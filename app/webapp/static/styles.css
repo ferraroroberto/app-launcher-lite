@@ -262,9 +262,7 @@ html, body {
 @media (pointer: coarse) and (max-width: 520px) {
   body.terminal-open .tabs,
   body:has(#lifeOsBrowser:not([hidden])) .tabs,
-  body:has(#loginOverlay:not([hidden])) .tabs,
-  body:has(#systemMapLightbox:not([hidden])) .tabs,
-  body:has(#summaryModal:not([hidden])) .tabs {
+  body:has(#loginOverlay:not([hidden])) .tabs {
     visibility: hidden;
     pointer-events: none;
   }
@@ -275,14 +273,12 @@ html, body {
      never the scroller in standalone — so without this, .app's own content
      stays touch-scrollable behind a hand-rolled overlay. Mirrors
      home-automation's `body:has(dialog[open]) .app { overflow: hidden }`;
-     the five app-specific overlays get the same treatment as the .tabs hide
+     the app-specific overlays get the same treatment as the .tabs hide
      rule above, plus native <dialog> for completeness (this app has both). */
   @media (display-mode: standalone) {
     body.terminal-open .app,
     body:has(#lifeOsBrowser:not([hidden])) .app,
     body:has(#loginOverlay:not([hidden])) .app,
-    body:has(#systemMapLightbox:not([hidden])) .app,
-    body:has(#summaryModal:not([hidden])) .app,
     body:has(dialog[open]) .app {
       overflow: hidden;
     }
@@ -368,54 +364,6 @@ summary + .opt-group { border-top: 0; }
 /* Favorites filter: the star fills gold when the filter is active. */
 .fav-filter-btn.active .icon { fill: currentColor; }
 
-/* System map (issue #173): the inline PNG fills the card width and is
-   tappable to open the full-screen lightbox for pan/zoom. */
-.system-map-img {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  cursor: zoom-in;
-}
-.system-map-status { margin: 6px 0 0; }
-.system-map-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 350;
-  background: rgba(0, 0, 0, 0.92);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: env(safe-area-inset-top, 8px) 8px env(safe-area-inset-bottom, 8px);
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
-  cursor: zoom-out;
-}
-.system-map-lightbox-img {
-  max-width: 100%;
-  height: auto;
-  /* Wider than the viewport when zoomed: let the overlay scroll to pan. */
-  border-radius: var(--radius-sm);
-}
-.system-map-lightbox-close {
-  position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 10px);
-  right: 14px;
-  z-index: 360;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(22, 27, 34, 0.9);
-  color: #fff;
-  font-size: var(--icon-title);
-  cursor: pointer;
-}
-/* Invisible hit-area expansion to the 44px effective floor (design.md Touch
-   targets); a co-applied .hit-target class can't be used here — it sets
-   position: relative, which would break this control's position: fixed. */
-.system-map-lightbox-close::before { content: ""; position: absolute; inset: -2px; }
 /* Tighter inter-tile gap on the Projects list — part of the vertical
    compaction (issue #212); horizontal rhythm is left alone. */
 .opt-group {
@@ -1890,14 +1838,6 @@ body.terminal-open {
   min-width: 44px;
   cursor: pointer;
 }
-/* Reading the last reply aloud (issue #190) — success-green pulse so the ⏹
-   stop state is unmistakable while speech is playing (on-state, #391). */
-.term-btn.speaking {
-  background: var(--success);
-  color: var(--accent-fg);
-  border-color: transparent;
-  animation: compose-record-pulse 1.2s ease-in-out infinite;
-}
 /* Every icon-only button in the terminal toolbar meets the 44x44pt HIG
    minimum (issue #477) — restated here for clarity even though the base
    .term-btn now carries 44×44 itself (#496). */
@@ -1919,83 +1859,6 @@ body.terminal-open {
   color: var(--danger);
   border-color: var(--danger);
 }
-/* Read-aloud action menu (issue #210): a small dropdown anchored below the
-   terminal bar under the 🔊 button — "Read aloud" (verbatim) and
-   "Summarize & read" (hub-condensed for hands-free / driving). */
-.speak-popover {
-  position: absolute;
-  top: 48px;
-  right: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  background: var(--card-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  z-index: 30;
-  box-shadow: var(--shadow);
-}
-.speak-action {
-  min-height: 44px;
-  padding: 10px 14px;
-  font-size: var(--font-label);
-  text-align: left;
-  white-space: nowrap;
-  background: var(--card);
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-.speak-action:active { background: var(--card-2); }
-/* Read-aloud summary modal (issue #210): the hub summary shown on screen while
-   it's read aloud (and readable on its own), auto-closing when the read ends or
-   on a tap. Sits above the terminal overlay (300), below the toast (400). */
-.summary-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 350;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.55);
-}
-.summary-card {
-  width: min(560px, 100%);
-  max-height: 80vh;
-  overflow-y: auto;
-  background: var(--card-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 18px 20px;
-  box-shadow: var(--shadow);
-}
-.summary-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.summary-title { font-weight: 700; font-size: var(--font-body); }
-.summary-close {
-  background: var(--card);
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  min-width: 36px;
-  min-height: var(--control-h);
-  font-size: var(--font-label);
-  cursor: pointer;
-}
-.summary-text {
-  margin: 0 0 12px;
-  font-size: var(--font-body);
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-.summary-foot { text-align: center; }
 /* On-screen keys popover (issue #36): D-pad anchored below the
    terminal bar, right-aligned under the ⌨️ button. */
 .keys-popover {
@@ -2147,77 +2010,6 @@ body.terminal-open {
 }
 .compose-record:active { opacity: 0.85; }
 .compose-record:disabled { opacity: 0.4; cursor: default; }
-/* Background work in progress (OCR / transcribe) — keep the ticking timer
-   legible despite the disabled dim, and tint it so it reads as "busy". */
-.compose-record.working { opacity: 1; color: var(--accent); font-size: var(--font-label); }
-/* Recording in progress — red pulse so the state is unmistakable. */
-.compose-record.recording {
-  background: var(--danger, #d9534f);
-  color: var(--accent-fg);
-  border-color: transparent;
-  animation: compose-record-pulse 1.2s ease-in-out infinite;
-}
-@keyframes compose-record-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
-}
-/* OCR staging tray (issue #171): images accumulate here as the 📷 button is
-   tapped; one Extract call collates them all into deduplicated text. */
-.ocr-tray {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: var(--card);
-  border-top: 1px solid var(--line);
-  flex-shrink: 0;
-}
-.ocr-thumbs {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  flex: 1;
-  min-width: 0;
-}
-.ocr-thumb { position: relative; flex-shrink: 0; }
-.ocr-thumb img {
-  height: 44px;
-  width: 44px;
-  object-fit: cover;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  display: block;
-}
-.ocr-thumb-x {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: none;
-  background: var(--danger, #d9534f);
-  color: var(--accent-fg);
-  font-size: var(--font-caption);
-  line-height: 18px;
-  padding: 0;
-  cursor: pointer;
-}
-.ocr-extract {
-  flex-shrink: 0;
-  min-height: 44px;
-  padding: 0 14px;
-  font-size: var(--font-label);
-  font-weight: 600;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--accent-border-soft);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-.ocr-extract:active { opacity: 0.85; }
-.ocr-extract:disabled { opacity: 0.6; cursor: default; }
-.ocr-extract.working { opacity: 1; }
 .terminal-status {
   padding: 8px 12px;
   font-size: var(--font-caption);

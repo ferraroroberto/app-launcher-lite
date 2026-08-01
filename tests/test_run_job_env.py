@@ -36,7 +36,6 @@ def _stub_webapp_config(monkeypatch, secrets=None):
         lambda: SimpleNamespace(
             secrets=secrets or {},
             notify_on_failure=False,
-            notify_failure_summary=False,
             notify_failure_streak=0,
         ),
     )

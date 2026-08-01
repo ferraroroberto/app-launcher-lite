@@ -3,8 +3,7 @@
 The notifier path runs inside the run-job executor, so the contract is:
 no exception escapes, no matter how broken the HTTP stack underneath.
 The tests prove (a) wiring is correct on the happy path and (b) every
-failure mode degrades to silence — Pushover 5xx, JSON decode error,
-hub unreachable.
+failure mode degrades to silence — Pushover 5xx, JSON decode error.
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src import _loopback_http, notifications as notif
+from src import notifications as notif
 
 
 # ============================================================== Notifiers
@@ -86,93 +85,3 @@ class TestFactory:
         cfg = SimpleNamespace(pushover_api_token="t", pushover_user_key="u")
         n = notif.build_notifier_from_config(cfg)
         assert isinstance(n, notif.PushoverNotifier)
-
-
-# ============================================================= LLM summary
-#
-# summarise_failure routes through the shared src.llm_client hub client
-# (issue #520), so — like tests/test_llm_client.py — the hub round-trip is
-# stubbed by monkeypatching the shared pooled `_loopback_http.SESSION.request`
-# (issue #605) rather than injecting a mock http object.
-
-
-class _HubResp:
-    def __init__(self, status_code=200, payload=None):
-        self.status_code = status_code
-        self._payload = payload if payload is not None else {}
-
-    def json(self):
-        return self._payload
-
-
-def _hub_completion(content):
-    return {"choices": [{"message": {"role": "assistant", "content": content}}]}
-
-
-class TestSummariseFailure:
-    def test_returns_text_block_first_line(self, monkeypatch):
-        monkeypatch.setattr(
-            _loopback_http.SESSION,
-            "request",
-            lambda *a, **k: _HubResp(
-                200, _hub_completion("ModuleNotFoundError: bs4\nfull stack...")
-            ),
-        )
-        out = notif.summarise_failure("Traceback (most recent call last)...")
-        assert out == "ModuleNotFoundError: bs4"
-
-    def test_hub_unreachable_returns_none(self, monkeypatch):
-        def fake_request(*a, **k):
-            raise _loopback_http.requests.RequestException("connection refused")
-
-        monkeypatch.setattr(_loopback_http.SESSION, "request", fake_request)
-        assert notif.summarise_failure("oops") is None
-
-    def test_non_2xx_returns_none(self, monkeypatch):
-        monkeypatch.setattr(
-            _loopback_http.SESSION, "request", lambda *a, **k: _HubResp(503)
-        )
-        assert notif.summarise_failure("oops") is None
-
-    def test_empty_tail_short_circuits(self, monkeypatch):
-        calls = {"n": 0}
-
-        def fake_request(*a, **k):
-            calls["n"] += 1
-            return _HubResp(200, _hub_completion("x"))
-
-        monkeypatch.setattr(_loopback_http.SESSION, "request", fake_request)
-        assert notif.summarise_failure("") is None
-        assert calls["n"] == 0
-
-    def test_malformed_payload_returns_none(self, monkeypatch):
-        monkeypatch.setattr(
-            _loopback_http.SESSION,
-            "request",
-            lambda *a, **k: _HubResp(200, {"unexpected": "shape"}),
-        )
-        assert notif.summarise_failure("oops") is None
-
-    def test_base_url_from_config_is_honoured(self, monkeypatch):
-        captured = {}
-
-        def fake_request(method, url, **kwargs):
-            captured["url"] = url
-            return _HubResp(200, _hub_completion("root cause"))
-
-        monkeypatch.setattr(_loopback_http.SESSION, "request", fake_request)
-        notif.summarise_failure("oops", base_url="http://127.0.0.1:9999")
-        assert captured["url"] == "http://127.0.0.1:9999/v1/chat/completions"
-
-    def test_missing_base_url_falls_back_to_constant(self, monkeypatch):
-        captured = {}
-
-        def fake_request(method, url, **kwargs):
-            captured["url"] = url
-            return _HubResp(200, _hub_completion("root cause"))
-
-        monkeypatch.setattr(_loopback_http.SESSION, "request", fake_request)
-        notif.summarise_failure("oops", base_url="")
-        assert captured["url"] == (
-            f"{notif.LOCAL_LLM_BASE_URL}/v1/chat/completions"
-        )

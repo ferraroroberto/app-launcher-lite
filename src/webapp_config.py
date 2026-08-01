@@ -231,11 +231,6 @@ def _default_life_os_dir() -> str:
     return str(PROJECT_ROOT.parent / "life-os")
 
 
-def _default_claude_config_dir() -> str:
-    """Default to the sibling ``fleet-config`` checkout next to this repo."""
-    return str(PROJECT_ROOT.parent / "fleet-config")
-
-
 def _default_sessions_state_file() -> str:
     """Where fleet-config's ``session_state`` hook writes the board rows."""
     return str(Path.home() / ".claude" / "hooks" / "state" / "sessions-state.json")
@@ -279,12 +274,6 @@ class WebappConfig:
     # shows disabled, the same way the Coding tab handles a missing
     # `projects_dir`.
     life_os_dir: str = field(default_factory=_default_life_os_dir)
-    # Root of the fleet-config checkout whose `architecture/` directory holds
-    # the rendered fleet system map (issue #173). The Coding tab's 🗺️ System
-    # map section serves `<claude_config_dir>/architecture/system-map.png`;
-    # when the PNG is absent the section hides, the same way the Life OS tab
-    # handles a missing life-os checkout.
-    claude_config_dir: str = field(default_factory=_default_claude_config_dir)
     # --- Board tab (issue #300 / #164) -----------------------------------
     # The sessions-state file written by fleet-config's session_state hook
     # (fleet-config#91). The board reads it defensively — absent/corrupt/stale
@@ -371,32 +360,6 @@ class WebappConfig:
     webauthn_rp_id: str = ""
     webauthn_rp_name: str = "Launcher"
     webauthn_origin: str = ""
-    # --- voice dictation (issue #165) -----------------------------------
-    # Base URL of the sibling voice-transcriber webapp, whose consumable
-    # session API (POST /api/sessions → /upload) transcribes a recording
-    # dictated from the Coding terminal's compose bar. The webapp proxies
-    # to it over loopback (verify=False on the self-signed cert), so the
-    # phone never talks to it directly. Empty string disables the feature
-    # (the 🎤 record button hides). Defaults to the voice-transcriber's
-    # loopback HTTPS port.
-    voice_transcriber_url: str = "https://127.0.0.1:8443"
-    # --- screenshot OCR (issue #171) ------------------------------------
-    # Base URL of the sibling photo-ocr webapp, whose consumable single-shot
-    # API (POST /api/extract) returns clean text for a screenshot captured
-    # from the Coding terminal's compose bar. The webapp proxies to it over
-    # loopback (verify=False on the self-signed cert), so the phone never
-    # talks to it directly — the pixel counterpart to voice_transcriber_url.
-    # Empty string disables the feature (the 📷 OCR button hides). Defaults
-    # to the photo-ocr loopback HTTPS port.
-    photo_ocr_url: str = "https://127.0.0.1:8444"
-    # --- read-aloud hub TTS (issue #203) --------------------------------
-    # Base URL of the local-llm-hub, whose OpenAI-shape POST /v1/audio/speech
-    # synthesizes the Coding terminal's 🔊 read-aloud with the high-quality
-    # Orpheus voice (streamed WAV). The webapp proxies to it over loopback so
-    # the phone never talks to it directly. Empty string disables the hub
-    # path (🔊 falls back to the on-device Web Speech voice). Plain HTTP — the
-    # hub binds loopback only and serves no TLS, unlike the sibling apps above.
-    llm_hub_url: str = "http://127.0.0.1:8000"
     # --- Jobs-tab failure notifications (issue #66) ---------------------
     # Pushover credentials — both empty means no-op notifier (executor
     # still finalises runs identically). The master switch
@@ -408,11 +371,6 @@ class WebappConfig:
     # (useful when single-failure pushes are muted via Pushover quiet
     # hours). 0 disables the streak fire.
     notify_failure_streak: int = 0
-    # Pipe the run's output tail through the local LLM hub
-    # (http://127.0.0.1:8000, claude-haiku-4-5) for a one-line
-    # "what went wrong" summary prepended to the push body. Default off
-    # so the issue lands without a hard dependency on the hub.
-    notify_failure_summary: bool = False
     # --- Per-job Telegram failure alerts (issue #597) --------------------
     # Credentials for the vendored src/notify Telegram primitive. Both
     # empty means no-op — the executor still finalises runs identically.
@@ -535,9 +493,6 @@ def load_webapp_config(
         ],
         apps_scan_root=str(raw.get("apps_scan_root") or _default_projects_dir()),
         life_os_dir=str(raw.get("life_os_dir") or _default_life_os_dir()),
-        claude_config_dir=str(
-            raw.get("claude_config_dir") or _default_claude_config_dir()
-        ),
         sessions_state_file=str(
             raw.get("sessions_state_file") or _default_sessions_state_file()
         ),
@@ -590,20 +545,10 @@ def load_webapp_config(
         webauthn_rp_id=str(raw.get("webauthn_rp_id", "")),
         webauthn_rp_name=str(raw.get("webauthn_rp_name", "Launcher")),
         webauthn_origin=str(raw.get("webauthn_origin", "")),
-        voice_transcriber_url=str(
-            raw.get("voice_transcriber_url", "https://127.0.0.1:8443")
-        ),
-        photo_ocr_url=str(
-            raw.get("photo_ocr_url", "https://127.0.0.1:8444")
-        ),
-        llm_hub_url=str(
-            raw.get("llm_hub_url", "http://127.0.0.1:8000")
-        ),
         pushover_api_token=str(raw.get("pushover_api_token", "")),
         pushover_user_key=str(raw.get("pushover_user_key", "")),
         notify_on_failure=bool(raw.get("notify_on_failure", False)),
         notify_failure_streak=int(raw.get("notify_failure_streak", 0) or 0),
-        notify_failure_summary=bool(raw.get("notify_failure_summary", False)),
         telegram_bot_token=str(raw.get("telegram_bot_token", "")),
         telegram_chat_id=str(raw.get("telegram_chat_id", "")),
         jobs_coverage_interval_minutes=int(
@@ -639,7 +584,6 @@ def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
         "coding_hidden_agents": cfg.coding_hidden_agents,
         "apps_scan_root": cfg.apps_scan_root,
         "life_os_dir": cfg.life_os_dir,
-        "claude_config_dir": cfg.claude_config_dir,
         "sessions_state_file": cfg.sessions_state_file,
         "rate_limits_file": cfg.rate_limits_file,
         "github_owner": cfg.github_owner,
@@ -670,14 +614,10 @@ def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
         "webauthn_rp_id": cfg.webauthn_rp_id,
         "webauthn_rp_name": cfg.webauthn_rp_name,
         "webauthn_origin": cfg.webauthn_origin,
-        "voice_transcriber_url": cfg.voice_transcriber_url,
-        "photo_ocr_url": cfg.photo_ocr_url,
-        "llm_hub_url": cfg.llm_hub_url,
         "pushover_api_token": cfg.pushover_api_token,
         "pushover_user_key": cfg.pushover_user_key,
         "notify_on_failure": cfg.notify_on_failure,
         "notify_failure_streak": cfg.notify_failure_streak,
-        "notify_failure_summary": cfg.notify_failure_summary,
         "telegram_bot_token": cfg.telegram_bot_token,
         "telegram_chat_id": cfg.telegram_chat_id,
         "jobs_coverage_interval_minutes": cfg.jobs_coverage_interval_minutes,

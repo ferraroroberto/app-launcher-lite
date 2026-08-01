@@ -6,7 +6,7 @@
  */
 
 import { els, state, BOARD_POLL_MS, GIT_STATUS_POLL_MS, JOBS_POLL_MS, LISTENERS_POLL_MS, RUNNING_APPS_POLL_MS, SESSIONS_POLL_MS, TUNNEL_POLL_MS, WEBAUTHN_POLL_MS } from './state.js';
-import { apiFailToast, consumeUrlParam, jsonApi, readToken, toast, wireLoginForm, writeToken } from './api.js';
+import { apiFailToast, consumeUrlParam, jsonApi, toast, wireLoginForm, writeToken } from './api.js';
 import { wireTabs } from './tabs.js';
 import { fetchConfig, patchConfig, wireClaudeOptions } from './claude-options.js';
 import { fetchRateLimits, fetchSessions, wireSessions } from './sessions.js';
@@ -14,7 +14,6 @@ import { fetchAgents, fetchApps, fetchListeners, fetchRunningApps, refreshGitSta
 import { fetchJobs, renderJobs, wireJobs } from './jobs.js';
 import { fetchSkills, wireLifeOs } from './life-os.js';
 import { fetchBoard, openBoardCard, wireBoard } from './board.js';
-import { fetchSystemMapStatus, wireSystemMap } from './system-map.js';
 import { wireTokens } from './tokens.js';
 import { openTerminal, wireTerminal } from './terminal.js';
 import { fetchWebauthnStatus, writeTerminalToken } from './webauthn.js';
@@ -80,7 +79,6 @@ function wireSettings() {
       projects_ignore: ignore,
       apps_scan_root: els.appsScanRoot.value.trim(),
       life_os_dir: els.lifeOsDir.value.trim(),
-      claude_config_dir: els.claudeConfigDir.value.trim(),
     };
     if (els.terminalHistoryLines && els.terminalHistoryLines.value !== '') {
       const lines = parseInt(els.terminalHistoryLines.value, 10);
@@ -89,7 +87,6 @@ function wireSettings() {
     await patchConfig(patch);
     await fetchApps();
     await fetchSkills();
-    await fetchSystemMapStatus();
     toast('Settings saved.', 'good');
   });
 }
@@ -170,15 +167,6 @@ async function boot() {
   // ceremony-minted one. TTL mirrors the server's 12 h _TERMINAL_TOKEN_TTL.
   const ttFromUrl = consumeUrlParam('tt');
   if (ttFromUrl) writeTerminalToken(ttFromUrl, 12 * 3600);
-  // THROWAWAY spike #246: bake the bearer token into the spike link so a full
-  // page-load of /spike/voice-loop passes the gate over the tunnel (the
-  // middleware accepts ?token=). Loopback bypasses the gate, so a tokenless
-  // href is fine on the PC.
-  if (els.spikeVoiceLink) {
-    const tok = readToken();
-    els.spikeVoiceLink.href =
-      '/spike/voice-loop' + (tok ? '?token=' + encodeURIComponent(tok) : '');
-  }
   const deepLinkSid = consumeUrlParam('terminal');
   // Only the launcher-spawned PC mirror window opens via the ?terminal=<sid>
   // deep-link; a human's own browser never does. Recording it here (before
@@ -203,7 +191,6 @@ async function boot() {
   await safe(fetchAgents);
   await safe(fetchApps);
   await safe(fetchSkills);
-  await safe(fetchSystemMapStatus);
   await safe(fetchSessions);
   await safe(fetchRateLimits);
   await safe(fetchListeners);
@@ -276,7 +263,6 @@ wireApps();
 wireJobs();
 wireLifeOs();
 wireBoard();
-wireSystemMap();
 wireTerminal();
 wireSettings();
 wireTokens();

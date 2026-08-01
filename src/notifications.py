@@ -17,10 +17,6 @@ Two independent channels share this one finalisation hook:
     ships dormant until the user opts in).
   * ``notify_failure_streak`` — extra fire when the consecutive-failure
     count equals this value (0 = disabled).
-  * ``notify_failure_summary`` — when true, pipe the output tail through
-    the local LLM hub (``http://127.0.0.1:8000``, ``claude-haiku-4-5``)
-    for a one-line "what went wrong" summary prepended to the push body.
-    Hub unreachable → silently falls back to the raw tail.
 
 * **Telegram (per-job, issue #597)** — only jobs with
   ``Job.alert_on_failure = True``, via the vendored :mod:`src.notify`
@@ -36,34 +32,16 @@ Two independent channels share this one finalisation hook:
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol
 
 import requests
 
-from src import llm_client
 from src.notify import NotifierError as TelegramNotifierError
 from src.notify import TelegramNotifier as _VendoredTelegramNotifier
 
 logger = logging.getLogger(__name__)
 
 PUSHOVER_URL = "https://api.pushover.net/1/messages.json"
-
-# Local LLM hub — see global CLAUDE.md "claude-local-calls". The model id
-# lives once on :mod:`src.llm_client` (:data:`llm_client.DEFAULT_MODEL`) —
-# both hub callers route through the same client (issue #520).
-LOCAL_LLM_BASE_URL = "http://127.0.0.1:8000"
-LOCAL_LLM_TIMEOUT_SECONDS = 8.0
-SUMMARY_TAIL_CHARS = 500
-
-# Root-cause-focused system prompt for the failure-tail summary — distinct
-# from llm_client's driving-mode reply summary, but asked through the same
-# hub client instead of a second hand-rolled one.
-_FAILURE_SUMMARY_SYSTEM_PROMPT = (
-    "You are reviewing the tail of a failed job's stdout/stderr. Reply with "
-    "ONE sentence (<= 25 words) describing the most likely root cause. No "
-    "preamble."
-)
-_FAILURE_SUMMARY_MAX_TOKENS = 120
 
 
 class Notifier(Protocol):
@@ -146,44 +124,6 @@ class TelegramNotifier:
             self._notifier.send_text(f"{title}\n\n{body}" if body else title)
         except TelegramNotifierError as exc:
             logger.warning(f"⚠️  telegram send failed: {exc}")
-
-
-def summarise_failure(
-    tail: str, *, base_url: Optional[str] = None
-) -> Optional[str]:
-    """Ask the local LLM hub for a one-line summary of ``tail``.
-
-    Routes through the shared :func:`src.llm_client.summarize` hub client
-    (issue #520) instead of hand-rolling a second one — same OpenAI-shape
-    ``/v1/chat/completions`` call, model constant, and ``LlmError`` handling
-    as the Coding-tab read-aloud summary, just with a root-cause-focused
-    system prompt, a short (executor-safe) timeout, and a capped reply.
-
-    ``base_url`` is the configured hub base URL (``WebappConfig.llm_hub_url``)
-    — the caller threads it through so a user who moves the hub off ``:8000``
-    still gets failure summaries. Falls back to :data:`LOCAL_LLM_BASE_URL`
-    only when the config is genuinely missing/empty.
-
-    Returns ``None`` when the hub is unreachable or the response is
-    malformed — the caller falls back to the raw tail. Bounded by a
-    short timeout so a wedged hub can't stall the executor's exit.
-    """
-    snippet = tail[-SUMMARY_TAIL_CHARS:] if tail else ""
-    if not snippet.strip():
-        return None
-    base = (base_url or "").strip() or LOCAL_LLM_BASE_URL
-    try:
-        summary = llm_client.summarize(
-            base,
-            snippet,
-            system_prompt=_FAILURE_SUMMARY_SYSTEM_PROMPT,
-            max_tokens=_FAILURE_SUMMARY_MAX_TOKENS,
-            timeout=LOCAL_LLM_TIMEOUT_SECONDS,
-        )
-    except llm_client.LlmError as exc:
-        logger.debug(f"local LLM summary skipped: {exc}")
-        return None
-    return summary.splitlines()[0].strip() or None
 
 
 def build_notifier_from_config(cfg: Any) -> Notifier:

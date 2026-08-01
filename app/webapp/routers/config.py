@@ -60,7 +60,6 @@ async def get_config(request: Request) -> Dict[str, Any]:
         "coding_hidden_agents": cfg.coding_hidden_agents,
         "apps_scan_root": cfg.apps_scan_root,
         "life_os_dir": cfg.life_os_dir,
-        "claude_config_dir": cfg.claude_config_dir,
         "terminal_history_lines": cfg.terminal_history_lines,
         "terminal_history_lines_min": MIN_TERMINAL_HISTORY_LINES,
         "terminal_history_lines_max": MAX_TERMINAL_HISTORY_LINES,
@@ -119,7 +118,6 @@ async def patch_config(request: Request) -> Dict[str, Any]:
         "coding_hidden_agents",
         "apps_scan_root",
         "life_os_dir",
-        "claude_config_dir",
         "terminal_history_lines",
         "claude_model",
         "claude_effort",
@@ -194,17 +192,4 @@ async def status(request: Request) -> Dict[str, Any]:
         "tunnel_url": tunnel_url,
         "tls": cert_present(),
         "terminal": terminal_reachability(request),
-        # Compose-bar voice dictation is available only when a
-        # voice-transcriber base URL is configured (issue #165). The SPA
-        # hides the 🎤 record button otherwise.
-        "voice_dictation": bool((cfg.voice_transcriber_url or "").strip()),
-        # Compose-bar screenshot OCR is available only when a photo-ocr
-        # base URL is configured (issue #171). The SPA hides the 📷 OCR
-        # button otherwise — the pixel counterpart to voice_dictation.
-        "screenshot_ocr": bool((cfg.photo_ocr_url or "").strip()),
-        # Read-aloud hub TTS is available only when a local-llm-hub base URL
-        # is configured (issue #203). A cheap config-presence flag — the SPA
-        # gates the 🔊 button's hub path on it before doing a live
-        # /api/tts/health probe to confirm the hub is actually answering.
-        "tts": bool((cfg.llm_hub_url or "").strip()),
     }

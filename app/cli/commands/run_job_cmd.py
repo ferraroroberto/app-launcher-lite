@@ -71,7 +71,6 @@ from src.notifications import (
     NoopNotifier,
     build_notifier_from_config,
     build_telegram_notifier_from_config,
-    summarise_failure,
 )
 from src.subprocess_flags import NO_WINDOW
 from src.webapp_config import WebappConfig, load_webapp_config
@@ -584,9 +583,8 @@ def _maybe_notify_failure(
       fires only for jobs that opted in.
 
     Either resolving to :class:`NoopNotifier` (no creds) is a silent
-    no-op for that channel. The optional LLM summary (Pushover only) is
-    best-effort; hub down → raw tail only. Any error inside this path is
-    logged and swallowed — finalisation must keep going.
+    no-op for that channel. Any error inside this path is logged and
+    swallowed — finalisation must keep going.
     """
     try:
         if status != "failed":
@@ -597,12 +595,6 @@ def _maybe_notify_failure(
             if not isinstance(notifier, NoopNotifier):
                 tail = read_output_tail(run_dir, max_bytes=8 * 1024)
                 body_parts: List[str] = []
-                if cfg.notify_failure_summary:
-                    summary = summarise_failure(tail, base_url=cfg.llm_hub_url)
-                    if summary:
-                        body_parts.append(summary)
-                # The raw tail is what an operator wants when the summary is
-                # missing or wrong — always include the last 500 chars.
                 body_parts.append(tail[-500:] if tail else "(no output captured)")
                 body_parts.append(
                     f"— job={job.id} run={run_dir.name} exit={exit_code}"

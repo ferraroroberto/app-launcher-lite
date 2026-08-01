@@ -52,7 +52,6 @@ class TestMaybeNotifyFailureTelegramChannel:
             pushover_user_key="",
             notify_on_failure=False,
             notify_failure_streak=0,
-            notify_failure_summary=False,
             telegram_bot_token="tok",
             telegram_chat_id="chat",
         )

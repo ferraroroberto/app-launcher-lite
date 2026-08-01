@@ -12,9 +12,8 @@
  * This module coordinates the xterm instance, sizing/keyboard-pan, the
  * on-screen keys D-pad, and image paste/drop. The WebSocket lifecycle lives
  * in terminal-connection.js and theme resolution in terminal-theme.js.
- * Three earlier concerns split out (issue #315):
- * the compose bar + dictation + OCR (terminal-compose.js), read-aloud UI
- * (terminal-readaloud.js, atop the terminal-readback.js engine), and the
+ * Two earlier concerns split out (issue #315):
+ * the compose bar (terminal-compose.js) and the
  * PC-mirror-window title/guard logic (terminal-mirror.js).
  */
 
@@ -37,7 +36,6 @@ import {
   wireCompose,
   growComposeInput,
 } from './terminal-compose.js';
-import { closeSpeakPopover, revealReadAloudButton, stopReading, wireReadAloud } from './terminal-readaloud.js';
 import {
   beginRepaintBatch,
   clearTerminalReconnect,
@@ -52,7 +50,6 @@ import {
   termContrastRatio,
   termScreenTheme,
 } from './terminal-theme.js';
-import { voiceDictationAvailable } from './voice.js';
 import {
   ensureTerminalToken,
   readTerminalToken,
@@ -312,23 +309,6 @@ export async function openTerminal(session) {
   // visible on every (non-mirror) open so a prior mirror open can't
   // leave it stuck hidden.
   els.terminalCompose.hidden = isMirror;
-
-  // The 🎤 dictation button (issue #165) needs the voice-transcriber
-  // configured *and* MediaRecorder support; hide it otherwise so the
-  // compose bar degrades to type-only. (It lives inside the compose bar,
-  // so the PC mirror — where the bar never opens — already won't show it.)
-  els.terminalRecord.hidden = !voiceDictationAvailable();
-
-  // The 📷 screenshot-OCR button (issue #171) needs photo-ocr configured;
-  // hide it otherwise. A plain file input, so no capability check beyond
-  // the server flag. Pixel counterpart to the 🎤 dictation button.
-  const ocrOn = !!(state.status && state.status.screenshot_ocr);
-  els.terminalScreenshot.hidden = !ocrOn;
-
-  // The 🔊 read-aloud button (issue #190) reveal/probe lives in
-  // terminal-readaloud.js — it needs both the cheap status flag and a live
-  // hub health probe (see revealReadAloudButton for why).
-  revealReadAloudButton();
 
   // Mirror window uses a uniquely identifiable OS title so the launcher
   // can find this Edge --app window via EnumWindows and dismiss it
@@ -696,17 +676,12 @@ function unlockBodyScroll() {
 }
 
 export function hideTerminal() {
-  // Leaving the Coding tab silences any in-flight read-aloud (#190) — the
-  // speech queue / hub audio is global and would otherwise keep talking
-  // off-screen.
-  stopReading();
   // Stash, don't dispose (#430): the xterm keeps its painted frame and
   // the WS keeps streaming, so re-opening this session is instant and
   // never triggers the server's repaint nudge. The host's DOM is NOT
   // cleared for the same reason.
   stashActiveTerminal();
   closeKeysPopover();
-  closeSpeakPopover();
   els.terminalOverlay.hidden = true;
   document.body.classList.remove('terminal-open');
   unlockBodyScroll();
@@ -909,10 +884,6 @@ export function wireTerminal() {
     try { t.term.scrollToBottom(); } catch (_) {}
     t.term.focus();
   });
-  // 🔊 read-aloud control (issues #190, #210) — wiring lives in
-  // terminal-readaloud.js, alongside the button's action menu and the
-  // summary modal it opens.
-  wireReadAloud();
   els.terminalPaste.addEventListener('click', async function () {
     const t = state.terminal;
     if (!t) return;
@@ -949,7 +920,7 @@ export function wireTerminal() {
     // Issue #450: reopen the on-screen keyboard NOW, synchronously inside this
     // `change` tick — the native photo picker dismissed it, and the `change`
     // event is still a trusted continuation of the user's gesture. Same iOS
-    // rule the read-aloud/voice paths lean on: WebKit only honours
+    // rule as every focus path here: WebKit only honours
     // .focus()→keyboard inside an active user-activation tick. sendImage's own
     // post-upload ta.focus() (~line 747) lands *after* the upload `await`, i.e.
     // outside the gesture — the caret shows but the keyboard stays down, so the

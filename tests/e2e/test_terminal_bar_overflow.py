@@ -84,13 +84,12 @@ def test_terminal_bar_buttons_stay_within_viewport(
 def test_terminal_bar_fits_at_once_on_default_phone(
     authed_page: Page, base_url: str, browser_name: str, launched_pty_session: str
 ) -> None:
-    """All eight bar buttons fit the default iPhone projection without scrolling.
+    """All seven bar buttons fit the default iPhone projection without scrolling.
 
     The second half of #514: with the Back button back at the uniform 44px and
-    uniform 6px gaps, the full row — including the read-aloud button, hidden by
-    default and force-shown here to measure the worst case — must be fully
-    visible at once on the suite's default iPhone 15 Pro Max (430px) viewport,
-    with no internal scrolling and no clipped button.
+    uniform 6px gaps, the full row must be fully visible at once on the
+    suite's default iPhone 15 Pro Max (430px) viewport, with no internal
+    scrolling and no clipped button.
     """
     if browser_name != "webkit":
         pytest.skip("phone-width row-fit only meaningful under the iPhone projection")
@@ -106,10 +105,6 @@ def test_terminal_bar_fits_at_once_on_default_phone(
     authed_page.wait_for_selector("#terminalOverlay:not([hidden])", timeout=10_000)
 
     viewport_width = authed_page.evaluate("window.innerWidth")
-
-    # Worst case is a Claude session where the 🔊 read-aloud button (#190) is
-    # visible — unhide it so the measurement covers all six action buttons.
-    authed_page.evaluate("document.querySelector('#terminalSpeak').hidden = false")
 
     # Equal-size contract: the Back button is the same 44px target as every
     # other bar button (the #496 64px widening is what tipped the row over).
@@ -135,8 +130,8 @@ def test_terminal_bar_fits_at_once_on_default_phone(
         " box: el.getBoundingClientRect()}))",
     )
     visible = [b for b in buttons if not b["hidden"]]
-    assert len(visible) == 8, (
-        f"expected all 8 bar buttons visible, hidden: "
+    assert len(visible) == 7, (
+        f"expected all 7 bar buttons visible, hidden: "
         f"{[b['id'] for b in buttons if b['hidden']]}"
     )
     for b in visible:

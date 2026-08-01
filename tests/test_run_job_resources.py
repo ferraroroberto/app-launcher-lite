@@ -103,7 +103,6 @@ class TestExecutorFinalises:
             lambda: SimpleNamespace(
                 pushover_api_token="", pushover_user_key="",
                 notify_on_failure=False, notify_failure_streak=0,
-                notify_failure_summary=False,
             ),
         )
 
@@ -139,7 +138,6 @@ class TestMaybeNotifyFailure:
             pushover_user_key="user",
             notify_on_failure=True,
             notify_failure_streak=0,
-            notify_failure_summary=False,
         )
         defaults.update(kw)
         return SimpleNamespace(**defaults)

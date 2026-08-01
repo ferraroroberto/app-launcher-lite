@@ -61,7 +61,6 @@ def _silence_notifier(monkeypatch):
         "load_webapp_config",
         lambda: SimpleNamespace(
             notify_on_failure=False,
-            notify_failure_summary=False,
             notify_failure_streak=0,
         ),
     )

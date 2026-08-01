@@ -35,7 +35,6 @@ export async function fetchConfig() {
   els.projectsIgnore.value = (body.projects_ignore || []).join('\n');
   els.appsScanRoot.value = body.apps_scan_root || '';
   if (els.lifeOsDir) els.lifeOsDir.value = body.life_os_dir || '';
-  if (els.claudeConfigDir) els.claudeConfigDir.value = body.claude_config_dir || '';
   if (els.terminalHistoryLines) {
     if (body.terminal_history_lines_min != null) {
       els.terminalHistoryLines.min = body.terminal_history_lines_min;

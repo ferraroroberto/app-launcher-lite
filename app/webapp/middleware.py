@@ -120,24 +120,6 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         "bypasses like everything else.",
     ),
     (
-        lambda p: p == "/api/transcribe" or p.startswith("/api/transcribe/"),
-        "passkey",
-        "Voice dictation (#165/#168): the recording is as sensitive as terminal "
-        "input — covers the single-shot proxy and the streamed/SSE session proxy.",
-    ),
-    (
-        lambda p: p == "/api/ocr",
-        "passkey",
-        "Screenshot OCR (#171): extracted text drops straight into the terminal compose bar.",
-    ),
-    (
-        lambda p: p in ("/api/tts/speak", "/api/tts/summarize"),
-        "passkey",
-        "Read-aloud hub TTS (#203/#206) + summarize-&-read (#210): both POST the "
-        "agent's last reply — terminal content. /api/tts/health stays token-only "
-        "so the SPA can decide button visibility even off-tailnet.",
-    ),
-    (
         lambda p: p == "/api/life-os/file" or p.startswith("/api/life-os/file/"),
         "passkey",
         "Life OS private-content browser (#102): file read/delete/rename surfaces "
@@ -147,13 +129,6 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         lambda p: p.startswith("/api/life-os/skills/") and p.endswith("/files"),
         "passkey",
         "Life OS per-skill file tree (#102) — same sensitivity as the file endpoint above.",
-    ),
-    (
-        lambda p: p == "/api/system-map/image",
-        "tailnet",
-        "Fleet system map (#173): rendered PNG can carry fleet topology. No passkey "
-        "— /api/system-map/status stays token-only so the SPA can decide the "
-        "section's visibility off-tailnet, like /api/tts/health.",
     ),
 )
 

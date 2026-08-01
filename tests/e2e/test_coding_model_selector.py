@@ -36,7 +36,6 @@ def _config(model: str) -> dict:
         "projects_ignore": [],
         "apps_scan_root": "",
         "life_os_dir": "",
-        "claude_config_dir": "",
         "claude": {
             "model": model,
             "models_available": ["opus", "sonnet", "haiku", "fable"],

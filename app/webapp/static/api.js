@@ -203,10 +203,10 @@ export function toast(msg, kind, opts) {
 // for the few sites that just toast the raw message.
 //
 // A plain Error carrying `.status === 401` gets the same treatment (issue
-// #333): terminal-readback.js is kept free of api.js imports by design (it
-// receives credentials as parameters rather than reaching into this module's
-// token storage itself), so its own fetches can't throw AuthRequiredError —
-// they tag `.status` on their thrown Error instead, and this is the one place
+// #333): a module kept free of api.js imports by design (receiving
+// credentials as parameters rather than reaching into this module's token
+// storage itself) can't throw AuthRequiredError from its own fetches — it
+// tags `.status` on its thrown Error instead, and this is the one place
 // that turns that into the same showLogin() the rest of the app gets for
 // free through api()/jsonApi()/apiRaw().
 export function apiFailToast(prefix, exc) {

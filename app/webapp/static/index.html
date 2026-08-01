@@ -514,20 +514,6 @@
         </div>
       </details>
 
-      <details id="systemMapCard" class="card card--collapsible system-map-card" hidden>
-        <summary class="collapse-summary">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-map"></use></svg>
-            <h3 class="collapse-title">System map</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">›</span>
-        </summary>
-        <div class="collapse-body system-map-body">
-          <img id="systemMapImage" class="system-map-img" alt="Fleet system map" hidden>
-          <p id="systemMapStatus" class="muted small system-map-status" hidden></p>
-        </div>
-      </details>
-
       <details id="codingOptions" class="card card--collapsible">
         <summary class="collapse-summary">
           <span class="collapse-main">
@@ -827,7 +813,7 @@
           id="boardDispatchGoal"
           class="compose-input board-dispatch-goal"
           rows="2"
-          placeholder="Speak or type a goal — send dispatches an /issue-* session."
+          placeholder="Type a goal — send dispatches an /issue-* session."
           enterkeyhint="enter"></textarea>
         <div class="board-repo-combo">
           <button type="button" id="boardDispatchRepoBtn" class="board-repo-input"
@@ -861,8 +847,6 @@
               <option value="gpt5.6">GPT-5.6</option>
             </select>
           </span>
-          <button id="boardDispatchRecord" type="button" class="compose-record"
-                  title="Dictate (voice → text)" aria-pressed="false" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-mic"></use></svg></button>
           <button id="boardDispatchClear" type="button" class="compose-record"
                   title="Clear the goal"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
           <button id="boardDispatchSend" type="button" class="compose-send"
@@ -959,10 +943,6 @@
           <input id="lifeOsDir" type="text" class="input-native">
         </label>
         <label class="stacked">
-          <span>Fleet-config dir (system map)</span>
-          <input id="claudeConfigDir" type="text" class="input-native">
-        </label>
-        <label class="stacked">
           <span>Terminal scrollback (lines) — how much history a full-screen agent (Codex, etc.) keeps for a reconnect</span>
           <input id="terminalHistoryLines" type="number" class="input-native" step="100">
         </label>
@@ -976,10 +956,6 @@
         </div>
         <hr>
         <p id="statusReadout" class="muted small"></p>
-        <!-- THROWAWAY spike #246 link — token-bearing href set in main.js so a
-             full page-load passes the bearer gate over the tunnel. Settings-only
-             (not every tab) since it's a dev/spike link, not app chrome. -->
-        <p class="muted small"><a id="spikeVoiceLink" href="/spike/voice-loop"><svg class="icon" aria-hidden="true"><use href="#i-mic"></use></svg> Voice loop spike (#246)</a></p>
         </div>
       </div>
 
@@ -1346,15 +1322,10 @@
       <span id="terminalTitle" class="terminal-title">session</span>
       <div class="terminal-bar-actions">
         <button id="terminalJumpEnd" type="button" class="term-btn" title="Jump to latest">↓</button>
-        <button id="terminalSpeak" type="button" class="term-btn" title="Read the last reply aloud" aria-pressed="false" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-volume-2"></use></svg></button>
         <button id="terminalPaste" type="button" class="term-btn" title="Paste from clipboard"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg></button>
         <button id="terminalImage" type="button" class="term-btn" title="Send image"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-image"></use></svg></button>
         <button id="terminalCompose" type="button" class="term-btn" title="Compose text with predictive keyboard"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
         <button id="terminalKeys" type="button" class="term-btn" title="Keyboard keys"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-keyboard"></use></svg></button>
-      </div>
-      <div id="terminalSpeakPopover" class="speak-popover" hidden>
-        <button type="button" class="speak-action" data-action="read"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-volume-2"></use></svg> Read aloud</button>
-        <button type="button" class="speak-action" data-action="summarize" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-file-text"></use></svg> Summarize &amp; read</button>
       </div>
       <div id="terminalKeysPopover" class="keys-popover" hidden>
         <button type="button" class="key-btn" data-key="esc">Esc</button>
@@ -1369,10 +1340,6 @@
       </div>
     </div>
     <div id="terminalHost" class="terminal-host"></div>
-    <div id="terminalOcrTray" class="ocr-tray" hidden>
-      <div id="terminalOcrThumbs" class="ocr-thumbs"></div>
-      <button id="terminalOcrExtract" type="button" class="ocr-extract"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-scan-text"></use></svg> Extract text</button>
-    </div>
     <div id="terminalComposeBar" class="compose-bar" hidden>
       <textarea
         id="terminalComposeInput"
@@ -1381,12 +1348,8 @@
         placeholder="Type a prompt — predictive on."
         enterkeyhint="enter"></textarea>
       <div class="compose-tools">
-        <button id="terminalRecord" type="button" class="compose-record" title="Dictate (voice → text)" aria-pressed="false"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-mic"></use></svg></button>
-        <button id="terminalScreenshot" type="button" class="compose-record" title="Extract text from screenshots (OCR)" aria-pressed="false"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-scan-text"></use></svg></button>
         <!-- General attach (issue #366): same sendImage()/#terminalImageInput
-             flow as the outer-bar 🖼 button, reachable from the compose view;
-             the OCR control above carries the distinct scan-text glyph so the
-             two no longer both read as "photo". -->
+             flow as the outer-bar 🖼 button, reachable from the compose view. -->
         <button id="terminalComposeAttach" type="button" class="compose-record" title="Attach image or file (path added to the prompt)"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-image"></use></svg></button>
         <button id="terminalComposeSend" type="button" class="compose-send" title="Send (with Enter)"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-send-horizontal"></use></svg></button>
       </div>
@@ -1398,27 +1361,6 @@
          `multiple` (issue #448): one gallery tap can pick several photos at
          once instead of a pick-upload-repeat loop. -->
     <input id="terminalImageInput" type="file" multiple hidden>
-    <input id="terminalScreenshotInput" type="file" accept="image/*" multiple hidden>
-  </div>
-
-  <!-- Read-aloud summary modal (issue #210): shows the hub summary text while
-       it's read aloud; auto-closes when the read finishes, or tap to dismiss. -->
-  <div id="summaryModal" class="summary-modal" hidden>
-    <div class="summary-card" role="dialog" aria-label="Reply summary">
-      <div class="summary-head">
-        <span class="summary-title"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-file-text"></use></svg> Summary</span>
-        <button id="summaryModalClose" type="button" class="summary-close" title="Close"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
-      </div>
-      <p id="summaryModalText" class="summary-text"></p>
-      <div class="summary-foot muted small"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-volume-2"></use></svg> Reading aloud… tap anywhere to dismiss</div>
-    </div>
-  </div>
-
-  <!-- System map lightbox (issue #173): tap the inline map to open it
-       full-screen for pan/zoom; tap anywhere (or ✕) to dismiss. -->
-  <div id="systemMapLightbox" class="system-map-lightbox" hidden>
-    <button id="systemMapLightboxClose" type="button" class="system-map-lightbox-close" title="Close"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
-    <img id="systemMapLightboxImage" class="system-map-lightbox-img" alt="Fleet system map (full screen)">
   </div>
 
   <script src="/static/vendor/xterm.js"></script>

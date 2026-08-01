@@ -46,12 +46,11 @@ flowchart TB
       R_CONFIG["config.py — /api/config, /api/status, /api/ports"]
       R_TOKENS["tokens.py — /api/tokens\nscoped-token mint/list/revoke (#72)"]
       R_APPS["apps.py — /api/apps (Apps tab)"]
-      R_SESS["sessions.py — /api/claude-code/sessions, WS\n+ media_proxy.py (transcribe/ocr/tts)"]
+      R_SESS["sessions.py — /api/claude-code/sessions, WS"]
       R_CC["claude_code.py — flags, git-status, generate"]
       R_JOBS["jobs.py + jobs_run_store_routes.py\n/api/jobs/* (Jobs tab)"]
       R_LIFEOS["life_os.py — /api/life-os/* (Life OS tab)"]
       R_BOARD["board.py — /api/board (Board tab) + dispatch\n+ board_chief.py (fleet-chief ensure/settings, #245)\n+ board_spawn.py (shared spawn-then-type)"]
-      R_SYSMAP["system_map.py — fleet map section"]
       R_WEBAUTHN["webauthn.py — passkey ceremonies"]
     end
   end
@@ -62,7 +61,7 @@ flowchart TB
   MGR --> WSERVER
 
   subgraph static["app/webapp/static/ — vanilla JS PWA"]
-    STATICJS["index.html, tabs.js, state.js,\nterminal*.js, sessions.js, jobs*.js,\nboard*.js, apps.js, life-os.js, voice.js"]
+    STATICJS["index.html, tabs.js, state.js,\nterminal*.js, sessions.js, jobs*.js,\nboard*.js, apps.js, life-os.js"]
   end
   R_MISC --> STATICJS
 
@@ -101,10 +100,6 @@ flowchart TB
     WEBAUTHNGATE["webauthn_gate.py"]
     STATICVER["static_versioning.py\nasset content-hash stamping"]
     DIAG["diagnostics.py\nring log buffer, port_owner"]
-    LLMCLIENT["llm_client.py"]
-    TTSCLIENT["tts_client.py"]
-    OCRCLIENT["photo_ocr_client.py"]
-    VOICECLIENT["voice_client.py"]
     JSONIO["_json_io.py"]
     LOOPHTTP["_loopback_http.py"]
     AUDIT["audit.py\ntranscript_path"]
@@ -155,30 +150,17 @@ flowchart TB
   R_TOKENS --> WEBAPPCFG
   R_WEBAUTHN --> WEBAUTHNGATE
   WSERVER --> STATICVER
-  R_SESS --> OCRCLIENT
-  R_SESS --> VOICECLIENT
-  R_SESS --> LLMCLIENT
-  STATICJS -->|read-aloud, summarize| LLMCLIENT
-  STATICJS -->|dictation| VOICECLIENT
-  STATICJS -->|TTS| TTSCLIENT
 
   subgraph external["External dependencies"]
     SCHTASKS["Windows Task Scheduler\n(\\AppLauncher\\ folder)"]
     GH["gh CLI / GitHub"]
     LIFEOSREPO["life-os repo (sibling)\nskills invoked via claude session"]
-    PHOTOOCR["photo-ocr repo (sibling)\nsession API, loopback"]
-    VOICETRANS["voice-transcriber repo (sibling)\nsession API, loopback"]
-    LLMHUB["claude-local-calls hub\n127.0.0.1:8000, chat + TTS"]
     CLOUDFLARE["Cloudflare named tunnel"]
     TAILSCALE["Tailscale"]
   end
   JOBSSCHTASKS --> SCHTASKS
   GHCLIENT --> GH
   R_LIFEOS --> LIFEOSREPO
-  OCRCLIENT --> PHOTOOCR
-  VOICECLIENT --> VOICETRANS
-  TTSCLIENT --> LLMHUB
-  LLMCLIENT --> LLMHUB
   TUNNEL --> CLOUDFLARE
   TRAY -->|Copy Tailscale URL| TAILSCALE
 

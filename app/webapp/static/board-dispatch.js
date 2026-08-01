@@ -16,8 +16,7 @@
  *   chief settings dialog.
  *
  * The bar is static markup `renderBoard()` never touches, so the 5 s poll
- * can't wipe a goal being typed. Dictation mics (shared voice.js) mount on
- * the goal box here; the drawer reply boxes mount theirs in `board.js`.
+ * can't wipe a goal being typed.
  *
  * `board.js` and this module import each other (this one calls `renderBoard`
  * and `fetchBoard`; `board.js` calls `wireDispatch`/`syncDispatchBar` and the
@@ -29,11 +28,33 @@
 import { els, state } from './state.js';
 import { apiFailToast, authHeaders, jsonApi, toast } from './api.js';
 import { applyLaunchSizePayload } from './terminal.js';
-import { createDictation, startWorkTimer, voiceDictationAvailable } from './voice.js';
 import { icon } from './_vendored/icons/icons.js';
 import { ensureTerminalToken } from './webauthn.js';
 import { CHIEF_RESTART_CONFIRM, isChiefSession } from './dom-utils.js';
 import { fetchBoard, renderBoard } from './board.js';
+
+// Tiny "working" indicator: swap a button's label for a ticking
+// elapsed-seconds timer so a blind background wait visibly shows progress
+// instead of looking stuck. ``workingLabel`` defaults to the hourglass
+// glyph; pass a richer label for wide buttons. Labels are HTML (the Lucide
+// icon() markup rides them — issue #355 PR 3). Returns a stop() that
+// restores ``restoreHtml``.
+function startWorkTimer(btn, restoreHtml, workingLabel) {
+  const lbl = workingLabel || icon('hourglass') + ' ';
+  const t0 = Date.now();
+  btn.classList.add('working');
+  function tick() {
+    const s = Math.floor((Date.now() - t0) / 1000);
+    btn.innerHTML = lbl + s + 's';
+  }
+  tick();
+  const id = setInterval(tick, 500);
+  return function stop() {
+    clearInterval(id);
+    btn.classList.remove('working');
+    btn.innerHTML = restoreHtml;
+  };
+}
 
 // ---------------------------------------------------- fleet chief (#245)
 // The standing conversational orchestrator: one label="chief" PTY session
@@ -464,9 +485,6 @@ async function dispatchGoal() {
 
 export function syncDispatchBar() {
   syncDispatchRepos();
-  if (els.boardDispatchRecord) {
-    els.boardDispatchRecord.hidden = !voiceDictationAvailable();
-  }
   renderChiefStatus();
 }
 
@@ -512,11 +530,6 @@ export function wireDispatch() {
     els.boardDispatchGoal.value = '';
     els.boardDispatchGoal.focus();
   });
-  const dictation = createDictation({
-    button: els.boardDispatchRecord,
-    getTextarea: function () { return els.boardDispatchGoal; },
-  });
-  els.boardDispatchRecord.addEventListener('click', dictation.toggle);
   wireChief();
   syncDispatchBar();
 }

@@ -6,8 +6,7 @@ per-column counts (with the Your-turn attention highlight), the ↻ button
 POSTs the gh refresh, and the phone projection lays the columns out as a
 one-column-per-viewport carousel while desktop gets the five-column grid.
 The #302 dispatch bar POSTs {repo, goal, mode} and keeps its goal for rapid
-multi-dispatch, and the dictation mics (dispatch bar + drawer reply box)
-render when the server reports voice dictation available. Hermetic — the
+multi-dispatch. Hermetic — the
 board API is route-mocked like the Jobs / Life OS e2e tests.
 
 Server-side logic (cwd join, jobs scan, gh cache/degradation, the
@@ -856,42 +855,6 @@ def test_dispatch_repo_dropdown_is_tap_only_and_filters_board_columns(
     expect(authed_page.locator("#boardColOther .board-count")).to_have_text("2")
 
 
-def test_dispatch_and_reply_mics_render_when_voice_available(
-    authed_page: Page, base_url: str
-) -> None:
-    """#302: with the server reporting voice dictation available (and
-    MediaRecorder present), the 🎤 shows on the dispatch bar and inside the
-    drawer's reply row."""
-    # voiceAvailable() also needs window.MediaRecorder, absent in headless
-    # WebKit — a bare stub is enough (presence check only, no recording).
-    authed_page.add_init_script(
-        "if (!window.MediaRecorder) { window.MediaRecorder = class {}; }"
-    )
-
-    def _status_voice_on(route):
-        resp = route.fetch()
-        body = resp.json()
-        body["voice_dictation"] = True
-        route.fulfill(response=resp, json=body)
-
-    authed_page.route(re.compile(r".*/api/status$"), _status_voice_on)
-    _mock_board(authed_page)
-    _mock_exchange(authed_page)
-
-    _open_board(authed_page, base_url)
-    # The board render re-syncs mic visibility once /api/status has landed.
-    expect(authed_page.locator("#boardDispatchRecord")).to_be_visible(
-        timeout=15_000
-    )
-
-    authed_page.locator(
-        '.board-list[data-col="your_turn"] li.board-item'
-    ).first.locator("button.board-card").click()
-    drawer = authed_page.locator(".board-drawer")
-    expect(drawer).to_be_visible()
-    expect(drawer.locator(".board-reply-record")).to_be_visible()
-
-
 def test_board_drawer_rename_first_icon_only_and_stop_kills_session(
     authed_page: Page, base_url: str
 ) -> None:
@@ -975,13 +938,8 @@ def test_board_drawer_rename_first_icon_only_and_stop_kills_session(
         f"last button right {terminal_right}"
     )
 
-    # 44px canonical footprint on every drawer button (#496 item 6 +
-    # round 2: the mic was the one visibly smaller straggler). The mic
-    # only renders when voice dictation is available, so probe it softly.
+    # 44px canonical footprint on every drawer button (#496 item 6).
     sized = [rename, terminal, stop, send]
-    mic = actions.locator(".board-reply-record")
-    if mic.count():
-        sized.append(mic)
     for btn in sized:
         box = btn.bounding_box()
         assert box and box["height"] >= 44 and box["width"] >= 44, (
@@ -1039,9 +997,8 @@ def test_board_drawer_survives_git_status_poll_mid_interaction(
     tag the rename button's live DOM node, hold the boot-time
     /api/claude-code/git-status fetch open until after the drawer is open
     and tagged, then release it and confirm the tagged node (and the
-    drawer) survive untouched — held-open, not a fixed sleep, per the
-    convention in test_voice_dictation.py (a sleep can't reliably outlast
-    Playwright's own route-dispatch latency)."""
+    drawer) survive untouched — held-open, not a fixed sleep (a sleep
+    can't reliably outlast Playwright's own route-dispatch latency)."""
     _mock_board(authed_page)
     _mock_exchange(authed_page)
 

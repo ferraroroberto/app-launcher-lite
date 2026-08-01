@@ -37,7 +37,6 @@ import { apiFailToast, authHeaders, escapeHtml, isDesktopClient, jsonApi, toast 
 import { setTab } from './tabs.js';
 import { openSessionRename, sessionTitle, stopSession } from './sessions.js';
 import { applyLaunchSizePayload, openTerminal } from './terminal.js';
-import { createDictation, voiceDictationAvailable } from './voice.js';
 import { icon } from './_vendored/icons/icons.js';
 import { ensureTerminalToken } from './webauthn.js';
 import { CHIEF_KILL_CONFIRM, iconUrl, renderUsageBadgeRow } from './dom-utils.js';
@@ -224,22 +223,6 @@ function buildDrawer(card) {
     input.rows = 2;
     input.placeholder = 'Reply to ' + (card.project || 'session') + '…';
     actions.appendChild(input);
-    // Voice-reply (#302): a per-drawer dictation instance — the drawer is
-    // rebuilt on every render, so the mic and its state live and die with it.
-    if (voiceDictationAvailable()) {
-      const mic = document.createElement('button');
-      mic.type = 'button';
-      mic.className = 'compose-record board-reply-record';
-      mic.innerHTML = icon('mic');
-      mic.title = 'Dictate (voice → text)';
-      mic.setAttribute('aria-pressed', 'false');
-      const dictation = createDictation({
-        button: mic,
-        getTextarea: function () { return input; },
-      });
-      mic.addEventListener('click', dictation.toggle);
-      actions.appendChild(mic);
-    }
     const send = document.createElement('button');
     send.type = 'button';
     send.className = 'board-reply-send';
@@ -656,7 +639,7 @@ export function renderBoard() {
 
   renderStatusLine(body);
   renderUsageBadgeRow(els.boardUsage, els.boardUsageSession, els.boardUsageWeekly, body.rate_limits);
-  // Keep the dispatch bar's repo list + mic visibility in step with state
+  // Keep the dispatch bar's repo list in step with state
   // that may land after the first render (/api/apps, /api/status).
   syncDispatchBar();
   syncStripActive();

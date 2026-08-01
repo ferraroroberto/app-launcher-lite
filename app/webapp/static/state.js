@@ -92,8 +92,6 @@ export const state = {
   // read-only content browser's current skill + loaded files.
   lifeOsSkills: [],
   lifeOsBrowser: null,   // { skillId, name, files } while the browser is open
-  systemMapAvailable: false, // /api/system-map/status → show/hide the section
-  systemMapObjectUrl: null,  // object URL of the loaded map blob (revoked on reload)
   pendingScan: [],
   webauthn: { configured: false, enrollment_open: false, devices: [] },
   terminal: null,   // { sid, ws, term, fit, onWindowResize }
@@ -143,7 +141,6 @@ export const els = {
   boardDispatchRepoList: document.getElementById('boardDispatchRepoList'),
   boardDispatchMode: document.getElementById('boardDispatchMode'),
   boardDispatchModel: document.getElementById('boardDispatchModel'),
-  boardDispatchRecord: document.getElementById('boardDispatchRecord'),
   boardDispatchClear: document.getElementById('boardDispatchClear'),
   boardDispatchSend: document.getElementById('boardDispatchSend'),
   boardChiefStatus: document.getElementById('boardChiefStatus'),
@@ -166,7 +163,6 @@ export const els = {
   lifeOsRecapBadge: document.getElementById('lifeOsRecapBadge'),
   lifeOsRecapLaunch: document.getElementById('lifeOsRecapLaunch'),
   lifeOsDir: document.getElementById('lifeOsDir'),
-  claudeConfigDir: document.getElementById('claudeConfigDir'),
   lifeOsBrowser: document.getElementById('lifeOsBrowser'),
   lifeOsBrowserBack: document.getElementById('lifeOsBrowserBack'),
   lifeOsBrowserTitle: document.getElementById('lifeOsBrowserTitle'),
@@ -271,12 +267,6 @@ export const els = {
   claudeList: document.getElementById('claudeList'),
   claudeEmpty: document.getElementById('claudeEmpty'),
   favFilterBtn: document.getElementById('favFilterBtn'),
-  systemMapCard: document.getElementById('systemMapCard'),
-  systemMapImage: document.getElementById('systemMapImage'),
-  systemMapStatus: document.getElementById('systemMapStatus'),
-  systemMapLightbox: document.getElementById('systemMapLightbox'),
-  systemMapLightboxImage: document.getElementById('systemMapLightboxImage'),
-  systemMapLightboxClose: document.getElementById('systemMapLightboxClose'),
   gitStatusBtn: document.getElementById('gitStatusBtn'),
   gitStatusSummary: document.getElementById('gitStatusSummary'),
   gitStatusLegend: document.getElementById('gitStatusLegend'),
@@ -319,7 +309,6 @@ export const els = {
   runningAppsEmpty: document.getElementById('runningAppsEmpty'),
   statusReadout: document.getElementById('statusReadout'),
   buildReadout: document.getElementById('buildReadout'),
-  spikeVoiceLink: document.getElementById('spikeVoiceLink'),
 
   scanDialog: document.getElementById('scanDialog'),
   scanResults: document.getElementById('scanResults'),
@@ -360,17 +349,6 @@ export const els = {
   terminalComposeBar: document.getElementById('terminalComposeBar'),
   terminalComposeInput: document.getElementById('terminalComposeInput'),
   terminalComposeSend: document.getElementById('terminalComposeSend'),
-  terminalRecord: document.getElementById('terminalRecord'),
-  terminalSpeak: document.getElementById('terminalSpeak'),
-  terminalSpeakPopover: document.getElementById('terminalSpeakPopover'),
-  summaryModal: document.getElementById('summaryModal'),
-  summaryModalText: document.getElementById('summaryModalText'),
-  summaryModalClose: document.getElementById('summaryModalClose'),
-  terminalScreenshot: document.getElementById('terminalScreenshot'),
-  terminalScreenshotInput: document.getElementById('terminalScreenshotInput'),
   terminalComposeAttach: document.getElementById('terminalComposeAttach'),
-  terminalOcrTray: document.getElementById('terminalOcrTray'),
-  terminalOcrThumbs: document.getElementById('terminalOcrThumbs'),
-  terminalOcrExtract: document.getElementById('terminalOcrExtract'),
 
 };

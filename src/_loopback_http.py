@@ -1,6 +1,6 @@
 """Shared plumbing for the loopback sibling-app HTTP clients.
 
-``session_client``, ``voice_client`` and ``photo_ocr_client`` all talk to a
+Clients like ``session_client`` talk to a
 same-host sibling app over loopback and make the *same* three decisions on
 every call: a transport failure (``requests.RequestException``) maps to a 503,
 a ``>= 400`` upstream response surfaces with its own status (preferring the
@@ -11,7 +11,7 @@ would otherwise emit — so each per-service client shrinks to a list of
 endpoint signatures delegating here.
 
 Each client declares a trivial :class:`LoopbackError` subclass (e.g.
-``VoiceTranscriberError``) so callers keep catching one service's failures
+``SessionHostError``) so callers keep catching one service's failures
 without catching another's; the shared ``status``-carrying ``__init__`` lives
 on the base.
 
