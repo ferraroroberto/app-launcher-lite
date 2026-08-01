@@ -1,7 +1,7 @@
 """First-prompt session title capture + derivation (issue #266).
 
-Only Claude Code emits a genuine per-conversation OSC title; Antigravity and
-Copilot emit none, and Codex/Pi emit only the project folder. For those agents
+Not every agent emits a genuine per-conversation OSC title; Copilot emits
+none, and other TUIs may emit only the project folder. For those agents
 the session-host derives a human title from the first *submitted* prompt seen
 on the input stream. These tests pin the derivation helpers and the
 capture-on-first-submit path against a fake PTY, so a refactor can't silently

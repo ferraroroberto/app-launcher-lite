@@ -19,7 +19,7 @@ from src.session_host import (
 )
 
 
-def _make_pty_session(manager: SessionManager, agent: str = "claude") -> PtySession:
+def _make_pty_session(manager: SessionManager, agent: str = "copilot") -> PtySession:
     session = PtySession(
         session_id="sid-test",
         project_dir=r"C:\code\app-launcher",
@@ -47,7 +47,7 @@ def _make_remote_session(manager: SessionManager, tmp_path, monkeypatch):
     monkeypatch.setattr(
         session_host.subprocess, "run", lambda *a, **k: _FakeCompleted()
     )
-    return manager.create_remote(str(tmp_path), "proj", "", "codex")
+    return manager.create_remote(str(tmp_path), "proj", "", "copilot")
 
 
 def test_rename_sets_manual_title_on_pty_session():
@@ -115,7 +115,7 @@ def test_rename_never_writes_to_the_pty():
     the agent's active turn and its CR often failed to submit, leaving the
     rename text stuck (and duplicated) in the prompt (#551/#553)."""
     mgr = SessionManager()
-    session = _make_pty_session(mgr, agent="claude")
+    session = _make_pty_session(mgr, agent="copilot")
 
     mgr.rename(session.session_id, "my custom title")
 

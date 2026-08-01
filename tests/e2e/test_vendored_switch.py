@@ -135,10 +135,7 @@ def test_static_boolean_controls_have_no_checkbox_markup(
 ) -> None:
     authed_page.goto(base_url, wait_until="domcontentloaded")
     selectors = (
-        "#claudeVerbose",
-        "#claudeDebug",
-        "#antigravitySkipPerms",
-        "#antigravitySandbox",
+        "#copilotAutopilot",
         "#copilotSkipPerms",
         "#jobsEditBtn",
         "#editMode",

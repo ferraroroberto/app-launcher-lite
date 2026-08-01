@@ -1,6 +1,6 @@
 """Regression pin for issues #115 + #496 (Coding tab git-status flags).
 
-The feature (#115) coloured each tile from /api/claude-code/git-status —
+The feature (#115) coloured each tile from /api/coding/git-status —
 red for a dirty tree, yellow for a non-default branch (red wins when both,
 but the branch tag still shows) — plus a legend. #496 reversed the
 on-demand contract: the fetch now happens automatically at boot (and on a
@@ -47,7 +47,7 @@ def test_git_status_auto_annotates_tiles_without_tap(
             )
         route.fulfill(response=resp, json=body)
 
-    authed_page.route("**/api/claude-code/git-status", _all_dirty)
+    authed_page.route("**/api/coding/git-status", _all_dirty)
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
 
     # Projects is collapsed by default (#383 review round) — expand it so
@@ -57,7 +57,7 @@ def test_git_status_auto_annotates_tiles_without_tap(
     )
 
     authed_page.wait_for_selector(
-        ".coding-item, #claudeEmpty:not([hidden])", timeout=10_000
+        ".coding-item, #codingEmpty:not([hidden])", timeout=10_000
     )
     tiles = authed_page.locator(".coding-item")
     if tiles.count() == 0:

@@ -1,4 +1,4 @@
-"""Basic webapp routes: /healthz, /, /api/status, /api/claude-code/flags."""
+"""Basic webapp routes: /healthz, /, /api/status, /api/coding/flags."""
 
 from __future__ import annotations
 
@@ -247,34 +247,31 @@ class TestAgents:
         body = resp.json()
         assert isinstance(body["agents"], list) and body["agents"]
         ids = {a["id"] for a in body["agents"]}
-        assert {"claude", "antigravity", "copilot"} <= ids
+        assert ids == {"copilot"}
         for a in body["agents"]:
             assert set(a) == {"id", "label", "available", "fullscreen"}
             assert isinstance(a["available"], bool)
             assert isinstance(a["fullscreen"], bool)
 
 
-class TestClaudeFlags:
+class TestCodingFlags:
     def test_flags_returns_defaults(self, webapp_client):
         client, _, _ = webapp_client
-        resp = client.get("/api/claude-code/flags")
+        resp = client.get("/api/coding/flags")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["model"] == "opus"
-        assert body["effort"] == "high"
-        assert body["verbose"] is True
-        assert body["debug"] is False
-        assert body["permission_mode"] == "auto"
-        # The always-on flags are surface-area for the SPA's badge; if the
-        # tuple ever changes, this test catches it loudly.
-        assert "--remote-control" in body["always_on_flags"]
-        # The permission flag is user-selectable now — not always-on.
-        assert "--dangerously-skip-permissions" not in body["always_on_flags"]
-        # Computed flags are a string; sanity-check that the model/effort
-        # and the default (auto) permission mode round-trip through the formatter.
-        assert "--model opus" in body["computed_flags"]
-        assert "--effort high" in body["computed_flags"]
-        assert "--permission-mode auto" in body["computed_flags"]
+        # Same payload as /api/config's embedded "copilot" block — the
+        # options card's flag preview reads either interchangeably.
+        assert body["model"] == "gpt-5.6-luna"
+        assert body["effort"] == "xhigh"
+        assert body["context"] == "long_context"
+        assert body["autopilot"] is True
+        assert body["skip_permissions"] is False
+        # Computed flags are a string; sanity-check the model/effort/context
+        # round-trip through the formatter.
+        assert "--model gpt-5.6-luna" in body["computed_flags"]
+        assert "--effort xhigh" in body["computed_flags"]
+        assert "--context long_context" in body["computed_flags"]
 
 
 class TestTerminalThemes:

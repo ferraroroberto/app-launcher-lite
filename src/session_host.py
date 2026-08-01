@@ -95,8 +95,8 @@ _BULK_CAP_MS = 3000
 # 50ms setInterval terminal-compose.js polls at.
 _BULK_POLL_S = 0.05
 
-# First-prompt session title (issue #266). Only Claude Code emits a genuine
-# per-conversation OSC title; Antigravity/Copilot emit none and Codex/Pi emit
+# First-prompt session title (issue #266). Not every agent emits a genuine
+# per-conversation OSC title; Copilot emits none, and other TUIs may emit
 # only the project folder, so for those agents we derive a human title from the
 # first submitted prompt. Cap how much un-submitted input we buffer (a line the
 # user never sends must not grow unbounded), and how long / how many words the
@@ -116,7 +116,7 @@ _MANUAL_TITLE_MAX_CHARS = 60
 
 # Stop modes accepted by SessionManager.stop / PtySession.stop.
 STOP_INTERRUPT = "interrupt"  # Ctrl+C into the PTY
-STOP_QUIT = "quit"            # type "/quit" — Claude Code's clean exit
+STOP_QUIT = "quit"            # type the agent's quit command (Copilot: /exit)
 STOP_KILL = "kill"            # force-terminate the ConPTY
 
 # Graceful-stop grace window: how long STOP_QUIT waits for the agent to exit
@@ -437,7 +437,7 @@ def _strip_color_osc(chunk: str, carry: str) -> Tuple[str, str]:
 
 @dataclass
 class PtySession:
-    """One ``claude`` process running inside a launcher-owned ConPTY."""
+    """One agent process running inside a launcher-owned ConPTY."""
 
     kind = KIND_PTY
 
@@ -774,7 +774,7 @@ class PtySession:
         """Stop the session: graceful agent-own quit, then force-fallback.
 
         ``STOP_QUIT`` (the path the single "Stop and kill" button drives)
-        types the agent's *own* quit command — Claude's ``/quit``,
+        types the agent's *own* quit command — Copilot's ``/exit``,
         Copilot's ``/exit``, … (see :func:`quit_command_for`) — after an
         ESC that clears any partial prompt, then waits up to
         ``grace_seconds`` for the agent to exit on its own. The clean exit
@@ -883,7 +883,7 @@ class PtySession:
 
 
 class RemoteSession:
-    """A detached ``claude`` window the launcher tracks but does not stream.
+    """A detached agent window the launcher tracks but does not stream.
 
     Spawned in its own console window and deliberately **orphaned out of the
     session-host's process tree** (see :meth:`SessionManager.create_remote`),
@@ -1059,7 +1059,7 @@ class SessionManager:
 
         ``rows``/``cols`` size the ConPTY at spawn time. The phone passes
         its real terminal dimensions through the launch request so a
-        full-screen differential TUI (Codex's ratatui) paints its *first*
+        full-screen differential TUI (ratatui-style) paints its *first*
         frame at the correct width instead of the legacy ``40×120`` — which
         wrapped/cut on a portrait phone (issue #126). They are clamped to
         the same bounds as :meth:`PtySession.resize`; an omitted value
@@ -1082,7 +1082,7 @@ class SessionManager:
         rows = max(1, min(int(rows), 1000))
         cols = max(1, min(int(cols), 1000))
         session_id = uuid.uuid4().hex
-        # `cmd /c` resolves the agent command (e.g. claude.cmd / agy.cmd)
+        # `cmd /c` resolves the agent command (e.g. copilot.cmd)
         # off PATH the way a normal shell would; when the agent exits, cmd
         # exits, the PTY closes, and the reader thread sees EOF.
         #
@@ -1153,7 +1153,7 @@ class SessionManager:
         if not directory.is_dir():
             raise OSError(f"Project directory not found: {project_dir}")
         session_id = uuid.uuid4().hex
-        # `cmd /c` resolves the agent command (e.g. claude.cmd) off PATH and
+        # `cmd /c` resolves the agent command (e.g. copilot.cmd) off PATH and
         # closes the window when the agent exits — same shape as the PTY spawn.
         exe = command_for(agent)
         inner = (

@@ -11,7 +11,7 @@ specialised to the skills in the sibling ``team-os`` repo:
     GET  /api/team-os/file?path=…              → file content (Tailscale + passkey)
 
 Launch reuses the Coding tab's session-host / ConPTY machinery wholesale
-(:func:`src.launcher.spawn_claude_session`, agent ``copilot`` — Copilot
+(:func:`src.launcher.spawn_agent_session`, agent ``copilot`` — Copilot
 reads ``.claude/skills`` and supports ``/skill`` invocation); only three
 things differ: the cwd is always ``team_os_dir`` (so the project skills
 resolve), the model comes from the tab's model combo (config-driven, from
@@ -42,7 +42,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from src import audit
 from src.launch_flags import build_copilot_flags, build_resume_flags
-from src.launcher import open_local_terminal_window, spawn_claude_session
+from src.launcher import open_local_terminal_window, spawn_agent_session
 from src.scanner import Skill, scan_skills, skills_dir_for
 from src.webapp_config import WebappConfig
 
@@ -223,7 +223,7 @@ async def _spawn_skill_session(
     rows = int(body.get("rows") or 40)
     cols = int(body.get("cols") or 120)
     session = await spawn_session_or_400(
-        spawn_claude_session,
+        spawn_agent_session,
         team_os_dir,
         name,
         flags,
@@ -259,7 +259,7 @@ async def _spawn_skill_session(
     # for every caller, unless the launcher explicitly says it's rendering
     # in-page itself (see should_mirror_to_pc).
     if kind == "pty" and should_mirror_to_pc(
-        cfg.claude_show_local_window, request, body
+        cfg.show_local_window, request, body
     ):
         asyncio.create_task(
             asyncio.to_thread(
@@ -397,7 +397,7 @@ async def launch_skill(skill_id: str, request: Request) -> Dict[str, Any]:
     ∈ "" (Default) + ``copilot_models``). The cwd is fixed to ``team_os_dir``;
     the model comes from the tab's combo; the positional prompt is a bare
     ``/<skill>`` (no free text — Copilot supports ``/skill`` invocation).
-    Mirrors the Coding tab's claude-code launch (PTY streamed to the phone
+    Mirrors the Coding tab's coding launch (PTY streamed to the phone
     vs. detached console window, + PC mirror window + audit).
 
     Resume (issue #151) reopens Copilot's own native session picker instead

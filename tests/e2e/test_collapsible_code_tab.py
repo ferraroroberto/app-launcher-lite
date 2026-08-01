@@ -32,11 +32,11 @@ def test_sessions_open_and_projects_collapsed_by_default(
 
     # Both panels exist as <details>. Scope sessions-card to the Code pane —
     # the Apps/Jobs tabs also carry .sessions-card now (issue #226).
-    sessions = authed_page.locator("#paneClaude details.sessions-card")
+    sessions = authed_page.locator("#paneCoding details.sessions-card")
     projects = authed_page.locator("details.projects-card")
     sessions.wait_for(state="attached", timeout=10_000)
     projects.wait_for(state="attached", timeout=10_000)
-    assert _is_open(authed_page, "#paneClaude details.sessions-card"), "sessions panel should open by default"
+    assert _is_open(authed_page, "#paneCoding details.sessions-card"), "sessions panel should open by default"
     assert not _is_open(authed_page, "details.projects-card"), (
         "projects panel should start collapsed (#383 review round)"
     )
@@ -54,13 +54,13 @@ def test_header_action_tap_does_not_toggle_sessions_panel(
 ) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
 
-    sessions = authed_page.locator("#paneClaude details.sessions-card")
+    sessions = authed_page.locator("#paneCoding details.sessions-card")
     sessions.wait_for(state="attached", timeout=10_000)
-    assert _is_open(authed_page, "#paneClaude details.sessions-card")
+    assert _is_open(authed_page, "#paneCoding details.sessions-card")
 
     # The ⎇ status button sits inside the sessions <summary>; clicking it
     # must drive the button but leave the panel open (stopPropagation).
     authed_page.locator("#gitStatusBtn").click()
-    assert _is_open(authed_page, "#paneClaude details.sessions-card"), (
+    assert _is_open(authed_page, "#paneCoding details.sessions-card"), (
         "header action tap must not collapse the sessions panel"
     )

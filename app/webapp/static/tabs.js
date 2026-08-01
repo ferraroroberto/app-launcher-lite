@@ -7,10 +7,7 @@
  * state.tab in sync (apps.js/board.js/jobs.js self-gate their polling on it)
  * and re-exports setTab for board.js's chained-job / ?board= deep-link calls.
  *
- * The Coding tab's element ids keep the historical `claude` prefix
- * (tabClaude / paneClaude / state.tab='claude') — only the visible
- * label changed (issue #45). Jobs added by issue #47; Board by #300;
- * Settings by #383. */
+ * Jobs added by issue #47; Board by #300; Settings by #383. */
 
 import { state } from './state.js';
 import { initNavTabs } from './_vendored/nav/nav-tabs.js';
@@ -26,7 +23,7 @@ export function wireTabs() {
     // Board leads the visual workflow, but Coding remains the first-launch
     // default. Without this explicit default the vendored controller selects
     // the first DOM tab, coupling presentation order to startup behavior.
-    defaultTab: 'claude',
+    defaultTab: 'coding',
     onChange: function (tab) { state.tab = tab; },
   });
 }

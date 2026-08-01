@@ -33,7 +33,7 @@ def _make_session(loop) -> PtySession:
     return PtySession(
         session_id="sid-test",
         project_dir=r"C:\stub",
-        name="claude",
+        name="coding",
         flags="",
         started_at=time.time(),
         _loop=loop,

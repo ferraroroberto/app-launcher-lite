@@ -6,7 +6,7 @@
 unthreaded from five HTTP handlers in the same file, so the defect #660 fixed
 stayed reachable through a different door.
 
-``POST /api/claude-code/sessions/{sid}/input`` is the one that matters most:
+``POST /api/coding/sessions/{sid}/input`` is the one that matters most:
 it is the path the Board's dispatch bar and any orchestrator use to drive
 sessions, so it fires at message rate against every session under a
 multi-worker run. The webapp runs a **single** uvicorn worker

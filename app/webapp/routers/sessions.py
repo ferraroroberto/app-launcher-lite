@@ -41,8 +41,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/api/claude-code/sessions")
-async def claude_sessions(request: Request) -> Dict[str, Any]:
+@router.get("/api/coding/sessions")
+async def coding_sessions(request: Request) -> Dict[str, Any]:
     """List launcher-owned PTY sessions (public, token-gated).
 
     Each session is joined with the shared cross-tab title (fleet-config#302,
@@ -67,8 +67,8 @@ async def claude_sessions(request: Request) -> Dict[str, Any]:
     return {"sessions": sessions}
 
 
-@router.post("/api/claude-code/sessions/{sid}/stop")
-async def stop_claude_session(sid: str, request: Request) -> Dict[str, Any]:
+@router.post("/api/coding/sessions/{sid}/stop")
+async def stop_coding_session(sid: str, request: Request) -> Dict[str, Any]:
     """Stop a PTY session — graceful /quit then force-fallback (public, token-gated)."""
     cfg: WebappConfig = request.app.state.webapp_config
     body = await maybe_json(request)
@@ -103,8 +103,8 @@ async def stop_claude_session(sid: str, request: Request) -> Dict[str, Any]:
     return result
 
 
-@router.post("/api/claude-code/sessions/{sid}/rename")
-async def rename_claude_session(sid: str, request: Request) -> Dict[str, Any]:
+@router.post("/api/coding/sessions/{sid}/rename")
+async def rename_coding_session(sid: str, request: Request) -> Dict[str, Any]:
     """Set or clear a manual title override for a session (issue #458).
 
     Wins over every auto-derived title (``live_title``/``prompt_title``/
@@ -129,8 +129,8 @@ async def rename_claude_session(sid: str, request: Request) -> Dict[str, Any]:
     return result
 
 
-@router.post("/api/claude-code/sessions/{sid}/mirror")
-async def mirror_claude_session(sid: str, request: Request) -> Dict[str, Any]:
+@router.post("/api/coding/sessions/{sid}/mirror")
+async def mirror_coding_session(sid: str, request: Request) -> Dict[str, Any]:
     """Open (or focus) the PC mirror window for an existing session (issue #282).
 
     Desktop parity with the launch flow: clicking a session row on a desktop
@@ -143,13 +143,13 @@ async def mirror_claude_session(sid: str, request: Request) -> Dict[str, Any]:
     launch path does (issue #20).
 
     The phone never calls this (it streams in-page). When local-window
-    mirroring is disabled (``claude_show_local_window`` false) the launch flow
+    mirroring is disabled (``show_local_window`` false) the launch flow
     opens no window either, so this returns ``mirrored: false`` and the caller
     falls back to the in-page terminal — preserving the old behaviour for that
     config.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    if not cfg.claude_show_local_window:
+    if not cfg.show_local_window:
         return {"mirrored": False, "reason": "local window mirroring disabled"}
     # A disposable e2e / verify-before-ship instance (identified by the
     # session-host port override, set only by autoboot) must never spawn a real
@@ -171,7 +171,7 @@ async def mirror_claude_session(sid: str, request: Request) -> Dict[str, Any]:
     return {"mirrored": True, "action": action}
 
 
-@router.post("/api/claude-code/sessions/{sid}/image")
+@router.post("/api/coding/sessions/{sid}/image")
 async def session_image(
     sid: str, request: Request, file: UploadFile = File(...)
 ) -> Dict[str, Any]:
@@ -203,7 +203,7 @@ async def session_image(
     return result
 
 
-@router.post("/api/claude-code/sessions/{sid}/input")
+@router.post("/api/coding/sessions/{sid}/input")
 async def session_input(sid: str, request: Request) -> Dict[str, Any]:
     """Write composed text into a session's PTY (Tailscale-only + passkey, #301).
 
@@ -252,7 +252,7 @@ async def session_input(sid: str, request: Request) -> Dict[str, Any]:
     return {"ok": True, "bytes": len(text), "submit": submit}
 
 
-@router.websocket("/api/claude-code/sessions/{sid}/ws")
+@router.websocket("/api/coding/sessions/{sid}/ws")
 async def proxy_session_ws(websocket: WebSocket, sid: str) -> None:
     """Tailscale-only + passkey-gated WebSocket proxy to the session-host.
 

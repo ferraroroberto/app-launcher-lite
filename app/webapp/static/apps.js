@@ -2,7 +2,7 @@
  * running-listeners panel.
  *
  * All of this is on the Apps tab — except renderApps also feeds the
- * Coding tab's project list (the `claude-code` rows), which renders as
+ * Coding tab's project list (the `coding` rows), which renders as
  * bare folder-name tiles with one launch button per coding agent.
  */
 
@@ -15,21 +15,21 @@ import { fmtAgo } from './sessions.js';
 import { applyLaunchSizePayload, handleLaunchResponse } from './terminal.js';
 import { icon } from './_vendored/icons/icons.js';
 import { setSwitch, switchEl } from './_vendored/switch/switch.js';
-import { patchConfig } from './claude-options.js';
+import { patchConfig } from './copilot-options.js';
 
 // ----------------------------------------------------------- apps list
 export function renderApps() {
-  const codingApps = state.apps.filter(function (a) { return a.kind === 'claude-code'; });
+  const codingApps = state.apps.filter(function (a) { return a.kind === 'coding'; });
   const trayApps = state.apps.filter(function (a) { return a.kind === 'tray'; });
   const otherApps = state.apps.filter(function (a) {
-    return a.kind !== 'claude-code' && a.kind !== 'tray';
+    return a.kind !== 'coding' && a.kind !== 'tray';
   });
 
-  renderCodingList(els.claudeList, codingApps);
+  renderCodingList(els.codingList, codingApps);
   renderList(els.registeredTraysList, trayApps);
   renderList(els.appsList, otherApps);
 
-  els.claudeEmpty.hidden = codingApps.length !== 0;
+  els.codingEmpty.hidden = codingApps.length !== 0;
   els.registeredTraysEmpty.hidden = trayApps.length !== 0;
   els.appsEmpty.hidden = otherApps.length !== 0;
 }
@@ -241,7 +241,7 @@ function renderCodingList(host, items) {
 // from the authoritative payload (no optimistic local mutation to drift).
 async function toggleFavorite(a) {
   try {
-    await jsonApi('/api/claude-code/favorites', {
+    await jsonApi('/api/coding/favorites', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: a.id, favorite: !a.is_favorite }),
@@ -315,7 +315,7 @@ function annotateGitStatus(nameEl, id) {
 export async function refreshGitStatus(options) {
   const quiet = !!(options && options.quiet);
   try {
-    const body = await jsonApi('/api/claude-code/git-status');
+    const body = await jsonApi('/api/coding/git-status');
     const map = {};
     (body.projects || []).forEach(function (p) { map[p.id] = p; });
     state.gitStatus = map;
@@ -371,7 +371,7 @@ function buildGitSummary() {
   box.innerHTML = '';
   // Off-default-branch coding projects, in the list's own order.
   const offMain = state.apps.filter(function (a) {
-    if (a.kind !== 'claude-code') return false;
+    if (a.kind !== 'coding') return false;
     const gs = state.gitStatus && state.gitStatus[a.id];
     return gs && gs.is_git && gs.branch && !gs.on_default_branch;
   });
@@ -537,25 +537,24 @@ function renderList(host, items) {
 // the phone. The ↺ Resume toggle (issue #151) reopens the agent's own
 // session picker; it is orthogonal to Detached (issue #157) — Detached +
 // Resume opens the picker in the detached console, Resume alone streams it
-// to the phone over a PTY. `agentId` (claude | codex | antigravity |
-// copilot) is set by the Coding tile's per-agent button; undefined for
-// Apps-tab bat launches.
+// to the phone over a PTY. `agentId` (copilot) is set by the Coding
+// tile's per-agent button; undefined for Apps-tab bat launches.
 async function launchApp(a, agentId) {
-  const resume = !!(a.kind === 'claude-code' && els.claudeResume &&
-    els.claudeResume.getAttribute('aria-checked') === 'true');
+  const resume = !!(a.kind === 'coding' && els.codingResume &&
+    els.codingResume.getAttribute('aria-checked') === 'true');
   // Detached → 'remote', independent of Resume. The two combine: a
   // Detached+Resume launch renders the agent's picker in the console.
-  const mode = (a.kind === 'claude-code' && els.claudeDetached &&
-    els.claudeDetached.getAttribute('aria-checked') === 'true') ? 'remote' : null;
+  const mode = (a.kind === 'coding' && els.codingDetached &&
+    els.codingDetached.getAttribute('aria-checked') === 'true') ? 'remote' : null;
   try {
     const opts = { method: 'POST' };
     const payload = {};
     if (mode) payload.mode = mode;
     if (resume) payload.resume = true;
-    if (a.kind === 'claude-code') payload.agent = agentId || 'claude';
+    if (a.kind === 'coding') payload.agent = agentId || 'copilot';
     // Streamed (pty) coding launches need a starting PTY size. Detached
     // (remote) launches have no PTY, so skip it.
-    if (a.kind === 'claude-code' && !mode) {
+    if (a.kind === 'coding' && !mode) {
       // A desktop browser gets a dedicated PC Edge --app window, not an
       // in-page terminal (issue #241); a phone carries its real terminal
       // size so the PTY's first frame is the right width for a ratatui
@@ -572,7 +571,7 @@ async function launchApp(a, agentId) {
     // Tag the toast with the agent's label for any non-default agent;
     // resolved against the registry so a new agent needs no change here.
     let agentTag = '';
-    if (a.kind === 'claude-code' && body.agent && body.agent !== 'claude') {
+    if (a.kind === 'coding' && body.agent && body.agent !== 'copilot') {
       const known = state.agents.find(function (ag) { return ag.id === body.agent; });
       agentTag = ' (' + (known ? known.label : body.agent) + ')';
     }
@@ -582,14 +581,14 @@ async function launchApp(a, agentId) {
       'good',
       { icon: resume ? 'rotate-ccw' : 'rocket' }
     );
-    if (a.kind === 'claude-code' && body.session) {
+    if (a.kind === 'coding' && body.session) {
       // Full-control sessions drop straight into the terminal; detached
       // ones only appear in the running-sessions list. A desktop browser
       // gets its terminal in a dedicated PC Edge window instead of in-page,
       // so it stays on the launcher SPA (issue #241).
       handleLaunchResponse(body.session);
-    } else if (a.kind !== 'claude-code') {
-      // Non-claude-code: a bat was spawned and is now tracked. Port
+    } else if (a.kind !== 'coding') {
+      // Non-coding: a bat was spawned and is now tracked. Port
       // discovery is racy (Streamlit takes 1-3 s to bind) so poll the
       // running-apps list a few times after the launch.
       fetchRunningApps().catch(function () {});
@@ -642,7 +641,7 @@ export async function fetchAgents() {
 }
 
 // -------------------------------------------------- running apps panel
-// Apps spawned from the launcher (bats). Mirrors the Claude Code tab's
+// Apps spawned from the launcher (bats). Mirrors the Coding tab's
 // Running sessions panel: list, tap-to-open over Tailscale, per-app stop.
 export function renderRunningApps() {
   const host = els.runningAppsList;

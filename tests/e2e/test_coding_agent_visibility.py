@@ -7,6 +7,9 @@ drops that button from every project row immediately and persists as
 `coding_hidden_agents` in the webapp config, so it stays hidden across a
 reload.
 
+Reduced to the lite fork's single-agent registry: the Copilot launch button
+is present, and the GitHub pseudo-button hides/persists/restores.
+
 Approach: /api/apps and /api/agents are mocked for a deterministic row and
 agent set, but the config write is **real** — the e2e conftest points the
 webapp at a throwaway `webapp_config.json`, so the reload assertion proves
@@ -23,8 +26,8 @@ from playwright.sync_api import Page, expect
 pytestmark = pytest.mark.smoke
 
 AGENTS = [
-    {"id": "claude", "label": "Claude Code", "available": True, "fullscreen": False},
-    {"id": "codex", "label": "Codex CLI", "available": True, "fullscreen": True},
+    {"id": "copilot", "label": "GitHub Copilot CLI", "available": True,
+     "fullscreen": True},
 ]
 
 
@@ -41,7 +44,7 @@ def _install_routes(page: Page) -> None:
                         {
                             "id": "alpha",
                             "name": "alpha",
-                            "kind": "claude-code",
+                            "kind": "coding",
                             "project_dir": "E:/automation/alpha",
                             "added_at": "",
                             "is_favorite": False,
@@ -68,8 +71,10 @@ def _open_surfaces(page: Page) -> None:
     page.locator("#codingOptions").evaluate("el => { el.open = true; }")
 
 
-def _codex_btn(page: Page):
-    return page.locator('.coding-item[data-id="alpha"] .agent-btn[data-agent="codex"]')
+def _copilot_btn(page: Page):
+    return page.locator(
+        '.coding-item[data-id="alpha"] .agent-btn[data-agent="copilot"]'
+    )
 
 
 def _github_btn(page: Page):
@@ -93,7 +98,7 @@ def _reset_visibility(page: Page, base_url: str) -> None:
     )
 
 
-def test_hidden_agent_and_github_buttons_disappear_and_persist(
+def test_copilot_button_present_and_github_toggle_persists(
     authed_page: Page, base_url: str
 ) -> None:
     _install_routes(authed_page)
@@ -102,36 +107,30 @@ def test_hidden_agent_and_github_buttons_disappear_and_persist(
     _open_surfaces(authed_page)
 
     # The list is generated from the registry: one row per agent + GitHub.
-    codex_toggle = authed_page.locator('[data-visibility-toggle="codex"]')
+    copilot_toggle = authed_page.locator('[data-visibility-toggle="copilot"]')
     github_toggle = authed_page.locator('[data-visibility-toggle="github"]')
-    expect(codex_toggle).to_have_attribute("aria-checked", "true", timeout=5_000)
-    expect(authed_page.locator('[data-visibility-toggle="claude"]')).to_have_count(1)
-    expect(_codex_btn(authed_page)).to_have_count(1)
+    expect(copilot_toggle).to_have_attribute("aria-checked", "true", timeout=5_000)
+    expect(github_toggle).to_have_count(1)
+    expect(_copilot_btn(authed_page)).to_have_count(1)
     expect(_github_btn(authed_page)).to_have_count(1)
 
-    # Toggling off drops the button from the row with no reload.
-    codex_toggle.click()
-    expect(_codex_btn(authed_page)).to_have_count(0)
+    # Toggling GitHub off drops its button from the row with no reload.
     github_toggle.click()
     expect(_github_btn(authed_page)).to_have_count(0)
-    # Claude stays — hiding is per button, not all-or-nothing.
-    expect(
-        authed_page.locator('.coding-item[data-id="alpha"] .agent-btn[data-agent="claude"]')
-    ).to_have_count(1)
+    # Copilot stays — hiding is per button, not all-or-nothing.
+    expect(_copilot_btn(authed_page)).to_have_count(1)
     # The favorite star is never hideable.
     expect(authed_page.locator('.coding-item[data-id="alpha"] .star-btn')).to_have_count(1)
 
-    # Persisted server-side: a reload keeps them hidden and the switches off.
+    # Persisted server-side: a reload keeps it hidden and the switch off.
     authed_page.reload(wait_until="domcontentloaded")
     _open_surfaces(authed_page)
-    expect(authed_page.locator('[data-visibility-toggle="codex"]')).to_have_attribute(
+    expect(authed_page.locator('[data-visibility-toggle="github"]')).to_have_attribute(
         "aria-checked", "false", timeout=5_000
     )
-    expect(_codex_btn(authed_page)).to_have_count(0)
     expect(_github_btn(authed_page)).to_have_count(0)
+    expect(_copilot_btn(authed_page)).to_have_count(1)
 
-    # Toggling back on restores both buttons.
-    authed_page.locator('[data-visibility-toggle="codex"]').click()
+    # Toggling back on restores the button.
     authed_page.locator('[data-visibility-toggle="github"]').click()
-    expect(_codex_btn(authed_page)).to_have_count(1)
     expect(_github_btn(authed_page)).to_have_count(1)

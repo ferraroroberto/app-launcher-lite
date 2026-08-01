@@ -1,6 +1,6 @@
 """Headless VT100 screen mirror for full-screen (ratatui) PTY sessions.
 
-A ratatui-based agent (Codex/Antigravity/Pi/Copilot, see :mod:`src.agents`)
+A ratatui-based agent (Copilot; see :mod:`src.agents`)
 re-emits its **entire transcript** on any winsize change (empirical probe,
 issue #430: ~65 KB for a long conversation, on a same-shape resize toggle).
 The session-host used to serve a (re)connecting client by toggling the PTY

@@ -1,8 +1,8 @@
 """Regression pin for issue #264 — pan, don't reflow, a full-screen TUI.
 
 On iPhone the software keyboard shrinks ``visualViewport.height``. For an
-inline agent (Claude) ``applySize()`` re-fits xterm to the smaller box
-(issue #135). For a full-screen *differential* agent (Codex/ratatui) that
+inline agent (e.g. SSH) ``applySize()`` re-fits xterm to the smaller box
+(issue #135). For a full-screen *differential* agent (ratatui-style) that
 reflow is harmful: it changes the PTY row count, which SIGWINCHes the agent
 into repainting its whole frame on every keyboard open/close — the visible
 "refreshment" the user reported. The fix keeps the PTY at its stable size

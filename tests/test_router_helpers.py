@@ -90,7 +90,7 @@ def test_loopback_api_launch_with_rows_cols_but_no_in_page_opens_mirror() -> Non
 
 
 def test_disabled_flag_never_mirrors() -> None:
-    # claude_show_local_window off → never open the mirror, even for a phone.
+    # show_local_window off → never open the mirror, even for a phone.
     assert should_mirror_to_pc(False, _request("100.64.0.5"), {}) is False
     # ...or for a loopback caller with no in_page flag, the new default-mirror case.
     assert should_mirror_to_pc(False, _request("127.0.0.1"), {}) is False

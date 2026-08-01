@@ -1,7 +1,7 @@
-"""POST /api/claude-code/favorites + the /api/apps is_favorite flag (#250).
+"""POST /api/coding/favorites + the /api/apps is_favorite flag (#250).
 
 Covers the Coding-tab favorites backend: a project's favorite state toggles
-idempotently, persists to webapp_config, and surfaces on the live claude-code
+idempotently, persists to webapp_config, and surfaces on the live coding
 rows of /api/apps. The frontend partition/filter is pinned separately by the
 e2e suite (tests/e2e/test_coding_favorites.py)."""
 
@@ -20,7 +20,7 @@ def _make_project(app, name: str) -> str:
 
 def _coding_rows(client) -> dict:
     body = client.get("/api/apps").json()
-    return {a["id"]: a for a in body["apps"] if a["kind"] == "claude-code"}
+    return {a["id"]: a for a in body["apps"] if a["kind"] == "coding"}
 
 
 class TestFavoritesEndpoint:
@@ -35,7 +35,7 @@ class TestFavoritesEndpoint:
 
         # Star it.
         resp = client.post(
-            "/api/claude-code/favorites",
+            "/api/coding/favorites",
             json={"id": "alphaproj", "favorite": True},
         )
         assert resp.status_code == 200
@@ -46,7 +46,7 @@ class TestFavoritesEndpoint:
 
         # Unstar it.
         resp = client.post(
-            "/api/claude-code/favorites",
+            "/api/coding/favorites",
             json={"id": "alphaproj", "favorite": False},
         )
         assert resp.status_code == 200
@@ -62,7 +62,7 @@ class TestFavoritesEndpoint:
         client, app, _ = webapp_client
         _make_project(app, "betaproj")
         client.post(
-            "/api/claude-code/favorites",
+            "/api/coding/favorites",
             json={"id": "betaproj", "favorite": True},
         )
         # Re-read from disk (DEFAULT_CONFIG_PATH is monkeypatched to tmp).
@@ -74,14 +74,14 @@ class TestFavoritesEndpoint:
         _make_project(app, "gammaproj")
         for _ in range(2):
             client.post(
-                "/api/claude-code/favorites",
+                "/api/coding/favorites",
                 json={"id": "gammaproj", "favorite": True},
             )
         assert app.state.webapp_config.coding_favorites == ["gammaproj"]
 
     def test_missing_id_is_400(self, webapp_client):
         client, _, _ = webapp_client
-        resp = client.post("/api/claude-code/favorites", json={"favorite": True})
+        resp = client.post("/api/coding/favorites", json={"favorite": True})
         assert resp.status_code == 400
 
     def test_favorite_for_absent_project_is_kept(self, webapp_client):
@@ -90,7 +90,7 @@ class TestFavoritesEndpoint:
         simply never matches a live row until it does."""
         client, app, _ = webapp_client
         resp = client.post(
-            "/api/claude-code/favorites",
+            "/api/coding/favorites",
             json={"id": "not-on-disk", "favorite": True},
         )
         assert resp.status_code == 200

@@ -57,7 +57,7 @@ Running `verify-before-ship.ps1` **on your machine** and running the **same scri
 Your machine is *dirty* in useful and misleading ways:
 
 - It has a real `config/webapp_config.json`, `config.json`, `apps.json` — you created them during setup. They are **gitignored**, so they exist only on your disk and never travel with the code.
-- `claude` is on your `PATH`.
+- `copilot` is on your `PATH`.
 - A tray, a session-host, certificates may already be running or present.
 
 A GitHub runner is *pristine*: a brand-new Windows VM with only what the workflow explicitly installs. Anything your code silently assumed to be "just there" is suddenly **not there**.
@@ -80,14 +80,14 @@ The fix was one workflow step: seed the three config files from their committed 
 30 passed, 24 skipped in 43.35s
 ```
 
-The suite genuinely runs now. The 24 remaining skips are *expected and documented*: the terminal-regression tests launch a real `claude` PTY, and `claude` is not on a GitHub runner's `PATH`, so the `launched_pty_session` fixture skips them cleanly. That is an honest skip — we know exactly why, and it is written down — not a silent collapse.
+The suite genuinely runs now. The 24 remaining skips are *expected and documented*: the terminal-regression tests launch a real `copilot` PTY, and `copilot` is not on a GitHub runner's `PATH`, so the `launched_pty_session` fixture skips them cleanly. That is an honest skip — we know exactly why, and it is written down — not a silent collapse.
 
 ### The takeaway
 
 | | Your machine | GitHub runner |
 |---|---|---|
 | Gitignored config files | Present (you made them) | **Absent** — seed from samples |
-| `claude` on PATH | Yes | No — terminal tests skip (expected) |
+| `copilot` on PATH | Yes | No — terminal tests skip (expected) |
 | Pre-existing tray / session-host | Maybe | Never — gate boots its own |
 | Good for | Fast dev loop | Proving it works from *nothing* |
 

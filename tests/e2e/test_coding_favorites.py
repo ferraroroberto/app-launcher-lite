@@ -1,8 +1,8 @@
 """Regression pin for issue #250 (Coding tab project favorites).
 
 The feature: a per-tile ★ star toggles a project's favorite state (persisted
-server-side via POST /api/claude-code/favorites and surfaced as `is_favorite`
-on the /api/apps claude-code rows). Favorites sort to the top of the Coding
+server-side via POST /api/coding/favorites and surfaced as `is_favorite`
+on the /api/apps coding rows). Favorites sort to the top of the Coding
 list (alphabetical within each group), and the "★ Favorites" header toggle
 filters the list down to only the starred projects.
 
@@ -29,7 +29,7 @@ def _row(slug: str, fav: bool) -> dict:
     return {
         "id": slug,
         "name": slug,
-        "kind": "claude-code",
+        "kind": "coding",
         "project_dir": f"E:/automation/{slug}",
         "added_at": "",
         "is_favorite": fav,
@@ -77,11 +77,11 @@ def _install_routes(page: Page) -> None:
         )
 
     page.route("**/api/apps", _apps)
-    page.route("**/api/claude-code/favorites", _favorites)
+    page.route("**/api/coding/favorites", _favorites)
 
 
 def _order(page: Page) -> list:
-    return page.locator("#claudeList .coding-item").evaluate_all(
+    return page.locator("#codingList .coding-item").evaluate_all(
         "els => els.map(e => e.getAttribute('data-id'))"
     )
 
@@ -103,7 +103,7 @@ def test_favorites_pin_to_top_then_filter(authed_page: Page, base_url: str) -> N
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     _open_projects(authed_page)
 
-    expect(authed_page.locator("#claudeList .coding-item")).to_have_count(4)
+    expect(authed_page.locator("#codingList .coding-item")).to_have_count(4)
 
     # Default view: the one favorite (bravo) is pinned above the alphabetical
     # rest (alpha, charlie, delta).
@@ -117,7 +117,7 @@ def test_favorites_pin_to_top_then_filter(authed_page: Page, base_url: str) -> N
 
     # Turn the "★ Favorites" filter ON → only the starred project shows.
     authed_page.locator("#favFilterBtn").click()
-    expect(authed_page.locator("#claudeList .coding-item")).to_have_count(1)
+    expect(authed_page.locator("#codingList .coding-item")).to_have_count(1)
     assert _order(authed_page) == ["bravo"]
     expect(authed_page.locator("#favFilterBtn")).to_have_attribute(
         "aria-pressed", "true"
@@ -125,7 +125,7 @@ def test_favorites_pin_to_top_then_filter(authed_page: Page, base_url: str) -> N
 
     # Turn it OFF → full favorites-first list returns.
     authed_page.locator("#favFilterBtn").click()
-    expect(authed_page.locator("#claudeList .coding-item")).to_have_count(4)
+    expect(authed_page.locator("#codingList .coding-item")).to_have_count(4)
     assert _order(authed_page) == ["bravo", "alpha", "charlie", "delta"]
 
 
@@ -137,7 +137,7 @@ def test_star_toggle_reorders_and_persists(authed_page: Page, base_url: str) -> 
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     _open_projects(authed_page)
 
-    expect(authed_page.locator("#claudeList .coding-item")).to_have_count(4)
+    expect(authed_page.locator("#codingList .coding-item")).to_have_count(4)
     assert _order(authed_page) == ["bravo", "alpha", "charlie", "delta"]
 
     # Star "delta" — the POST persists it and the SPA re-fetches, so delta
@@ -147,7 +147,7 @@ def test_star_toggle_reorders_and_persists(authed_page: Page, base_url: str) -> 
 
     # Wait for the reorder to settle, then assert the new order.
     expect(
-        authed_page.locator("#claudeList .coding-item").first
+        authed_page.locator("#codingList .coding-item").first
     ).to_have_attribute("data-id", "bravo")
     delta_star = authed_page.locator('.coding-item[data-id="delta"] .star-btn')
     expect(delta_star).to_have_attribute("aria-pressed", "true")
@@ -157,6 +157,6 @@ def test_star_toggle_reorders_and_persists(authed_page: Page, base_url: str) -> 
     # alphabetical rest (alpha, bravo, charlie); delta is the sole favorite.
     authed_page.locator('.coding-item[data-id="bravo"] .star-btn').click()
     expect(
-        authed_page.locator("#claudeList .coding-item").first
+        authed_page.locator("#codingList .coding-item").first
     ).to_have_attribute("data-id", "delta")
     assert _order(authed_page) == ["delta", "alpha", "bravo", "charlie"]

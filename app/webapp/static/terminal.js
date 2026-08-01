@@ -72,7 +72,7 @@ export {
 
 // Estimate the phone's terminal size (rows × cols) BEFORE a session
 // exists, so the launch request can spawn the PTY at the right width and
-// a full-screen differential TUI (Codex's ratatui) paints its first frame
+// a full-screen differential TUI (ratatui-style) paints its first frame
 // at the correct width instead of the legacy 40×120 — which wrapped/cut on
 // a portrait phone (issue #126). Measures one monospace cell with the same
 // font the live terminal uses, then divides the visual viewport. Cols (the
@@ -139,7 +139,7 @@ export function applyLaunchSizePayload(payload) {
 // list, then drop straight into the in-page terminal for a full-control
 // (non-'remote') session on a phone — a desktop browser already got its
 // dedicated PC Edge window instead (issue #241), so it stays on the SPA.
-// No-op when the launch produced no session (a non-claude-code app launch).
+// No-op when the launch produced no session (a non-coding app launch).
 export function handleLaunchResponse(session) {
   if (!session) return;
   fetchSessions().catch(function () {});
@@ -172,7 +172,7 @@ export function keyboardOverlayHeight(layoutHeight, visualHeight) {
 // Pixels to shift a full-screen TUI's canvas *up* so its bottom row (the
 // agent's prompt/composer) sits just above the on-screen keyboard, given
 // the rendered content height and the visible box height. For a fullscreen
-// differential agent (Codex/ratatui) the phone must NOT reflow xterm to the
+// differential agent (ratatui-style) the phone must NOT reflow xterm to the
 // smaller keyboard box — reflowing changes the PTY rows, which SIGWINCHes
 // the agent into repainting its whole frame on every keyboard open/close
 // (the visible "refreshment", issue #264). Instead we keep the PTY at its
@@ -391,14 +391,14 @@ export async function openTerminal(session) {
     webgl = null;
   }
 
-  // Full-screen differential agents (Codex/Antigravity/Copilot ratatui)
+  // Full-screen differential agents (Copilot's ratatui-style TUI)
   // drive the pan-not-reflow keyboard path (issue #264): on these the phone
   // pans the fixed canvas above the keyboard rather than resizing the PTY.
   // Resolved off the live /api/agents flag; an unknown/missing agent (or a
   // degraded fallback agents list) reads as non-fullscreen — Claude's
   // inline reflow (#135), the safe default. Board drill-down and ?session=
   // deep links pass a synthetic {session_id, name} with no agent field
-  // (#430) — resolve it from the sessions list so a Codex session opened
+  // (#430) — resolve it from the sessions list so a fullscreen session opened
   // from the Board still gets the fullscreen client handling.
   const liveSession = (state.sessions || []).find(function (x) {
     return x.session_id === sid;
@@ -442,7 +442,7 @@ export async function openTerminal(session) {
   // list re-render, which is what the main poll's pause deliberately avoids.
   t.titleTimer = setInterval(function () {
     if (t !== state.terminal) return;
-    jsonApi('/api/claude-code/sessions').then(function (body) {
+    jsonApi('/api/coding/sessions').then(function (body) {
       if (t !== state.terminal) return;
       const s = (body.sessions || []).find(function (x) {
         return x.session_id === sid;
@@ -502,7 +502,7 @@ export async function openTerminal(session) {
     // EVERY change after the first real size (keyboard up/down, compose
     // bar, browser chrome, a PWA layout-viewport shrink, OR a phone
     // rotation) PANS/letterboxes the fixed-size canvas instead (#264,
-    // #430, #432). Empirical (#430 probe): Codex/ratatui re-emits its
+    // #430, #432). Empirical (#430 probe): a ratatui-style TUI re-emits its
     // ENTIRE transcript on any winsize change — rows or cols, either
     // direction (~65 KB on a long conversation) — so a single stray
     // SIGWINCH replays the whole conversation through the phone terminal.
@@ -706,7 +706,7 @@ async function sendImage(file, opts) {
   try {
     const tt = readTerminalToken();
     const res = await apiRaw(
-      '/api/claude-code/sessions/' + encodeURIComponent(t.sid) + '/image' +
+      '/api/coding/sessions/' + encodeURIComponent(t.sid) + '/image' +
         (inline ? '?inline=1' : ''),
       { method: 'POST', terminalToken: tt, body: fd }
     );

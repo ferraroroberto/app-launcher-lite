@@ -24,20 +24,14 @@ full per-family surface.  Top-level families:
                  DELETE /api/apps/{id}          → remove
                  POST /api/apps/{id}/launch     → spawn bat or coding-agent session
 
-    sessions     GET  /api/claude-code/sessions           → running sessions
-                 POST /api/claude-code/sessions/{sid}/stop
-                 POST /api/claude-code/sessions/{sid}/image
-                 WS   /api/claude-code/sessions/{sid}/ws
-                 POST /api/transcribe                     → one-shot audio → text
-                 POST /api/transcribe/sessions            → start streaming dictation
-                 POST /api/transcribe/sessions/{id}/chunk → append audio chunk
-                 POST /api/transcribe/sessions/{id}/finish
-                 GET  /api/ocr                            → screenshot OCR
+    sessions     GET  /api/coding/sessions           → running sessions
+                 POST /api/coding/sessions/{sid}/stop
+                 POST /api/coding/sessions/{sid}/image
+                 WS   /api/coding/sessions/{sid}/ws
 
-    claude_code  GET  /api/claude-code/flags              → persisted per-agent flags
-                 GET  /api/claude-code/git-status         → per-project branch+dirty
-                 GET  /api/claude-code/generate           → preview workspace↔bat
-                 POST /api/claude-code/generate           → workspace↔bat sync
+    coding       GET  /api/coding/flags              → persisted Copilot flags
+                 GET  /api/coding/git-status         → per-project branch+dirty
+                 POST /api/coding/favorites          → star/unstar a project
 
     jobs         /api/jobs/*                   → Jobs tab (~30 routes)
 
@@ -80,7 +74,7 @@ from app.webapp.routers import (
     apps,
     auth,
     board,
-    claude_code,
+    coding,
     config,
     jobs,
     misc,
@@ -338,7 +332,7 @@ def create_app() -> FastAPI:
     app.include_router(apps.router)
     app.include_router(jobs.router)
     app.include_router(sessions.router)
-    app.include_router(claude_code.router)
+    app.include_router(coding.router)
     app.include_router(team_os.router)
     app.include_router(board.router)
     app.include_router(webauthn.router)

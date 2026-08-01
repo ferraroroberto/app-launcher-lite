@@ -135,7 +135,7 @@ class TestLaunchSkill:
             )
             return {"session_id": "s1", "kind": kind}
 
-        monkeypatch.setattr(team_os_router, "spawn_claude_session", fake_spawn)
+        monkeypatch.setattr(team_os_router, "spawn_agent_session", fake_spawn)
 
     def test_launch_pty_default_appends_skill_command(
         self, team_os_client, monkeypatch
@@ -571,7 +571,7 @@ class TestLaunchRecap:
             captured.update(flags=flags, kind=kind, name=name, agent=agent)
             return {"session_id": "r1", "kind": kind}
 
-        monkeypatch.setattr(team_os_router, "spawn_claude_session", fake_spawn)
+        monkeypatch.setattr(team_os_router, "spawn_agent_session", fake_spawn)
         resp = client.post(
             "/api/team-os/recap/launch", json={"mode": "pty"}
         )
@@ -597,7 +597,7 @@ class TestLaunchRecap:
             captured.update(flags=flags, kind=kind)
             return {"session_id": "r1", "kind": kind}
 
-        monkeypatch.setattr(team_os_router, "spawn_claude_session", fake_spawn)
+        monkeypatch.setattr(team_os_router, "spawn_agent_session", fake_spawn)
         resp = client.post(
             "/api/team-os/recap/launch",
             json={"mode": "remote", "model": "gpt-5.6-terra"},

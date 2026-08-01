@@ -3,7 +3,7 @@
 Binds ``127.0.0.1`` exclusively — it is **never** directly reachable from
 the network. The main webapp (which owns all auth, Tailscale gating, and
 WebAuthn) proxies to it. Keeping the PTYs in this separate long-lived
-process means a webapp restart doesn't kill running Claude sessions.
+process means a webapp restart doesn't kill running agent sessions.
 
 Routes:
 
@@ -67,7 +67,7 @@ _REPAINT_SETTLE = 0.15
 _REPAINT_TOGGLE_GAP = 0.05
 
 # Clean-frame preamble for a full-screen TUI (re)connect (#270 tail-jump).
-# A no-alt-screen agent (Codex/ratatui) paints the *main* buffer, so on a
+# A no-alt-screen differential agent paints the *main* buffer, so on a
 # reconnect — where the client reuses the same xterm instance with the stale
 # frame still in its buffer — the forced repaint is appended *below* that
 # stale content, and xterm auto-follows to the bottom, scrolling through the
@@ -78,7 +78,7 @@ _REPAINT_TOGGLE_GAP = 0.05
 # reintroduce the query leak the #128/#270 strip removed.
 _CLEAR_FRAME = "\x1b[H\x1b[2J\x1b[3J"
 
-# Where uploaded files land inside the project so `claude` can read them.
+# Where uploaded files land inside the project so the agent can read them.
 # Any file type is accepted (issue #366 — the compose-bar attach covers
 # documents, not just photos): the file is only ever *stored* here and its
 # path pasted into the user's own prompt, nothing executes it; the surface
@@ -137,7 +137,7 @@ def create_app() -> FastAPI:
     async def create_session(request: Request) -> Dict[str, Any]:
         body = await _json(request)
         project_dir = str(body.get("project_dir") or "").strip()
-        name = str(body.get("name") or "claude").strip() or "claude"
+        name = str(body.get("name") or "coding").strip() or "coding"
         flags = str(body.get("flags") or "").strip()
         kind = str(body.get("kind") or "pty").strip().lower()
         agent = str(body.get("agent") or DEFAULT_AGENT).strip().lower()
@@ -257,7 +257,7 @@ def create_app() -> FastAPI:
         # inline=1 (compose bar open): skip the paste — the caller drops the
         # returned path into the textarea for review-before-send (issue #41).
         if not inline:
-            # Bracketed paste so the Claude TUI takes the path as one unit.
+            # Bracketed paste so the agent TUI takes the path as one unit.
             session.write(f"\x1b[200~{path}\x1b[201~")
         return {"ok": True, "path": path, "inline": inline}
 
@@ -284,7 +284,7 @@ def create_app() -> FastAPI:
         )
         try:
             if is_fullscreen(getattr(session, "agent", DEFAULT_AGENT)):
-                # Full-screen differential TUI (Codex/ratatui): do NOT replay
+                # Full-screen differential TUI: do NOT replay
                 # the raw scrollback ring. Replaying its stale move-cursor /
                 # clear deltas garbles a fresh xterm, and replaying the
                 # agent's startup terminal queries makes xterm re-answer them
@@ -354,7 +354,7 @@ async def _force_repaint(session) -> None:
     We skip the raw differential-ring replay for these agents, so the
     viewport is blank until the agent next draws. Toggle the PTY width by
     one column and back: each ``setwinsize`` fires a SIGWINCH-equivalent,
-    so ratatui clears and redraws the *current* frame at the real size.
+    so the TUI clears and redraws the *current* frame at the real size.
     The toggle guarantees a change even on a same-size reconnect (where a
     single ``setwinsize`` to the unchanged size is a no-op). Best-effort —
     a dead PTY's ``resize`` already swallows its own errors.

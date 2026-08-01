@@ -255,7 +255,7 @@ def _registered_dir_names() -> Dict[str, str]:
     """Map every registered app's directory → display name.
 
     For bat-based apps the directory is the bat's parent; for
-    claude-code apps it's the project dir. Used to label a running
+    coding apps it's the project dir. Used to label a running
     listener with the app it belongs to.
     """
     registry = load_registry()

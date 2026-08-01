@@ -46,8 +46,8 @@ flowchart TB
       R_CONFIG["config.py — /api/config, /api/status, /api/ports"]
       R_TOKENS["tokens.py — /api/tokens\nscoped-token mint/list/revoke (#72)"]
       R_APPS["apps.py — /api/apps (Apps tab)"]
-      R_SESS["sessions.py — /api/claude-code/sessions, WS"]
-      R_CC["claude_code.py — flags, git-status, generate"]
+      R_SESS["sessions.py — /api/coding/sessions, WS"]
+      R_CC["coding.py — flags, git-status, favorites"]
       R_JOBS["jobs.py + jobs_run_store_routes.py\n/api/jobs/* (Jobs tab)"]
       R_TEAMOS["team_os.py — /api/team-os/* (Team OS tab)"]
       R_BOARD["board.py — /api/board (Board tab) + dispatch\n+ board_spawn.py (shared spawn-then-type)"]
@@ -74,7 +74,7 @@ flowchart TB
   subgraph srclib["src/ — shared library"]
     SESSHOST["session_host.py\nPtySession + SessionManager\nConPTY via winpty (Windows-only)"]
     VTSNAP["vt_snapshot.py\nheadless pyte VT mirror per\nfullscreen session — reconnect snapshot"]
-    AGENTS["agents.py\nagent registry: claude · codex · agy · copilot · pi · grok"]
+    AGENTS["agents.py\nagent registry: copilot (+ ssh, loopback-only)"]
     SESSCLIENT["session_client.py\nHTTP client → session-host over loopback"]
     REGISTRY["registry.py\nconfig/apps.json load/save/scan"]
     SCANNER["scanner.py\nfs scan: project dirs + *.bat classify"]
@@ -134,8 +134,8 @@ flowchart TB
   BOARD --> SESSCLIENT
   BOARD --> JOBSFACADE
   BOARD --> GHCLIENT
-  BOARD -->|reads| SESSSTATE["~/.claude/hooks/state/sessions-state.json\n(fleet-config session_state hook)"]
-  BOARD -->|reads| ACTIVEISSUES["~/.claude/hooks/state/active-issues.json\n(fleet-config issue workflows)"]
+  BOARD -->|reads| SESSSTATE["~/.copilot/hooks/state/sessions-state.json\n(session_state hook)"]
+  BOARD -->|reads| ACTIVEISSUES["~/.copilot/hooks/state/active-issues.json\n(issue workflows)"]
   R_CONFIG --> WEBAPPCFG
   R_CONFIG --> LAUNCHFLAGS
   R_APPS --> LAUNCHFLAGS

@@ -38,7 +38,7 @@ import { openSessionRename, sessionTitle, stopSession } from './sessions.js';
 import { applyLaunchSizePayload, openTerminal } from './terminal.js';
 import { icon } from './_vendored/icons/icons.js';
 import { ensureTerminalToken } from './webauthn.js';
-import { iconUrl, renderUsageBadgeRow } from './dom-utils.js';
+import { iconUrl } from './dom-utils.js';
 import {
   boardRepoFilter,
   matchesRepoFilter,
@@ -123,11 +123,10 @@ function renderSessionCard(card) {
   const meta = STATUS_META[card.status] || STATUS_META.unknown;
   const bits = [card.project || '', meta.text, fmtAge(card.age_seconds)].filter(Boolean);
   const shell = cardShell(meta.icon, ' ' + bits.join(' · '), sessionLabel(card), meta.cls);
-  // The Board now includes every launcher-owned agent, not only Claude Code
-  // (#455). Show the same registry-backed brand identity as the Coding tab so
-  // an unknown/degraded status never hides which terminal the card belongs to.
+  // Show the same registry-backed brand identity as the Coding tab so an
+  // unknown/degraded status never hides which terminal the card belongs to.
   const known = state.agents.find(function (a) { return a.id === card.agent; });
-  const agentId = String(card.agent || 'claude');
+  const agentId = String(card.agent || 'copilot');
   const agentIcon = document.createElement('img');
   agentIcon.className = 'session-agent-icon board-agent-icon';
   agentIcon.src = iconUrl(agentId);
@@ -320,7 +319,7 @@ async function sendReply(card, input, btn) {
   try {
     const tt = await ensureTerminalToken();
     await jsonApi(
-      '/api/claude-code/sessions/' + encodeURIComponent(card.session_id) + '/input',
+      '/api/coding/sessions/' + encodeURIComponent(card.session_id) + '/input',
       {
         method: 'POST',
         headers: authHeaders({ terminalToken: tt, contentType: 'application/json' }),
@@ -350,7 +349,7 @@ async function sendReply(card, input, btn) {
 
 function repoInProjects(repo) {
   return (state.apps || []).some(function (a) {
-    return a.kind === 'claude-code' &&
+    return a.kind === 'coding' &&
       String(a.name).toLowerCase() === String(repo || '').toLowerCase();
   });
 }
@@ -363,7 +362,7 @@ function repoInProjects(repo) {
 function repoGitStatus(repo) {
   if (!repo || !state.gitStatus) return null;
   const app = (state.apps || []).find(function (a) {
-    return a.kind === 'claude-code' &&
+    return a.kind === 'coding' &&
       String(a.name).toLowerCase() === String(repo).toLowerCase();
   });
   const gs = app && state.gitStatus[app.id];
@@ -544,16 +543,6 @@ function renderStatusLine(body) {
   els.boardStatus.hidden = parts.length === 0;
 }
 
-// Claude 5h/7d usage badges (issue #326) — a separate element from
-// boardStatus on purpose: that one is transient-problem text that vanishes
-// once the problem clears, while these are live content that should persist
-// (dimmed, not hidden) even when the cache is stale. Sourced from
-// fleet-config's statusline cache (fleet-config#259); hidden entirely until
-// that writer exists or the cache goes missing/corrupt (rate_limits.available
-// false) — the same degrade-to-nothing contract sessions_state already uses.
-// Rendering itself is shared with the Coding tab's own usage badges — see
-// dom-utils.js::renderUsageBadgeRow.
-
 export function renderBoard() {
   const body = state.board;
   if (!body || !els.boardColumns) return;
@@ -586,7 +575,6 @@ export function renderBoard() {
   });
 
   renderStatusLine(body);
-  renderUsageBadgeRow(els.boardUsage, els.boardUsageSession, els.boardUsageWeekly, body.rate_limits);
   // Keep the dispatch bar's repo list in step with state
   // that may land after the first render (/api/apps, /api/status).
   syncDispatchBar();

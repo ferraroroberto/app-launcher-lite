@@ -23,7 +23,7 @@ endpoint — the exact on-demand contract of the Coding tab's ⎇ git-status
 button. Column assembly is pure logic in :mod:`src.board`.
 
 The board + refresh routes are read-only repo/session metadata — the same gate
-class as ``GET /api/claude-code/sessions`` (bearer token, no passkey). The
+class as ``GET /api/coding/sessions`` (bearer token, no passkey). The
 drill-down exchange and issue-start routes (#301) are terminal-grade and get
 the passkey gate in ``middleware._terminal_guard_level``; the reply proxy
 lives beside its session siblings in ``routers/sessions.py``.
@@ -59,8 +59,8 @@ from fastapi import APIRouter, HTTPException, Request
 
 from src import agents, audit, board, github_client, session_client
 from src.board_exchange import resolve_exchange, unavailable
-from src.launch_flags import build_claude_flags
-from src.launcher import open_local_terminal_window, spawn_claude_session
+from src.launch_flags import build_copilot_flags
+from src.launcher import open_local_terminal_window, spawn_agent_session
 from src.webapp_config import WebappConfig
 
 from app.webapp.routers._helpers import (
@@ -83,16 +83,6 @@ def _github_section(snap: Dict[str, Any]) -> Dict[str, Any]:
     return {"fetched_at": snap.get("fetched_at"), "error": snap.get("error")}
 
 
-def _rate_limits_section(rate_limits: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "available": rate_limits["available"],
-        "stale": rate_limits["stale"],
-        "updated_at": rate_limits["updated_at"],
-        "five_hour": rate_limits["five_hour"],
-        "seven_day": rate_limits["seven_day"],
-    }
-
-
 def _mark_active_backlog(
     columns: Dict[str, List[Dict[str, Any]]], active_rows: Dict[str, Any]
 ) -> None:
@@ -111,12 +101,11 @@ async def get_board(request: Request) -> Dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
 
     active_issues_file = Path(cfg.sessions_state_file).with_name("active-issues.json")
-    live, state, active_issues, job_cards, rate_limits = await asyncio.gather(
+    live, state, active_issues, job_cards = await asyncio.gather(
         asyncio.to_thread(_safe_list_sessions, cfg.session_host_port),
         asyncio.to_thread(board.read_sessions_state, Path(cfg.sessions_state_file)),
         asyncio.to_thread(board.read_active_issues, active_issues_file),
         asyncio.to_thread(board.jobs_attention),
-        asyncio.to_thread(board.read_rate_limits, Path(cfg.rate_limits_file)),
     )
     github = github_client.snapshot()
 
@@ -143,26 +132,7 @@ async def get_board(request: Request) -> Dict[str, Any]:
             "updated_at": active_issues["updated_at"],
             "count": len(active_issues["rows"]),
         },
-        "rate_limits": _rate_limits_section(rate_limits),
     }
-
-
-@router.get("/api/rate-limits")
-async def get_rate_limits(request: Request) -> Dict[str, Any]:
-    """Claude 5h/7d usage % (issue #326), standalone from the Board tab.
-
-    The Coding tab's Running-sessions header shows the same usage badges as
-    the Board tab, but must not depend on the Board ever having been opened
-    — ``GET /api/board``'s own rate-limits read only happens as a side
-    effect of that endpoint being polled, which fetchBoard() self-gates to
-    "Board tab visible". This is the same cheap one-file read, exposed on
-    its own route so any tab can poll it independently.
-    """
-    cfg: WebappConfig = request.app.state.webapp_config
-    rate_limits = await asyncio.to_thread(
-        board.read_rate_limits, Path(cfg.rate_limits_file)
-    )
-    return _rate_limits_section(rate_limits)
 
 
 @router.post("/api/board/github/refresh")
@@ -177,7 +147,7 @@ async def refresh_github(request: Request) -> Dict[str, Any]:
 async def session_exchange(sid: str, request: Request) -> Dict[str, Any]:
     """Last user↔assistant exchange for a live session (Tailscale + passkey).
 
-    Structured Claude/Codex history wins when it correlates safely. A missing
+    Structured native history wins when it correlates safely. A missing
     hook JSONL or unsupported agent falls back to the launcher's exact-id PTY
     capture + input audit, parsed on demand (never on the Board poll). Distinct
     unavailable reasons let the client separate true-empty from source error.
@@ -205,12 +175,13 @@ async def session_exchange(sid: str, request: Request) -> Dict[str, Any]:
         logger.info(
             "ℹ️ Board exchange %s (%s) used exact-id launcher capture; "
             "native transcript unavailable",
-            sid[:8], session.get("agent") or "claude",
+            sid[:8], session.get("agent") or agents.DEFAULT_AGENT,
         )
     elif not result.get("available"):
         logger.info(
             "ℹ️ Board exchange %s (%s) unavailable: %s",
-            sid[:8], session.get("agent") or "claude", result.get("reason"),
+            sid[:8], session.get("agent") or agents.DEFAULT_AGENT,
+            result.get("reason"),
         )
     return result
 
@@ -229,9 +200,9 @@ async def start_issue(request: Request) -> Dict[str, Any]:
     worktree claiming inside the session.
 
     ``model`` (#505) is the dispatch bar's selector applied to one-tap
-    starts: the #500 values override the shared Coding model (gpt5.6 →
-    Codex, which takes the same positional prompt). Absent (stale-cache
-    client) → the legacy persisted Coding model, exactly as before.
+    starts: a value from the configured ``copilot_models`` list overrides
+    the persisted ``copilot_model`` for this launch. Absent → the persisted
+    Coding model, exactly as before.
 
     The optional ``title`` (the Board card's issue title) auto-names the
     session after the issue (#467) via the #458 manual-override path, so it is
@@ -257,7 +228,7 @@ async def start_issue(request: Request) -> Dict[str, Any]:
     if model:
         agent, base_flags = _agent_and_flags(cfg, model)
     else:
-        agent, base_flags = "claude", build_claude_flags(cfg)
+        agent, base_flags = agents.DEFAULT_AGENT, build_copilot_flags(cfg)
 
     entry = _resolve_repo_entry(cfg, repo)
 
@@ -267,7 +238,7 @@ async def start_issue(request: Request) -> Dict[str, Any]:
         part for part in (base_flags, native_name_flags, f'"{prompt}"') if part
     )
     session = await spawn_session_or_400(
-        spawn_claude_session,
+        spawn_agent_session,
         Path(entry.project_dir),
         entry.name,
         flags,
@@ -320,7 +291,8 @@ async def dispatch_goal(request: Request) -> Dict[str, Any]:
     """Free-text goal → a fresh ``/issue-*`` session (Tailscale + passkey, #302).
 
     Body: ``{"repo": str, "goal": str, "mode": "add"|"build"|"yolo",
-    "model": "sonnet"|"opus"|"fable"|"gpt5.6", "rows": int, "cols": int}``.
+    "model": str (one of ``copilot_models``, or ""/"default" for auto),
+    "rows": int, "cols": int}``.
     Spawn-then-type per the module docstring: the goal rides the PTY input
     path, never the command line. The half-spawned session is killed on any
     failure past the spawn, so a timeout can't strand an orphan the user
@@ -338,9 +310,9 @@ async def dispatch_goal(request: Request) -> Dict[str, Any]:
             status_code=400, detail="goal must be a non-empty string"
         )
     goal = goal.strip()
-    # Per-launch model (#500) — sonnet default when absent (stale-cache
-    # client). No positional prompt — see the module docstring.
-    model = str(body.get("model") or "sonnet").strip().lower()
+    # Per-launch model (#500) — absent/empty means the Copilot auto model.
+    # No positional prompt — see the module docstring.
+    model = str(body.get("model") or "").strip().lower()
     agent, flags = _agent_and_flags(cfg, model)
     rows = int(body.get("rows") or 40)
     cols = int(body.get("cols") or 120)
@@ -348,7 +320,7 @@ async def dispatch_goal(request: Request) -> Dict[str, Any]:
     entry = _resolve_repo_entry(cfg, repo)
 
     session = await spawn_session_or_400(
-        spawn_claude_session,
+        spawn_agent_session,
         Path(entry.project_dir),
         entry.name,
         flags,

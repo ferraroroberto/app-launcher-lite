@@ -39,8 +39,8 @@ def test_page_loads_without_console_errors(authed_page: Page, base_url: str) -> 
 def test_coding_options_populated(authed_page: Page, base_url: str) -> None:
     _navigate_collecting_errors(authed_page, base_url)
     # The Coding options card is a <details> collapsed by default — expand
-    # it so the segmented controls become visible. renderClaudeOptions()
-    # runs after /api/config resolves regardless, but the buttons are only
+    # it so the Copilot selects become visible. renderCopilotOptions()
+    # runs after /api/config resolves regardless, but the controls are only
     # *visible* once the panel is open. Click the title (not the summary's
     # geometric centre, which can land on a stopPropagation toggle now that
     # the row carries both ☁️ Detached and ↺ Resume — issue #151).
@@ -48,15 +48,24 @@ def test_coding_options_populated(authed_page: Page, base_url: str) -> None:
     # panels now share the .collapse-title class (issue #212), so a
     # bare class selector matches three titles.
     authed_page.locator("#codingOptions .collapse-title").click()
-    authed_page.wait_for_selector("#claudeModel > button", timeout=5_000)
-    authed_page.wait_for_selector("#claudeEffort > button", timeout=5_000)
-    authed_page.wait_for_selector("#claudePermission > button", timeout=5_000)
-    model_count = authed_page.locator("#claudeModel > button").count()
-    effort_count = authed_page.locator("#claudeEffort > button").count()
-    perm_count = authed_page.locator("#claudePermission > button").count()
-    assert model_count >= 1, f"#claudeModel rendered no buttons (got {model_count})"
-    assert effort_count >= 1, f"#claudeEffort rendered no buttons (got {effort_count})"
-    assert perm_count == 2, f"#claudePermission expected 2 buttons (got {perm_count})"
+    # <option> elements never report a bounding box, so wait on attachment,
+    # not visibility.
+    authed_page.wait_for_selector(
+        "#copilotModel > option", state="attached", timeout=5_000
+    )
+    authed_page.wait_for_selector(
+        "#copilotContext > option", state="attached", timeout=5_000
+    )
+    authed_page.wait_for_selector(
+        "#copilotEffort > option", state="attached", timeout=5_000
+    )
+    model_count = authed_page.locator("#copilotModel > option").count()
+    context_count = authed_page.locator("#copilotContext > option").count()
+    effort_count = authed_page.locator("#copilotEffort > option").count()
+    # Default (auto) + at least one config-driven id.
+    assert model_count >= 2, f"#copilotModel rendered too few options (got {model_count})"
+    assert context_count >= 1, f"#copilotContext rendered no options (got {context_count})"
+    assert effort_count >= 1, f"#copilotEffort rendered no options (got {effort_count})"
 
 
 def test_sessions_panel_renders(authed_page: Page, base_url: str) -> None:
@@ -84,7 +93,7 @@ def test_sessions_panel_renders(authed_page: Page, base_url: str) -> None:
 
 def test_tabs_switch(authed_page: Page, base_url: str) -> None:
     _navigate_collecting_errors(authed_page, base_url)
-    pane_claude = authed_page.locator("#paneClaude")
+    pane_claude = authed_page.locator("#paneCoding")
     pane_apps = authed_page.locator("#paneApps")
     pane_jobs = authed_page.locator("#paneJobs")
 
@@ -108,7 +117,7 @@ def test_tabs_switch(authed_page: Page, base_url: str) -> None:
     expect(pane_apps).to_be_hidden()
     expect(authed_page.locator("#tabJobs")).to_have_class(re.compile(r"\bactive\b"))
 
-    authed_page.locator("#tabClaude").click()
+    authed_page.locator("#tabCoding").click()
     expect(pane_claude).to_be_visible()
     expect(pane_apps).to_be_hidden()
     expect(pane_jobs).to_be_hidden()

@@ -86,7 +86,7 @@ def create_session(
     name: str,
     flags: str,
     kind: str = "pty",
-    agent: str = "claude",
+    agent: str = "copilot",
     rows: int = 40,
     cols: int = 120,
     history_lines: Optional[int] = None,

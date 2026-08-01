@@ -3,7 +3,7 @@
 The bug class: every overlay close disposed the xterm + WebSocket, so
 every re-open re-subscribed to the session-host, which answers a
 fullscreen (re)connect with a clear-frame + winsize-toggle repaint nudge
-— and a ratatui agent (Codex/Antigravity/Pi/Copilot) re-emits its ENTIRE
+— and a ratatui-style agent (Copilot) re-emits its ENTIRE
 transcript on any winsize change (empirical probe on #430: ~65 KB for a
 long conversation, on every open/close cycle). The phone watched the
 whole conversation scroll through on every re-open, and the always-on PC

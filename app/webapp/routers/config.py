@@ -12,27 +12,10 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from src import boot_autostart
-from src.launch_flags import (
-    build_antigravity_flags,
-    build_claude_flags,
-    build_codex_flags,
-    build_copilot_flags,
-    build_grok_flags,
-    build_pi_flags,
-)
+from src.launch_flags import build_copilot_flags
 from src.webapp_config import (
     MAX_TERMINAL_HISTORY_LINES,
     MIN_TERMINAL_HISTORY_LINES,
-    VALID_CODEX_EFFORTS,
-    VALID_CODEX_PERMISSION_MODES,
-    VALID_COPILOT_CONTEXTS,
-    VALID_COPILOT_EFFORTS,
-    VALID_GROK_EFFORTS,
-    VALID_GROK_PERMISSION_MODES,
-    VALID_PI_EFFORTS,
-    VALID_PI_MODELS,
-    VALID_PI_TRUST_MODES,
-    PI_MODEL_SPECS,
     WebappConfig,
     update_webapp_config,
 )
@@ -41,7 +24,7 @@ from app.webapp.middleware import terminal_reachability
 from app.webapp.routers._helpers import (
     PROJECT_ROOT,
     cert_present,
-    claude_flags_payload,
+    copilot_flags_payload,
     maybe_json,
 )
 
@@ -64,52 +47,7 @@ async def get_config(request: Request) -> Dict[str, Any]:
         "terminal_history_lines": cfg.terminal_history_lines,
         "terminal_history_lines_min": MIN_TERMINAL_HISTORY_LINES,
         "terminal_history_lines_max": MAX_TERMINAL_HISTORY_LINES,
-        "claude": claude_flags_payload(cfg),
-        "codex": {
-            "effort": cfg.codex_effort,
-            "permission_mode": cfg.codex_permission_mode,
-            "efforts_available": list(VALID_CODEX_EFFORTS),
-            "permission_modes_available": list(VALID_CODEX_PERMISSION_MODES),
-            "computed_flags": build_codex_flags(cfg),
-        },
-        "antigravity": {
-            "skip_permissions": cfg.antigravity_skip_permissions,
-            "sandbox": cfg.antigravity_sandbox,
-            "computed_flags": build_antigravity_flags(cfg),
-        },
-        "copilot": {
-            "skip_permissions": cfg.copilot_skip_permissions,
-            "model": cfg.copilot_model,
-            # Config-driven (lite Phase 3): the offered ids come from the
-            # `copilot_models` list in webapp_config.json — read-only from
-            # the UI (GET only; not in the POST allow-list below).
-            "models_available": list(cfg.copilot_models),
-            "autopilot": cfg.copilot_autopilot,
-            "context": cfg.copilot_context,
-            "contexts_available": list(VALID_COPILOT_CONTEXTS),
-            "effort": cfg.copilot_effort,
-            "efforts_available": list(VALID_COPILOT_EFFORTS),
-            "computed_flags": build_copilot_flags(cfg),
-        },
-        "pi": {
-            "model": cfg.pi_model,
-            "effort": cfg.pi_effort,
-            "trust_mode": cfg.pi_trust_mode,
-            "models_available": [
-                {"value": value, "label": spec[2]}
-                for value, spec in PI_MODEL_SPECS.items()
-            ],
-            "efforts_available": list(VALID_PI_EFFORTS),
-            "trust_modes_available": list(VALID_PI_TRUST_MODES),
-            "computed_flags": build_pi_flags(cfg),
-        },
-        "grok": {
-            "effort": cfg.grok_effort,
-            "permission_mode": cfg.grok_permission_mode,
-            "efforts_available": list(VALID_GROK_EFFORTS),
-            "permission_modes_available": list(VALID_GROK_PERMISSION_MODES),
-            "computed_flags": build_grok_flags(cfg),
-        },
+        "copilot": copilot_flags_payload(cfg),
         "auth_password_set": bool(cfg.auth_password),
         # Boot-autostart toggle (issue #456): live-queried, not stored in
         # webapp_config.json — the Startup-folder wrapper bat's presence
@@ -128,15 +66,6 @@ async def patch_config(request: Request) -> Dict[str, Any]:
         "apps_scan_root",
         "team_os_dir",
         "terminal_history_lines",
-        "claude_model",
-        "claude_effort",
-        "claude_verbose",
-        "claude_debug",
-        "claude_permission_mode",
-        "antigravity_skip_permissions",
-        "antigravity_sandbox",
-        "codex_effort",
-        "codex_permission_mode",
         # copilot_models is deliberately absent: read-only from the UI,
         # edited in webapp_config.json directly (tenant-gated ids).
         "copilot_skip_permissions",
@@ -144,11 +73,6 @@ async def patch_config(request: Request) -> Dict[str, Any]:
         "copilot_autopilot",
         "copilot_context",
         "copilot_effort",
-        "pi_model",
-        "pi_effort",
-        "pi_trust_mode",
-        "grok_effort",
-        "grok_permission_mode",
     }
     patch = {k: v for k, v in body.items() if k in allowed}
     # projects_ignore is a list of patterns — coerce to a clean string
@@ -172,7 +96,7 @@ async def patch_config(request: Request) -> Dict[str, Any]:
     request.app.state.webapp_config = new_cfg
     return {
         "ok": True,
-        "claude_flags": build_claude_flags(new_cfg),
+        "copilot_flags": build_copilot_flags(new_cfg),
     }
 
 

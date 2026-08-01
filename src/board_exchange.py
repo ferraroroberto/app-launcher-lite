@@ -1,10 +1,9 @@
 """Agent-aware conversation previews for the Board drawer (issue #457).
 
-The hook row's Claude JSONL remains the best source when it exists because it
+The hook row's native JSONL remains the best source when it exists because it
 is structured chat data.  Launcher-owned PTYs also have an exact-id capture,
-however, and that is the common fallback for remote-control Claude sessions
-whose declared JSONL is absent and for agents such as Codex that publish no
-hook transcript at all.
+however, and that is the common fallback for sessions whose declared JSONL is
+absent and for agents that publish no hook transcript at all.
 
 The capture is terminal output, not prose.  A bounded tail is replayed through
 ``pyte`` and reply blocks are selected by the same leading-bullet colour
@@ -17,7 +16,6 @@ from __future__ import annotations
 import ast
 import json
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -27,8 +25,6 @@ from src.board_transcript import last_exchange
 
 _CAPTURE_TAIL_BYTES = 512 * 1024
 _CAPTURE_HISTORY_LINES = 2500
-_CODEX_TAIL_BYTES = 4 * 1024 * 1024
-_CODEX_START_SLOP_SECONDS = 120
 _ASSISTANT_TEXT_CAP = 6000
 _USER_TEXT_CAP = 1500
 
@@ -51,11 +47,6 @@ _SPINNER_RE = re.compile(
 _TIP_RE = re.compile(r"^\s*[⎿└╰⤷↳]\s*Tip\b", re.IGNORECASE)
 _INPUT_RE = re.compile(r"\[input\]\s+(.*)$")
 _CSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
-_CODEX_FILE_RE = re.compile(
-    r"^rollout-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-.*\.jsonl$"
-)
-_CODEX_CWD_RE = re.compile(rb'"cwd"\s*:\s*"((?:\\.|[^"\\])*)"')
-_CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 
 
 def unavailable(reason: str) -> Dict[str, Any]:
@@ -80,12 +71,6 @@ def resolve_exchange(
     if native.get("available"):
         return {**native, "source": "native", "reason": None}
 
-    if str(session.get("agent") or "claude").lower() == "codex":
-        codex_path = _find_codex_transcript(session)
-        codex = codex_last_exchange(codex_path)
-        if codex.get("available"):
-            return codex
-
     fallback = launcher_last_exchange(
         launcher_capture_path,
         launcher_input_path=launcher_input_path,
@@ -105,142 +90,6 @@ def resolve_exchange(
     else:
         reason = "no_exchange"
     return unavailable(reason)
-
-
-def codex_last_exchange(path: Optional[Path]) -> Dict[str, Any]:
-    """Read the newest Codex user/assistant messages from bounded JSONL."""
-    if path is None:
-        return unavailable("native_unavailable")
-    raw = _read_tail(path, _CODEX_TAIL_BYTES)
-    if not raw:
-        return unavailable("native_unavailable")
-    records: List[Tuple[str, str, Any]] = []
-    for line in raw.splitlines():
-        try:
-            obj = json.loads(line)
-        except (TypeError, ValueError):
-            continue
-        if obj.get("type") != "response_item":
-            continue
-        payload = obj.get("payload")
-        if not isinstance(payload, dict) or payload.get("type") != "message":
-            continue
-        role = str(payload.get("role") or "")
-        if role not in ("user", "assistant"):
-            continue
-        wanted = "input_text" if role == "user" else "output_text"
-        content = payload.get("content")
-        if not isinstance(content, list):
-            continue
-        text = "\n\n".join(
-            str(item.get("text") or "").strip()
-            for item in content
-            if isinstance(item, dict) and item.get("type") == wanted
-            and str(item.get("text") or "").strip()
-        )
-        if text:
-            records.append((role, text, obj.get("timestamp")))
-    assistant_index = next(
-        (index for index in range(len(records) - 1, -1, -1)
-         if records[index][0] == "assistant"),
-        None,
-    )
-    if assistant_index is None:
-        return unavailable("no_exchange")
-    user_record = next(
-        (records[index] for index in range(assistant_index - 1, -1, -1)
-         if records[index][0] == "user"),
-        None,
-    )
-    assistant = records[assistant_index]
-    return {
-        "available": True,
-        "source": "codex",
-        "reason": None,
-        "user": (
-            {
-                "text": user_record[1][-_USER_TEXT_CAP:],
-                "timestamp": user_record[2],
-            }
-            if user_record else None
-        ),
-        "assistant": {
-            "text": assistant[1][-_ASSISTANT_TEXT_CAP:],
-            "timestamp": assistant[2],
-        },
-    }
-
-
-def _find_codex_transcript(session: Dict[str, Any]) -> Optional[Path]:
-    """Safely correlate a Codex rollout by cwd + launch timestamp.
-
-    Codex does not persist ``APP_LAUNCHER_SESSION_ID`` in its JSONL.  Filename
-    start time plus the transcript's cwd is therefore used only when there is
-    one unambiguous candidate in a narrow launch window.  Ambiguity degrades
-    to the exact-id launcher capture rather than risking cross-session text.
-    """
-    started_raw = session.get("started_at")
-    try:
-        if isinstance(started_raw, (int, float)):
-            started = datetime.fromtimestamp(float(started_raw)).astimezone()
-        else:
-            started = datetime.fromisoformat(
-                str(started_raw).replace("Z", "+00:00")
-            ).astimezone()
-    except (TypeError, ValueError, OSError):
-        return None
-    session_cwd = _normalize_dir(session.get("project_dir"))
-    if not session_cwd:
-        return None
-
-    day_dir = _CODEX_SESSIONS_DIR / started.strftime("%Y/%m/%d")
-    candidates: List[Tuple[float, Path]] = []
-    try:
-        paths = list(day_dir.glob("rollout-*.jsonl"))
-    except OSError:
-        return None
-    for path in paths:
-        match = _CODEX_FILE_RE.match(path.name)
-        if not match:
-            continue
-        try:
-            file_started = datetime.strptime(
-                match.group(1), "%Y-%m-%dT%H-%M-%S"
-            ).replace(tzinfo=started.tzinfo)
-        except ValueError:
-            continue
-        delta = abs((file_started - started).total_seconds())
-        if delta > _CODEX_START_SLOP_SECONDS:
-            continue
-        if _codex_cwd(path) != session_cwd:
-            continue
-        candidates.append((delta, path))
-    candidates.sort(key=lambda item: item[0])
-    if not candidates:
-        return None
-    if len(candidates) > 1 and candidates[1][0] - candidates[0][0] < 1.0:
-        return None
-    return candidates[0][1]
-
-
-def _codex_cwd(path: Path) -> str:
-    try:
-        with path.open("rb") as fh:
-            prefix = fh.read(64 * 1024)
-    except OSError:
-        return ""
-    match = _CODEX_CWD_RE.search(prefix)
-    if not match:
-        return ""
-    try:
-        value = json.loads('"' + match.group(1).decode("utf-8") + '"')
-    except (UnicodeDecodeError, ValueError):
-        return ""
-    return _normalize_dir(value)
-
-
-def _normalize_dir(raw: Any) -> str:
-    return str(raw or "").replace("\\", "/").rstrip("/").lower()
 
 
 def launcher_last_exchange(

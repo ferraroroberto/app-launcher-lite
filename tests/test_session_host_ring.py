@@ -67,7 +67,7 @@ def test_read_loop_overflow_trims_ring_to_line_boundary():
         started_at=time.time(),
         _loop=MagicMock(),
         _pty=_OneShotPty(chunk),
-        agent="claude",
+        agent="ssh",
     )
     session._read_loop()
     assert len(session._ring) <= _RING_MAX_CHARS

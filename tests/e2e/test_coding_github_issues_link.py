@@ -21,7 +21,7 @@ def _row(slug: str, repo_url: str | None) -> dict:
     return {
         "id": slug,
         "name": slug,
-        "kind": "claude-code",
+        "kind": "coding",
         "project_dir": f"E:/automation/{slug}",
         "added_at": "",
         "is_favorite": False,
@@ -61,7 +61,7 @@ def test_github_icon_opens_open_issues_sorted_by_updated(
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     _open_projects(authed_page)
 
-    expect(authed_page.locator("#claudeList .coding-item")).to_have_count(1)
+    expect(authed_page.locator("#codingList .coding-item")).to_have_count(1)
     gh_btn = authed_page.locator('.coding-item[data-id="alpha"] .agent-btn').filter(
         has=authed_page.locator('img[alt="GitHub"]')
     )
@@ -81,7 +81,7 @@ def test_github_icon_disabled_without_repo_url(authed_page: Page, base_url: str)
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     _open_projects(authed_page)
 
-    expect(authed_page.locator("#claudeList .coding-item")).to_have_count(1)
+    expect(authed_page.locator("#codingList .coding-item")).to_have_count(1)
     gh_btn = authed_page.locator('.coding-item[data-id="alpha"] .agent-btn').filter(
         has=authed_page.locator('img[alt="GitHub"]')
     )

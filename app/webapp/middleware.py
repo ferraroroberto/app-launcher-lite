@@ -88,12 +88,12 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         "WebAuthn ceremony endpoints — Tailscale-only; no passkey check (that's what they issue).",
     ),
     (
-        lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/image"),
+        lambda p: p.startswith("/api/coding/sessions/") and p.endswith("/image"),
         "passkey",
         "Coding-tab image paste into a live PTY.",
     ),
     (
-        lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/input"),
+        lambda p: p.startswith("/api/coding/sessions/") and p.endswith("/input"),
         "passkey",
         "Board drill-down (#301): reply proxy writes into a live PTY.",
     ),

@@ -59,7 +59,12 @@ def _spawn(webapp_client, monkeypatch):
         )
         return {"session_id": "disp-1", "kind": "pty", "name": name}
 
-    monkeypatch.setattr(board_router, "spawn_claude_session", fake_spawn)
+    monkeypatch.setattr(board_router, "spawn_agent_session", fake_spawn)
+    # Every dispatch routes through the copilot install guard — pretend the
+    # CLI is on PATH so tests don't depend on the host machine.
+    monkeypatch.setattr(
+        board_spawn.agents, "is_installed", lambda agent_id: True
+    )
     return captured
 
 
@@ -108,7 +113,7 @@ class TestSpawnThenType:
         # positional prompt (the issues/start shape) in the flags string.
         assert "wire the" not in _spawn["flags"]
         assert not _spawn["flags"].rstrip().endswith('"')
-        assert _spawn["kind"] == "pty" and _spawn["agent"] == "claude"
+        assert _spawn["kind"] == "pty" and _spawn["agent"] == "copilot"
         # The goal arrives byte-identical, in a single call — framing and
         # the submit CR are now the session-host's own job (#611).
         calls = overrides["session"].send_input.call_args_list
@@ -130,53 +135,36 @@ class TestSpawnThenType:
         first_write = overrides["session"].send_input.call_args_list[0].args[2]
         assert first_write == command + " ship it"
 
-    @pytest.mark.parametrize("model", ["sonnet", "opus", "fable"])
-    def test_claude_models_map_to_model_flag(
+    @pytest.mark.parametrize(
+        "model", ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+    )
+    def test_copilot_models_map_to_model_flag(
         self, webapp_client, _bypass_gate, _fast_probe, _spawn,
         _ready_session, model,
     ):
         client, _, overrides = webapp_client
         _dispatch(client, overrides, model=model)
         assert f"--model {model}" in _spawn["flags"]
-        assert _spawn["agent"] == "claude"
+        assert _spawn["agent"] == "copilot"
 
-    def test_model_defaults_to_sonnet(
+    def test_model_defaults_to_persisted_coding_model(
         self, webapp_client, _bypass_gate, _fast_probe, _spawn, _ready_session
     ):
+        """No model in the body → the persisted Coding model (the
+        ``model_override=None`` path), same as a Coding-tab launch."""
         client, _, overrides = webapp_client
         _dispatch(client, overrides)
-        assert "--model sonnet" in _spawn["flags"]
-        assert _spawn["agent"] == "claude"
+        assert "--model gpt-5.6-luna" in _spawn["flags"]
+        assert _spawn["agent"] == "copilot"
 
-    def test_gpt56_spawns_codex_with_coding_tab_flags(
-        self, webapp_client, _bypass_gate, _fast_probe, _spawn,
-        _ready_session, monkeypatch,
-    ):
-        """#500: gpt5.6 = the Coding tab's Codex launch — agent codex,
-        effort-only flags (Codex has no --model), same /issue-* typing."""
-        monkeypatch.setattr(
-            board_spawn.agents, "is_installed", lambda a: a == "codex"
-        )
-        client, _, overrides = webapp_client
-        resp = _dispatch(client, overrides, model="gpt5.6")
-        assert resp.status_code == 200
-        assert _spawn["agent"] == "codex" and _spawn["kind"] == "pty"
-        assert "model_reasoning_effort=" in _spawn["flags"]
-        assert "--model" not in _spawn["flags"]
-        # The goal still rides the PTY path, one call, submit=True.
-        calls = overrides["session"].send_input.call_args_list
-        assert len(calls) == 1
-        assert calls[0].args[2].startswith("/issue-add ")
-        assert calls[0].args[3] is True
-
-    def test_gpt56_without_codex_installed_400s_before_spawn(
+    def test_copilot_not_installed_400s_before_spawn(
         self, webapp_client, _bypass_gate, _fast_probe, _spawn, monkeypatch
     ):
         monkeypatch.setattr(
             board_spawn.agents, "is_installed", lambda a: False
         )
         client, _, overrides = webapp_client
-        resp = _dispatch(client, overrides, model="gpt5.6")
+        resp = _dispatch(client, overrides)
         assert resp.status_code == 400
         assert "not installed" in resp.json()["detail"]
         assert not _spawn  # nothing ever spawned

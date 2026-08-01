@@ -4,10 +4,10 @@ A design decision worth re-reading before anyone tries to add a graceful "Ctrl+C
 
 ## The two session kinds (historical context)
 
-The launcher runs Claude/agent sessions in two shapes:
+The launcher runs agent sessions in two shapes:
 
 - **Attached (`PtySession`)** — the process runs in a ConPTY owned by the session-host, output streamed to the phone over a WebSocket. It has a real stdin/PTY, so it *could* be gracefully stopped (send `Ctrl+C`, the agent exits cleanly) *or* stopped-and-closed.
-- **Detached (`RemoteSession`)** — the process runs in its own console window, orphaned out of the session-host's process tree (see `SessionManager.create_remote`). The launcher keeps **only the PID**; there is no PTY, no stdin pipe, no WebSocket. Remote control comes from the Claude cloud app, not the launcher.
+- **Detached (`RemoteSession`)** — the process runs in its own console window, orphaned out of the session-host's process tree (see `SessionManager.create_remote`). The launcher keeps **only the PID**; there is no PTY, no stdin pipe, no WebSocket. The session is driven from its own console window, not the launcher.
 
 Because a detached session has no stdin/PTY the launcher can reach, the only stop it can perform is a kill.
 

@@ -24,7 +24,7 @@ class ScanCommand(BaseCommand):
     def add_parser(cls, subparsers: argparse._SubParsersAction) -> None:
         p = subparsers.add_parser(
             "scan",
-            help="Scan for new Claude Code projects + app launchers and persist them",
+            help="Scan for new coding projects + app launchers and persist them",
         )
         p.add_argument(
             "--dry-run",

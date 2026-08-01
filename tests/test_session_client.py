@@ -31,14 +31,14 @@ def test_create_session_includes_phone_dimensions(monkeypatch):
     monkeypatch.setattr(session_client._loopback_http.SESSION, "request", fake_request)
 
     session_client.create_session(
-        8446, r"C:\proj", "name", "", agent="codex", rows=50, cols=42
+        8446, r"C:\proj", "name", "", agent="copilot", rows=50, cols=42
     )
 
     body = captured["json"]
     assert captured["method"] == "POST"
     assert body["rows"] == 50
     assert body["cols"] == 42
-    assert body["agent"] == "codex"
+    assert body["agent"] == "copilot"
 
 
 def test_create_session_defaults_dimensions(monkeypatch):
@@ -69,7 +69,7 @@ def test_create_session_includes_history_lines_when_given(monkeypatch):
     monkeypatch.setattr(session_client._loopback_http.SESSION, "request", fake_request)
 
     session_client.create_session(
-        8446, r"C:\proj", "name", "", agent="codex", history_lines=5000,
+        8446, r"C:\proj", "name", "", agent="copilot", history_lines=5000,
     )
 
     assert captured["json"]["history_lines"] == 5000

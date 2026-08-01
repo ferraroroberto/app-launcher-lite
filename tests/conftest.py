@@ -160,20 +160,13 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
                 "port": 8445,
                 "projects_dir": str(tmp_projects_dir),
                 "apps_scan_root": str(tmp_apps_root),
-                "claude_model": "opus",
-                "claude_effort": "high",
-                "claude_verbose": True,
-                "claude_debug": False,
                 "auth_token": "",
                 "auth_password": "",
                 "session_host_port": 8446,
                 # Board tab (issue #300): point the sessions-state file at a
                 # temp path so a test can never read the real hook-written
-                # ~/.claude/hooks/state/sessions-state.json.
+                # ~/.copilot/hooks/state/sessions-state.json.
                 "sessions_state_file": str(tmp_path / "sessions-state.json"),
-                # Same reasoning for the rate-limits cache (issue #326): never
-                # let a test touch ~/.claude/hooks/state/rate-limits.json.
-                "rate_limits_file": str(tmp_path / "rate-limits.json"),
                 "github_owner": "testowner",
             }
         ),
@@ -225,7 +218,7 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     # module-level `session_client` reference of its own. The launch
     # routers (apps.py, team_os.py) no longer do since #689 moved their
     # spawn + error-mapping head into _helpers.spawn_session_or_400 —
-    # they reach the host only through the `spawn_claude_session` the
+    # they reach the host only through the `spawn_agent_session` the
     # per-test fakes replace.
     from src import session_client as real_session_client
     session_mock = MagicMock()

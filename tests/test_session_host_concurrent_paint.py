@@ -108,7 +108,7 @@ async def _create_and_attach(
             # The monkeypatched command_for() turns flags into the child's
             # argv, so this doubles as the session's unique tag.
             "flags": tag,
-            "agent": "claude",
+            "agent": "copilot",
             "rows": 40,
             "cols": 120,
         },

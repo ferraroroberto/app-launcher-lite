@@ -27,13 +27,13 @@ def test_home_head_is_first_card_with_stats_and_toggle(
 ) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
 
-    head = authed_page.locator("#paneClaude .home-head")
+    head = authed_page.locator("#paneCoding .home-head")
     expect(head).to_be_visible()
     expect(head.locator(".home-title")).to_contain_text("Launcher")
 
     # First card of the pane — the summary row leads the tab.
     first_class = authed_page.evaluate(
-        "document.getElementById('paneClaude').firstElementChild.className"
+        "document.getElementById('paneCoding').firstElementChild.className"
     )
     assert "home-head" in first_class, (
         f"home-head must be the pane's first card, got {first_class!r}"
@@ -62,7 +62,7 @@ def test_options_card_is_last_and_toggles_live_on_projects_card(
 
     # The options card is the LAST card on the Coding tab (#496 item 2).
     last_id = authed_page.evaluate(
-        "document.getElementById('paneClaude').lastElementChild.id"
+        "document.getElementById('paneCoding').lastElementChild.id"
     )
     assert last_id == "codingOptions", (
         f"options card must be the pane's last card, got {last_id!r}"
@@ -73,16 +73,16 @@ def test_options_card_is_last_and_toggles_live_on_projects_card(
     projects_summary = authed_page.locator(
         "details.projects-card summary"
     )
-    expect(projects_summary.locator("#claudeDetached")).to_be_attached()
-    expect(projects_summary.locator("#claudeResume")).to_be_attached()
+    expect(projects_summary.locator("#codingDetached")).to_be_attached()
+    expect(projects_summary.locator("#codingResume")).to_be_attached()
 
     # A toggle tap flips the switch without expanding/collapsing the panel
     # (the stopPropagation guard rode along with the move).
     was_open = authed_page.locator("details.projects-card").evaluate(
         "el => el.open"
     )
-    authed_page.locator("#claudeDetached").click()
-    expect(authed_page.locator("#claudeDetached")).to_have_attribute(
+    authed_page.locator("#codingDetached").click()
+    expect(authed_page.locator("#codingDetached")).to_have_attribute(
         "aria-checked", "true"
     )
     still_open = authed_page.locator("details.projects-card").evaluate(
@@ -92,4 +92,4 @@ def test_options_card_is_last_and_toggles_live_on_projects_card(
         "Detached tap must not toggle the Projects panel"
     )
     # Leave the client-side switch off for the next test's page.
-    authed_page.locator("#claudeDetached").click()
+    authed_page.locator("#codingDetached").click()

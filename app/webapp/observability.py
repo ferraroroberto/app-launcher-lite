@@ -7,7 +7,7 @@ This middleware leaves one, in ``webapp/slow-requests.log``:
 * one line per request slower than ``LAUNCHER_SLOW_REQUEST_S`` (default 3 s):
   method, path, status, elapsed, and how many other requests were still in
   flight when it finished;
-* a rate-limited in-flight line whenever a new request arrives while more
+* a throttled in-flight line whenever a new request arrives while more
   than ``LAUNCHER_INFLIGHT_WARN`` (default 16) are already in flight — with
   the age + path of the oldest, enough to tell "event-loop blocked" from
   "handlers deadlocked" from "TLS/socket exhaustion" at the next wedge.

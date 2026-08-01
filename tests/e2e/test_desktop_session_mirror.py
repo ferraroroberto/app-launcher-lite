@@ -5,7 +5,7 @@ open the same dedicated PC Edge ``--app`` mirror window a *new*-session launch
 opens — so it can be closed without fear while the session keeps running —
 rather than rendering the terminal inside the user's own browser (which is the
 phone's behaviour). The row-tap therefore POSTs
-``/api/claude-code/sessions/<sid>/mirror`` and the in-page ``#terminalOverlay``
+``/api/coding/sessions/<sid>/mirror`` and the in-page ``#terminalOverlay``
 must stay hidden.
 
 The disposable autoboot harness is identified by ``LAUNCHER_SESSION_HOST_PORT``
@@ -53,7 +53,7 @@ def test_desktop_row_tap_mirrors_and_keeps_inpage_terminal_closed(
     # desktop path routed to /mirror (not the in-page openTerminal).
     with authed_page.expect_response(
         lambda r: r.request.method == "POST"
-        and f"/api/claude-code/sessions/{sid}/mirror" in r.url
+        and f"/api/coding/sessions/{sid}/mirror" in r.url
     ) as resp_info:
         pty_row.locator(".session-open").click()
 

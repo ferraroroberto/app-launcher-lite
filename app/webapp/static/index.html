@@ -358,14 +358,14 @@
        installed iOS PWA can capture a fixed nav nested inside a momentum/
        content scroller and anchor it to that scroller's content instead of
        the physical viewport (home-automation#232). -->
-  <nav class="tabs" role="tablist" aria-label="Primary navigation" data-active-tab="claude">
+  <nav class="tabs" role="tablist" aria-label="Primary navigation" data-active-tab="coding">
     <button id="tabBoard" type="button" class="tab" data-tab="board"
             role="tab" aria-selected="false" aria-controls="paneBoard" tabindex="-1">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-square-kanban"></use></svg>
       <span class="tab-label">Board</span>
     </button>
-    <button id="tabClaude" type="button" class="tab active" data-tab="claude"
-            role="tab" aria-selected="true" aria-controls="paneClaude">
+    <button id="tabCoding" type="button" class="tab active" data-tab="coding"
+            role="tab" aria-selected="true" aria-controls="paneCoding">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-code-xml"></use></svg>
       <span class="tab-label">Code</span>
     </button>
@@ -392,7 +392,7 @@
   </nav>
 
   <main class="app">
-    <section id="paneClaude" class="pane" role="tabpanel" aria-labelledby="tabClaude">
+    <section id="paneCoding" class="pane" role="tabpanel" aria-labelledby="tabCoding">
       <!-- Vendored home-head summary card (#496): one-line dashboard row —
            app title + live stats (sessions / running apps / git aggregate)
            + the theme toggle pinned right (home-head.css contract). The
@@ -434,13 +434,9 @@
           </span>
         </summary>
         <div class="collapse-body">
-        <div id="codingUsage" class="usage-badges" hidden>
-          <span id="codingUsageSession" class="usage-badge" hidden></span>
-          <span id="codingUsageWeekly" class="usage-badge" hidden></span>
-        </div>
-        <ul id="sessionsList" class="card-list" aria-label="Running Claude Code sessions"></ul>
+        <ul id="sessionsList" class="card-list" aria-label="Running coding sessions"></ul>
         <p id="sessionsEmpty" class="muted small">No sessions launched from here yet — tap a project below to start one.</p>
-        <p class="launcher-note">Only sessions launched from here appear — Claude windows started directly on the PC can't be attached.</p>
+        <p class="launcher-note">Only sessions launched from here appear — agent windows started directly on the PC can't be attached.</p>
         </div>
       </details>
 
@@ -456,28 +452,14 @@
           </span>
           <span class="summary-actions">
             <div class="coding-toggles">
-              <!-- Launch model (#540): a board-style combo (mirrors the Board
-                   dispatch bar's model selector) that stays in sync with the
-                   Claude Model segmented control in the options card below —
-                   both write/read the same claude_model config, so picking in
-                   one updates the other (no double-setting). Claude-only:
-                   Codex/others are their own per-tile launch buttons. -->
-              <span class="model-combo" id="codingModelCombo" data-value="sonnet">
-                <button type="button" id="codingModelBtn" class="model-combo-trigger"
-                        aria-haspopup="listbox" aria-expanded="false" aria-controls="codingModelMenu"
-                        title="Model for Claude Code launches — stays in sync with the Model control in options below">Sonnet</button>
-                <span id="codingModelMenu" class="model-combo-menu" role="listbox" aria-label="Claude launch model" hidden>
-                  <button type="button" role="option" data-value="sonnet" aria-selected="true">Sonnet</button>
-                  <button type="button" role="option" data-value="opus" aria-selected="false">Opus</button>
-                  <button type="button" role="option" data-value="fable" aria-selected="false">Fable</button>
-                </span>
-              </span>
-              <button type="button" id="claudeDetached" class="detached-toggle" role="switch" aria-checked="false"
+              <!-- The launch model lives in the Copilot options card below
+                   (#copilotModel) — one control, one source of truth. -->
+              <button type="button" id="codingDetached" class="detached-toggle" role="switch" aria-checked="false"
                      aria-label="Launch detached"
                      title="Launch detached: a console window on the PC, listed and killable here but no phone terminal">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-cloud"></use></svg>
               </button>
-              <button type="button" id="claudeResume" class="detached-toggle" role="switch" aria-checked="false"
+              <button type="button" id="codingResume" class="detached-toggle" role="switch" aria-checked="false"
                      aria-label="Resume session"
                      title="Resume: reopen the agent's own session picker — in a phone terminal, or in the detached console when Detached is also on">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rotate-ccw"></use></svg>
@@ -489,9 +471,9 @@
           </span>
         </summary>
         <div class="collapse-body">
-        <ul id="claudeList" class="card-list" aria-label="Claude Code projects"></ul>
-        <div id="claudeEmpty" class="empty" hidden>
-          No Claude Code projects found — point <strong>Projects dir</strong> in Settings at a folder that has project subdirectories.
+        <ul id="codingList" class="card-list" aria-label="Coding projects"></ul>
+        <div id="codingEmpty" class="empty" hidden>
+          No coding projects found — point <strong>Projects dir</strong> in Settings at a folder that has project subdirectories.
         </div>
         <p id="gitStatusLegend" class="muted small git-legend" hidden>
           <span class="git-swatch off-main"></span> not on main ·
@@ -516,51 +498,6 @@
         </div>
 
         <div class="opt-group">
-          <h3 class="opt-group-title">Claude Code</h3>
-          <div class="opt-row">
-            <span class="opt-name">Model</span>
-            <div id="claudeModel" class="segmented" role="radiogroup" aria-label="Claude model"></div>
-          </div>
-          <div class="opt-row">
-            <span class="opt-name">Effort</span>
-            <div id="claudeEffort" class="segmented" role="radiogroup" aria-label="Effort"></div>
-          </div>
-          <div class="opt-row">
-            <span class="opt-name">Permission</span>
-            <div id="claudePermission" class="segmented" role="radiogroup" aria-label="Permission mode"></div>
-          </div>
-          <div class="toggles">
-            <span class="switch-row"><span>Verbose</span><button type="button" id="claudeVerbose" class="toggle" role="switch" aria-checked="false" aria-label="Verbose output"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
-            <span class="switch-row"><span>Debug</span><button type="button" id="claudeDebug" class="toggle" role="switch" aria-checked="false" aria-label="Debug output"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
-          </div>
-          <div id="claudeFlagsPreview" class="flags-preview">claude …</div>
-        </div>
-
-        <div class="opt-group">
-          <h3 class="opt-group-title">Codex</h3>
-          <div class="opt-row">
-            <span class="opt-name">Reasoning</span>
-            <div id="codexEffort" class="segmented" role="radiogroup" aria-label="Codex reasoning"></div>
-          </div>
-          <div class="opt-row">
-            <span class="opt-name">Permission</span>
-            <div id="codexPermission" class="segmented" role="radiogroup" aria-label="Codex permission mode"></div>
-          </div>
-          <p class="opt-hint">Runs on your ChatGPT-plan login (<code>codex login</code>) — model stays the account default (<code>gpt-5-codex</code>); the tiers map to reasoning effort.</p>
-          <div id="codexFlagsPreview" class="flags-preview">codex</div>
-        </div>
-
-        <div class="opt-group">
-          <h3 class="opt-group-title">Antigravity</h3>
-          <div class="toggles">
-            <span class="switch-row"><span>Skip permission prompts</span><button type="button" id="antigravitySkipPerms" class="toggle" role="switch" aria-checked="false" aria-label="Skip Antigravity permission prompts"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
-            <span class="switch-row"><span>Sandbox</span><button type="button" id="antigravitySandbox" class="toggle" role="switch" aria-checked="false" aria-label="Antigravity sandbox"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
-          </div>
-          <p class="opt-hint">Model is chosen with <code>/model</code> inside the session — the Antigravity CLI has no launch-time model flag.</p>
-          <div id="antigravityFlagsPreview" class="flags-preview">agy</div>
-        </div>
-
-        <div class="opt-group">
           <h3 class="opt-group-title">GitHub Copilot</h3>
           <div class="opt-row">
             <span class="opt-name">Model</span>
@@ -580,38 +517,6 @@
           </div>
           <p class="opt-hint">Sign in with <code>/login</code> inside the session. <strong>Default (auto)</strong> lets Copilot pick the model — Effort only applies with an explicit model (the auto model rejects it). The model list comes from <code>copilot_models</code> in <code>webapp_config.json</code> (tenant-gated ids — edit it there).</p>
           <div id="copilotFlagsPreview" class="flags-preview">copilot</div>
-        </div>
-
-        <div class="opt-group">
-          <h3 class="opt-group-title">Pi</h3>
-          <div class="opt-row">
-            <span class="opt-name">Model</span>
-            <div id="piModel" class="segmented" role="radiogroup" aria-label="Pi model"></div>
-          </div>
-          <div class="opt-row">
-            <span class="opt-name">Effort</span>
-            <div id="piEffort" class="segmented" role="radiogroup" aria-label="Pi reasoning"></div>
-          </div>
-          <div class="opt-row">
-            <span class="opt-name">Project trust</span>
-            <div id="piTrust" class="segmented" role="radiogroup" aria-label="Pi project trust"></div>
-          </div>
-          <p class="opt-hint"><strong>Opus</strong>/<strong>Sonnet</strong> run on your <strong>Claude subscription</strong> (<code>claude-agent-sdk</code>); <strong>GPT</strong> runs on your <strong>ChatGPT plan</strong> (<code>openai-codex</code>) — no API credits either way. Needs the one-time <code>pi install npm:claude-agent-sdk-pi</code>. Effort maps to <code>--thinking</code>; switch models/effort in-session with <code>/model</code> / <code>Shift+Tab</code>. <strong>Trust</strong> loads project-local <code>.pi/</code> resources (not a tool-permission gate — pi has no sandbox).</p>
-          <div id="piFlagsPreview" class="flags-preview">pi</div>
-        </div>
-
-        <div class="opt-group">
-          <h3 class="opt-group-title">Grok Build</h3>
-          <div class="opt-row">
-            <span class="opt-name">Reasoning</span>
-            <div id="grokEffort" class="segmented" role="radiogroup" aria-label="Grok reasoning"></div>
-          </div>
-          <div class="opt-row">
-            <span class="opt-name">Permission</span>
-            <div id="grokPermission" class="segmented" role="radiogroup" aria-label="Grok permission mode"></div>
-          </div>
-          <p class="opt-hint">Runs on your <code>grok.com</code> login (<code>grok login</code>) — model stays the account default (<code>grok-4.5</code>, the only one <code>grok models</code> lists); the tiers map to <code>--reasoning-effort</code>.</p>
-          <div id="grokFlagsPreview" class="flags-preview">grok</div>
         </div>
       </details>
     </section>
@@ -833,12 +738,13 @@
             </select>
           </span>
           <span class="board-model-combo">
+            <!-- Options are populated at wire time from the config-driven
+                 copilot_models list (board-dispatch.js::syncDispatchModels);
+                 the static Default option ('' = Copilot auto) is the
+                 fallback until /api/config lands. -->
             <select id="boardDispatchModel" class="select-native" aria-label="Dispatch model"
-                    title="model for dispatches and one-tap start/YOLO: Sonnet / Opus / Fable spawn Claude Code; GPT-5.6 spawns Codex CLI (high effort)">
-              <option value="sonnet" selected>Sonnet</option>
-              <option value="opus">Opus</option>
-              <option value="fable">Fable</option>
-              <option value="gpt5.6">GPT-5.6</option>
+                    title="model for dispatches and one-tap start/YOLO — Default lets Copilot pick">
+              <option value="" selected>Default</option>
             </select>
           </span>
           <button id="boardDispatchClear" type="button" class="compose-record"
@@ -863,10 +769,6 @@
                 aria-label="Refresh GitHub data">↻</button>
       </div>
       <div id="boardStatus" class="board-status" hidden></div>
-      <div id="boardUsage" class="usage-badges" hidden>
-        <span id="boardUsageSession" class="usage-badge" hidden></span>
-        <span id="boardUsageWeekly" class="usage-badge" hidden></span>
-      </div>
       <div id="boardColumns" class="board-columns">
         <section class="board-col" data-col="backlog" aria-label="Backlog">
           <h3 class="board-col-title">Backlog <span class="board-col-count" data-col="backlog">(0)</span></h3>
@@ -909,7 +811,7 @@
         </div>
         <div class="collapse-body">
         <label class="stacked">
-          <span>Projects dir (Claude Code)</span>
+          <span>Projects dir (Coding)</span>
           <input id="projectsDir" type="text" class="input-native">
         </label>
         <label class="stacked">
@@ -926,7 +828,7 @@
           <input id="teamOsDir" type="text" class="input-native">
         </label>
         <label class="stacked">
-          <span>Terminal scrollback (lines) — how much history a full-screen agent (Codex, etc.) keeps for a reconnect</span>
+          <span>Terminal scrollback (lines) — how much history a full-screen agent keeps for a reconnect</span>
           <input id="terminalHistoryLines" type="number" class="input-native" step="100">
         </label>
         <div class="switch-row settings-switch-row">

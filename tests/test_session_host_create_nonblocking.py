@@ -65,7 +65,7 @@ async def test_slow_create_does_not_stall_concurrent_event_loop_work(monkeypatch
                 "/sessions",
                 json={
                     "project_dir": r"C:\proj", "name": "proj", "flags": "",
-                    "agent": "claude",
+                    "agent": "copilot",
                 },
             )
             assert resp.status_code == 200

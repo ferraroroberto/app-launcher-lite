@@ -41,7 +41,7 @@ def test_create_forwards_history_lines_when_given(monkeypatch):
         "/sessions",
         json={
             "project_dir": r"C:\proj", "name": "proj", "flags": "",
-            "agent": "codex", "rows": 40, "cols": 120, "history_lines": 5000,
+            "agent": "copilot", "rows": 40, "cols": 120, "history_lines": 5000,
         },
     )
 
@@ -57,7 +57,7 @@ def test_create_defaults_history_lines_to_none_when_omitted(monkeypatch):
         "/sessions",
         json={
             "project_dir": r"C:\proj", "name": "proj", "flags": "",
-            "agent": "codex", "rows": 40, "cols": 120,
+            "agent": "copilot", "rows": 40, "cols": 120,
         },
     )
 
@@ -76,7 +76,7 @@ def test_create_forwards_normalized_label(monkeypatch):
         "/sessions",
         json={
             "project_dir": r"C:\proj", "name": "special", "flags": "",
-            "agent": "claude", "label": " Special ",
+            "agent": "copilot", "label": " Special ",
         },
     )
 

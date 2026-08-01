@@ -8,8 +8,8 @@
 import { els, state, BOARD_POLL_MS, GIT_STATUS_POLL_MS, JOBS_POLL_MS, LISTENERS_POLL_MS, RUNNING_APPS_POLL_MS, SESSIONS_POLL_MS, TUNNEL_POLL_MS, WEBAUTHN_POLL_MS } from './state.js';
 import { apiFailToast, consumeUrlParam, jsonApi, toast, wireLoginForm, writeToken } from './api.js';
 import { wireTabs } from './tabs.js';
-import { fetchConfig, patchConfig, wireClaudeOptions } from './claude-options.js';
-import { fetchRateLimits, fetchSessions, wireSessions } from './sessions.js';
+import { fetchConfig, patchConfig, wireCopilotOptions } from './copilot-options.js';
+import { fetchSessions, wireSessions } from './sessions.js';
 import { fetchAgents, fetchApps, fetchListeners, fetchRunningApps, refreshGitStatus, wireApps } from './apps.js';
 import { fetchJobs, renderJobs, wireJobs } from './jobs.js';
 import { fetchSkills, wireTeamOs } from './team-os.js';
@@ -192,7 +192,6 @@ async function boot() {
   await safe(fetchApps);
   await safe(fetchSkills);
   await safe(fetchSessions);
-  await safe(fetchRateLimits);
   await safe(fetchListeners);
   await safe(fetchRunningApps);
   await safe(fetchStatus);
@@ -224,9 +223,6 @@ async function boot() {
     if (!state.terminal) fetchSessions().catch(function () {});
   }, SESSIONS_POLL_MS);
   setInterval(function () {
-    fetchRateLimits().catch(function () {});
-  }, SESSIONS_POLL_MS);
-  setInterval(function () {
     fetchListeners().catch(function () {});
   }, LISTENERS_POLL_MS);
   setInterval(function () {
@@ -249,7 +245,7 @@ async function boot() {
     // is visible (Coding tiles / Board backlog) and the page is foreground —
     // a backgrounded PWA must not keep spawning git subprocesses.
     if (document.hidden) return;
-    if (state.tab !== 'claude' && state.tab !== 'board') return;
+    if (state.tab !== 'coding' && state.tab !== 'board') return;
     refreshGitStatus({ quiet: true }).catch(function () {});
   }, GIT_STATUS_POLL_MS);
 }
@@ -257,7 +253,7 @@ async function boot() {
 // --------------------------------------------------------- wire + go
 wireLoginForm(boot);
 wireTabs();
-wireClaudeOptions();
+wireCopilotOptions();
 wireSessions();
 wireApps();
 wireJobs();

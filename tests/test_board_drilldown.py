@@ -7,7 +7,7 @@ Covers the act-from-the-card loop server-side:
     degraded to ``available: False``.
   * ``board.state_row_for_session`` — resolves the same row the board's
     merge renders (newest-session-wins claim order).
-  * ``POST /api/claude-code/sessions/{sid}/input`` — one call to the
+  * ``POST /api/coding/sessions/{sid}/input`` — one call to the
     session-host, which now owns framing + settle-then-submit itself
     (#611); the bare-submit escape hatch for a stranded composer.
   * ``POST /api/board/issues/start`` — server-built ``/issue-<mode> <N>``
@@ -190,75 +190,6 @@ def test_launcher_exchange_reads_only_the_bounded_capture_tail(
     assert result["assistant"]["text"] == "New reply is inside the bounded tail."
 
 
-def test_codex_native_exchange_correlates_by_unique_start_and_cwd(
-    tmp_path: Path, monkeypatch,
-):
-    sessions = tmp_path / "sessions"
-    local_start = datetime.fromtimestamp(NOW.timestamp()).astimezone()
-    day = sessions / local_start.strftime("%Y/%m/%d")
-    day.mkdir(parents=True)
-    target_stamp = (local_start + timedelta(seconds=2)).strftime(
-        "%Y-%m-%dT%H-%M-%S"
-    )
-    target = day / f"rollout-{target_stamp}-correct.jsonl"
-    target.write_text("\n".join(json.dumps(item) for item in [
-        {"type": "session_meta", "payload": {
-            "timestamp": "2026-07-02T12:00:02Z", "cwd": "E:/proj/app",
-        }},
-        {"timestamp": "2026-07-02T12:01:00Z", "type": "response_item",
-         "payload": {"type": "message", "role": "user",
-                     "content": [{"type": "input_text", "text": "status?"}]}},
-        {"timestamp": "2026-07-02T12:02:00Z", "type": "response_item",
-         "payload": {"type": "message", "role": "assistant",
-                     "content": [{"type": "output_text", "text": "All green."}]}},
-    ]) + "\n", encoding="utf-8")
-    other_stamp = (local_start + timedelta(seconds=90)).strftime(
-        "%Y-%m-%dT%H-%M-%S"
-    )
-    other = day / f"rollout-{other_stamp}-other.jsonl"
-    other.write_text(
-        '{"type":"session_meta","payload":{"cwd":"E:/proj/app"}}\n',
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(board_exchange, "_CODEX_SESSIONS_DIR", sessions)
-    session = {
-        "agent": "codex", "project_dir": "E:/proj/app",
-        "started_at": NOW.timestamp(), "prompt_title": "status?",
-    }
-    result = board_exchange.resolve_exchange(
-        session, None, tmp_path / "missing.transcript"
-    )
-    assert result["source"] == "codex"
-    assert result["user"]["text"] == "status?"
-    assert result["assistant"]["text"] == "All green."
-
-
-def test_codex_ambiguous_native_match_degrades_to_exact_launcher_capture(
-    tmp_path: Path, monkeypatch,
-):
-    sessions = tmp_path / "sessions"
-    local_start = datetime.fromtimestamp(NOW.timestamp()).astimezone()
-    day = sessions / local_start.strftime("%Y/%m/%d")
-    day.mkdir(parents=True)
-    for offset in (-1, 1):
-        stamp = (local_start + timedelta(seconds=offset)).strftime(
-            "%Y-%m-%dT%H-%M-%S"
-        )
-        (day / f"rollout-{stamp}-candidate.jsonl").write_text(
-            '{"type":"session_meta","payload":{"cwd":"E:/proj/app"}}\n',
-            encoding="utf-8",
-        )
-    capture = tmp_path / "exact.transcript"
-    capture.write_text("● Exact session reply.\r\n", encoding="utf-8")
-    monkeypatch.setattr(board_exchange, "_CODEX_SESSIONS_DIR", sessions)
-    result = board_exchange.resolve_exchange({
-        "agent": "codex", "project_dir": "E:/proj/app",
-        "started_at": NOW.timestamp(), "prompt_title": "question",
-    }, None, capture)
-    assert result["source"] == "launcher"
-    assert result["assistant"]["text"] == "Exact session reply."
-
-
 # --------------------------------------------------- state_row_for_session
 
 
@@ -292,7 +223,7 @@ def test_state_row_for_session_matches_render_claim():
 
 def test_new_paths_classified_passkey():
     from app.webapp.middleware import _terminal_guard_level
-    assert _terminal_guard_level("/api/claude-code/sessions/abc/input") == "passkey"
+    assert _terminal_guard_level("/api/coding/sessions/abc/input") == "passkey"
     assert _terminal_guard_level("/api/board/sessions/abc/exchange") == "passkey"
     assert _terminal_guard_level("/api/board/issues/start") == "passkey"
 
@@ -304,7 +235,7 @@ class TestGateRefusal:
     def test_input_refused_off_tailnet(self, webapp_client):
         client, _, _ = webapp_client
         resp = client.post(
-            "/api/claude-code/sessions/s1/input", json={"data": "hi"}
+            "/api/coding/sessions/s1/input", json={"data": "hi"}
         )
         assert resp.status_code == 403
 
@@ -343,7 +274,7 @@ class TestInputProxy:
         (#611) — the router just forwards data + submit in a single call."""
         client, _, overrides = webapp_client
         resp = client.post(
-            "/api/claude-code/sessions/s1/input",
+            "/api/coding/sessions/s1/input",
             json={"data": "line one\nline two", "submit": True},
         )
         assert resp.status_code == 200
@@ -354,7 +285,7 @@ class TestInputProxy:
     def test_single_line_forwarded_raw(self, webapp_client, _bypass_gate):
         client, _, overrides = webapp_client
         client.post(
-            "/api/claude-code/sessions/s1/input",
+            "/api/coding/sessions/s1/input",
             json={"data": "hello", "submit": True},
         )
         calls = overrides["session"].send_input.call_args_list
@@ -364,7 +295,7 @@ class TestInputProxy:
     def test_no_submit_forwards_submit_false(self, webapp_client, _bypass_gate):
         client, _, overrides = webapp_client
         client.post(
-            "/api/claude-code/sessions/s1/input",
+            "/api/coding/sessions/s1/input",
             json={"data": "draft", "submit": False},
         )
         calls = overrides["session"].send_input.call_args_list
@@ -377,11 +308,11 @@ class TestInputProxy:
         below, which always carries submit=True."""
         client, _, _ = webapp_client
         assert client.post(
-            "/api/claude-code/sessions/s1/input",
+            "/api/coding/sessions/s1/input",
             json={"data": "   ", "submit": False},
         ).status_code == 400
         assert client.post(
-            "/api/claude-code/sessions/s1/input",
+            "/api/coding/sessions/s1/input",
             json={"data": "", "submit": False},
         ).status_code == 400
 
@@ -394,7 +325,7 @@ class TestInputProxy:
         tapping the phone's own compose Send by hand."""
         client, _, overrides = webapp_client
         resp = client.post(
-            "/api/claude-code/sessions/s1/input",
+            "/api/coding/sessions/s1/input",
             json={"data": "", "submit": True},
         )
         assert resp.status_code == 200
@@ -409,7 +340,7 @@ class TestInputProxy:
         an empty string — there is no meaningful text to write either way."""
         client, _, overrides = webapp_client
         resp = client.post(
-            "/api/claude-code/sessions/s1/input",
+            "/api/coding/sessions/s1/input",
             json={"data": "   ", "submit": True},
         )
         assert resp.status_code == 200
@@ -429,7 +360,7 @@ class TestInputProxy:
         )
 
         resp = client.post(
-            "/api/claude-code/sessions/s1/input",
+            "/api/coding/sessions/s1/input",
             json={"data": "hello", "submit": True},
         )
 
@@ -456,7 +387,14 @@ class TestIssueStart:
             )
             return {"session_id": "spawned-1", "kind": "pty", "name": name}
 
-        monkeypatch.setattr(board_router, "spawn_claude_session", fake_spawn)
+        monkeypatch.setattr(board_router, "spawn_agent_session", fake_spawn)
+        # The per-launch model path routes through the copilot install
+        # guard — pretend the CLI is on PATH so tests don't depend on the
+        # host machine. The not-installed test re-patches to False.
+        from app.webapp.routers import board_spawn
+        monkeypatch.setattr(
+            board_spawn.agents, "is_installed", lambda agent_id: True
+        )
         return captured
 
     def test_builds_server_side_prompt(self, webapp_client, _bypass_gate, _spawn):
@@ -469,7 +407,7 @@ class TestIssueStart:
         assert resp.status_code == 200
         assert _spawn["flags"].endswith(' "/issue-start 42"')
         assert Path(_spawn["project_dir"]).name == "myrepo"
-        assert _spawn["kind"] == "pty" and _spawn["agent"] == "claude"
+        assert _spawn["kind"] == "pty" and _spawn["agent"] == "copilot"
         assert resp.json()["session"]["session_id"] == "spawned-1"
 
     def test_yolo_mode(self, webapp_client, _bypass_gate, _spawn):
@@ -495,7 +433,9 @@ class TestIssueStart:
             "/api/board/issues/start", json={**base, "number": -3}
         ).status_code == 400
 
-    @pytest.mark.parametrize("model", ["sonnet", "opus", "fable"])
+    @pytest.mark.parametrize(
+        "model", ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+    )
     def test_model_overrides_persisted_coding_model(
         self, webapp_client, _bypass_gate, _spawn, model
     ):
@@ -509,46 +449,24 @@ class TestIssueStart:
         )
         assert f"--model {model}" in _spawn["flags"]
         assert _spawn["flags"].endswith(' "/issue-start 9"')
-        assert _spawn["agent"] == "claude"
+        assert _spawn["agent"] == "copilot"
 
     def test_absent_model_keeps_persisted_coding_model(
         self, webapp_client, _bypass_gate, _spawn
     ):
         """No ``model`` (stale-cache client) → legacy behaviour: the
-        persisted Coding model (opus in the test config), unchanged."""
+        persisted Coding model (gpt-5.6-luna in the default config),
+        unchanged."""
         client, _, overrides = webapp_client
         (overrides["tmp_projects_dir"] / "myrepo").mkdir()
         client.post(
             "/api/board/issues/start",
             json={"repo": "myrepo", "number": 9, "mode": "start"},
         )
-        assert "--model opus" in _spawn["flags"]
-        assert _spawn["agent"] == "claude"
+        assert "--model gpt-5.6-luna" in _spawn["flags"]
+        assert _spawn["agent"] == "copilot"
 
-    def test_gpt56_starts_codex_with_positional_prompt(
-        self, webapp_client, _bypass_gate, _spawn, monkeypatch
-    ):
-        """#505: gpt5.6 spawns Codex — shared Codex flags, and the same
-        server-built ``/issue-*`` positional prompt appended (Codex takes
-        ``codex [OPTIONS] [PROMPT]`` like claude)."""
-        from app.webapp.routers import board_spawn
-        monkeypatch.setattr(
-            board_spawn.agents, "is_installed", lambda a: a == "codex"
-        )
-        client, _, overrides = webapp_client
-        (overrides["tmp_projects_dir"] / "myrepo").mkdir()
-        resp = client.post(
-            "/api/board/issues/start",
-            json={"repo": "myrepo", "number": 7, "mode": "yolo",
-                  "model": "gpt5.6"},
-        )
-        assert resp.status_code == 200
-        assert _spawn["agent"] == "codex" and _spawn["kind"] == "pty"
-        assert "model_reasoning_effort=" in _spawn["flags"]
-        assert "--model" not in _spawn["flags"]
-        assert _spawn["flags"].endswith(' "/issue-yolo 7"')
-
-    def test_gpt56_without_codex_installed_400s(
+    def test_copilot_not_installed_400s(
         self, webapp_client, _bypass_gate, _spawn, monkeypatch
     ):
         from app.webapp.routers import board_spawn
@@ -560,7 +478,7 @@ class TestIssueStart:
         resp = client.post(
             "/api/board/issues/start",
             json={"repo": "myrepo", "number": 7, "mode": "start",
-                  "model": "gpt5.6"},
+                  "model": "gpt-5.6-luna"},
         )
         assert resp.status_code == 400
         assert "not installed" in resp.json()["detail"]
@@ -621,30 +539,6 @@ class TestIssueStart:
         assert resp.status_code == 200
         assert "--name" not in _spawn["flags"]
         overrides["session"].rename.assert_called_once_with(8446, "spawned-1", title)
-
-    def test_codex_title_remains_launcher_only(
-        self, webapp_client, _bypass_gate, _spawn, monkeypatch
-    ):
-        """Codex exposes no verified spawn-time session-name interface."""
-        from app.webapp.routers import board_spawn
-
-        monkeypatch.setattr(
-            board_spawn.agents, "is_installed", lambda agent: agent == "codex"
-        )
-        client, _, overrides = webapp_client
-        (overrides["tmp_projects_dir"] / "myrepo").mkdir()
-        resp = client.post(
-            "/api/board/issues/start",
-            json={
-                "repo": "myrepo", "number": 42, "mode": "start",
-                "model": "gpt5.6", "title": "Codex title",
-            },
-        )
-        assert resp.status_code == 200
-        assert "--name" not in _spawn["flags"]
-        overrides["session"].rename.assert_called_once_with(
-            8446, "spawned-1", "Codex title"
-        )
 
     def test_blank_title_skips_rename(
         self, webapp_client, _bypass_gate, _spawn
@@ -713,15 +607,15 @@ class TestExchangeEndpoint:
         assert body["reason"] == "session_not_found"
 
     @pytest.mark.parametrize("agent, with_missing_native", [
-        ("claude", True),
-        ("codex", False),
+        ("copilot", True),
+        ("ssh", False),
     ])
     def test_launcher_capture_falls_back_when_native_exchange_is_unavailable(
         self, webapp_client, _bypass_gate, tmp_path: Path, monkeypatch,
         agent: str, with_missing_native: bool,
     ):
-        """#457 repro: both a missing Claude hook transcript and a Codex
-        session with no hook row still have an exact-id launcher capture."""
+        """#457 repro: both a missing hook transcript and a session with no
+        hook row at all still have an exact-id launcher capture."""
         from app.webapp.routers import board as board_router
 
         client, app, overrides = webapp_client
@@ -743,7 +637,7 @@ class TestExchangeEndpoint:
             state_file = Path(app.state.webapp_config.sessions_state_file)
             state_file.write_text(json.dumps({
                 "t-uuid": {
-                    "agent": "claude", "cwd": "E:/proj/app",
+                    "agent": "copilot", "cwd": "E:/proj/app",
                     "status": "needs-you", "updated_at": _iso(NOW),
                     "transcript_path": str(tmp_path / "missing.jsonl"),
                 },

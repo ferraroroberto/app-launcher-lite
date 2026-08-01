@@ -8,10 +8,10 @@ Two pure-function contracts back the feature, pinned here via dynamic
 ``test_fullscreen_keyboard_pan.py``):
 
 1. ``sessions.js`` ``sessionTitle()`` smart precedence. A genuine shared
-   title (fleet-config#302, ``shared_name`` with ``shared_name_source`` !==
-   ``'derived'``) wins outright. Otherwise: only Claude emits a genuine
-   per-conversation OSC title; Codex emits ``<folder> | <model>``, Pi emits
-   ``π - <folder>``, and Antigravity/Copilot emit nothing. So a real live
+   title (``shared_name`` with ``shared_name_source`` !== ``'derived'``)
+   wins outright. Otherwise: not every agent emits a genuine
+   per-conversation OSC title (Copilot emits none; other TUIs emit
+   folder-echo shapes like ``<folder> | <model>``). So a real live
    summary wins next, a folder-echo title yields to the first-prompt-derived
    ``prompt_title``, then a *derived* shared name (the generic
    ``<project>-N`` fallback) beats a bare folder echo, and with nothing at
@@ -35,22 +35,22 @@ async () => {
   const { sessionTitle } = await import('/static/sessions.js');
   const dir = 'C:/code/app-launcher';   // basename 'app-launcher'
   return {
-    // Claude's real summary (glyph stripped, not a folder echo) wins.
-    claudeSummary: sessionTitle({
+    // A real agent summary (glyph stripped, not a folder echo) wins.
+    agentSummary: sessionTitle({
       live_title: '✳ Fixing the login flow bug',
       prompt_title: 'something else', project_dir: dir, name: 'app-launcher',
     }),
-    // Codex '<folder> | <model>' is a short folder echo → prompt_title wins.
-    codexEcho: sessionTitle({
+    // A '<folder> | <model>' echo is a short folder echo → prompt_title wins.
+    folderModelEcho: sessionTitle({
       live_title: 'app-launcher | gpt-5.5',
       prompt_title: 'add dark mode toggle', project_dir: dir, name: 'app-launcher',
     }),
-    // Pi 'π - <folder>' is a folder echo → prompt_title wins.
-    piEcho: sessionTitle({
+    // A 'π - <folder>'-style glyph echo is a folder echo → prompt_title wins.
+    glyphEcho: sessionTitle({
       live_title: 'π - app-launcher',
       prompt_title: 'refactor the parser', project_dir: dir, name: 'app-launcher',
     }),
-    // No agent title at all (Antigravity/Copilot) → first-prompt title.
+    // No agent title at all (Copilot emits none) → first-prompt title.
     noLiveTitle: sessionTitle({
       live_title: '', prompt_title: 'wire up the API',
       project_dir: dir, name: 'app-launcher',
@@ -129,21 +129,21 @@ def test_session_title_precedence(authed_page: Page, base_url: str) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     r = authed_page.evaluate(_TITLE_PROBE)
 
-    assert r["claudeSummary"] == "Fixing the login flow bug", (
-        f"a genuine Claude summary returned {r['claudeSummary']!r} — a real "
+    assert r["agentSummary"] == "Fixing the login flow bug", (
+        f"a genuine agent summary returned {r['agentSummary']!r} — a real "
         "per-conversation title must win over the first-prompt fallback"
     )
-    assert r["codexEcho"] == "add dark mode toggle", (
-        f"Codex's '<folder> | <model>' echo returned {r['codexEcho']!r} — a "
+    assert r["folderModelEcho"] == "add dark mode toggle", (
+        f"a '<folder> | <model>' echo returned {r['folderModelEcho']!r} — a "
         "folder-echo title must yield to the first-prompt title"
     )
-    assert r["piEcho"] == "refactor the parser", (
-        f"Pi's 'π - <folder>' echo returned {r['piEcho']!r} — it must yield to "
+    assert r["glyphEcho"] == "refactor the parser", (
+        f"a 'π - <folder>' glyph echo returned {r['glyphEcho']!r} — it must yield to "
         "the first-prompt title"
     )
     assert r["noLiveTitle"] == "wire up the API", (
         f"an agent with no OSC title returned {r['noLiveTitle']!r} — the "
-        "first-prompt title must show (Antigravity/Copilot have no native name)"
+        "first-prompt title must show (Copilot has no native name)"
     )
     assert r["bareFallback"] == "myproj", (
         f"a session with no titles returned {r['bareFallback']!r}, expected the "

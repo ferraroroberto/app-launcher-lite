@@ -3,7 +3,7 @@
 Ports the compose bar's ``framePaste``/``sendSubmit``/``bulkSettle``
 (``app/webapp/static/terminal-compose.js``, issues #166/#450/#499) to the
 HTTP ``/input`` path, which previously wrote text and a CR back-to-back with
-no settle logic at all — Claude Code's composer classifies a bulk write as a
+no settle logic at all — an agent's composer can classify a bulk write as a
 paste, and a CR landing mid-ingest is absorbed as a literal newline instead
 of Submit, stranding the message unsent.
 
@@ -34,7 +34,7 @@ def _make_session() -> PtySession:
     return PtySession(
         session_id="sid-test",
         project_dir=r"C:\stub",
-        name="claude",
+        name="coding",
         flags="",
         started_at=real_time.time(),
         _loop=MagicMock(),

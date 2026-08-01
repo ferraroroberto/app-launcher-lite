@@ -30,8 +30,8 @@ from typing import Any, Dict, List, Tuple
 from fastapi import HTTPException
 
 from src import agents, session_client
-from src.launch_flags import build_claude_flags, build_codex_flags
-from src.registry import AppEntry, live_claude_code_entries
+from src.launch_flags import build_copilot_flags
+from src.registry import AppEntry, live_coding_entries
 from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
@@ -48,13 +48,13 @@ def _safe_list_sessions(port: int) -> List[Dict[str, Any]]:
 
 
 def _resolve_repo_entry(cfg: WebappConfig, repo: str) -> AppEntry:
-    """Resolve ``repo`` to a live claude-code entry, or 404.
+    """Resolve ``repo`` to a live coding entry, or 404.
 
     Shared by ``start_issue`` and ``dispatch_goal`` — both take a bare repo
     name and need the same case-insensitive lookup against the live
     projects-folder listing.
     """
-    entries = live_claude_code_entries(
+    entries = live_coding_entries(
         Path(cfg.projects_dir), list(cfg.projects_ignore)
     )
     entry = next(
@@ -89,34 +89,28 @@ PTY_QUIESCENT_STABLE_S = 2.0
 PTY_QUIESCENT_CAP_S = 30.0
 PTY_QUIESCENT_POLL_S = 0.5
 
-# Dispatch model selector (#500): three Claude tiers (each a valid
-# ``build_claude_flags`` override) plus "gpt5.6", which spawns a Codex CLI
-# session with the shared Coding-tab flags instead — Codex has no per-model
-# flag, so "gpt5.6" just means "the account's default model at the
-# configured effort", same as the Coding tab's Codex button.
-_DISPATCH_CLAUDE_MODELS = ("sonnet", "opus", "fable")
-_DISPATCH_CODEX_MODEL = "gpt5.6"
-
-
 def _agent_and_flags(cfg: WebappConfig, model: str) -> Tuple[str, str]:
     """Validated ``(agent, flags)`` for a Board per-launch ``model`` (#500/#505).
 
-    The Claude tiers force ``--model`` per launch (the Board's model combo);
-    ``gpt5.6`` selects Codex with the Coding tab's shared flags instead
-    (``apps.py``'s exact launch shape). The ``is_installed`` check is the
+    Every dispatch routes to Copilot; ``model`` forces ``--model`` per launch
+    via ``build_copilot_flags``'s override (""/"default" mean "let Copilot
+    pick auto" — no ``--model``). A model outside the configured
+    ``copilot_models`` list is a 400: an unavailable tenant-gated id would
+    only error inside the PTY after spawn. The ``is_installed`` check is the
     same defence-in-depth 400 as ``apps.py`` — Board launches bypass the
     Coding tab's already-disabled button.
     """
-    if model not in _DISPATCH_CLAUDE_MODELS and model != _DISPATCH_CODEX_MODEL:
+    if model not in ("", "default") and model not in cfg.copilot_models:
         raise HTTPException(status_code=400, detail=f"unknown model: {model}")
-    if model == _DISPATCH_CODEX_MODEL:
-        if not agents.is_installed("codex"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"{agents.AGENTS['codex'].label} is not installed",
-            )
-        return "codex", build_codex_flags(cfg)
-    return "claude", build_claude_flags(cfg, model)
+    if not agents.is_installed(agents.DEFAULT_AGENT):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{agents.AGENTS[agents.DEFAULT_AGENT].label} is not installed",
+        )
+    return (
+        agents.DEFAULT_AGENT,
+        build_copilot_flags(cfg, model_override=model or None),
+    )
 
 
 async def _await_dispatch_ready(port: int, sid: str) -> None:

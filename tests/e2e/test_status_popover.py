@@ -7,7 +7,7 @@ per project parked off its default branch, colour-matched to the list
 or a tap outside, closes it. All-on-default shows a single short note.
 
 Approach mirrors test_git_status_flags.py: real per-project git state
-isn't deterministic, so we intercept /api/claude-code/git-status with a
+isn't deterministic, so we intercept /api/coding/git-status with a
 canned payload keyed to the first real coding tile, then assert the
 popover DOM. Runs in both projections — the wiring is browser-agnostic
 but the iPhone projection confirms the phone surface too.
@@ -36,7 +36,7 @@ def test_status_button_opens_off_main_popover(authed_page: Page, base_url: str) 
     )
 
     authed_page.wait_for_selector(
-        ".coding-item, #claudeEmpty:not([hidden])", timeout=10_000
+        ".coding-item, #codingEmpty:not([hidden])", timeout=10_000
     )
     tiles = authed_page.locator(".coding-item")
     if tiles.count() == 0:
@@ -60,7 +60,7 @@ def test_status_button_opens_off_main_popover(authed_page: Page, base_url: str) 
         ]
     }
     authed_page.route(
-        "**/api/claude-code/git-status",
+        "**/api/coding/git-status",
         lambda route: route.fulfill(
             status=200,
             content_type="application/json",

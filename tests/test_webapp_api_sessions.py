@@ -1,4 +1,4 @@
-"""/api/claude-code/sessions — list + stop (kill/quit/interrupt modes)."""
+"""/api/coding/sessions — list + stop (kill/quit/interrupt modes)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ class TestListSessions:
     def test_empty_list_when_session_host_returns_none(self, webapp_client):
         client, _, overrides = webapp_client
         overrides["session"].list_sessions.return_value = []
-        resp = client.get("/api/claude-code/sessions")
+        resp = client.get("/api/coding/sessions")
         assert resp.status_code == 200
         assert resp.json() == {"sessions": []}
 
@@ -30,7 +30,7 @@ class TestListSessions:
                 "project_dir": "C:\\stub",
             }
         ]
-        resp = client.get("/api/claude-code/sessions")
+        resp = client.get("/api/coding/sessions")
         assert resp.status_code == 200
         sessions = resp.json()["sessions"]
         assert len(sessions) == 1
@@ -44,7 +44,7 @@ class TestListSessions:
         sess.list_sessions.side_effect = sess.SessionHostError(
             "session-host unreachable", status=503
         )
-        resp = client.get("/api/claude-code/sessions")
+        resp = client.get("/api/coding/sessions")
         assert resp.status_code == 200
         assert resp.json() == {"sessions": []}
 
@@ -80,7 +80,7 @@ class TestSharedSessionName:
             },
         }), encoding="utf-8")
 
-        resp = client.get("/api/claude-code/sessions")
+        resp = client.get("/api/coding/sessions")
         assert resp.status_code == 200
         sessions = resp.json()["sessions"]
         assert len(sessions) == 1
@@ -102,7 +102,7 @@ class TestSharedSessionName:
                 "project_dir": "E:/automation/photo-ocr",
             }
         ]
-        resp = client.get("/api/claude-code/sessions")
+        resp = client.get("/api/coding/sessions")
         assert resp.status_code == 200
         sessions = resp.json()["sessions"]
         assert sessions[0]["shared_name"] is None
@@ -112,7 +112,7 @@ class TestSharedSessionName:
         """No live sessions → nothing to join; must still return []."""
         client, _, overrides = webapp_client
         overrides["session"].list_sessions.return_value = []
-        resp = client.get("/api/claude-code/sessions")
+        resp = client.get("/api/coding/sessions")
         assert resp.status_code == 200
         assert resp.json() == {"sessions": []}
 
@@ -123,7 +123,7 @@ class TestStopSession:
         sess = overrides["session"]
         sess.stop.return_value = {"ok": True, "mode": "kill"}
         resp = client.post(
-            "/api/claude-code/sessions/abc-123/stop",
+            "/api/coding/sessions/abc-123/stop",
             json={"mode": "kill"},
         )
         assert resp.status_code == 200
@@ -137,7 +137,7 @@ class TestStopSession:
         sess = overrides["session"]
         sess.stop.return_value = {"ok": True}
         resp = client.post(
-            "/api/claude-code/sessions/abc-123/stop",
+            "/api/coding/sessions/abc-123/stop",
             json={"mode": "quit"},
         )
         assert resp.status_code == 200
@@ -149,7 +149,7 @@ class TestStopSession:
         sess = overrides["session"]
         sess.stop.return_value = {"ok": True}
         resp = client.post(
-            "/api/claude-code/sessions/abc-123/stop", json={}
+            "/api/coding/sessions/abc-123/stop", json={}
         )
         assert resp.status_code == 200
         sess.stop.assert_called_once_with(8446, "abc-123", "quit")
@@ -161,7 +161,7 @@ class TestStopSession:
             "no such session", status=404
         )
         resp = client.post(
-            "/api/claude-code/sessions/missing/stop",
+            "/api/coding/sessions/missing/stop",
             json={"mode": "kill"},
         )
         assert resp.status_code == 404
@@ -194,7 +194,7 @@ class TestStopSessionMirrorClose:
         )
 
         resp = client.post(
-            "/api/claude-code/sessions/abc-123/stop",
+            "/api/coding/sessions/abc-123/stop",
             json={"mode": "quit"},
         )
 
@@ -221,7 +221,7 @@ class TestStopSessionMirrorClose:
         )
 
         resp = client.post(
-            "/api/claude-code/sessions/abc-123/stop",
+            "/api/coding/sessions/abc-123/stop",
             json={"mode": "kill"},
         )
 
@@ -244,7 +244,7 @@ class TestStopSessionMirrorClose:
         )
 
         resp = client.post(
-            "/api/claude-code/sessions/abc-123/stop",
+            "/api/coding/sessions/abc-123/stop",
             json={"mode": "kill"},
         )
 
@@ -262,7 +262,7 @@ class TestRenameSession:
         sess = overrides["session"]
         sess.rename.return_value = {"session_id": "abc-123", "manual_title": "custom"}
         resp = client.post(
-            "/api/claude-code/sessions/abc-123/rename",
+            "/api/coding/sessions/abc-123/rename",
             json={"title": "custom"},
         )
         assert resp.status_code == 200
@@ -274,7 +274,7 @@ class TestRenameSession:
         sess = overrides["session"]
         sess.rename.return_value = {"session_id": "abc-123", "manual_title": ""}
         resp = client.post(
-            "/api/claude-code/sessions/abc-123/rename",
+            "/api/coding/sessions/abc-123/rename",
             json={"title": ""},
         )
         assert resp.status_code == 200
@@ -284,7 +284,7 @@ class TestRenameSession:
         client, _, overrides = webapp_client
         sess = overrides["session"]
         sess.rename.return_value = {"session_id": "abc-123", "manual_title": ""}
-        resp = client.post("/api/claude-code/sessions/abc-123/rename", json={})
+        resp = client.post("/api/coding/sessions/abc-123/rename", json={})
         assert resp.status_code == 200
         sess.rename.assert_called_once_with(8446, "abc-123", "")
 
@@ -295,7 +295,7 @@ class TestRenameSession:
             "no such session", status=404
         )
         resp = client.post(
-            "/api/claude-code/sessions/missing/rename",
+            "/api/coding/sessions/missing/rename",
             json={"title": "x"},
         )
         assert resp.status_code == 404
@@ -311,14 +311,14 @@ class TestMirrorSession:
         self, webapp_client, monkeypatch
     ):
         client, app, _ = webapp_client
-        app.state.webapp_config.claude_show_local_window = True
+        app.state.webapp_config.show_local_window = True
         from app.webapp.routers import sessions as sessions_router
         mock_open = MagicMock(return_value="opened")
         monkeypatch.setattr(
             sessions_router.launcher, "open_or_focus_mirror_window", mock_open
         )
 
-        resp = client.post("/api/claude-code/sessions/abc-123/mirror")
+        resp = client.post("/api/coding/sessions/abc-123/mirror")
 
         assert resp.status_code == 200
         assert resp.json() == {"mirrored": True, "action": "opened"}
@@ -329,7 +329,7 @@ class TestMirrorSession:
 
     def test_focus_reports_focused(self, webapp_client, monkeypatch):
         client, app, _ = webapp_client
-        app.state.webapp_config.claude_show_local_window = True
+        app.state.webapp_config.show_local_window = True
         from app.webapp.routers import sessions as sessions_router
         monkeypatch.setattr(
             sessions_router.launcher,
@@ -337,7 +337,7 @@ class TestMirrorSession:
             MagicMock(return_value="focused"),
         )
 
-        resp = client.post("/api/claude-code/sessions/abc-123/mirror")
+        resp = client.post("/api/coding/sessions/abc-123/mirror")
 
         assert resp.status_code == 200
         assert resp.json() == {"mirrored": True, "action": "focused"}
@@ -348,14 +348,14 @@ class TestMirrorSession:
         """With local-window mirroring off, the endpoint opens nothing and the
         client falls back to the in-page terminal (old behaviour preserved)."""
         client, app, _ = webapp_client
-        app.state.webapp_config.claude_show_local_window = False
+        app.state.webapp_config.show_local_window = False
         from app.webapp.routers import sessions as sessions_router
         mock_open = MagicMock()
         monkeypatch.setattr(
             sessions_router.launcher, "open_or_focus_mirror_window", mock_open
         )
 
-        resp = client.post("/api/claude-code/sessions/abc-123/mirror")
+        resp = client.post("/api/coding/sessions/abc-123/mirror")
 
         assert resp.status_code == 200
         assert resp.json()["mirrored"] is False
@@ -406,7 +406,7 @@ class TestProxySessionWS:
 
         with pytest.raises(WebSocketDisconnect) as excinfo:
             with client.websocket_connect(
-                "/api/claude-code/sessions/reaped-sid/ws"
+                "/api/coding/sessions/reaped-sid/ws"
             ) as ws:
                 ws.receive_text()
         assert excinfo.value.code == 4502
@@ -434,7 +434,7 @@ class TestProxySessionWS:
 
         with pytest.raises(WebSocketDisconnect) as excinfo:
             with client.websocket_connect(
-                "/api/claude-code/sessions/no-host-sid/ws"
+                "/api/coding/sessions/no-host-sid/ws"
             ) as ws:
                 ws.receive_text()
         assert excinfo.value.code == 4502

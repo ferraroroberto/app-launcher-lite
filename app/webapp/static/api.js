@@ -76,7 +76,7 @@ export class AuthRequiredError extends Error {
 }
 
 // Log a background-poll failure, unless it's just the login overlay going
-// up — every poll loop (apps, sessions, jobs, team-os, rate-limits, ...)
+// up — every poll loop (apps, sessions, jobs, team-os, ...)
 // wants the exact same "warn on real failures, stay silent on 401" guard.
 export function logPollFailure(label, exc) {
   if (exc instanceof AuthRequiredError) return;

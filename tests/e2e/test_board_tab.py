@@ -44,14 +44,14 @@ _FAKE_BOARD = {
              "updated_at": "2026-07-01T10:00:00Z", "labels": ["enhancement"]},
         ],
         "claude_turn": [
-            {"session_id": "s-work", "kind": "pty", "agent": "claude",
+            {"session_id": "s-work", "kind": "pty", "agent": "copilot",
              "project_dir": "E:/automation/team-os", "name": "team-os",
              "alive": True, "started_at": "2026-07-02T11:56:00Z",
              "live_title": "weekly recap", "prompt_title": "",
              "project": "team-os", "status": "working", "age_seconds": 240},
         ],
         "your_turn": [
-            {"session_id": "s-wait", "kind": "pty", "agent": "claude",
+            {"session_id": "s-wait", "kind": "pty", "agent": "copilot",
              "project_dir": "E:/automation/photo-ocr", "name": "photo-ocr",
              "alive": True, "started_at": "2026-07-02T11:30:00Z",
              "live_title": "chunk merge fix", "prompt_title": "",
@@ -119,7 +119,7 @@ def _mock_board(page: Page, payload: dict | None = None) -> None:
     # The two tests below that care about the response register their route
     # *after* this.
     page.route(
-        re.compile(r".*/api/claude-code/git-status$"),
+        re.compile(r".*/api/coding/git-status$"),
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({"projects": []}),
@@ -322,7 +322,7 @@ def test_board_card_drawer_shows_exchange_and_posts_reply(
         )
 
     authed_page.route(
-        re.compile(r".*/api/claude-code/sessions/s-wait/input$"), _capture_input
+        re.compile(r".*/api/coding/sessions/s-wait/input$"), _capture_input
     )
 
     _open_board(authed_page, base_url)
@@ -369,7 +369,7 @@ def test_board_reply_optimistically_moves_card_off_your_turn(
     _mock_board(authed_page)
     _mock_exchange(authed_page)
     authed_page.route(
-        re.compile(r".*/api/claude-code/sessions/s-wait/input$"),
+        re.compile(r".*/api/coding/sessions/s-wait/input$"),
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({"ok": True, "bytes": 8, "submit": True}),
@@ -402,24 +402,24 @@ def test_board_reply_optimistically_moves_card_off_your_turn(
     expect(authed_page.locator("#boardColClaude .board-count")).to_have_text("2")
 
 
-def test_board_codex_card_drawer_shows_agent_native_exchange(
+def test_board_card_drawer_shows_agent_native_exchange(
     authed_page: Page, base_url: str
 ) -> None:
-    """#457: a Codex card opens its own structured exchange, rather than
-    degrading to the old Claude-hook-only empty message."""
+    """#457: a card opens its own structured native exchange, rather than
+    degrading to an empty message."""
     payload = _board_payload()
     payload["columns"]["claude_turn"].append({
-        "session_id": "s-codex", "kind": "pty", "agent": "codex",
+        "session_id": "s-native", "kind": "pty", "agent": "copilot",
         "project_dir": "E:/automation/app-launcher", "name": "app-launcher",
         "alive": True, "started_at": "2026-07-02T11:57:00Z",
         "live_title": "app-launcher | fix/457", "prompt_title": "fix the drawer",
         "project": "app-launcher", "status": "unknown", "age_seconds": None,
     })
     _mock_board(authed_page, payload)
-    _mock_exchange(authed_page, sid="s-codex", payload={
-        "available": True, "source": "codex", "reason": None,
+    _mock_exchange(authed_page, sid="s-native", payload={
+        "available": True, "source": "native", "reason": None,
         "user": {"text": "fix the drawer", "timestamp": None},
-        "assistant": {"text": "Codex exchange resolved.", "timestamp": None},
+        "assistant": {"text": "Native exchange resolved.", "timestamp": None},
     })
     _open_board(authed_page, base_url)
     card = authed_page.locator(
@@ -430,7 +430,7 @@ def test_board_codex_card_drawer_shows_agent_native_exchange(
     exchange = authed_page.locator(".board-exchange")
     expect(exchange).to_have_attribute("data-state", "ready")
     expect(exchange).to_contain_text("fix the drawer")
-    expect(exchange).to_contain_text("Codex exchange resolved.")
+    expect(exchange).to_contain_text("Native exchange resolved.")
 
 
 @pytest.mark.parametrize("reason, expected_state, expected_text", [
@@ -469,7 +469,7 @@ def test_backlog_start_button_posts_issue_start(
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({"scan_root": "", "apps": [{
-                "id": "cc-app-launcher", "kind": "claude-code",
+                "id": "cc-app-launcher", "kind": "coding",
                 "name": "app-launcher",
                 "project_dir": "E:/automation/app-launcher",
             }]}),
@@ -496,7 +496,9 @@ def test_backlog_start_button_posts_issue_start(
     _switch_to_backlog(authed_page)
     # The dispatch bar's model selector governs one-tap starts too (#505) —
     # pick a non-default value so the POST provably carries the selection.
-    authed_page.locator("#boardDispatchModel").select_option("fable")
+    # Options are populated at wire time from the config-driven
+    # copilot_models list (the disposable webapp's defaults).
+    authed_page.locator("#boardDispatchModel").select_option("gpt-5.6-sol")
     start_btn = authed_page.locator(
         '.board-list[data-col="backlog"] .board-issue-btn'
     ).first
@@ -512,7 +514,7 @@ def test_backlog_start_button_posts_issue_start(
     assert body.get("repo") == "app-launcher"
     assert body.get("number") == 301
     assert body.get("mode") == "start"
-    assert body.get("model") == "fable"
+    assert body.get("model") == "gpt-5.6-sol"
 
 
 def test_backlog_issue_tile_is_flat_separator_row_with_icon_only_actions(
@@ -695,14 +697,14 @@ def test_board_deep_link_resolves_via_state_sid(authed_page: Page, base_url: str
 
 
 def _mock_apps_with_app_launcher(page: Page) -> None:
-    """state.apps with one claude-code entry, so the dispatch repo combobox
+    """state.apps with one coding entry, so the dispatch repo combobox
     (and the #301 ▶/⚡ buttons) have a launchable repo."""
     page.route(
         re.compile(r".*/api/apps$"),
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({"scan_root": "", "apps": [{
-                "id": "cc-app-launcher", "kind": "claude-code",
+                "id": "cc-app-launcher", "kind": "coding",
                 "name": "app-launcher",
                 "project_dir": "E:/automation/app-launcher",
             }]}),
@@ -749,10 +751,11 @@ def test_dispatch_bar_posts_repo_mode_goal_and_keeps_text(
 
     authed_page.locator("#boardDispatchGoal").fill("ship the goal bar")
     authed_page.locator("#boardDispatchMode").select_option("yolo")
-    # Model selector (#500): defaults to Sonnet; pick a non-default value so
-    # the POST provably carries the selection, not a hardcoded default.
-    expect(authed_page.locator("#boardDispatchModel")).to_have_value("sonnet")
-    authed_page.locator("#boardDispatchModel").select_option("gpt5.6")
+    # Model selector (#500): defaults to Default ('' — Copilot auto); pick a
+    # non-default value so the POST provably carries the selection, not a
+    # hardcoded default. Options come from the config-driven copilot_models.
+    expect(authed_page.locator("#boardDispatchModel")).to_have_value("")
+    authed_page.locator("#boardDispatchModel").select_option("gpt-5.6-terra")
     authed_page.locator("#boardDispatchSend").click()
     authed_page.wait_for_timeout(500)
 
@@ -761,7 +764,7 @@ def test_dispatch_bar_posts_repo_mode_goal_and_keeps_text(
     assert body.get("repo") == "app-launcher"
     assert body.get("goal") == "ship the goal bar"
     assert body.get("mode") == "yolo"
-    assert body.get("model") == "gpt5.6"
+    assert body.get("model") == "gpt-5.6-terra"
     # #374: a phone (non-desktop) dispatch carries the PTY spawn size so a
     # streaming agent's first output is authored at the width the overlay
     # will fit() to; a desktop client sends the mirror flag instead.
@@ -791,13 +794,13 @@ def test_dispatch_repo_dropdown_is_tap_only_and_filters_board_columns(
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({"scan_root": "", "apps": [
-                {"id": "cc-app-launcher", "kind": "claude-code",
+                {"id": "cc-app-launcher", "kind": "coding",
                  "name": "app-launcher", "project_dir": "E:/automation/app-launcher"},
-                {"id": "cc-voice", "kind": "claude-code",
+                {"id": "cc-voice", "kind": "coding",
                  "name": "voice-transcriber", "project_dir": "E:/automation/voice-transcriber"},
-                {"id": "cc-team-os", "kind": "claude-code",
+                {"id": "cc-team-os", "kind": "coding",
                  "name": "team-os", "project_dir": "E:/automation/team-os"},
-                {"id": "cc-photo", "kind": "claude-code",
+                {"id": "cc-photo", "kind": "coding",
                  "name": "photo-ocr", "project_dir": "E:/automation/photo-ocr"},
             ]}),
         ),
@@ -877,7 +880,7 @@ def test_board_drawer_rename_first_icon_only_and_stop_kills_session(
         )
 
     authed_page.route(
-        re.compile(r".*/api/claude-code/sessions/s-wait/stop$"), _capture_stop
+        re.compile(r".*/api/coding/sessions/s-wait/stop$"), _capture_stop
     )
 
     _open_board(authed_page, base_url)
@@ -958,13 +961,13 @@ def test_backlog_cards_color_coded_from_shared_git_cache(
     authed_page: Page, base_url: str
 ) -> None:
     """#496 item 4: a backlog card whose repo is dirty shows the red meta
-    annotation, fed from the boot-time /api/claude-code/git-status cache —
+    annotation, fed from the boot-time /api/coding/git-status cache —
     the route is mocked BEFORE navigation, and no board-poll git work is
     involved (the board payload itself carries no git fields)."""
     _mock_apps_with_app_launcher(authed_page)
     _mock_board(authed_page)
     authed_page.route(
-        "**/api/claude-code/git-status",
+        "**/api/coding/git-status",
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({"projects": [{
@@ -995,7 +998,7 @@ def test_board_drawer_survives_git_status_poll_mid_interaction(
     the whole column/card DOM, including an open drawer, out from under an
     in-progress interaction. Reproduced with the #510 diagnostic technique:
     tag the rename button's live DOM node, hold the boot-time
-    /api/claude-code/git-status fetch open until after the drawer is open
+    /api/coding/git-status fetch open until after the drawer is open
     and tagged, then release it and confirm the tagged node (and the
     drawer) survive untouched — held-open, not a fixed sleep (a sleep
     can't reliably outlast Playwright's own route-dispatch latency)."""
@@ -1004,7 +1007,7 @@ def test_board_drawer_survives_git_status_poll_mid_interaction(
 
     held_git_status: dict = {}
     authed_page.route(
-        re.compile(r".*/api/claude-code/git-status$"),
+        re.compile(r".*/api/coding/git-status$"),
         lambda route: held_git_status.__setitem__("route", route),
     )
 

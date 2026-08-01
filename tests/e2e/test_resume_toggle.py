@@ -5,7 +5,7 @@ the next agent-icon tap POST ``resume: true``. Resume is orthogonal to
 Detached (issue #157): Resume alone streams a pty (no ``mode``); Detached
 + Resume sends ``mode: remote`` so the native picker renders in the
 detached console. This is the client-side contract; the server-side splice
-(resume token, codex flag-dropping, agy --continue, Team OS skill-prompt
+(resume token splice, Team OS skill-prompt
 drop) is covered by the non-browser suites.
 
 Hermetic: ``/api/agents``, ``/api/apps`` and the launch endpoint are
@@ -35,8 +35,9 @@ def _install_mocks(page: Page) -> None:
             status=200,
             content_type="application/json",
             body=json.dumps(
-                {"agents": [{"id": "claude", "label": "Claude Code",
-                             "available": True}]}
+                {"agents": [{"id": "copilot",
+                             "label": "GitHub Copilot CLI",
+                             "available": True, "fullscreen": True}]}
             ),
         ),
     )
@@ -49,7 +50,7 @@ def _install_mocks(page: Page) -> None:
                 {
                     "scan_root": "X",
                     "apps": [
-                        {"id": "demo", "name": "demo", "kind": "claude-code",
+                        {"id": "demo", "name": "demo", "kind": "coding",
                          "project_dir": "X", "repo_url": None}
                     ],
                 }
@@ -66,8 +67,8 @@ def _install_mocks(page: Page) -> None:
             status=200,
             content_type="application/json",
             body=json.dumps(
-                {"launched": "demo", "name": "demo", "kind": "claude-code",
-                 "agent": "claude", "mode": "pty", "session": None}
+                {"launched": "demo", "name": "demo", "kind": "coding",
+                 "agent": "copilot", "mode": "pty", "session": None}
             ),
         ),
     )
@@ -79,7 +80,7 @@ def _open_coding(page: Page, base_url: str) -> None:
     # the tile buttons are clickable.
     page.locator("details.projects-card").evaluate("el => { el.open = true; }")
     page.wait_for_selector(
-        '#claudeList .coding-item[data-id="demo"] button.agent-btn[data-agent="claude"]',
+        '#codingList .coding-item[data-id="demo"] button.agent-btn[data-agent="copilot"]',
         timeout=5_000,
     )
 
@@ -89,8 +90,8 @@ def test_resume_toggle_present(authed_page: Page, base_url: str) -> None:
     _open_coding(authed_page, base_url)
     # The toggle lives in the (collapsed) options <summary>, so its
     # role="switch" button is present and starts unchecked (issue #355).
-    expect(authed_page.locator("#claudeResume")).to_be_attached()
-    expect(authed_page.locator("#claudeResume")).not_to_be_checked()
+    expect(authed_page.locator("#codingResume")).to_be_attached()
+    expect(authed_page.locator("#codingResume")).not_to_be_checked()
 
 
 def test_resume_only_launch_streams_pty(
@@ -100,19 +101,19 @@ def test_resume_only_launch_streams_pty(
     _open_coding(authed_page, base_url)
 
     # Resume alone (Detached off) → streamed pty: resume=true, no remote mode.
-    authed_page.locator("#claudeResume").click()
-    expect(authed_page.locator("#claudeResume")).to_be_checked()
+    authed_page.locator("#codingResume").click()
+    expect(authed_page.locator("#codingResume")).to_be_checked()
 
     with authed_page.expect_request("**/api/apps/*/launch") as req_info:
         authed_page.locator(
-            '#claudeList .coding-item[data-id="demo"] '
-            'button.agent-btn[data-agent="claude"]'
+            '#codingList .coding-item[data-id="demo"] '
+            'button.agent-btn[data-agent="copilot"]'
         ).click()
 
     payload = req_info.value.post_data_json
     assert payload.get("resume") is True
     assert payload.get("mode") != "remote"
-    assert payload.get("agent") == "claude"
+    assert payload.get("agent") == "copilot"
 
 
 def test_resume_with_detached_launches_remote_console(
@@ -122,17 +123,17 @@ def test_resume_with_detached_launches_remote_console(
     _open_coding(authed_page, base_url)
 
     # Detached + Resume → remote console: resume=true AND mode=remote (#157).
-    authed_page.locator("#claudeDetached").click()
-    authed_page.locator("#claudeResume").click()
-    expect(authed_page.locator("#claudeResume")).to_be_checked()
+    authed_page.locator("#codingDetached").click()
+    authed_page.locator("#codingResume").click()
+    expect(authed_page.locator("#codingResume")).to_be_checked()
 
     with authed_page.expect_request("**/api/apps/*/launch") as req_info:
         authed_page.locator(
-            '#claudeList .coding-item[data-id="demo"] '
-            'button.agent-btn[data-agent="claude"]'
+            '#codingList .coding-item[data-id="demo"] '
+            'button.agent-btn[data-agent="copilot"]'
         ).click()
 
     payload = req_info.value.post_data_json
     assert payload.get("resume") is True
     assert payload.get("mode") == "remote"
-    assert payload.get("agent") == "claude"
+    assert payload.get("agent") == "copilot"

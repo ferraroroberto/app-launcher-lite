@@ -22,7 +22,7 @@ const RECONNECT_GIVE_UP_MS = 30000;
 // fixable regardless of cause: if the WS opens but nothing has painted
 // within this window, surface an explicit, actionable state instead of
 // staying silently blank forever. Generous on purpose — a normal agent boot
-// (Claude Code / Codex CLI startup) can legitimately take a couple of
+// (a coding agent's startup) can legitimately take a couple of
 // seconds before its first frame, and a genuinely fresh session with no
 // output yet sends nothing at connect time at all (session-host only
 // replays a *non-empty* snapshot) — this must not misfire on either.
@@ -44,9 +44,9 @@ function disarmPaintWatchdog(terminal) {
 }
 
 // Repaint batching for full-screen differential agents (#430). Empirical
-// probe: Codex/ratatui re-emits its ENTIRE transcript on every winsize
+// probe: a ratatui-style TUI re-emits its ENTIRE transcript on every winsize
 // change (~65 KB for a long conversation — same magnitude as a full
-// `codex resume` attach). The session-host deliberately fires such a
+// a resume attach). The session-host deliberately fires such a
 // change on every (re)connect (the #128 width-toggle nudge), and a real
 // rotation fires one too. Written chunk-by-chunk into xterm that storm
 // renders as a visible scroll-through of the whole conversation. Instead,
@@ -144,7 +144,7 @@ function termWsUrl(sid, terminalToken) {
   if (bearerToken) params.set('token', bearerToken);
   if (terminalToken) params.set('tt', terminalToken);
   const query = params.toString();
-  return proto + '//' + location.host + '/api/claude-code/sessions/' +
+  return proto + '//' + location.host + '/api/coding/sessions/' +
     encodeURIComponent(sid) + '/ws' + (query ? '?' + query : '');
 }
 

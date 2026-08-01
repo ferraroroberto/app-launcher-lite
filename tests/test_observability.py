@@ -53,7 +53,7 @@ def test_fast_request_stays_silent(caplog):
     assert not [r for r in caplog.records if r.name == _SLOW_LOGGER]
 
 
-def test_inflight_breadcrumb_thresholded_and_rate_limited(caplog):
+def test_inflight_breadcrumb_thresholded_and_throttled(caplog):
     # Drive the in-flight logic directly: TestClient is serial, so real
     # concurrent requests can't populate the registry in a unit test.
     mw = SlowRequestLogMiddleware(app=None, slow_s=999.0, inflight_warn=2)

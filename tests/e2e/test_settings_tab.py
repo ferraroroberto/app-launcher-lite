@@ -36,7 +36,7 @@ def test_settings_tab_opens_pane_with_controls(
 
     authed_page.locator("#tabSettings").click()
     expect(authed_page.locator("#paneSettings")).to_be_visible()
-    expect(authed_page.locator("#paneClaude")).to_be_hidden()
+    expect(authed_page.locator("#paneCoding")).to_be_hidden()
     expect(authed_page.locator("#tabSettings")).to_have_attribute(
         "aria-selected", "true"
     )
@@ -67,7 +67,7 @@ def test_theme_toggle_lives_on_coding_tab_and_flips_theme(
     # Not duplicated into the Settings pane.
     authed_page.locator("#tabSettings").click()
     expect(toggle).to_be_hidden()
-    authed_page.locator("#tabClaude").click()
+    authed_page.locator("#tabCoding").click()
     expect(toggle).to_be_visible()
 
     before = authed_page.evaluate(

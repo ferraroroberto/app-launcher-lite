@@ -117,15 +117,15 @@ class TestDetectionUsesEffectivePath:
         """The #668 symptom, end to end: a binary reachable only via the
         registry path is detected, where a plain ``shutil.which`` would not
         see it."""
-        exe = tmp_path / "claude.exe"
+        exe = tmp_path / "copilot.exe"
         exe.write_text("", encoding="utf-8")
         # An empty search path finds nothing; the same lookup against a path
         # that contains the binary finds it — i.e. `is_installed` resolves
         # through `effective_path`, not through `os.environ` behind its back.
         monkeypatch.setattr(agents, "effective_path", lambda: "")
-        assert agents.is_installed("claude") is False
+        assert agents.is_installed("copilot") is False
         monkeypatch.setattr(agents, "effective_path", lambda: str(tmp_path))
-        assert agents.is_installed("claude") is True
+        assert agents.is_installed("copilot") is True
 
     def test_unknown_agent_is_never_installed(self):
         assert agents.is_installed("no-such-agent") is False
@@ -141,8 +141,8 @@ class TestChildEnvUsesEffectivePath:
         monkeypatch.setattr(
             session_host, "effective_path", lambda: "C:\\merged;C:\\extra"
         )
-        env = session_host.agent_child_env("sid-1", "claude")
+        env = session_host.agent_child_env("sid-1", "copilot")
         assert env["PATH"] == "C:\\merged;C:\\extra"
         # The marker-scrubbing policy is untouched by #668.
         assert env["APP_LAUNCHER_SESSION_ID"] == "sid-1"
-        assert env["APP_LAUNCHER_AGENT"] == "claude"
+        assert env["APP_LAUNCHER_AGENT"] == "copilot"

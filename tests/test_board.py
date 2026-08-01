@@ -108,99 +108,6 @@ def test_active_issues_keeps_fresh_and_expires_orphans(tmp_path: Path):
     assert set(result["rows"]) == {"app-launcher#528"}
 
 
-# -------------------------------------------------------- read_rate_limits
-
-
-_EMPTY_RATE_LIMITS = {
-    "available": False, "stale": False, "updated_at": None,
-    "five_hour": None, "seven_day": None,
-}
-
-
-def test_rate_limits_missing_file_unavailable(tmp_path: Path):
-    result = board.read_rate_limits(tmp_path / "nope.json", now=NOW)
-    assert result == _EMPTY_RATE_LIMITS
-
-
-def test_rate_limits_corrupt_file_unavailable(tmp_path: Path):
-    target = tmp_path / "rate-limits.json"
-    target.write_text("{not json", encoding="utf-8")
-    assert board.read_rate_limits(target, now=NOW)["available"] is False
-
-
-def test_rate_limits_fresh_both_windows(tmp_path: Path):
-    target = tmp_path / "rate-limits.json"
-    target.write_text(json.dumps({
-        "five_hour": {"used_percentage": 42, "resets_at": 1751640000},
-        "seven_day": {"used_percentage": 77, "resets_at": 1751900000},
-        "captured_at": _iso(NOW - timedelta(minutes=2)),
-    }), encoding="utf-8")
-    result = board.read_rate_limits(target, now=NOW)
-    assert result["available"] is True
-    assert result["stale"] is False
-    assert result["five_hour"] == {"used_percentage": 42, "resets_at": 1751640000}
-    assert result["seven_day"] == {"used_percentage": 77, "resets_at": 1751900000}
-
-
-def test_rate_limits_stale_when_captured_at_old(tmp_path: Path):
-    target = tmp_path / "rate-limits.json"
-    target.write_text(json.dumps({
-        "five_hour": {"used_percentage": 10, "resets_at": 1751640000},
-        "captured_at": _iso(NOW - timedelta(minutes=45)),
-    }), encoding="utf-8")
-    assert board.read_rate_limits(target, now=NOW)["stale"] is True
-
-
-def test_rate_limits_one_window_absent(tmp_path: Path):
-    target = tmp_path / "rate-limits.json"
-    target.write_text(json.dumps({
-        "five_hour": {"used_percentage": 10, "resets_at": 1751640000},
-        "captured_at": _iso(NOW),
-    }), encoding="utf-8")
-    result = board.read_rate_limits(target, now=NOW)
-    assert result["five_hour"] == {"used_percentage": 10, "resets_at": 1751640000}
-    assert result["seven_day"] is None
-
-
-def test_rate_limits_window_is_null(tmp_path: Path):
-    target = tmp_path / "rate-limits.json"
-    target.write_text(json.dumps({
-        "five_hour": None,
-        "seven_day": {"used_percentage": 5, "resets_at": 1751900000},
-        "captured_at": _iso(NOW),
-    }), encoding="utf-8")
-    result = board.read_rate_limits(target, now=NOW)
-    assert result["five_hour"] is None
-    assert result["seven_day"] == {"used_percentage": 5, "resets_at": 1751900000}
-
-
-def test_rate_limits_tolerates_utf8_bom(tmp_path: Path):
-    # The fleet-config statusline writer is PowerShell; .NET's
-    # [System.Text.Encoding]::UTF8 defaults to emitting a BOM (fleet-config#259
-    # found this the hard way). A BOM'd file must still parse, not read as
-    # corrupt.
-    target = tmp_path / "rate-limits.json"
-    payload = json.dumps({
-        "five_hour": {"used_percentage": 41.7, "resets_at": 1751640000},
-        "captured_at": _iso(NOW),
-    })
-    target.write_bytes(b"\xef\xbb\xbf" + payload.encode("utf-8"))
-    result = board.read_rate_limits(target, now=NOW)
-    assert result["available"] is True
-    assert result["five_hour"] == {"used_percentage": 41.7, "resets_at": 1751640000}
-
-
-def test_rate_limits_window_present_but_null_fields(tmp_path: Path):
-    target = tmp_path / "rate-limits.json"
-    target.write_text(json.dumps({
-        "five_hour": {"used_percentage": None, "resets_at": None},
-        "captured_at": _iso(NOW),
-    }), encoding="utf-8")
-    result = board.read_rate_limits(target, now=NOW)
-    assert result["available"] is True
-    assert result["five_hour"] == {"used_percentage": None, "resets_at": None}
-
-
 # ------------------------------------------------------------ merge_sessions
 
 
@@ -208,7 +115,7 @@ def _live(session_id: str, project_dir: str, started_min_ago: int, **extra):
     row = {
         "session_id": session_id,
         "kind": "pty",
-        "agent": "claude",
+        "agent": "copilot",
         "project_dir": project_dir,
         "name": Path(project_dir).name,
         "alive": True,
@@ -326,22 +233,23 @@ def test_merge_three_sessions_one_dir_never_cross_wires_transcripts():
         assert by_id[sid]["status"] == "unknown"
 
 
-def test_merge_non_claude_does_not_claim_legacy_claude_row():
-    """#455: legacy rows are Claude rows. A Codex session in the same cwd
-    must stay truthful/unknown instead of borrowing Claude's needs-you state."""
-    codex = _live(
-        "codex-live", "E:/automation/app-launcher", 5, agent="codex"
+def test_merge_other_agent_does_not_claim_agentless_row():
+    """#455: agent-less rows default to the launcher's agent. A session
+    running a different agent in the same cwd must stay truthful/unknown
+    instead of borrowing that row's needs-you state."""
+    other = _live(
+        "ssh-live", "E:/automation/app-launcher", 5, agent="ssh"
     )
     cards = board.merge_sessions(
-        [codex],
-        {"claude-transcript": _state_row(
+        [other],
+        {"copilot-transcript": _state_row(
             "E:/automation/app-launcher", status="needs-you", updated_min_ago=240
         )},
         now=NOW,
     )
     assert len(cards) == 1
-    assert cards[0]["session_id"] == "codex-live"
-    assert cards[0]["agent"] == "codex"
+    assert cards[0]["session_id"] == "ssh-live"
+    assert cards[0]["agent"] == "ssh"
     assert cards[0]["status"] == "unknown"
     assert cards[0]["state_sid"] is None
 
@@ -353,12 +261,12 @@ def test_merge_exact_launcher_id_beats_same_cwd_recency():
     state_rows = {
         "right": _state_row(
             "E:/automation/app-launcher", status="needs-you",
-            updated_min_ago=20, agent="claude",
+            updated_min_ago=20, agent="copilot",
             launcher_session_id="launcher-aaa",
         ),
         "newer-other": _state_row(
             "E:/automation/app-launcher", status="working",
-            updated_min_ago=1, agent="claude",
+            updated_min_ago=1, agent="copilot",
             launcher_session_id="launcher-bbb",
         ),
     }
@@ -377,12 +285,12 @@ def test_merge_duplicate_exact_launcher_ids_take_newest_row():
     state_rows = {
         "older": _state_row(
             "E:/automation/app-launcher", status="working",
-            updated_min_ago=20, agent="claude",
+            updated_min_ago=20, agent="copilot",
             launcher_session_id="launcher-aaa",
         ),
         "newer": _state_row(
             "E:/automation/app-launcher", status="needs-you",
-            updated_min_ago=1, agent="claude",
+            updated_min_ago=1, agent="copilot",
             launcher_session_id="launcher-aaa",
         ),
     }
@@ -536,9 +444,9 @@ def test_attach_shared_names_no_match_returns_none():
 
 
 def test_attach_shared_names_does_not_cross_agent_boundary():
-    live = [_live("codex-live", "E:/automation/app-launcher", 10, agent="codex")]
-    state_rows = {"claude-row": _state_row(
-        "E:/automation/app-launcher", name="Claude title",
+    live = [_live("ssh-live", "E:/automation/app-launcher", 10, agent="ssh")]
+    state_rows = {"copilot-row": _state_row(
+        "E:/automation/app-launcher", name="Copilot title",
     )}
     joined = board.attach_shared_names(live, state_rows)
     assert joined[0]["shared_name"] is None
@@ -672,20 +580,17 @@ def test_merge_reaped_launcher_session_with_no_transcript_also_suppressed():
     assert cards == []
 
 
-def test_merge_reaped_codex_launcher_session_suppressed(tmp_path: Path):
-    """#613's literal reported ghost, reproduced: ``agent=codex``,
+def test_merge_reaped_other_agent_launcher_session_suppressed(tmp_path: Path):
+    """#613's literal reported ghost, reproduced with a non-default agent:
     ``status=needs-you``, ~14.3 min old -- the exact shape from the issue.
     The reaped-session check is agent-agnostic (keyed only on
-    ``launcher_session_id``, never on ``agent``), and a Codex row spawned via
-    the launcher's own session-host does carry ``launcher_session_id``
-    (fleet-config#349's ``session_state_codex.py`` inherits
-    ``APP_LAUNCHER_SESSION_ID`` from the same PTY env Claude rows use) -- so
-    this ghost is suppressed exactly like the Claude case above, regardless
-    of how fresh its transcript looks."""
+    ``launcher_session_id``, never on ``agent``) -- so this ghost is
+    suppressed exactly like the default-agent case above, regardless of how
+    fresh its transcript looks."""
     row = _state_row(
         "E:/automation/app-launcher", status="needs-you", updated_min_ago=14,
         transcript_path=_transcript_file(tmp_path, NOW - timedelta(minutes=1)),
-        launcher_session_id="dead-codex-pty-id", agent="codex",
+        launcher_session_id="dead-ssh-pty-id", agent="ssh",
     )
     cards = board.merge_sessions([], {"t": row}, now=NOW)
     assert cards == []
@@ -1826,7 +1731,6 @@ def test_api_board_shape_with_everything_absent(webapp_client):
     assert body["github"] == {"fetched_at": None, "error": None}
     assert body["sessions_state"]["available"] is False
     assert body["active_issues"]["available"] is False
-    assert body["rate_limits"]["available"] is False
     assert body["columns"]["backlog"] == []
     assert body["generated_at"]
 
@@ -1853,45 +1757,6 @@ def test_api_board_marks_active_backlog_issue(
     assert body["active_issues"]["available"] is True
     assert body["active_issues"]["count"] == 1
     assert body["columns"]["backlog"][0]["in_progress"] is True
-
-
-def test_api_board_rate_limits_present(webapp_client):
-    client, app, _overrides = webapp_client
-    rate_limits_file = Path(app.state.webapp_config.rate_limits_file)
-    rate_limits_file.write_text(json.dumps({
-        "five_hour": {"used_percentage": 42, "resets_at": 1751640000},
-        "seven_day": {"used_percentage": 88, "resets_at": 1751900000},
-        "captured_at": _iso(datetime.now(timezone.utc) - timedelta(minutes=1)),
-    }), encoding="utf-8")
-
-    body = client.get("/api/board").json()
-    assert body["rate_limits"]["available"] is True
-    assert body["rate_limits"]["stale"] is False
-    assert body["rate_limits"]["five_hour"] == {"used_percentage": 42, "resets_at": 1751640000}
-    assert body["rate_limits"]["seven_day"] == {"used_percentage": 88, "resets_at": 1751900000}
-
-
-def test_api_rate_limits_standalone_endpoint_absent(webapp_client):
-    client, _app, _overrides = webapp_client
-    body = client.get("/api/rate-limits").json()
-    assert body == {
-        "available": False, "stale": False, "updated_at": None,
-        "five_hour": None, "seven_day": None,
-    }
-
-
-def test_api_rate_limits_standalone_endpoint_present(webapp_client):
-    client, app, _overrides = webapp_client
-    rate_limits_file = Path(app.state.webapp_config.rate_limits_file)
-    rate_limits_file.write_text(json.dumps({
-        "five_hour": {"used_percentage": 10, "resets_at": 1751640000},
-        "captured_at": _iso(datetime.now(timezone.utc)),
-    }), encoding="utf-8")
-
-    body = client.get("/api/rate-limits").json()
-    assert body["available"] is True
-    assert body["five_hour"] == {"used_percentage": 10, "resets_at": 1751640000}
-    assert body["seven_day"] is None
 
 
 def test_api_board_merges_live_sessions_and_state(webapp_client):

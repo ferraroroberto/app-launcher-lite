@@ -37,7 +37,7 @@ def _run_once(browser_name: str) -> None:
 def test_probe_hides_pywinpty_ephemerals(
     base_url: str, auth_token: str, launched_pty_session: str
 ) -> None:
-    # launched_pty_session has spawned a real claude PTY via the session-host,
+    # launched_pty_session has spawned a PTY child via the session-host,
     # so pywinpty's loopback ephemerals exist right now. The probe response
     # must NOT include them.
     headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else {}

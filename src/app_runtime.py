@@ -1,7 +1,7 @@
 """In-process tracker for apps spawned by the launcher.
 
-The Apps tab needs a "what did I launch?" list the way the Claude Code
-tab has one for sessions. Claude sessions are owned by the session-host;
+The Apps tab needs a "what did I launch?" list the way the Coding
+tab has one for sessions. Coding sessions are owned by the session-host;
 plain ``*.bat`` apps are not — they run in their own CMD windows. This
 module keeps a small in-memory record of every bat the launcher spawned
 so ``/api/apps/running`` can list them, bind each to its listening port,
@@ -11,7 +11,7 @@ State lives in process memory only: a webapp restart forgets it. That
 matches the rest of the tray's behaviour — orphaned listeners still show
 in the Port listeners panel.
 
-Not routed through the session-host: that host is for ``claude`` PTYs
+Not routed through the session-host: that host is for agent PTYs
 only. This stays a plain module-level structure.
 """
 

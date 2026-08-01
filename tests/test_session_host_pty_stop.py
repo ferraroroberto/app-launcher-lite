@@ -29,12 +29,12 @@ from src.session_host import (
 )
 
 
-def _make_session(loop, agent: str = "claude") -> PtySession:
+def _make_session(loop, agent: str = "copilot") -> PtySession:
     pty = MagicMock(name="PtyProcess")
     return PtySession(
         session_id="sid-test",
         project_dir=r"C:\stub",
-        name="claude",
+        name="coding",
         flags="",
         started_at=time.time(),
         _loop=loop,
@@ -45,34 +45,34 @@ def _make_session(loop, agent: str = "claude") -> PtySession:
 
 @pytest.mark.asyncio
 async def test_stop_quit_types_esc_then_quit_and_exits_cleanly():
-    """STOP_QUIT clears the prompt with ESC, types the agent's /quit, and
+    """STOP_QUIT clears the prompt with ESC, types the agent's quit command, and
     when the agent exits within the grace window it must NOT force-kill."""
     loop = asyncio.get_running_loop()
     session = _make_session(loop)
-    session._pty.isalive.return_value = False  # exits immediately on /quit
-
-    session.stop(mode=STOP_QUIT)
-
-    calls = [c.args for c in session._pty.write.call_args_list]
-    assert ("\x1b",) in calls
-    assert ("/quit\r",) in calls
-    session._pty.terminate.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_stop_quit_uses_per_agent_command():
-    """STOP_QUIT types the agent's *own* quit command — Copilot's /exit,
-    not Claude's /quit."""
-    loop = asyncio.get_running_loop()
-    session = _make_session(loop, agent="copilot")
-    session._pty.isalive.return_value = False
+    session._pty.isalive.return_value = False  # exits immediately on /exit
 
     session.stop(mode=STOP_QUIT)
 
     calls = [c.args for c in session._pty.write.call_args_list]
     assert ("\x1b",) in calls
     assert ("/exit\r",) in calls
-    assert ("/quit\r",) not in calls
+    session._pty.terminate.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_stop_quit_uses_per_agent_command():
+    """STOP_QUIT types the agent's *own* quit command — SSH's bare exit,
+    not Copilot's /exit."""
+    loop = asyncio.get_running_loop()
+    session = _make_session(loop, agent="ssh")
+    session._pty.isalive.return_value = False
+
+    session.stop(mode=STOP_QUIT)
+
+    calls = [c.args for c in session._pty.write.call_args_list]
+    assert ("\x1b",) in calls
+    assert ("exit\r",) in calls
+    assert ("/exit\r",) not in calls
     session._pty.terminate.assert_not_called()
 
 
@@ -89,7 +89,7 @@ async def test_stop_quit_force_terminates_when_agent_does_not_exit():
 
     # Quit was still attempted first…
     calls = [c.args for c in session._pty.write.call_args_list]
-    assert ("/quit\r",) in calls
+    assert ("/exit\r",) in calls
     # …then the fallback force-kill fired.
     session._pty.terminate.assert_called_once_with(force=True)
 

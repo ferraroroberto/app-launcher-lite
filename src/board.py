@@ -8,9 +8,9 @@ failed/stuck jobs. See :func:`build_board` for the exact routing.
 Three inputs, one board:
 
 * the **live session list** from the session-host (``session_client.list_sessions``),
-* the **sessions-state file** written by fleet-config's ``session_state`` hook
-  (``~/.claude/hooks/state/sessions-state.json`` — ``working`` / ``needs-you``
-  / ``idle`` rows per recent Claude Code session),
+* the **sessions-state file** written by the ``session_state`` hook
+  (``~/.copilot/hooks/state/sessions-state.json`` — ``working`` / ``needs-you``
+  / ``idle`` rows per recent coding session),
 * the **jobs attention scan** (failed-today / stuck runs from ``src.jobs``),
 
 plus the in-memory GitHub snapshot from :mod:`src.github_client`.
@@ -22,11 +22,11 @@ every existing ``board.<name>`` call site (routers, tests) keeps working
 unchanged:
 
 * :mod:`src.board_state` — hook-state-file IO (:func:`read_sessions_state`,
-  :func:`read_active_issues`, :func:`read_rate_limits`).
+  :func:`read_active_issues`).
 * :mod:`src.board_sessions` — session-claim/merge logic
   (:func:`merge_sessions`, :func:`attach_shared_names`,
   :func:`state_row_for_session`). Writer-provided launcher id + agent wins;
-  legacy Claude rows use an agent-gated normalized-cwd fallback.
+  agent-less rows use an agent-gated normalized-cwd fallback.
 * :mod:`src.board_transcript` — transcript-JSONL parsing
   (:func:`last_exchange`, plus the activity-overlay/external-liveness helpers
   ``merge_sessions`` calls internally).
@@ -36,10 +36,10 @@ must never error — session cards fall back to ``unknown`` status and the
 GitHub/jobs columns render regardless.
 
 Shared session title (#396): the state row also carries ``name``/``name_source``
-(fleet-config#302's live Claude Code session title). ``merge_sessions`` copies
+(the agent's live session title, where one exists). ``merge_sessions`` copies
 those onto every card as ``shared_name``/``shared_name_source``, and
 :func:`attach_shared_names` runs the identical agent-aware claim walk for the
-Coding tab's own ``/api/claude-code/sessions`` list — so a live session
+Coding tab's own ``/api/coding/sessions`` list — so a live session
 resolves to the same state row, and therefore the same title, on both tabs.
 The frontend's precedence lives in one place, ``sessions.js``'s
 ``sessionTitle()``, which both tabs call.
@@ -52,13 +52,11 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from src.board_state import (  # noqa: F401 — re-exported for board.<name> callers
-    RATE_LIMITS_STALE_AFTER,
     STATE_STALE_AFTER,
     _age_seconds,
     _now,
     _parse_iso,
     read_active_issues,
-    read_rate_limits,
     read_sessions_state,
 )
 from src.board_sessions import (  # noqa: F401 — re-exported for board.<name> callers

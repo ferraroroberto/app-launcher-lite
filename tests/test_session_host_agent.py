@@ -37,20 +37,6 @@ def _capture_run(captured: dict):
     return fake_run
 
 
-def test_create_remote_uses_antigravity_command(tmp_path, monkeypatch):
-    captured: dict = {}
-
-    from src import session_host
-    monkeypatch.setattr(session_host.subprocess, "run", _capture_run(captured))
-
-    mgr = SessionManager()
-    session = mgr.create_remote(str(tmp_path), "proj", "", "antigravity")
-
-    assert "&& agy" in captured["argv"][-1]
-    assert session.agent == "antigravity"
-    assert session.to_api()["agent"] == "antigravity"
-
-
 def test_create_remote_uses_copilot_command(tmp_path, monkeypatch):
     captured: dict = {}
 
@@ -65,7 +51,7 @@ def test_create_remote_uses_copilot_command(tmp_path, monkeypatch):
     assert session.to_api()["agent"] == "copilot"
 
 
-def test_create_remote_defaults_to_claude(tmp_path, monkeypatch):
+def test_create_remote_defaults_to_copilot(tmp_path, monkeypatch):
     captured: dict = {}
 
     from src import session_host
@@ -74,8 +60,8 @@ def test_create_remote_defaults_to_claude(tmp_path, monkeypatch):
     mgr = SessionManager()
     session = mgr.create_remote(str(tmp_path), "proj", "")
 
-    assert "&& claude" in captured["argv"][-1]
-    assert session.agent == "claude"
+    assert "&& copilot" in captured["argv"][-1]
+    assert session.agent == "copilot"
 
 
 def test_create_remote_orphans_console_via_start_process(tmp_path, monkeypatch):
@@ -100,8 +86,8 @@ def test_create_remote_orphans_console_via_start_process(tmp_path, monkeypatch):
     ps_command = argv[-1]
     assert "Start-Process" in ps_command and "-PassThru" in ps_command
     assert 'set "APP_LAUNCHER_SESSION_ID=' in ps_command
-    assert 'set "APP_LAUNCHER_AGENT=claude"' in ps_command
-    assert "&& claude --foo" in ps_command
+    assert 'set "APP_LAUNCHER_AGENT=copilot"' in ps_command
+    assert "&& copilot --foo" in ps_command
     assert session._pid == 4321
 
 
@@ -175,7 +161,7 @@ def test_create_spawns_pty_at_given_dimensions(tmp_path, monkeypatch):
 
     mgr = SessionManager()
     mgr.attach_loop(MagicMock())
-    session = mgr.create(str(tmp_path), "proj", "", "codex", rows=55, cols=42)
+    session = mgr.create(str(tmp_path), "proj", "", "copilot", rows=55, cols=42)
 
     assert captured["dimensions"] == (55, 42)
     # APP_LAUNCHER_SESSION_ID/AGENT ride the child's real environment (#537),
@@ -184,7 +170,7 @@ def test_create_spawns_pty_at_given_dimensions(tmp_path, monkeypatch):
     # rebuilds it with subprocess.list2cmdline(), which backslash-escapes
     # embedded quotes and silently broke that chain.
     assert captured["env"]["APP_LAUNCHER_SESSION_ID"] == session.session_id
-    assert captured["env"]["APP_LAUNCHER_AGENT"] == "codex"
+    assert captured["env"]["APP_LAUNCHER_AGENT"] == "copilot"
     assert "APP_LAUNCHER_SESSION_ID" not in captured["command"]
     assert session.rows == 55 and session.cols == 42
     assert session.to_api()["rows"] == 55 and session.to_api()["cols"] == 42
@@ -228,9 +214,9 @@ def test_create_defaults_and_clamps_dimensions(tmp_path, monkeypatch):
 
 
 def test_create_attaches_vt_snapshot_for_fullscreen_agent(tmp_path, monkeypatch):
-    """Codex (fullscreen) gets a headless VT mirror so a (re)connect can be
+    """A fullscreen agent gets a headless VT mirror so a (re)connect can be
     served a current-frame snapshot instead of a resize-triggered
-    re-emission (issue #432); Claude (inline, raw-ring replay) needs none."""
+    re-emission (issue #432); an inline agent (raw-ring replay) needs none."""
     captured: dict = {}
     from src import session_host
 
@@ -240,13 +226,13 @@ def test_create_attaches_vt_snapshot_for_fullscreen_agent(tmp_path, monkeypatch)
     mgr = SessionManager()
     mgr.attach_loop(MagicMock())
 
-    codex_session = mgr.create(str(tmp_path), "proj", "", "codex", rows=30, cols=90)
-    assert isinstance(codex_session._vt, VtSnapshot)
-    assert codex_session._vt._screen.lines == 30
-    assert codex_session._vt._screen.columns == 90
+    fs_session = mgr.create(str(tmp_path), "proj", "", "copilot", rows=30, cols=90)
+    assert isinstance(fs_session._vt, VtSnapshot)
+    assert fs_session._vt._screen.lines == 30
+    assert fs_session._vt._screen.columns == 90
 
-    claude_session = mgr.create(str(tmp_path), "proj", "", "claude")
-    assert claude_session._vt is None
+    inline_session = mgr.create(str(tmp_path), "peer", "user@host", "ssh")
+    assert inline_session._vt is None
 
 
 def test_create_threads_history_lines_override_to_vt_snapshot(tmp_path, monkeypatch):
@@ -263,12 +249,12 @@ def test_create_threads_history_lines_override_to_vt_snapshot(tmp_path, monkeypa
     mgr.attach_loop(MagicMock())
 
     session = mgr.create(
-        str(tmp_path), "proj", "", "codex", rows=30, cols=90, history_lines=42,
+        str(tmp_path), "proj", "", "copilot", rows=30, cols=90, history_lines=42,
     )
     assert session._vt._screen.history.size == 42
     assert session._vt._screen.history.top.maxlen == 42
 
-    default_session = mgr.create(str(tmp_path), "proj", "", "codex", rows=30, cols=90)
+    default_session = mgr.create(str(tmp_path), "proj", "", "copilot", rows=30, cols=90)
     assert default_session._vt._screen.history.size != 42
 
 
@@ -281,7 +267,7 @@ def test_resize_forwards_to_vt_snapshot():
         started_at=time.time(),
         _loop=MagicMock(),
         _pty=MagicMock(),
-        agent="codex",
+        agent="copilot",
         _vt=VtSnapshot(40, 120),
     )
     session.resize(20, 60)
@@ -298,7 +284,7 @@ def test_snapshot_frame_none_without_vt():
         started_at=time.time(),
         _loop=MagicMock(),
         _pty=MagicMock(),
-        agent="claude",
+        agent="ssh",
     )
     assert session.snapshot_frame() is None
 
@@ -312,7 +298,7 @@ def test_snapshot_frame_renders_current_vt_screen():
         started_at=time.time(),
         _loop=MagicMock(),
         _pty=MagicMock(),
-        agent="codex",
+        agent="copilot",
         _vt=VtSnapshot(10, 40),
     )
     session._vt.feed("current frame text")
@@ -349,7 +335,7 @@ def test_read_loop_feeds_vt_snapshot():
         started_at=time.time(),
         _loop=MagicMock(),
         _pty=_OneShotPty("agent output here\r\n"),
-        agent="codex",
+        agent="copilot",
         _vt=VtSnapshot(24, 80),
     )
     session._read_loop()
@@ -365,9 +351,9 @@ def test_pty_session_to_api_carries_agent():
         started_at=time.time(),
         _loop=MagicMock(),
         _pty=MagicMock(),
-        agent="antigravity",
+        agent="copilot",
     )
-    assert session.to_api()["agent"] == "antigravity"
+    assert session.to_api()["agent"] == "copilot"
 
 
 def test_create_threads_label_to_api(tmp_path, monkeypatch):
@@ -383,10 +369,10 @@ def test_create_threads_label_to_api(tmp_path, monkeypatch):
     mgr = SessionManager()
     mgr.attach_loop(MagicMock())
 
-    tagged = mgr.create(str(tmp_path), "special", "", "claude", label="special")
+    tagged = mgr.create(str(tmp_path), "special", "", "copilot", label="special")
     assert tagged.to_api()["label"] == "special"
 
-    plain = mgr.create(str(tmp_path), "proj", "", "claude")
+    plain = mgr.create(str(tmp_path), "proj", "", "copilot")
     assert plain.to_api()["label"] == ""
 
 

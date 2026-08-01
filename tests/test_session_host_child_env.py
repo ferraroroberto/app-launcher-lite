@@ -21,7 +21,7 @@ from src.session_host import agent_child_env
 
 # The full block captured off the polluted live session-host.
 _POLLUTED = {
-    "AI_AGENT": "claude-code_2-1-220_agent",
+    "AI_AGENT": "coding_2-1-220_agent",
     "CLAUDECODE": "1",
     "CLAUDE_CODE_BRIDGE_SESSION_ID": "session_01YE4xgL2CkzZFRnALUFVSE3",
     "CLAUDE_CODE_CHILD_SESSION": "1",
@@ -37,7 +37,7 @@ def test_inherited_agent_markers_are_scrubbed(monkeypatch):
     for key, value in _POLLUTED.items():
         monkeypatch.setenv(key, value)
 
-    env = agent_child_env("abc123", "claude")
+    env = agent_child_env("abc123", "copilot")
 
     for key in _POLLUTED:
         assert key not in env, f"{key} leaked into the child environment"
@@ -49,7 +49,7 @@ def test_color_and_transcript_markers_are_scrubbed(monkeypatch):
     monkeypatch.setenv("FORCE_COLOR", "0")
     monkeypatch.setenv("CLAUDE_CODE_CHILD_SESSION", "1")
 
-    env = agent_child_env("abc123", "claude")
+    env = agent_child_env("abc123", "copilot")
 
     assert "NO_COLOR" not in env
     assert "FORCE_COLOR" not in env
@@ -59,12 +59,12 @@ def test_color_and_transcript_markers_are_scrubbed(monkeypatch):
 def test_session_stamp_is_applied(monkeypatch):
     """The child still carries this session's own identity."""
     monkeypatch.setenv("APP_LAUNCHER_SESSION_ID", "stale-parent-session")
-    monkeypatch.setenv("APP_LAUNCHER_AGENT", "codex")
+    monkeypatch.setenv("APP_LAUNCHER_AGENT", "ssh")
 
-    env = agent_child_env("abc123", "claude")
+    env = agent_child_env("abc123", "copilot")
 
     assert env["APP_LAUNCHER_SESSION_ID"] == "abc123"
-    assert env["APP_LAUNCHER_AGENT"] == "claude"
+    assert env["APP_LAUNCHER_AGENT"] == "copilot"
 
 
 def test_user_scope_settings_survive(monkeypatch):
@@ -74,7 +74,7 @@ def test_user_scope_settings_survive(monkeypatch):
     monkeypatch.setenv("GIT_TERMINAL_PROMPT", "0")
     monkeypatch.setenv("PATH", "C:\\Windows\\System32")
 
-    env = agent_child_env("abc123", "claude")
+    env = agent_child_env("abc123", "copilot")
 
     assert env["CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"] == "70"
     assert env["CLAUDE_CODE_ENABLE_TELEMETRY"] == "1"

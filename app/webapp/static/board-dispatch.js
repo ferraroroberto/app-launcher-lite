@@ -56,7 +56,7 @@ function startWorkTimer(btn, restoreHtml, workingLabel) {
 
 let dispatchMode = 'add';
 
-// Repo/project dropdown (#337) ← the same live claude-code listing the
+// Repo/project dropdown (#337) ← the same live coding listing the
 // Coding tab renders (state.apps). It is a plain tap-to-open/tap-to-select
 // dropdown, not a typable field — a button trigger, not an <input>. It does
 // double duty: the real dispatch target lives in the hidden
@@ -133,7 +133,7 @@ function syncDispatchRepos() {
   const btn = els.boardDispatchRepoBtn;
   if (!hidden || !btn) return;
   const repos = (state.apps || [])
-    .filter(function (a) { return a.kind === 'claude-code'; })
+    .filter(function (a) { return a.kind === 'coding'; })
     .map(function (a) { return String(a.name); });
   const sig = repos.join('\n');
   if (sig === _repoSig) return;
@@ -195,7 +195,8 @@ async function dispatchGoal() {
       repo: repo,
       goal: goal,
       mode: dispatchMode,
-      model: (els.boardDispatchModel && els.boardDispatchModel.value) || 'sonnet',
+      // '' = the Copilot auto model (no --model on the launch line).
+      model: (els.boardDispatchModel && els.boardDispatchModel.value) || '',
     };
     // Same size contract as startIssue (issue #374).
     applyLaunchSizePayload(payload);
@@ -218,6 +219,36 @@ async function dispatchGoal() {
 
 export function syncDispatchBar() {
   syncDispatchRepos();
+  syncDispatchModels();
+}
+
+// Model <select> options ← the config-driven copilot_models list (#500,
+// reduced to Copilot-only in the lite fork). Rebuilt only when the list
+// actually changes so a rebuild can't reset a dropdown mid-browse; the
+// "Default" option ('' — Copilot picks the model) is always first.
+let _modelSig = null;
+
+function syncDispatchModels() {
+  const sel = els.boardDispatchModel;
+  if (!sel) return;
+  const cp = (state.config && state.config.copilot) || {};
+  const models = (cp.models_available || []).map(String);
+  const sig = models.join('\n');
+  if (sig === _modelSig) return;
+  _modelSig = sig;
+  const current = sel.value;
+  sel.replaceChildren();
+  const defOpt = document.createElement('option');
+  defOpt.value = '';
+  defOpt.textContent = 'Default';
+  sel.appendChild(defOpt);
+  models.forEach(function (m) {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m;
+    sel.appendChild(opt);
+  });
+  sel.value = models.indexOf(current) >= 0 ? current : '';
 }
 
 function wireRepoCombo() {

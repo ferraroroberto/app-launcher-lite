@@ -30,7 +30,7 @@ def _mock_sessions_list(page: Page, state: dict) -> None:
             body=_json.dumps({"sessions": [{
                 "session_id": _CODING_SID,
                 "kind": "pty",
-                "agent": "claude",
+                "agent": "copilot",
                 "project_dir": "E:/automation/renameproj",
                 "name": "renameproj",
                 "alive": True,
@@ -41,7 +41,7 @@ def _mock_sessions_list(page: Page, state: dict) -> None:
             }]}),
         )
 
-    page.route(re.compile(r".*/api/claude-code/sessions$"), _handler)
+    page.route(re.compile(r".*/api/coding/sessions$"), _handler)
 
 
 def _mock_rename(page: Page, sid: str, state: dict, captured: dict) -> None:
@@ -56,7 +56,7 @@ def _mock_rename(page: Page, sid: str, state: dict, captured: dict) -> None:
             }),
         )
 
-    page.route(re.compile(r".*/api/claude-code/sessions/" + sid + r"/rename$"), _handler)
+    page.route(re.compile(r".*/api/coding/sessions/" + sid + r"/rename$"), _handler)
 
 
 def _mock_board(page: Page) -> None:
@@ -71,7 +71,7 @@ def _mock_board(page: Page) -> None:
                     "claude_turn": [{
                         "session_id": _BOARD_SID,
                         "kind": "pty",
-                        "agent": "claude",
+                        "agent": "copilot",
                         "project_dir": "E:/automation/boardrenameproj",
                         "name": "boardrenameproj",
                         "alive": True,
@@ -99,14 +99,14 @@ def _mock_board(page: Page) -> None:
             body=_json.dumps({"available": False, "reason": "no_exchange"}),
         ),
     )
-    # #510/#680: the real /api/claude-code/git-status boot fetch is
+    # #510/#680: the real /api/coding/git-status boot fetch is
     # git-subprocess-backed and non-deterministic in timing; its completion
     # calls renderBoard() whenever the Board tab is active (apps.js), which
     # rebuilds the DOM — including an open drawer's rename button — out from
     # under an in-progress interaction. Stubbed in the shared helper so every
     # test here gets it, not just the ones that remembered to ask.
     page.route(
-        re.compile(r".*/api/claude-code/git-status$"),
+        re.compile(r".*/api/coding/git-status$"),
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({"projects": []}),

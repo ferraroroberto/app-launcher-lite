@@ -1,4 +1,4 @@
-"""src.scanner — directory-based Claude Code discovery (issue #44)."""
+"""src.scanner — directory-based coding-project discovery (issue #44)."""
 
 from __future__ import annotations
 

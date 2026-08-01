@@ -12,11 +12,11 @@ holds the **Apps tab** rows — bat-based launchers:
       ]
     }
 
-``claude-code`` rows are **not** persisted here — they are computed live
-on every request by :func:`live_claude_code_entries`, which scans the
+``coding`` rows are **not** persisted here — they are computed live
+on every request by :func:`live_coding_entries`, which scans the
 configured ``projects_dir`` for project directories. Each carries a
-``project_dir`` (the folder ``claude`` is cwd'd into); the Apps-tab
-kinds each carry a ``bat_path``. Stale ``claude-code`` rows left in an
+``project_dir`` (the folder the agent is cwd'd into); the Apps-tab
+kinds each carry a ``bat_path``. Stale ``coding`` rows left in an
 older ``apps.json`` are ignored by the API.
 """
 
@@ -31,7 +31,7 @@ from typing import Dict, List, Optional
 
 from ._json_io import atomic_write_json
 from .scanner import (
-    KIND_CLAUDE_CODE,
+    KIND_CODING,
     KIND_STREAMLIT,
     VALID_KINDS,
     app_id_from_path,
@@ -150,13 +150,13 @@ def decorate_for_api(entry: AppEntry) -> Dict:
     return payload
 
 
-# ------------------------------------------------------ claude-code (live)
+# ------------------------------------------------------ coding (live)
 
 
-def live_claude_code_entries(
+def live_coding_entries(
     projects_dir: Path, ignore: Optional[List[str]] = None
 ) -> List[AppEntry]:
-    """Build ``claude-code`` rows live from the directories under ``projects_dir``.
+    """Build ``coding`` rows live from the directories under ``projects_dir``.
 
     No persistence and no scan step — every direct child directory of
     ``projects_dir`` that survives the ignore list (see
@@ -166,7 +166,7 @@ def live_claude_code_entries(
         AppEntry(
             id=project.id,
             name=project.name,
-            kind=KIND_CLAUDE_CODE,
+            kind=KIND_CODING,
             project_dir=str(project.project_dir),
             repo_url=github_repo_url(project.project_dir),
         )
@@ -181,8 +181,8 @@ def discover_new(*, scan_root: Path, existing: Registry) -> List[AppEntry]:
     """Scan ``scan_root`` for app bats not already in ``existing``.
 
     Each returned entry has ``added_at`` empty — the caller is expected
-    to stamp it when persisting. ``claude-code`` rows are never returned
-    here; they come from :func:`live_claude_code_entries` instead.
+    to stamp it when persisting. ``coding`` rows are never returned
+    here; they come from :func:`live_coding_entries` instead.
     """
     have_paths: set[str] = {a.bat_path for a in existing.apps if a.bat_path}
 

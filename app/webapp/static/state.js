@@ -1,12 +1,12 @@
 /* Shared singletons: app state, DOM-element references, constants.
  *
  * State (mutable):
- *   state.tab          — 'claude' | 'apps'
- *   state.config       — /api/config payload (claude flags + scan paths)
+ *   state.tab          — 'coding' | 'apps'
+ *   state.config       — /api/config payload (copilot flags + scan paths)
  *   state.apps         — array from /api/apps (each entry carries its own .health)
  *   state.agents       — array from /api/agents ({id,label,available} per agent)
  *   state.runningApps  — array from /api/apps/running (launcher-spawned apps)
- *   state.sessions     — array from /api/claude-code/sessions
+ *   state.sessions     — array from /api/coding/sessions
  *   state.pendingScan  — array from /api/apps/scan, surfaced in scan dialog
  *   state.webauthn     — { configured, enrollment_open, devices[] }
  *   state.terminal     — null when overlay closed, else { sid, ws, term, fit, onWindowResize }
@@ -23,7 +23,7 @@ export const TT_KEY = 'launcher.tt';
 export const TT_EXP_KEY = 'launcher.tt.exp';
 
 export const TUNNEL_POLL_MS = 4000;       // refresh tunnel-kind URLs + health
-export const SESSIONS_POLL_MS = 5000;     // refresh running Claude Code sessions
+export const SESSIONS_POLL_MS = 5000;     // refresh running coding sessions
 export const LISTENERS_POLL_MS = 5000;    // refresh port listeners
 export const RUNNING_APPS_POLL_MS = 4000; // refresh launcher-spawned apps
 export const JOBS_POLL_MS = 4000;         // refresh Jobs tab while it's visible
@@ -35,24 +35,18 @@ export const WEBAUTHN_POLL_MS = 15000;
 export const GIT_STATUS_POLL_MS = 45000;
 
 export const state = {
-  tab: 'claude',
+  tab: 'coding',
   config: null,
   apps: [],
   // Coding agents — overwritten by /api/agents at boot. The fallback
-  // keeps the Coding tab usable if that fetch fails: Claude Code is the
-  // launcher's core agent so it's assumed present; the other agents
-  // stay disabled until detection confirms their CLI is on PATH. The
-  // fullscreen flags mirror src/agents.py so a terminal opened while the
-  // fetch is degraded still takes the pan-not-reflow path (#264/#430) —
-  // without them a ratatui agent would silently fall onto Claude's
-  // reflow path and replay-scroll on every keyboard toggle.
+  // keeps the Coding tab usable if that fetch fails: Copilot is the
+  // launcher's core agent so it's assumed present. The fullscreen flag
+  // mirrors src/agents.py so a terminal opened while the fetch is
+  // degraded still takes the pan-not-reflow path (#264/#430) — without
+  // it a differential TUI would silently fall onto the inline reflow
+  // path and replay-scroll on every keyboard toggle.
   agents: [
-    { id: 'claude', label: 'Claude Code', available: true, fullscreen: false },
-    { id: 'codex', label: 'Codex CLI', available: false, fullscreen: true },
-    { id: 'antigravity', label: 'Antigravity CLI', available: false, fullscreen: true },
-    { id: 'copilot', label: 'GitHub Copilot CLI', available: false, fullscreen: true },
-    { id: 'pi', label: 'Pi', available: false, fullscreen: true },
-    { id: 'grok', label: 'Grok Build', available: false, fullscreen: true },
+    { id: 'copilot', label: 'GitHub Copilot CLI', available: true, fullscreen: true },
   ],
   runningApps: [],
   // Git flags for the Coding tiles + Board backlog (issue #115, always-on
@@ -113,12 +107,12 @@ export const state = {
 export const els = {
   themeToggle: document.getElementById('themeToggle'),
   homeHeadStatus: document.getElementById('homeHeadStatus'),
-  tabClaude: document.getElementById('tabClaude'),
+  tabCoding: document.getElementById('tabCoding'),
   tabApps: document.getElementById('tabApps'),
   tabJobs: document.getElementById('tabJobs'),
   tabTeamOS: document.getElementById('tabTeamOS'),
   tabBoard: document.getElementById('tabBoard'),
-  paneClaude: document.getElementById('paneClaude'),
+  paneCoding: document.getElementById('paneCoding'),
   paneApps: document.getElementById('paneApps'),
   paneJobs: document.getElementById('paneJobs'),
   paneTeamOS: document.getElementById('paneTeamOS'),
@@ -126,9 +120,6 @@ export const els = {
 
   boardColumns: document.getElementById('boardColumns'),
   boardStatus: document.getElementById('boardStatus'),
-  boardUsage: document.getElementById('boardUsage'),
-  boardUsageSession: document.getElementById('boardUsageSession'),
-  boardUsageWeekly: document.getElementById('boardUsageWeekly'),
   boardRefresh: document.getElementById('boardRefresh'),
   boardColBacklog: document.getElementById('boardColBacklog'),
   boardColClaude: document.getElementById('boardColClaude'),
@@ -229,44 +220,22 @@ export const els = {
 
   codingOptions: document.getElementById('codingOptions'),
   agentVisibility: document.getElementById('agentVisibility'),
-  claudeModel: document.getElementById('claudeModel'),
-  claudeEffort: document.getElementById('claudeEffort'),
-  claudePermission: document.getElementById('claudePermission'),
-  claudeVerbose: document.getElementById('claudeVerbose'),
-  claudeDebug: document.getElementById('claudeDebug'),
-  claudeDetached: document.getElementById('claudeDetached'),
-  claudeResume: document.getElementById('claudeResume'),
-  claudeFlagsPreview: document.getElementById('claudeFlagsPreview'),
-  codexEffort: document.getElementById('codexEffort'),
-  codexPermission: document.getElementById('codexPermission'),
-  codexFlagsPreview: document.getElementById('codexFlagsPreview'),
-  grokEffort: document.getElementById('grokEffort'),
-  grokPermission: document.getElementById('grokPermission'),
-  grokFlagsPreview: document.getElementById('grokFlagsPreview'),
-  antigravitySkipPerms: document.getElementById('antigravitySkipPerms'),
-  antigravitySandbox: document.getElementById('antigravitySandbox'),
-  antigravityFlagsPreview: document.getElementById('antigravityFlagsPreview'),
+  codingDetached: document.getElementById('codingDetached'),
+  codingResume: document.getElementById('codingResume'),
   copilotModel: document.getElementById('copilotModel'),
   copilotAutopilot: document.getElementById('copilotAutopilot'),
   copilotContext: document.getElementById('copilotContext'),
   copilotEffort: document.getElementById('copilotEffort'),
   copilotSkipPerms: document.getElementById('copilotSkipPerms'),
   copilotFlagsPreview: document.getElementById('copilotFlagsPreview'),
-  piModel: document.getElementById('piModel'),
-  piEffort: document.getElementById('piEffort'),
-  piTrust: document.getElementById('piTrust'),
-  piFlagsPreview: document.getElementById('piFlagsPreview'),
-  claudeList: document.getElementById('claudeList'),
-  claudeEmpty: document.getElementById('claudeEmpty'),
+  codingList: document.getElementById('codingList'),
+  codingEmpty: document.getElementById('codingEmpty'),
   favFilterBtn: document.getElementById('favFilterBtn'),
   gitStatusBtn: document.getElementById('gitStatusBtn'),
   gitStatusSummary: document.getElementById('gitStatusSummary'),
   gitStatusLegend: document.getElementById('gitStatusLegend'),
   sessionsList: document.getElementById('sessionsList'),
   sessionsEmpty: document.getElementById('sessionsEmpty'),
-  codingUsage: document.getElementById('codingUsage'),
-  codingUsageSession: document.getElementById('codingUsageSession'),
-  codingUsageWeekly: document.getElementById('codingUsageWeekly'),
   appsList: document.getElementById('appsList'),
   appsEmpty: document.getElementById('appsEmpty'),
   registeredTraysList: document.getElementById('registeredTraysList'),

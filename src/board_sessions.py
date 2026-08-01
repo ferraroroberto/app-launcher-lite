@@ -3,15 +3,15 @@
 Joins the **live session list** from the session-host
 (``session_client.list_sessions``) with the hook-written state rows
 (:mod:`src.board_state`) into board cards. The join is exact launcher id +
-agent when a writer supplies those fields; legacy Claude rows fall back to an
+agent when a writer supplies those fields; agent-less rows fall back to an
 agent-gated normalized-cwd claim. Two legacy live sessions in one directory
 tie-break by most recent ``started_at``; the rest show ``unknown``.
 
 Shared session title (#396): the state row also carries ``name``/``name_source``
-(fleet-config#302's live Claude Code session title). :func:`merge_sessions`
+(the agent's live session title, where one exists). :func:`merge_sessions`
 copies those onto every card as ``shared_name``/``shared_name_source``, and
 :func:`attach_shared_names` runs the identical agent-aware claim walk for the
-Coding tab's own ``/api/claude-code/sessions`` list — so a live session
+Coding tab's own ``/api/coding/sessions`` list — so a live session
 resolves to the same state row, and therefore the same title, on both tabs.
 """
 
@@ -89,12 +89,12 @@ def _normalize_dir(raw: Any) -> str:
 
 
 def _row_agent(row: Dict[str, Any]) -> str:
-    """State rows predating #455 are Claude Code rows by definition."""
-    return str(row.get("agent") or "claude").strip().lower()
+    """State rows with no ``agent`` field default to the launcher's agent."""
+    return str(row.get("agent") or "copilot").strip().lower()
 
 
 def _session_agent(session: Dict[str, Any]) -> str:
-    return str(session.get("agent") or "claude").strip().lower()
+    return str(session.get("agent") or "copilot").strip().lower()
 
 
 def _cwd_agent_key(session: Dict[str, Any]) -> tuple:
@@ -111,7 +111,7 @@ def _match_state_row(
     """Claim an agent-compatible state row for one live session.
 
     A writer-provided ``launcher_session_id`` is exact and wins first. Legacy
-    Claude rows have neither that field nor ``agent`` and retain the normalized
+    agent-less rows have neither field and retain the normalized
     cwd fallback. Rows carrying a different launcher id are never allowed to
     fall back by cwd — that would reintroduce the same-session collision exact
     identity exists to prevent (#455).
@@ -132,8 +132,7 @@ def _match_state_row(
     cross-wires cards to the wrong session's transcript (reproduced live: 3
     concurrent sessions in one directory, all 3 assigned to each other's
     rows). Degrading to no match (``unknown`` card, no transcript) is safer
-    than a confident wrong answer — same principle as the Codex ambiguity
-    guard in :func:`src.board_exchange._find_codex_transcript`. Sessions that
+    than a confident wrong answer. Sessions that
     carry their own ``launcher_session_id`` (the exact-match path above)
     never reach here, so this only affects legacy/external sessions with no
     launcher id sharing a directory.
@@ -285,7 +284,7 @@ def merge_sessions(
     """Join live session-host sessions with hook state rows into board cards.
 
     Live sessions are walked newest-first. Exact launcher-session id + agent
-    claims win; legacy Claude rows fall back to cwd recency. Later sessions in
+    claims win; agent-less rows fall back to cwd recency. Later sessions in
     the same directory render ``unknown``. A state row with no live match only
     becomes an external card when recent transcript activity independently
     proves the process still exists — hook state alone is not liveness (#455).

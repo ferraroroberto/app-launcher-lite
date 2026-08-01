@@ -1,9 +1,9 @@
-/* Running Claude Code sessions panel: list, stop, refresh.
+/* Running coding sessions panel: list, stop, refresh.
  *
  * One 🛑 "Stop and kill" button per row (issue #253), same for both kinds.
- * The session-host types the agent's own quit command (Claude's /quit,
- * Copilot's /exit, …), waits briefly for a clean exit so shutdown hooks
- * run, then force-terminates as a fallback — and the window always closes.
+ * The session-host types the agent's own quit command (Copilot's /exit),
+ * waits briefly for a clean exit so shutdown hooks run, then
+ * force-terminates as a fallback — and the window always closes.
  * Detached (remote) rows have no PTY to type into, so the host force-kills
  * the console directly.
  */
@@ -12,7 +12,7 @@ import { els, state } from './state.js';
 import { apiFailToast, isDesktopClient, jsonApi, logPollFailure, toast } from './api.js';
 import { renderHomeHead } from './home-head.js';
 import { hideTerminal, openTerminal } from './terminal.js';
-import { iconUrl, renderUsageBadgeRow } from './dom-utils.js';
+import { iconUrl } from './dom-utils.js';
 import { icon } from './_vendored/icons/icons.js';
 
 export function fmtAgo(epochSeconds) {
@@ -42,28 +42,26 @@ function projectBasename(s) {
 //      It is the one title channel that works identically across every
 //      agent (including detached sessions) without depending on agent-native
 //      OSC support, so it overrides every auto-derived source below.
-//   1. ``shared_name`` (fleet-config#302, joined agent-aware server-side into
-//      every session dict as shared_name/shared_name_source) wins outright
-//      when it's a real Claude-assigned title (name_source !== 'derived') —
-//      the one cross-tab authoritative source: Claude's own /resume picker
-//      title, kept fresh on every UserPromptSubmit/Stop hook fire.
+//   1. ``shared_name`` (joined agent-aware server-side into every session
+//      dict as shared_name/shared_name_source) wins outright when it's a
+//      real agent-assigned title (name_source !== 'derived') — the one
+//      cross-tab authoritative source, kept fresh on every hook fire.
 //   2. else the OSC-parsed ``live_title`` — kept as a same-poll-cycle-faster
 //      supplement: it updates sub-second inside an open terminal (parsed
 //      straight off the PTY), while the shared source only refreshes on the
-//      next hook fire + sessions-state.json poll. Only some agents self-name
-//      per conversation this way: Claude emits a real summary, Codex emits
-//      "<folder> | <model>", Pi emits "π - <folder>", Antigravity/Copilot
-//      emit nothing — a short title that's just the folder name is a
-//      project echo, no more distinctive than the launch name, so it's
-//      skipped here in favor of prompt_title below.
+//      next hook fire + sessions-state.json poll. Not every agent self-names
+//      per conversation this way (Copilot emits no OSC title) — a short
+//      title that's just the folder name is a project echo, no more
+//      distinctive than the launch name, so it's skipped here in favor of
+//      prompt_title below.
 //   3. else the first-prompt-derived title (prompt_title) — covers agents
 //      that don't self-name, and de-genericizes the folder-only echoes.
 //   4. else the shared name even when it's the generic derived
 //      "<project>-N" fallback — still better than a bare project echo since
 //      it distinguishes sibling sessions in the same directory.
 //   5. else the folder-echo live title, then the launch name.
-// Coding agents prefix their live title with a brand glyph (Claude's green ✳);
-// the per-session agent icon already identifies the agent, so strip any
+// A coding agent may prefix its live title with a brand glyph; the
+// per-session agent icon already identifies the agent, so strip any
 // leading run of non-alphanumeric characters.
 export function sessionTitle(s) {
   const manual = String((s && s.manual_title) || '').trim();
@@ -75,8 +73,8 @@ export function sessionTitle(s) {
     .trim();
   const prompt = String((s && s.prompt_title) || '').trim();
   const base = projectBasename(s);
-  // A short live title containing the folder name is a project echo (Codex /
-  // Pi), no more distinctive than the launch name. A real summary is longer
+  // A short live title containing the folder name is a project echo, no
+  // more distinctive than the launch name. A real summary is longer
   // and not folder-dominated, so the word-count guard lets it through.
   const projectEcho = !!live && !!base &&
     live.toLowerCase().includes(base) && live.split(/\s+/).length <= 4;
@@ -128,13 +126,13 @@ export function renderSessions() {
     // Which coding agent this session is running (issue #45). Resolved
     // against the agent registry (state.agents) so a new agent's icon +
     // label flow through without touching this file; falls back to
-    // Claude Code for an unrecognised id.
+    // Copilot for an unrecognised id.
     const known = state.agents.find(function (a) { return a.id === s.agent; });
-    const agentId = known ? known.id : 'claude';
+    const agentId = known ? known.id : 'copilot';
     const agentIcon = document.createElement('img');
     agentIcon.className = 'session-agent-icon';
     agentIcon.src = iconUrl(agentId);
-    agentIcon.alt = known ? known.label : 'Claude Code';
+    agentIcon.alt = known ? known.label : 'GitHub Copilot CLI';
     agentIcon.title = agentIcon.alt;
     head.appendChild(agentIcon);
     const kindTag = document.createElement('span');
@@ -205,7 +203,7 @@ export async function openSession(s) {
   if (isDesktopClient()) {
     try {
       const r = await jsonApi(
-        '/api/claude-code/sessions/' + encodeURIComponent(s.session_id) +
+        '/api/coding/sessions/' + encodeURIComponent(s.session_id) +
           '/mirror',
         { method: 'POST' }
       );
@@ -233,7 +231,7 @@ export async function stopSession(s) {
   // so a confirmation dialog is just friction.
   try {
     await jsonApi(
-      '/api/claude-code/sessions/' + encodeURIComponent(s.session_id) +
+      '/api/coding/sessions/' + encodeURIComponent(s.session_id) +
         '/stop',
       {
         method: 'POST',
@@ -253,26 +251,12 @@ export async function stopSession(s) {
 
 export async function fetchSessions() {
   try {
-    const body = await jsonApi('/api/claude-code/sessions');
+    const body = await jsonApi('/api/coding/sessions');
     state.sessions = body.sessions || [];
     renderSessions();
   } catch (exc) {
     // Sessions polling is best-effort — don't spam toasts.
     logPollFailure('sessions fetch failed', exc);
-  }
-}
-
-// Claude 5h/7d usage badges (issue #326) in the Running-sessions header —
-// same data + rendering as the Board tab's badges (dom-utils.js), but on
-// its own endpoint so this tab never depends on the Board tab ever having
-// been opened (GET /api/board's own rate-limits read only happens as a
-// side effect of fetchBoard(), which self-gates to "Board tab visible").
-export async function fetchRateLimits() {
-  try {
-    const body = await jsonApi('/api/rate-limits');
-    renderUsageBadgeRow(els.codingUsage, els.codingUsageSession, els.codingUsageWeekly, body);
-  } catch (exc) {
-    logPollFailure('rate-limits fetch failed', exc);
   }
 }
 
@@ -305,7 +289,7 @@ function wireSessionRenameDialog() {
     const title = els.sessionRenameInput.value.trim();
     try {
       await jsonApi(
-        '/api/claude-code/sessions/' +
+        '/api/coding/sessions/' +
           encodeURIComponent(renameSessionTarget.session_id) + '/rename',
         {
           method: 'POST',

@@ -1,6 +1,6 @@
-"""Claude-code config-shaped endpoint: launch-flag preview.
+"""Coding config-shaped endpoints: launch-flag preview, favorites, git status.
 
-A small read of webapp_config (the `claude` subtree of /api/config),
+A small read of webapp_config (the `copilot` subtree of /api/config),
 surfaced on its own path for the options card's flag preview.
 """
 
@@ -15,12 +15,12 @@ from fastapi import APIRouter, HTTPException, Request
 from src.scanner import git_status, scan_project_dirs
 from src.webapp_config import WebappConfig, update_webapp_config
 
-from app.webapp.routers._helpers import claude_flags_payload, maybe_json
+from app.webapp.routers._helpers import copilot_flags_payload, maybe_json
 
 router = APIRouter()
 
 
-@router.post("/api/claude-code/favorites")
+@router.post("/api/coding/favorites")
 async def toggle_favorite(request: Request) -> Dict[str, Any]:
     """Star/unstar a coding project (issue #250).
 
@@ -48,14 +48,14 @@ async def toggle_favorite(request: Request) -> Dict[str, Any]:
     return {"ok": True, "coding_favorites": new_cfg.coding_favorites}
 
 
-@router.get("/api/claude-code/flags")
-async def claude_flags(request: Request) -> Dict[str, Any]:
+@router.get("/api/coding/flags")
+async def coding_flags(request: Request) -> Dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
-    return claude_flags_payload(cfg)
+    return copilot_flags_payload(cfg)
 
 
-@router.get("/api/claude-code/git-status")
-async def claude_git_status(request: Request) -> Dict[str, Any]:
+@router.get("/api/coding/git-status")
+async def coding_git_status(request: Request) -> Dict[str, Any]:
     """Per-project git state for the Coding tiles + Board backlog flags.
 
     Runs ``git`` once per project (branch + clean/dirty + default

@@ -34,7 +34,7 @@ def _configure_logging(level_name: str) -> None:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="launcher",
-        description="Phone-first launcher hub for Claude Code + Apps.",
+        description="Phone-first launcher hub for Coding + Apps.",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument(

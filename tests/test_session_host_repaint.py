@@ -3,10 +3,10 @@
 Two halves of the fix live in ``app/session_host/server.py``:
 
 - the WS handler **skips the raw scrollback-ring replay** for a
-  full-screen differential-TUI agent (Codex/ratatui) — replaying its
+  full-screen differential-TUI agent — replaying its
   stale deltas garbles a fresh xterm and re-answers the agent's startup
   terminal queries as input (the ``[?1;2c`` DA leak), while an inline
-  agent (Claude Code) still gets its snapshot;
+  agent (e.g. SSH) still gets its snapshot;
 - ``_force_repaint`` nudges the TUI into a clean redraw by toggling the
   PTY width one column and back.
 """
@@ -115,12 +115,12 @@ def _connect(monkeypatch, agent: str, vt_frame: "str | None" = None):
 
 
 def test_ws_skips_ring_replay_for_fullscreen_agent_no_vt_frame(monkeypatch):
-    """Codex (fullscreen), no VT frame yet (falls back to the toggle nudge):
+    """A fullscreen agent, no VT frame yet (falls back to the toggle nudge):
     the raw ring is NOT replayed. The only text frame is the clean-frame
     preamble (#270 tail-jump) — never the stale ring — so the DA-query leak
     can't happen (issue #128) and the reopened session lands on a clean
     buffer instead of crawling through history."""
-    client = _connect(monkeypatch, "codex", vt_frame=None)
+    client = _connect(monkeypatch, "copilot", vt_frame=None)
     with client.websocket_connect("/sessions/abc/ws?role=phone") as ws:
         first = ws.receive_text()
         assert first == server._CLEAR_FRAME
@@ -139,7 +139,7 @@ def test_clean_frame_preamble_is_csi_only():
 
 
 def test_ws_serves_vt_snapshot_when_available(monkeypatch):
-    """Codex (fullscreen) with a VT frame already painted: the snapshot is
+    """A fullscreen agent with a VT frame already painted: the snapshot is
     sent right after the clean-frame preamble, and — critically — the
     winsize-toggle nudge (``_force_repaint``) is never scheduled, since that
     toggle is exactly what triggers a ratatui agent's full transcript
@@ -153,7 +153,7 @@ def test_ws_serves_vt_snapshot_when_available(monkeypatch):
     monkeypatch.setattr(
         server.manager,
         "get",
-        lambda sid: _FakeSession("codex", vt_frame="RENDERED-VT-FRAME"),
+        lambda sid: _FakeSession("copilot", vt_frame="RENDERED-VT-FRAME"),
     )
     client = TestClient(server.app)
     with client.websocket_connect("/sessions/abc/ws?role=phone") as ws:
@@ -166,12 +166,12 @@ def test_ws_serves_vt_snapshot_when_available(monkeypatch):
 
 
 def test_ws_replays_ring_for_inline_agent_after_wipe(monkeypatch):
-    """Claude (inline): the scrollback snapshot is still replayed — but
+    """An inline agent: the scrollback snapshot is still replayed — but
     prefixed with the clean-frame preamble in the SAME frame (#444). The
     phone reuses one xterm across reconnects (#28 backoff, #430 warm
     cache); without the wipe the full ring lands BELOW the stale buffer,
     duplicating the conversation tail on every reconnect."""
-    client = _connect(monkeypatch, "claude")
+    client = _connect(monkeypatch, "ssh")
     with client.websocket_connect("/sessions/abc/ws?role=phone") as ws:
         first = ws.receive_text()
         assert first == server._CLEAR_FRAME + "RAW-RING-SNAPSHOT"

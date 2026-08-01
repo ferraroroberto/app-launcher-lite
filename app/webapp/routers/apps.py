@@ -23,33 +23,25 @@ from src.diagnostics import (
     kill_process_tree,
     listening_port_for_pid_tree,
 )
-from src.launch_flags import (
-    build_antigravity_flags,
-    build_claude_flags,
-    build_codex_flags,
-    build_copilot_flags,
-    build_grok_flags,
-    build_pi_flags,
-    build_resume_flags,
-)
+from src.launch_flags import build_copilot_flags, build_resume_flags
 from src.launcher import (
     open_local_terminal_window,
     spawn_bat,
-    spawn_claude_session,
+    spawn_agent_session,
 )
 from src.registry import (
     AppEntry,
     decorate_for_api,
     discover_new,
     get_by_id,
-    live_claude_code_entries,
+    live_coding_entries,
     load_registry,
     persist_additions,
     remove_by_id,
     rename_by_id,
     set_autostart_by_id,
 )
-from src.scanner import KIND_CLAUDE_CODE, KIND_TRAY, KIND_TUNNEL
+from src.scanner import KIND_CODING, KIND_TRAY, KIND_TUNNEL
 from src.webapp_config import WebappConfig
 
 from app.webapp.routers._helpers import (
@@ -64,9 +56,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _claude_code_entries(cfg: WebappConfig) -> List[AppEntry]:
-    """Live claude-code rows from the configured projects directory."""
-    return live_claude_code_entries(
+def _coding_entries(cfg: WebappConfig) -> List[AppEntry]:
+    """Live coding rows from the configured projects directory."""
+    return live_coding_entries(
         Path(cfg.projects_dir), list(cfg.projects_ignore)
     )
 
@@ -75,12 +67,12 @@ def _claude_code_entries(cfg: WebappConfig) -> List[AppEntry]:
 async def get_apps(request: Request) -> Dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
     registry = load_registry()
-    # claude-code rows are computed live from `projects_dir`; the
+    # coding rows are computed live from `projects_dir`; the
     # bat-based kinds come from the persisted registry. Any stale
-    # claude-code row left in an older apps.json is ignored.
-    bat_entries = [a for a in registry.apps if a.kind != KIND_CLAUDE_CODE]
+    # coding row left in an older apps.json is ignored.
+    bat_entries = [a for a in registry.apps if a.kind != KIND_CODING]
     decorated = [
-        decorate_for_api(a) for a in _claude_code_entries(cfg) + bat_entries
+        decorate_for_api(a) for a in _coding_entries(cfg) + bat_entries
     ]
     # Health for tunnel apps is probed here, server-side — the SPA
     # can't probe a sibling's /healthz from the browser (cross-origin,
@@ -98,7 +90,7 @@ async def get_apps(request: Request) -> Dict[str, Any]:
     # based kinds never carry the flag — favorites are a Coding-tab concept.
     favorites = set(cfg.coding_favorites)
     for d in decorated:
-        if d.get("kind") == KIND_CLAUDE_CODE:
+        if d.get("kind") == KIND_CODING:
             d["is_favorite"] = d.get("id") in favorites
     return {
         "scan_root": registry.scan_root,
@@ -180,26 +172,26 @@ async def delete_app(app_id: str) -> Dict[str, Any]:
 async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
     registry = load_registry()
-    # claude-code rows aren't persisted — resolve them against the live
+    # coding rows aren't persisted — resolve them against the live
     # directory scan first; bat-based rows come from the registry.
     entry = next(
-        (e for e in _claude_code_entries(cfg) if e.id == app_id), None
+        (e for e in _coding_entries(cfg) if e.id == app_id), None
     ) or get_by_id(registry, app_id)
     if entry is None:
         raise HTTPException(status_code=404, detail=f"unknown app {app_id}")
 
-    # claude-code (the Coding tab): two launch modes (chosen by the
+    # coding (the Coding tab): two launch modes (chosen by the
     # request body's `mode`) and one of the registered coding agents
     # (`agent`). "pty" (default) = a launcher-owned PTY session streamed
     # to and driven from the phone. "remote" = a detached console window
     # on the PC the session-host only tracks (listed + killable but not
     # streamed). `agent` must be a key in `agents.AGENTS` (see
     # `src/agents.py` for the full set).
-    if entry.kind == KIND_CLAUDE_CODE:
+    if entry.kind == KIND_CODING:
         if not entry.project_dir:
             raise HTTPException(
                 status_code=400,
-                detail=f"claude-code entry {entry.id} has no project_dir",
+                detail=f"coding entry {entry.id} has no project_dir",
             )
         body = await maybe_json(request)
         mode = str(body.get("mode") or "pty").strip().lower()
@@ -219,28 +211,19 @@ async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
             raise HTTPException(
                 status_code=400, detail=f"unknown agent: {agent}"
             )
-        # Claude Code is the launcher's core agent — its launch path is
-        # unguarded, exactly as before issue #45. Other agents
-        # (Antigravity, Copilot) are checked server-side too, as
-        # defence-in-depth behind the Coding tab's already-disabled button.
-        if agent != agents.DEFAULT_AGENT and not agents.is_installed(agent):
+        # Server-side install check, as defence-in-depth behind the Coding
+        # tab's already-disabled button — a clean 400 "copilot CLI not
+        # found" beats a dead PTY. Applies to the default agent too: there
+        # is no unguarded core agent in the lite fork.
+        if not agents.is_installed(agent):
             raise HTTPException(
                 status_code=400,
                 detail=f"{agents.AGENTS[agent].label} is not installed",
             )
-        # Each agent has its own flag set: Claude's model / effort /
-        # always-on remote-control switches; Antigravity's two opt-in
-        # launch toggles; Copilot's config-driven model / autopilot /
-        # context / effort knobs plus the allow-all toggle. The other
-        # agents have no launch-time model flag — that's chosen in-TUI
-        # with `/model`.
+        # Copilot's flags: the config-driven model / autopilot / context /
+        # effort knobs plus the allow-all toggle.
         flag_builders = {
-            "claude": build_claude_flags,
-            "codex": build_codex_flags,
-            "antigravity": build_antigravity_flags,
             "copilot": build_copilot_flags,
-            "pi": build_pi_flags,
-            "grok": build_grok_flags,
         }
         if resume:
             # Swap the normal flags for the agent's resume invocation; the
@@ -252,7 +235,7 @@ async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
 
         if mode == "remote":
             session = await spawn_session_or_400(
-                spawn_claude_session,
+                spawn_agent_session,
                 Path(entry.project_dir),
                 entry.name,
                 flags,
@@ -280,7 +263,7 @@ async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
             }
 
         session = await spawn_session_or_400(
-            spawn_claude_session,
+            spawn_agent_session,
             Path(entry.project_dir),
             entry.name,
             flags,

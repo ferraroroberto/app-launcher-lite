@@ -1,7 +1,7 @@
 """#396: the Board tab's session cards and the Coding tab's Running-sessions
 list must show an identical title for the same live session, sourced from
 the shared ``shared_name`` field (fleet-config#302) both ``GET
-/api/claude-code/sessions`` and ``GET /api/board`` now carry (joined by the
+/api/coding/sessions`` and ``GET /api/board`` now carry (joined by the
 same agent-aware claim walk server-side — see ``src/board.py``'s ``attach_shared_names``/
 ``merge_sessions``).
 
@@ -29,7 +29,7 @@ _FAKE_SESSIONS = {
         {
             "session_id": _SID,
             "kind": "pty",
-            "agent": "claude",
+            "agent": "copilot",
             "project_dir": "E:/automation/photo-ocr",
             "name": "photo-ocr",
             "alive": True,
@@ -50,7 +50,7 @@ _FAKE_BOARD = {
             {
                 "session_id": _SID,
                 "kind": "pty",
-                "agent": "claude",
+                "agent": "copilot",
                 "project_dir": "E:/automation/photo-ocr",
                 "name": "photo-ocr",
                 "alive": True,
@@ -76,7 +76,7 @@ _FAKE_BOARD = {
 
 def _mock_sessions(page: Page) -> None:
     page.route(
-        re.compile(r".*/api/claude-code/sessions$"),
+        re.compile(r".*/api/coding/sessions$"),
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps(_FAKE_SESSIONS),
@@ -102,7 +102,7 @@ def _mock_board(page: Page) -> None:
     # Boot-time git-status is git-subprocess-backed and re-renders the Board
     # on arrival (#510/#680) — keep it off the real server and deterministic.
     page.route(
-        re.compile(r".*/api/claude-code/git-status$"),
+        re.compile(r".*/api/coding/git-status$"),
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({"projects": []}),
@@ -135,4 +135,4 @@ def test_board_and_coding_tab_show_identical_shared_title(
         authed_page.locator(
             '.board-list[data-col="claude_turn"] .board-agent-icon'
         ).first
-    ).to_have_attribute("alt", "Claude Code")
+    ).to_have_attribute("alt", "GitHub Copilot CLI")

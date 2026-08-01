@@ -7,18 +7,16 @@ of truth.
 
 Holds:
 - network knobs (host, port)
-- scan roots for Claude-Code projects and Apps
-- the per-agent launch *settings* (model, effort, verbose, debug) for all
-  registered coding agents (claude, codex, antigravity, copilot, pi, grok),
-  together with the ``VALID_*`` / ``PI_MODEL_SPECS`` value sets each field
-  validates against
-- sibling-app loopback URLs (voice-transcriber, photo-ocr, local-llm-hub)
+- scan roots for coding projects and Apps
+- the Copilot launch *settings* (model list, model, autopilot, context,
+  effort) together with the ``VALID_*`` value sets the fields validate
+  against
 - Team OS tab settings
 - terminal display and passkey / WebAuthn config
 - Pushover failure-notification credentials
 - auth secrets (bearer token + login password)
 
-Config only — turning those settings into each agent's actual CLI argv is
+Config only — turning those settings into the agent's actual CLI argv is
 launch logic, and lives in :mod:`src.launch_flags` (``build_*_flags``, split
 out in issue #691). That module imports this one; never the reverse.
 """
@@ -61,10 +59,10 @@ SESSION_HOST_PORT_ENV = "LAUNCHER_SESSION_HOST_PORT"
 # intentionally undocumented in the config sample.
 WEBAPP_CONFIG_PATH_ENV = "LAUNCHER_WEBAPP_CONFIG"
 
-# Bounded scrollback for full-screen (ratatui) agent sessions (issue #435
-# follow-up) — how many lines of history the session-host retains and
-# replays on a (re)connect. 10,000 is evidence-based, not a guess: a real,
-# tool-heavy Codex exchange was observed producing 3371-4447 total scrolled
+# Bounded scrollback for full-screen agent sessions (issue #435 follow-up) —
+# how many lines of history the session-host retains and replays on a
+# (re)connect. 10,000 is evidence-based, not a guess: a real, tool-heavy
+# full-screen agent exchange was observed producing 3371-4447 total scrolled
 # lines and rendering to only ~216-283 KB even at that size (see
 # src/vt_snapshot.py's _HISTORY_LINES docstring for the full history). The
 # bounds keep a user-set value sane: too low reintroduces "can't see the
@@ -73,35 +71,6 @@ WEBAPP_CONFIG_PATH_ENV = "LAUNCHER_WEBAPP_CONFIG"
 DEFAULT_TERMINAL_HISTORY_LINES = 10_000
 MIN_TERMINAL_HISTORY_LINES = 200
 MAX_TERMINAL_HISTORY_LINES = 50_000
-
-VALID_CLAUDE_MODELS = ("opus", "sonnet", "haiku", "fable")
-VALID_CLAUDE_EFFORTS = ("off", "low", "medium", "high")
-DEFAULT_CLAUDE_MODEL = "opus"
-DEFAULT_CLAUDE_EFFORT = "high"
-
-# Claude Code permission mode for the launch command. "auto" maps to
-# `--permission-mode auto` (no prompts, but a classifier blocks dangerous
-# actions — the safer autopilot); "skip" maps to the legacy
-# `--dangerously-skip-permissions` (no prompts, no safety net).
-VALID_CLAUDE_PERMISSION_MODES = ("auto", "skip")
-DEFAULT_CLAUDE_PERMISSION_MODE = "auto"
-
-# Codex CLI launch knobs (issue #120). Codex has no Claude-style model
-# tiers — its quality knob is reasoning effort, set via the config
-# override `-c model_reasoning_effort=<low|medium|high>`. The model
-# itself stays the account default (gpt-5-codex via the ChatGPT-plan
-# login), so there is no model picker. "off" is not offered: Codex's
-# reasoning is always on.
-VALID_CODEX_EFFORTS = ("low", "medium", "high")
-DEFAULT_CODEX_EFFORT = "high"
-
-# Permission mode for the `codex` launch, mirroring Claude's auto/skip.
-# "auto" → `--ask-for-approval never --sandbox workspace-write` (no
-# prompts, but still sandboxed — the safe autopilot); "skip" → the
-# legacy `--dangerously-bypass-approvals-and-sandbox` (no prompts, no
-# sandbox).
-VALID_CODEX_PERMISSION_MODES = ("auto", "skip")
-DEFAULT_CODEX_PERMISSION_MODE = "auto"
 
 # Models the GitHub Copilot CLI accepts for the `--model` flag (and the
 # in-session `/model` command) — a *config list*, not a hardcoded tuple:
@@ -123,77 +92,6 @@ VALID_COPILOT_EFFORTS = (
 )
 DEFAULT_COPILOT_EFFORT = "xhigh"
 
-# Pi coding-agent launch models (issues #273, #288). The Coding tab shows a
-# deliberately small, segmented model control — three options spanning two
-# subscription providers (the one cross-provider wrinkle in the launcher):
-#
-#   - Opus / Sonnet → the `claude-agent-sdk` provider, driven by the Claude
-#     **subscription** via the claude-agent-sdk-pi extension (the Claude Agent
-#     SDK / Claude Code path). NOT pi's native `anthropic` provider, which
-#     bills metered API "extra usage" credits (that OAuth is disconnected on
-#     this machine — only the SDK + openai-codex paths remain).
-#   - GPT → pi's `openai-codex` provider, the ChatGPT-plan **subscription**
-#     (its OAuth token lives in pi's auth.json). Verified no-API-credit:
-#     `pi -p --provider openai-codex --model openai-codex/gpt-5.5` completes
-#     cleanly with no key set.
-#
-# Each option maps to (provider, full `provider/id` model arg, display label);
-# `build_pi_flags` switches `--provider`/`--model` on the chosen option.
-# `pi_model` is never empty — an unknown value falls back to DEFAULT_PI_MODEL
-# so the launch can never slip onto a billing path. Refresh the model ids from
-# `pi --list-models claude-agent-sdk` / `pi --list-models openai-codex`.
-PI_MODEL_SPECS: dict = {
-    "claude-opus-4-8": ("claude-agent-sdk", "claude-agent-sdk/claude-opus-4-8", "Opus"),
-    "claude-sonnet-4-6": ("claude-agent-sdk", "claude-agent-sdk/claude-sonnet-4-6", "Sonnet"),
-    "gpt-5.5": ("openai-codex", "openai-codex/gpt-5.5", "GPT"),
-}
-VALID_PI_MODELS = tuple(PI_MODEL_SPECS)
-DEFAULT_PI_MODEL = "claude-opus-4-8"
-
-# Pi reasoning effort, mapped to pi's `--thinking <level>` flag (issue #288).
-# A small segmented control mirroring Claude's Effort; defaults high (the user
-# changes it in-session with Shift+Tab if needed). Pi's full ladder is
-# off/minimal/low/medium/high/xhigh; the UI offers the same small set as the
-# other agents.
-VALID_PI_EFFORTS = ("low", "medium", "high")
-DEFAULT_PI_EFFORT = "high"
-
-# Pi project-trust mode, mapped to pi's `--approve`/`--no-approve` flag
-# (issue #288). NOTE: this is NOT a tool-execution permission gate like
-# Claude's/Codex's auto/skip — pi has no tool sandbox or per-action prompt
-# (see pi's security.md). It governs project *trust*: whether pi loads
-# project-local `.pi/` settings/extensions/skills. "trust" → `--approve`
-# (load them, no startup trust prompt — the smooth phone default); "ask" →
-# `--no-approve` (ignore project-local resources for the run). Default
-# "trust" so an interactive phone launch never stalls on a trust prompt.
-VALID_PI_TRUST_MODES = ("trust", "ask")
-DEFAULT_PI_TRUST_MODE = "trust"
-
-# Grok Build launch knobs (issue #667, filling in #626's deliberate stub).
-# Reasoning tier for `--reasoning-effort` — the exact set the CLI accepts,
-# probed off the binary rather than the docs (`grok --reasoning-effort bogus`
-# answers "use one of: high, medium, low", verified on 0.2.114). No model
-# picker: `grok models` still lists only `grok-4.5`, and the launcher already
-# omits a one-option control for the same reason on Antigravity.
-VALID_GROK_EFFORTS = ("low", "medium", "high")
-DEFAULT_GROK_EFFORT = "high"
-
-# Permission mode for the `grok` launch, mirroring Claude's and Codex's
-# auto/skip rather than exposing grok's own six-value `--permission-mode`
-# space (default|acceptEdits|auto|dontAsk|bypassPermissions|plan). "auto" →
-# `--permission-mode auto` (no prompts, guard rails intact); "skip" →
-# `--permission-mode bypassPermissions`. `--always-approve` is deliberately
-# not surfaced — it is a third spelling of the same idea, so it would add
-# surface without adding capability.
-VALID_GROK_PERMISSION_MODES = ("auto", "skip")
-DEFAULT_GROK_PERMISSION_MODE = "auto"
-
-# `--remote-control` is *always* added to the generated claude command
-# line — that's the whole point of the Coding tab, and the UI can't turn
-# it off without breaking the workflow. The permission flag used to live
-# here too; it is now user-selectable via `claude_permission_mode`.
-ALWAYS_ON_CLAUDE_FLAGS = ("--remote-control",)
-
 
 def _default_projects_dir() -> str:
     """Default to the parent of this repo (so siblings are visible)."""
@@ -206,13 +104,8 @@ def _default_team_os_dir() -> str:
 
 
 def _default_sessions_state_file() -> str:
-    """Where fleet-config's ``session_state`` hook writes the board rows."""
-    return str(Path.home() / ".claude" / "hooks" / "state" / "sessions-state.json")
-
-
-def _default_rate_limits_file() -> str:
-    """Where fleet-config's statusline writer caches 5h/7d usage % (issue #326)."""
-    return str(Path.home() / ".claude" / "hooks" / "state" / "rate-limits.json")
+    """Where fleet-config-lite's ``session_state`` hook writes the board rows."""
+    return str(Path.home() / ".copilot" / "hooks" / "state" / "sessions-state.json")
 
 
 @dataclass
@@ -221,11 +114,11 @@ class WebappConfig:
 
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
-    # Master folder whose direct child directories the Claude Code tab
+    # Master folder whose direct child directories the Coding tab
     # lists as launchable projects.
     projects_dir: str = field(default_factory=_default_projects_dir)
     # gitignore-style patterns: directory names under `projects_dir` to
-    # exclude from the Claude Code tab (matched case-insensitively, `*`
+    # exclude from the Coding tab (matched case-insensitively, `*`
     # globs honoured). VCS / build dirs are always skipped regardless.
     projects_ignore: list = field(default_factory=list)
     # Project ids (scanner slugs) the user starred as favorites in the
@@ -249,36 +142,13 @@ class WebappConfig:
     # `projects_dir`.
     team_os_dir: str = field(default_factory=_default_team_os_dir)
     # --- Board tab (issue #300 / #164) -----------------------------------
-    # The sessions-state file written by fleet-config's session_state hook
-    # (fleet-config#91). The board reads it defensively — absent/corrupt/stale
-    # degrades to unknown session status, never an error.
+    # The sessions-state file written by fleet-config-lite's session_state
+    # hook. The board reads it defensively — absent/corrupt/stale degrades
+    # to unknown session status, never an error.
     sessions_state_file: str = field(default_factory=_default_sessions_state_file)
-    # The rate-limits cache a fleet-config statusline writer maintains
-    # (fleet-config#259 / issue #326) — 5h/7d Claude usage % + reset times.
-    # Read defensively like sessions_state_file: absent/corrupt/stale hides
-    # the Board's usage badges, never an error.
-    rate_limits_file: str = field(default_factory=_default_rate_limits_file)
     # GitHub owner whose repos the Board's gh searches span (backlog / PRs /
     # done-today). One owner covers the whole fleet.
     github_owner: str = "ferraroroberto"
-    # Persisted Claude Code launch flag defaults.
-    claude_model: str = DEFAULT_CLAUDE_MODEL
-    claude_effort: str = DEFAULT_CLAUDE_EFFORT
-    claude_verbose: bool = True
-    claude_debug: bool = False
-    # Permission mode for the `claude` launch — "auto" or "skip"
-    # (see VALID_CLAUDE_PERMISSION_MODES).
-    claude_permission_mode: str = DEFAULT_CLAUDE_PERMISSION_MODE
-    # Antigravity CLI launch toggles (issue #45 follow-up). The Antigravity
-    # CLI exposes no model / effort / verbose flags — its model is chosen
-    # with `/model` in-session — so these two switches are the whole story.
-    antigravity_skip_permissions: bool = False
-    antigravity_sandbox: bool = False
-    # Codex CLI launch settings (issue #120). `codex_effort` is the
-    # reasoning tier (low/medium/high); `codex_permission_mode` mirrors
-    # Claude's auto/skip. The model stays the account default — no picker.
-    codex_effort: str = DEFAULT_CODEX_EFFORT
-    codex_permission_mode: str = DEFAULT_CODEX_PERMISSION_MODE
     # GitHub Copilot CLI launch settings (issue #48; config-driven since the
     # lite fork's Phase 3). `copilot_models` is the UI/select list of model
     # ids offered — read-only from the UI, edited in the JSON file directly
@@ -297,22 +167,6 @@ class WebappConfig:
     copilot_autopilot: bool = True
     copilot_context: str = DEFAULT_COPILOT_CONTEXT
     copilot_effort: str = DEFAULT_COPILOT_EFFORT
-    # Grok Build launch settings (issue #667). `grok_effort` is the
-    # reasoning tier (low/medium/high); `grok_permission_mode` mirrors
-    # Claude's and Codex's auto/skip. No model picker — see VALID_GROK_*.
-    grok_effort: str = DEFAULT_GROK_EFFORT
-    grok_permission_mode: str = DEFAULT_GROK_PERMISSION_MODE
-    # Pi coding agent launch settings (issues #273, #288). `pi_model` is one
-    # of three segmented options (Opus/Sonnet on the claude-agent-sdk
-    # subscription path, GPT on the openai-codex ChatGPT-plan path) — never
-    # empty; `build_pi_flags` falls back to DEFAULT_PI_MODEL for an unknown
-    # value so the launch can't slip onto a billing path. `pi_effort` maps to
-    # `--thinking` (default high); `pi_trust_mode` maps to `--approve` /
-    # `--no-approve` (project trust, not a tool-permission gate — see
-    # VALID_PI_TRUST_MODES).
-    pi_model: str = DEFAULT_PI_MODEL
-    pi_effort: str = DEFAULT_PI_EFFORT
-    pi_trust_mode: str = DEFAULT_PI_TRUST_MODE
     # Bearer token enforced when the request did NOT come from a
     # loopback IP. Empty string disables enforcement entirely.
     auth_token: str = ""
@@ -329,10 +183,10 @@ class WebappConfig:
     # When true, launching a session from the phone also opens an
     # interactive terminal window for it on the PC (over loopback, so it
     # bypasses the Tailscale + passkey gate). Input works from both sides.
-    claude_show_local_window: bool = True
+    show_local_window: bool = True
     # Bounded scrollback (issue #435 follow-up): how many lines of a
-    # full-screen (ratatui) agent's history the session-host retains and
-    # replays on a (re)connect. See DEFAULT_TERMINAL_HISTORY_LINES for the
+    # full-screen agent's history the session-host retains and replays on
+    # a (re)connect. See DEFAULT_TERMINAL_HISTORY_LINES for the
     # real-session evidence behind the default.
     terminal_history_lines: int = DEFAULT_TERMINAL_HISTORY_LINES
     # WebAuthn relying-party identity for the passkey gate. rp_id is the
@@ -477,25 +331,7 @@ def load_webapp_config(
         sessions_state_file=str(
             raw.get("sessions_state_file") or _default_sessions_state_file()
         ),
-        rate_limits_file=str(
-            raw.get("rate_limits_file") or _default_rate_limits_file()
-        ),
         github_owner=str(raw.get("github_owner", "ferraroroberto")),
-        claude_model=str(raw.get("claude_model", DEFAULT_CLAUDE_MODEL)),
-        claude_effort=str(raw.get("claude_effort", DEFAULT_CLAUDE_EFFORT)),
-        claude_verbose=bool(raw.get("claude_verbose", True)),
-        claude_debug=bool(raw.get("claude_debug", False)),
-        claude_permission_mode=str(
-            raw.get("claude_permission_mode", DEFAULT_CLAUDE_PERMISSION_MODE)
-        ),
-        antigravity_skip_permissions=bool(
-            raw.get("antigravity_skip_permissions", False)
-        ),
-        antigravity_sandbox=bool(raw.get("antigravity_sandbox", False)),
-        codex_effort=str(raw.get("codex_effort", DEFAULT_CODEX_EFFORT)),
-        codex_permission_mode=str(
-            raw.get("codex_permission_mode", DEFAULT_CODEX_PERMISSION_MODE)
-        ),
         copilot_skip_permissions=bool(
             raw.get("copilot_skip_permissions", False)
         ),
@@ -510,21 +346,14 @@ def load_webapp_config(
             raw.get("copilot_context", DEFAULT_COPILOT_CONTEXT)
         ),
         copilot_effort=str(raw.get("copilot_effort", DEFAULT_COPILOT_EFFORT)),
-        grok_effort=str(raw.get("grok_effort", DEFAULT_GROK_EFFORT)),
-        grok_permission_mode=str(
-            raw.get("grok_permission_mode", DEFAULT_GROK_PERMISSION_MODE)
-        ),
-        pi_model=str(raw.get("pi_model", DEFAULT_PI_MODEL)),
-        pi_effort=str(raw.get("pi_effort", DEFAULT_PI_EFFORT)),
-        pi_trust_mode=str(raw.get("pi_trust_mode", DEFAULT_PI_TRUST_MODE)),
         auth_token=str(raw.get("auth_token", "")),
         auth_password=str(raw.get("auth_password", "")),
         session_host_port=int(
             raw.get("session_host_port", DEFAULT_SESSION_HOST_PORT)
         ),
         tailnet_allowlist=list(raw.get("tailnet_allowlist") or []),
-        claude_show_local_window=bool(
-            raw.get("claude_show_local_window", True)
+        show_local_window=bool(
+            raw.get("show_local_window", True)
         ),
         terminal_history_lines=int(
             raw.get("terminal_history_lines", DEFAULT_TERMINAL_HISTORY_LINES)
@@ -572,33 +401,18 @@ def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
         "apps_scan_root": cfg.apps_scan_root,
         "team_os_dir": cfg.team_os_dir,
         "sessions_state_file": cfg.sessions_state_file,
-        "rate_limits_file": cfg.rate_limits_file,
         "github_owner": cfg.github_owner,
-        "claude_model": cfg.claude_model,
-        "claude_effort": cfg.claude_effort,
-        "claude_verbose": cfg.claude_verbose,
-        "claude_debug": cfg.claude_debug,
-        "claude_permission_mode": cfg.claude_permission_mode,
-        "antigravity_skip_permissions": cfg.antigravity_skip_permissions,
-        "antigravity_sandbox": cfg.antigravity_sandbox,
-        "codex_effort": cfg.codex_effort,
-        "codex_permission_mode": cfg.codex_permission_mode,
         "copilot_skip_permissions": cfg.copilot_skip_permissions,
         "copilot_models": cfg.copilot_models,
         "copilot_model": cfg.copilot_model,
         "copilot_autopilot": cfg.copilot_autopilot,
         "copilot_context": cfg.copilot_context,
         "copilot_effort": cfg.copilot_effort,
-        "grok_effort": cfg.grok_effort,
-        "grok_permission_mode": cfg.grok_permission_mode,
-        "pi_model": cfg.pi_model,
-        "pi_effort": cfg.pi_effort,
-        "pi_trust_mode": cfg.pi_trust_mode,
         "auth_token": cfg.auth_token,
         "auth_password": cfg.auth_password,
         "session_host_port": cfg.session_host_port,
         "tailnet_allowlist": cfg.tailnet_allowlist,
-        "claude_show_local_window": cfg.claude_show_local_window,
+        "show_local_window": cfg.show_local_window,
         "terminal_history_lines": cfg.terminal_history_lines,
         "webauthn_rp_id": cfg.webauthn_rp_id,
         "webauthn_rp_name": cfg.webauthn_rp_name,
@@ -664,37 +478,6 @@ def _validate(cfg: WebappConfig) -> None:
             f"terminal_history_lines must be between {MIN_TERMINAL_HISTORY_LINES} "
             f"and {MAX_TERMINAL_HISTORY_LINES}; got {cfg.terminal_history_lines}"
         )
-    if cfg.claude_model not in VALID_CLAUDE_MODELS:
-        raise ValueError(
-            f"claude_model must be one of {VALID_CLAUDE_MODELS}; got {cfg.claude_model!r}"
-        )
-    if cfg.claude_permission_mode not in VALID_CLAUDE_PERMISSION_MODES:
-        raise ValueError(
-            f"claude_permission_mode must be one of {VALID_CLAUDE_PERMISSION_MODES}; "
-            f"got {cfg.claude_permission_mode!r}"
-        )
-    if cfg.claude_effort not in VALID_CLAUDE_EFFORTS:
-        raise ValueError(
-            f"claude_effort must be one of {VALID_CLAUDE_EFFORTS}; got {cfg.claude_effort!r}"
-        )
-    if cfg.codex_effort not in VALID_CODEX_EFFORTS:
-        raise ValueError(
-            f"codex_effort must be one of {VALID_CODEX_EFFORTS}; got {cfg.codex_effort!r}"
-        )
-    if cfg.codex_permission_mode not in VALID_CODEX_PERMISSION_MODES:
-        raise ValueError(
-            f"codex_permission_mode must be one of {VALID_CODEX_PERMISSION_MODES}; "
-            f"got {cfg.codex_permission_mode!r}"
-        )
-    if cfg.grok_effort not in VALID_GROK_EFFORTS:
-        raise ValueError(
-            f"grok_effort must be one of {VALID_GROK_EFFORTS}; got {cfg.grok_effort!r}"
-        )
-    if cfg.grok_permission_mode not in VALID_GROK_PERMISSION_MODES:
-        raise ValueError(
-            f"grok_permission_mode must be one of {VALID_GROK_PERMISSION_MODES}; "
-            f"got {cfg.grok_permission_mode!r}"
-        )
     # Copilot knobs self-heal instead of raising: the model list is a
     # hand-edited config field (tenant-gated ids), so a stale persisted
     # value must never brick config loading — fall back with a warning.
@@ -730,19 +513,6 @@ def _validate(cfg: WebappConfig) -> None:
             DEFAULT_COPILOT_EFFORT,
         )
         cfg.copilot_effort = DEFAULT_COPILOT_EFFORT
-    if cfg.pi_model not in VALID_PI_MODELS:
-        raise ValueError(
-            f"pi_model must be one of {VALID_PI_MODELS}; got {cfg.pi_model!r}"
-        )
-    if cfg.pi_effort not in VALID_PI_EFFORTS:
-        raise ValueError(
-            f"pi_effort must be one of {VALID_PI_EFFORTS}; got {cfg.pi_effort!r}"
-        )
-    if cfg.pi_trust_mode not in VALID_PI_TRUST_MODES:
-        raise ValueError(
-            f"pi_trust_mode must be one of {VALID_PI_TRUST_MODES}; "
-            f"got {cfg.pi_trust_mode!r}"
-        )
     if cfg.notify_failure_streak < 0:
         raise ValueError(
             f"notify_failure_streak must be >= 0; got {cfg.notify_failure_streak}"

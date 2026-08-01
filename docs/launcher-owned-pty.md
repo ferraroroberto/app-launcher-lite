@@ -8,7 +8,7 @@ Replace the fire-and-forget "detached CMD window the launcher can't see" model w
 
 ## 2. The architecture, and why each piece exists
 
-- **A separate `session-host` process owns the PTYs.** The obvious design is "the webapp owns the ConPTYs." It's wrong: every *Restart webapp* would kill every running Claude session. Pulling the PTYs into their own long-lived process (loopback-only, port `8446`, owned by the tray like `cloudflared`) means the streaming layer can restart without touching the work. **Lesson: separate the thing that restarts often from the thing that must not die.**
+- **A separate `session-host` process owns the PTYs.** The obvious design is "the webapp owns the ConPTYs." It's wrong: every *Restart webapp* would kill every running agent session. Pulling the PTYs into their own long-lived process (loopback-only, port `8446`, owned by the tray like `cloudflared`) means the streaming layer can restart without touching the work. **Lesson: separate the thing that restarts often from the thing that must not die.**
 - **The webapp is the single auth choke point.** WebSockets *bypass HTTP middleware* — the bearer-token middleware never runs for a `ws://` upgrade. So every WS route re-applies the full gate (Tailscale check, bearer, passkey token) by hand. **Lesson: if you add an auth middleware, audit every protocol that skips it.**
 - **The session-host fans output to N subscribers.** Making it multi-subscriber from day one (ring buffer + per-client queues) is what later made the PC mirror window a 10-line change instead of a rewrite.
 

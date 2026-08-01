@@ -5,7 +5,7 @@ Two pieces of discovery share this module:
 - ``scan_project_dirs(projects_dir, ignore)`` — lists the **direct child
   directories** of ``projects_dir``, dropping VCS / build noise and any
   directory whose name matches a gitignore-style ignore pattern. Each
-  surviving directory becomes a ``claude-code`` row. There is no scan
+  surviving directory becomes a ``coding`` row. There is no scan
   step and no on-disk marker file — the directory listing is the source
   of truth, recomputed live on every request.
 
@@ -14,9 +14,9 @@ Two pieces of discovery share this module:
   returns ``(path, kind)`` pairs for kinds ``streamlit``, ``webapp``,
   ``tunnel``, ``tray``.
 
-The two scans run independently — a Claude Code project never collides
-with an Apps row because Claude Code rows have no ``bat_path`` (the
-launcher launches ``claude`` in the directory directly).
+The two scans run independently — a coding project never collides
+with an Apps row because coding rows have no ``bat_path`` (the
+launcher launches the agent in the directory directly).
 """
 
 from __future__ import annotations
@@ -41,20 +41,20 @@ APPS_SCAN_SKIP_DIRS = frozenset(
     {".venv", "venv", "__pycache__", "node_modules", "certificates", ".git", "old"}
 )
 
-# Directories never offered as Claude Code projects, regardless of the
+# Directories never offered as coding projects, regardless of the
 # user's ignore list — VCS metadata, virtualenvs, build caches, IDE dirs.
 PROJECT_SCAN_SKIP_DIRS = frozenset(
     {".git", ".venv", "venv", "__pycache__", "node_modules", ".idea", ".vscode"}
 )
 
 # kind constants — used as string literals everywhere else.
-KIND_CLAUDE_CODE = "claude-code"
+KIND_CODING = "coding"
 KIND_STREAMLIT = "streamlit"
 KIND_WEBAPP = "webapp"
 KIND_TUNNEL = "tunnel"
 KIND_TRAY = "tray"
 
-# ``claude-code`` rows are computed live (see registry.py's module
+# ``coding`` rows are computed live (see registry.py's module
 # docstring) and never persisted in apps.json, so it is deliberately
 # excluded here — a stray/hand-edited row with that kind must be
 # rejected by :func:`src.registry.load_registry`, not silently kept.
@@ -91,7 +91,7 @@ def slugify(value: str) -> str:
     return cleaned or "app"
 
 
-# ----------------------------------------------------------- claude code
+# ----------------------------------------------------------- coding
 
 
 def dir_ignored(name: str, patterns: Sequence[str]) -> bool:
@@ -149,7 +149,7 @@ def scan_project_dirs(
 # ------------------------------------------------------------- team-os skills
 
 # A skill's slash-command / folder name must be a safe slug — it is
-# interpolated into the launch command line (`claude … /<name>`), so any
+# interpolated into the launch command line (`copilot … /<name>`), so any
 # value that isn't a bare kebab token is rejected outright rather than
 # quoted. Directory names are inherently filesystem-safe; this also vets
 # the SKILL.md frontmatter `name` before it can reach a shell.

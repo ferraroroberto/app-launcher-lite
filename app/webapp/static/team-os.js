@@ -479,7 +479,7 @@ export function renderMarkdown(text) {
 // --------------------------------------------------------------- wire
 // (Re)build the launch-model menu from server config: a "Default" option
 // (Copilot auto, value "") plus the config-driven copilot_models list —
-// the Team OS combo mirrors how claude-options.js reads state.config,
+// the Team OS combo mirrors how copilot-options.js reads state.config,
 // instead of hardcoding model ids in index.html. Idempotent: called at
 // wire time (config may not be loaded yet — boot() awaits fetchConfig
 // before the tab is usable) and again on every tab open, preserving the

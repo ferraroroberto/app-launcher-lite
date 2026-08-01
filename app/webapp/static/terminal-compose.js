@@ -85,7 +85,7 @@ function setComposeOpen(open) {
 // native paste (term.onData); the 📋 button and compose ➤ Send bypass
 // xterm, so they have to replicate it. Only bracket when the app actually
 // asked for it (`term.modes.bracketedPasteMode`) — otherwise the literal
-// `\x1b[200~` would land as garbage in an agent that doesn't grok it.
+// `\x1b[200~` would land as garbage in an agent that doesn't understand it.
 //
 // Framing only — this never appends the submitting carriage return. A
 // submit goes through `sendSubmit`, which delivers the CR as its OWN WS

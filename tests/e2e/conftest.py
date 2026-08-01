@@ -87,9 +87,9 @@ _STARTUP_DIR_ENV = "LAUNCHER_STARTUP_DIR"
 _AUTOBOOT_ENV = "LAUNCHER_E2E_AUTOBOOT"
 # Sentinel flag for the lightweight PTY child (issue #534). Under autoboot the
 # disposable session-host's PATH is prepended with a harness-generated
-# `claude.cmd` shim: a launch whose flags are exactly this sentinel runs a
-# tiny deterministic Python echo loop instead of the real Claude CLI (3-5 s
-# startup each), while any other flag set falls through to the real `claude`.
+# `copilot.cmd` shim: a launch whose flags are exactly this sentinel runs a
+# tiny deterministic Python echo loop instead of the real Copilot CLI (slow
+# startup each), while any other flag set falls through to the real `copilot`.
 # Purely a harness substitution — no production code knows about it.
 _STUB_FLAG = "--e2e-stub"
 # Filled by _autoboot_server so the lightweight fixture can create sessions
@@ -231,9 +231,10 @@ def _wait_healthz(base: str, timeout: float) -> bool:
 _STUB_CHILD_SOURCE = '''\
 """Deterministic lightweight PTY child for UI-only e2e tests (issue #534).
 
-Stands in for the real Claude CLI under the disposable autoboot session-host:
+Stands in for the real Copilot CLI under the disposable autoboot session-host:
 instant startup, echoes each input line (ConPTY cooked mode echoes keystrokes
-too), exits on /quit so the host's graceful stop path works.
+too), exits on /exit (Copilot's quit command — what the host's graceful stop
+types for agent "copilot") so the graceful stop path works.
 """
 import sys
 
@@ -243,33 +244,33 @@ while True:
     if not line:
         break
     text = line.rstrip("\\r\\n")
-    if text.strip() == "/quit":
+    if text.strip() in ("/exit", "/quit"):
         print("[e2e-stub] bye", flush=True)
         break
     print(text, flush=True)
 '''
 
 
-def _write_claude_shim(shim_dir: Path) -> None:
-    """Generate the `claude.cmd` PATH shim + stub child script (issue #534).
+def _write_copilot_shim(shim_dir: Path) -> None:
+    """Generate the `copilot.cmd` PATH shim + stub child script (issue #534).
 
-    The session-host spawns agents via ``cmd /c … && claude <flags>`` with the
-    command resolved off its own PATH, so prepending this directory to the
-    *disposable* session-host's PATH intercepts every claude launch: the
+    The session-host spawns agents via ``cmd /c … && copilot <flags>`` with
+    the command resolved off its own PATH, so prepending this directory to the
+    *disposable* session-host's PATH intercepts every copilot launch: the
     ``--e2e-stub`` sentinel routes to the stub child, anything else falls
-    through to the real ``claude`` resolved at generation time. Where claude
+    through to the real ``copilot`` resolved at generation time. Where copilot
     isn't installed (the CI runner) the fall-through branch fails loud — but
-    it is never reached there, because `launched_claude_pty_session` skips
+    it is never reached there, because `launched_copilot_pty_session` skips
     first (same `shutil.which` guard as always).
     """
     stub_py = shim_dir / "e2e_stub_child.py"
     stub_py.write_text(_STUB_CHILD_SOURCE, encoding="utf-8")
-    real_claude = shutil.which("claude")
-    if real_claude:
-        real_branch = f'call "{real_claude}" %*\nexit /b %ERRORLEVEL%\n'
+    real_copilot = shutil.which("copilot")
+    if real_copilot:
+        real_branch = f'call "{real_copilot}" %*\nexit /b %ERRORLEVEL%\n'
     else:
         real_branch = (
-            "echo [e2e-shim] real claude is not installed 1>&2\n"
+            "echo [e2e-shim] real copilot is not installed 1>&2\n"
             "exit /b 1\n"
         )
     shim = (
@@ -282,7 +283,7 @@ def _write_claude_shim(shim_dir: Path) -> None:
     )
     # Text-mode write translates \n -> os.linesep, so the .cmd lands with
     # proper CRLF line endings on Windows.
-    (shim_dir / "claude.cmd").write_text(shim, encoding="ascii")
+    (shim_dir / "copilot.cmd").write_text(shim, encoding="ascii")
 
 
 @pytest.fixture(scope="session")
@@ -364,10 +365,10 @@ def _autoboot_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         ]
         # Lightweight-child shim (issue #534): only the DISPOSABLE
         # session-host gets the shim on PATH — the pytest process and the
-        # live tray keep the real resolution, so `shutil.which("claude")`
+        # live tray keep the real resolution, so `shutil.which("copilot")`
         # in the fixtures below still faithfully predicts the real CLI.
-        shim_dir = tmp_path_factory.mktemp("claude-shim")
-        _write_claude_shim(shim_dir)
+        shim_dir = tmp_path_factory.mktemp("copilot-shim")
+        _write_copilot_shim(shim_dir)
         sh_proc = _spawn(
             sh_cmd,
             _open_log("e2e-autoboot-session-host.log"),
@@ -626,11 +627,11 @@ def _auth_headers(auth_token: str) -> dict:
 
 def _stop_session(base_url: str, headers: dict, sid: str) -> None:
     """Force-kill a PTY session. `mode: "kill"` is unconditional (vs "quit",
-    which waits for claude to process /quit). Best-effort — a swallowed
-    exception here must not mask the actual test failure."""
+    which waits for the agent to process its quit command). Best-effort — a
+    swallowed exception here must not mask the actual test failure."""
     try:
         requests.post(
-            f"{base_url}/api/claude-code/sessions/{sid}/stop",
+            f"{base_url}/api/coding/sessions/{sid}/stop",
             json={"mode": "kill"},
             headers=headers,
             verify=False,
@@ -640,22 +641,22 @@ def _stop_session(base_url: str, headers: dict, sid: str) -> None:
         logger.warning("⚠️  session %s teardown failed: %s", sid, exc)
 
 
-def _launch_claude_via_webapp(base_url: str, auth_token: str) -> str:
-    """Launch a REAL claude PTY session through the webapp's launch endpoint.
+def _launch_copilot_via_webapp(base_url: str, auth_token: str) -> str:
+    """Launch a REAL copilot PTY session through the webapp's launch endpoint.
 
-    Where `claude` isn't on PATH — notably the CI runner, which never
-    installs it — the PTY child exits at once ("'claude' is not
+    Where `copilot` isn't on PATH — notably the CI runner, which never
+    installs it — the PTY child exits at once ("'copilot' is not
     recognized…"), the session-host reaps it, and its WS endpoint then 403s
     the webapp's proxy, so every consumer would race a corpse. Skip cleanly
-    instead: these tests genuinely gate on a dev box where `claude` runs.
+    instead: these tests genuinely gate on a dev box where `copilot` runs.
     The test process shares the live session-host's PATH (same machine), so
     `which` here faithfully predicts whether the session-host can spawn it.
     See #58.
     """
-    if shutil.which("claude") is None:
+    if shutil.which("copilot") is None:
         pytest.skip(
-            "`claude` is not on PATH — real-Claude PTY tests need a live "
-            "claude CLI and skip cleanly where it isn't installed (e.g. the "
+            "`copilot` is not on PATH — real-Copilot PTY tests need a live "
+            "copilot CLI and skip cleanly where it isn't installed (e.g. the "
             "CI runner)"
         )
 
@@ -691,20 +692,20 @@ def launched_pty_session(
 
     Under autoboot (the pre-ship gate + CI) the child is the deterministic
     lightweight stub, created directly on the disposable session-host with
-    the ``--e2e-stub`` sentinel — no real Claude CLI process per test. The
-    launch API never blocked on Claude's bootstrap, so the win is not big
+    the ``--e2e-stub`` sentinel — no real Copilot CLI process per test. The
+    launch API never blocked on the agent's bootstrap, so the win is not big
     idle-box wall time (measured ~20 s across the whole gate, #534): it is
-    removing ~110 background node boots whose CPU contention made loaded
+    removing ~110 background agent boots whose CPU contention made loaded
     runs balloon, plus CI coverage (the stub needs only Python). The
     production webapp ↔ session-host ↔ ConPTY boundary stays fully real
     (session rows, WS streaming, input forwarding, stop paths).
 
     Against the LIVE tray (run-e2e.ps1 dev loop) there is no shim on the
-    tray's PATH, so this falls back to a real claude launch — behaviour
+    tray's PATH, so this falls back to a real copilot launch — behaviour
     identical to before the split.
 
-    Tests that assert real agent semantics (rendered Claude output, agent
-    echo, lifecycle) must use `launched_claude_pty_session` instead.
+    Tests that assert real agent semantics (rendered agent output, agent
+    echo, lifecycle) must use `launched_copilot_pty_session` instead.
     """
     headers = _auth_headers(auth_token)
     if _autoboot_enabled(request.config):
@@ -721,7 +722,7 @@ def launched_pty_session(
                 "project_dir": str(_REPO_ROOT),
                 "name": _LAUNCH_TARGET_ID,
                 "flags": _STUB_FLAG,
-                "agent": "claude",
+                "agent": "copilot",
             },
             timeout=15,
         )
@@ -736,7 +737,7 @@ def launched_pty_session(
         if not sid:
             pytest.fail(f"stub session response missing session_id: {res.text[:200]}")
     else:
-        sid = _launch_claude_via_webapp(base_url, auth_token)
+        sid = _launch_copilot_via_webapp(base_url, auth_token)
 
     try:
         yield sid
@@ -745,16 +746,16 @@ def launched_pty_session(
 
 
 @pytest.fixture
-def launched_claude_pty_session(base_url: str, auth_token: str) -> Iterator[str]:
-    """A live PTY session running the REAL Claude CLI (issue #534).
+def launched_copilot_pty_session(base_url: str, auth_token: str) -> Iterator[str]:
+    """A live PTY session running the REAL Copilot CLI (issue #534).
 
     Only for tests whose assertions depend on the real agent — rendered
-    Claude output in the xterm buffer, agent input echo, Claude lifecycle
-    semantics. Spawns a real node process per test: keep its consumer set
+    agent output in the xterm buffer, agent input echo, agent lifecycle
+    semantics. Spawns a real agent process per test: keep its consumer set
     minimal, and put UI-only assertions on `launched_pty_session`.
     """
     headers = _auth_headers(auth_token)
-    sid = _launch_claude_via_webapp(base_url, auth_token)
+    sid = _launch_copilot_via_webapp(base_url, auth_token)
     try:
         yield sid
     finally:

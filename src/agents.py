@@ -1,21 +1,10 @@
 """Terminal-agent registries for Coding launches and loopback PTY clients.
 
-The Coding tab launches one of several interactive terminal agents in
-a project folder, all hosted by the same session-host PTY/remote
-machinery:
+The Coding tab launches an interactive terminal agent in a project
+folder, hosted by the session-host PTY/remote machinery:
 
-- ``claude`` — Claude Code (the launcher's original agent).
-- ``codex`` — OpenAI's Codex CLI (the Rust terminal agent; runs on the
-  user's ChatGPT-plan login, not API-key billing).
-- ``agy`` — Google's Antigravity CLI (the Go-based terminal agent that
-  replaced Gemini CLI).
 - ``copilot`` — GitHub Copilot CLI (GitHub's terminal-native agentic
   coding agent; authenticates in-session via ``/login``).
-- ``pi`` — the Pi coding agent, launched under the ``claude-agent-sdk``
-  provider so it runs on the Claude subscription (no API credits); see
-  ``build_pi_flags`` and ``docs/pi-coding-agent.md``.
-- ``grok`` — xAI's Grok Build CLI (the Rust terminal agent; browser
-  OAuth or ``XAI_API_KEY``, both out-of-band like every other agent).
 
 This module is the single source of truth for the agent id → command
 mapping. ``AGENTS`` contains the coding agents exposed by the webapp;
@@ -41,12 +30,11 @@ class Agent:
     is the display name; ``command`` is the executable resolved off
     ``PATH`` when the agent is spawned; ``quit_command`` is the
     interactive command typed into the PTY for a graceful stop (each
-    program uses its own — Claude's is ``/quit``; Copilot's and SSH's are
-    ``/exit`` and ``exit`` respectively).
+    program uses its own — Copilot's and SSH's are ``/exit`` and
+    ``exit`` respectively).
 
-    ``fullscreen`` marks a full-screen *differential* TUI (Codex's
-    ratatui, and the other terminal agents) that repaints in place rather
-    than scrolling inline like Claude Code. The session-host streams these
+    ``fullscreen`` marks a full-screen *differential* TUI that repaints
+    in place rather than scrolling inline. The session-host streams these
     differently: it must **not** replay the raw scrollback ring on
     (re)connect — doing so dumps stale move-cursor/clear deltas into a
     fresh xterm and re-answers the agent's startup terminal queries (the
@@ -55,11 +43,8 @@ class Agent:
     ``resume_token`` is the agent's *native* resume invocation, spliced
     between the command and the flags for a Resume launch (issue #151) so
     the agent renders its own session picker over the PTY — the launcher
-    never builds a session list of its own. It is a flag for the
-    flag-shaped agents (Claude/Copilot ``--resume``) and a subcommand for
-    Codex (``resume``). Antigravity has no picker flag, so it maps to
-    ``--continue`` (reopen the most recent conversation — the closest
-    native behaviour). Empty means the agent has no resume path.
+    never builds a session list of its own (Copilot's is ``--resume``).
+    Empty means the agent has no resume path.
 
     ``native_name_flag`` is a spawn-time flag that gives a new session a
     picker-visible title. It is intentionally separate from a live rename:
@@ -79,59 +64,16 @@ class Agent:
 # id → Agent. The order here is the order the Coding tab renders the
 # per-tile launch buttons in.
 AGENTS: Dict[str, Agent] = {
-    "claude": Agent(
-        id="claude", label="Claude Code", command="claude",
-        quit_command="/quit", fullscreen=False, resume_token="--resume",
-        native_name_flag="--name",
-    ),
-    "codex": Agent(
-        id="codex", label="Codex CLI", command="codex",
-        quit_command="/quit", fullscreen=True, resume_token="resume",
-    ),
-    "antigravity": Agent(
-        id="antigravity", label="Antigravity CLI", command="agy",
-        quit_command="/quit", fullscreen=True, resume_token="--continue",
-    ),
     "copilot": Agent(
         id="copilot", label="GitHub Copilot CLI", command="copilot",
         quit_command="/exit", fullscreen=True, resume_token="--resume",
         native_name_flag="--name",
     ),
-    # Pi coding agent (issue #273), driven by the claude-agent-sdk provider —
-    # the Claude **subscription** path (no API credits); see the launch flags
-    # in `build_pi_flags` and docs/pi-coding-agent.md. `-r` renders pi's own
-    # session picker. fullscreen=True (issue #291): pi uses no alternate-screen
-    # buffer, but it is still a *differential* TUI — during a response it
-    # repaints its bottom chrome (header/status/input box/separator) in place
-    # via cursor-up + clear-line wrapped in synchronized output (DEC 2026),
-    # ~4 redraw ops per line. That makes its raw scrollback ring replay-unsafe
-    # (unlike Claude's inline-append output): replaying it into a fresh xterm
-    # scrolls through the whole redraw history and never settles (#291). So pi
-    # takes Codex's skip-replay + forced-repaint path, not Claude's.
-    "pi": Agent(
-        id="pi", label="Pi", command="pi",
-        quit_command="/quit", fullscreen=True, resume_token="-r",
-        native_name_flag="--name",
-    ),
-    # Grok Build (issue #626). fullscreen=True is empirical, not assumed: a
-    # ConPTY probe of grok 0.2.112 showed an alt-screen enter (CSI ?1049h)
-    # plus DEC 2026 synchronized-output writes on startup — a differential
-    # TUI in the Codex bucket, so it takes the skip-replay + forced-repaint
-    # path (#128). The same probe saw an OSC title write traverse the ConPTY
-    # layer: Grok self-names per conversation like Claude (an LLM-generated
-    # session title), so no spawn-time name flag is needed — and none
-    # exists (`--session-id` takes only a UUID, not a label).
-    # Bare `--resume` resumes the cwd's most recent session (Antigravity's
-    # `--continue` shape, not a Claude-style picker).
-    "grok": Agent(
-        id="grok", label="Grok Build", command="grok",
-        quit_command="/quit", fullscreen=True, resume_token="--resume",
-    ),
 }
 
 # The loopback session-host accepts the Coding-tab agents plus commands used
 # by trusted sibling services. SSH is intentionally absent from ``AGENTS``:
-# it is a service integration, not a sixth Coding-tab launch button (#558).
+# it is a service integration, not a Coding-tab launch button (#558).
 SESSION_HOST_AGENTS: Dict[str, Agent] = {
     **AGENTS,
     "ssh": Agent(
@@ -140,7 +82,7 @@ SESSION_HOST_AGENTS: Dict[str, Agent] = {
     ),
 }
 
-DEFAULT_AGENT = "claude"
+DEFAULT_AGENT = "copilot"
 
 
 def command_for(agent_id: str) -> str:
@@ -171,9 +113,7 @@ def resume_command_for(agent_id: str) -> str:
     """Return the agent's native resume token (issue #151).
 
     Spliced between the command and the flags for a Resume launch so the
-    agent shows its own session picker (Claude/Copilot ``--resume``, Codex
-    ``resume`` subcommand) or — for Antigravity, which has no picker flag —
-    continues the most recent conversation (``--continue``). Returns an
+    agent shows its own session picker (Copilot ``--resume``). Returns an
     empty string for an unknown id or an agent with no resume path; the
     caller treats that as "not resumable" rather than raising, so a bad id
     can never break a launch.
@@ -205,7 +145,7 @@ def is_fullscreen(agent_id: str) -> bool:
     Drives the session-host's (re)connect handling: full-screen agents
     skip the raw scrollback-ring replay and get a forced repaint instead
     (issue #128). An unknown id is treated as non-fullscreen — the safe
-    inline default, matching Claude Code.
+    inline default.
     """
     agent = SESSION_HOST_AGENTS.get(agent_id)
     return bool(agent and agent.fullscreen)
@@ -233,12 +173,12 @@ def detect_agents() -> List[Dict[str, object]]:
 
     Each dict is ``{"id", "label", "available", "fullscreen"}``;
     ``available`` is the live ``PATH`` check, and ``fullscreen`` lets the
-    SPA tell a differential TUI (Codex/ratatui) apart from inline Claude so
+    SPA tell a differential TUI apart from an inline-scrolling agent so
     the phone terminal can pan the fixed canvas above the keyboard instead
-    of reflowing — reflowing resizes the PTY and makes ratatui repaint on
-    every keyboard open/close (issue #264). The Coding tab disables an
-    agent's launch button (with a hover hint) when ``available`` is
-    ``False``.
+    of reflowing — reflowing resizes the PTY and makes a differential TUI
+    repaint on every keyboard open/close (issue #264). The Coding tab
+    disables an agent's launch button (with a hover hint) when
+    ``available`` is ``False``.
     """
     return [
         {

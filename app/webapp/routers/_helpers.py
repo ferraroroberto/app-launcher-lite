@@ -11,13 +11,11 @@ from urllib.parse import urlencode
 
 from fastapi import HTTPException, Request, WebSocket
 
-from src.launch_flags import build_claude_flags
+from src.launch_flags import build_copilot_flags
 from src.session_client import SessionHostError
 from src.webapp_config import (
-    ALWAYS_ON_CLAUDE_FLAGS,
-    VALID_CLAUDE_EFFORTS,
-    VALID_CLAUDE_MODELS,
-    VALID_CLAUDE_PERMISSION_MODES,
+    VALID_COPILOT_CONTEXTS,
+    VALID_COPILOT_EFFORTS,
     WebappConfig,
     append_auth_token,
 )
@@ -27,21 +25,23 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
-def claude_flags_payload(cfg: WebappConfig) -> Dict[str, Any]:
-    """The claude-code flags subtree shared by ``/api/config``'s embedded
-    ``"claude"`` section and ``/api/claude-code/flags``'s own response.
+def copilot_flags_payload(cfg: WebappConfig) -> Dict[str, Any]:
+    """The Copilot flags subtree shared by ``/api/config``'s embedded
+    ``"copilot"`` section and ``/api/coding/flags``'s own response.
     """
     return {
-        "model": cfg.claude_model,
-        "effort": cfg.claude_effort,
-        "verbose": cfg.claude_verbose,
-        "debug": cfg.claude_debug,
-        "permission_mode": cfg.claude_permission_mode,
-        "models_available": list(VALID_CLAUDE_MODELS),
-        "efforts_available": list(VALID_CLAUDE_EFFORTS),
-        "permission_modes_available": list(VALID_CLAUDE_PERMISSION_MODES),
-        "always_on_flags": list(ALWAYS_ON_CLAUDE_FLAGS),
-        "computed_flags": build_claude_flags(cfg),
+        "skip_permissions": cfg.copilot_skip_permissions,
+        "model": cfg.copilot_model,
+        # Config-driven (lite Phase 3): the offered ids come from the
+        # `copilot_models` list in webapp_config.json — read-only from
+        # the UI (GET only; not in the POST allow-list).
+        "models_available": list(cfg.copilot_models),
+        "autopilot": cfg.copilot_autopilot,
+        "context": cfg.copilot_context,
+        "contexts_available": list(VALID_COPILOT_CONTEXTS),
+        "effort": cfg.copilot_effort,
+        "efforts_available": list(VALID_COPILOT_EFFORTS),
+        "computed_flags": build_copilot_flags(cfg),
     }
 
 
@@ -213,7 +213,7 @@ def should_mirror_to_pc(
 async def spawn_session_or_400(
     spawn_fn: Callable[..., Dict[str, Any]], /, *args: Any, **kwargs: Any
 ) -> Dict[str, Any]:
-    """Run ``spawn_claude_session`` off the event loop, mapping its two
+    """Run ``spawn_agent_session`` off the event loop, mapping its two
     failure modes onto HTTP responses (issue #689).
 
     The shared *head* of every session-launch route, the counterpart to
@@ -229,7 +229,7 @@ async def spawn_session_or_400(
     bad request by the time it reaches here.
 
     ``spawn_fn`` is passed in rather than imported here so
-    ``tests/conftest.py``'s per-router ``spawn_claude_session``
+    ``tests/conftest.py``'s per-router ``spawn_agent_session``
     monkeypatches still bite when the spawn runs on the caller's behalf —
     same contract as ``audit_mod`` / ``mirror_fn`` below.
     """
@@ -258,7 +258,7 @@ async def audit_session_start_and_maybe_mirror(
     """Audit a freshly spawned PTY session, then mirror it to a PC terminal
     window if appropriate (issue #241) — the shared tail every PTY-launch
     call site (Coding tab ``apps.py``, Board issue-start/dispatch
-    ``board.py``) needs right after ``spawn_claude_session`` (issue #334).
+    ``board.py``) needs right after ``spawn_agent_session`` (issue #334).
 
     Team OS (``routers/team_os.py``) already has its own
     ``_spawn_skill_session`` covering this same tail plus the "remote" kind
@@ -290,7 +290,7 @@ async def audit_session_start_and_maybe_mirror(
     # an explicit in-page loopback browser skips it (see should_mirror_to_pc).
     # mirror_url picks loopback (auth-bypass) or the ts.net URL with explicit
     # credentials, keyed on the active cert (#356).
-    if should_mirror_to_pc(cfg.claude_show_local_window, request, body):
+    if should_mirror_to_pc(cfg.show_local_window, request, body):
         # Pass sid so launcher tracks the mirror window's HWND for Stop &
         # Close to dismiss it later (issue #20).
         asyncio.create_task(

@@ -14,7 +14,7 @@ pytestmark = pytest.mark.smoke
 
 TAB_ORDER = [
     "tabBoard",
-    "tabClaude",
+    "tabCoding",
     "tabTeamOS",
     "tabApps",
     "tabJobs",
@@ -36,19 +36,19 @@ def test_primary_nav_is_responsive_and_accessible(
     assert tabs.locator(":scope > button.tab").evaluate_all(
         "buttons => buttons.map(button => button.id)"
     ) == TAB_ORDER
-    expect(authed_page.locator("#paneClaude")).to_be_visible()
-    expect(authed_page.locator("#tabClaude")).to_have_attribute(
+    expect(authed_page.locator("#paneCoding")).to_be_visible()
+    expect(authed_page.locator("#tabCoding")).to_have_attribute(
         "aria-selected", "true"
     )
-    expect(tabs).to_have_attribute("data-active-tab", "claude")
+    expect(tabs).to_have_attribute("data-active-tab", "coding")
 
     authed_page.locator("#tabJobs").click()
     expect(authed_page.locator("#paneJobs")).to_be_visible()
-    expect(authed_page.locator("#paneClaude")).to_be_hidden()
+    expect(authed_page.locator("#paneCoding")).to_be_hidden()
     expect(authed_page.locator("#tabJobs")).to_have_attribute(
         "aria-selected", "true"
     )
-    expect(authed_page.locator("#tabClaude")).to_have_attribute(
+    expect(authed_page.locator("#tabCoding")).to_have_attribute(
         "aria-selected", "false"
     )
     expect(tabs).to_have_attribute("data-active-tab", "jobs")

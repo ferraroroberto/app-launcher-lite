@@ -1,18 +1,15 @@
-"""Coding-tab launch model selector (issue #540).
+"""Coding-tab launch model selector (lite fork: Copilot-only).
 
-The Projects card's <summary> gained a board-style model dropdown
-(``#codingModelCombo`` — a <button> trigger + a <span role="listbox"> of
-option buttons, NOT a native <select>, which WebKit's HTML parser cannot
-survive inside a <summary>) that stays in sync with the options-card
-segmented control (``#claudeModel``): both write/read the same ``claude_model``
-config, so picking in one updates the other — no double-setting. Both surface
-exactly Sonnet / Opus / Fable (Board-combo parity); Haiku stays a valid config
-value server-side but is filtered out of the picker.
+The old Projects-summary combo + Claude segmented-control pair (#540) is
+gone — the single source of truth is the Copilot options card's
+``#copilotModel`` <select>, fed by the config-driven ``copilot_models``
+list plus a leading "Default (auto)" option ('' — launch without
+``--model``, Copilot picks).
 
 Hermetic: /api/config is route-mocked with a tiny stateful handler that
-stores ``claude_model`` on POST and echoes it on GET, exactly as the real
-``patchConfig`` round-trip does — so the sync is exercised without mutating
-the live disposable webapp's config.
+stores ``copilot_model`` on POST and echoes it on GET, exactly as the real
+``patchConfig`` round-trip does — so the persistence contract is exercised
+without mutating the live disposable webapp's config.
 """
 
 from __future__ import annotations
@@ -25,26 +22,26 @@ from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.smoke
 
+_MODELS = ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+
 
 def _config(model: str) -> dict:
     """A minimal /api/config payload — enough for fetchConfig +
-    renderClaudeSubsection; the other agent subsections are omitted (each
-    render* returns early when its key is absent). ``models_available``
-    includes Haiku so the test proves it's filtered out of both controls."""
+    renderCopilotOptions."""
     return {
         "projects_dir": "E:/automation",
         "projects_ignore": [],
         "apps_scan_root": "",
         "team_os_dir": "",
-        "claude": {
+        "copilot": {
+            "skip_permissions": False,
             "model": model,
-            "models_available": ["opus", "sonnet", "haiku", "fable"],
-            "effort": "off",
-            "efforts_available": ["off", "low", "medium", "high"],
-            "permission_mode": "auto",
-            "permission_modes_available": ["auto", "skip"],
-            "verbose": False,
-            "debug": False,
+            "models_available": list(_MODELS),
+            "autopilot": True,
+            "context": "long_context",
+            "contexts_available": ["", "default", "long_context"],
+            "effort": "xhigh",
+            "efforts_available": ["", "low", "high", "xhigh"],
             "computed_flags": "",
         },
     }
@@ -53,14 +50,14 @@ def _config(model: str) -> dict:
 def _mock_config(page: Page) -> dict:
     """Route /api/config with a stateful GET/POST pair mimicking patchConfig.
     Returns the mutable state dict so a test can read the last-persisted model."""
-    state = {"model": "sonnet"}
+    state = {"model": "gpt-5.6-luna"}
 
     def _route(route):
         req = route.request
         if req.method == "POST":
             body = _json.loads(req.post_data or "{}")
-            if "claude_model" in body:
-                state["model"] = body["claude_model"]
+            if "copilot_model" in body:
+                state["model"] = body["copilot_model"]
             route.fulfill(status=200, content_type="application/json", body="{}")
         else:
             route.fulfill(
@@ -72,44 +69,37 @@ def _mock_config(page: Page) -> dict:
     return state
 
 
-def test_coding_model_combo_syncs_with_segmented_control(
+def test_copilot_model_select_lists_config_models_and_persists(
     authed_page: Page, base_url: str
 ) -> None:
-    """Picking a model in the Projects-summary combo updates the options-card
-    segmented control (and vice versa), and both persist the same
-    ``claude_model`` — the #540 no-double-setting contract."""
+    """The options-card model <select> offers Default (auto) plus exactly the
+    config-driven ``copilot_models`` list, and a pick persists
+    ``copilot_model`` through the patchConfig round-trip."""
     state = _mock_config(authed_page)
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    # Coding (#tabClaude) is the default active tab.
-    combo = authed_page.locator("#codingModelCombo")
-    trigger = authed_page.locator("#codingModelBtn")
-    expect(trigger).to_be_visible(timeout=5_000)
-    # Boot default is Sonnet.
-    expect(combo).to_have_attribute("data-value", "sonnet")
-    expect(trigger).to_have_text("Sonnet")
-
-    # Haiku is filtered out of BOTH controls despite being in models_available.
-    expect(
-        authed_page.locator("#codingModelMenu button[data-value='haiku']")
-    ).to_have_count(0)
-    expect(
-        authed_page.locator("#claudeModel button[data-value='haiku']")
-    ).to_have_count(0)
-
-    # Combo → segmented: open the dropdown, pick Fable; the segmented control's
-    # Fable button becomes active and the config persisted Fable.
-    trigger.click()
-    authed_page.locator("#codingModelMenu button[data-value='fable']").click()
-    expect(
-        authed_page.locator("#claudeModel button[data-value='fable']")
-    ).to_have_class(re.compile(r"\bactive\b"), timeout=5_000)
-    expect(trigger).to_have_text("Fable")
-    assert state["model"] == "fable"
-
-    # Segmented → combo: expand the options card and click Opus; the dropdown
-    # trigger follows and Opus is persisted.
+    # Coding (#tabCoding) is the default active tab; the options card is
+    # collapsed by default.
     authed_page.locator("#codingOptions").evaluate("el => { el.open = true; }")
-    authed_page.locator("#claudeModel button[data-value='opus']").click()
-    expect(combo).to_have_attribute("data-value", "opus", timeout=5_000)
-    expect(trigger).to_have_text("Opus")
-    assert state["model"] == "opus"
+    select = authed_page.locator("#copilotModel")
+    expect(select).to_be_attached(timeout=5_000)
+
+    # Options = Default (value '') + the config-driven list, in order.
+    values = select.locator("option").evaluate_all(
+        "opts => opts.map(o => o.value)"
+    )
+    assert values == [""] + _MODELS, (
+        f"model select options {values!r} do not match Default + the "
+        f"config-driven copilot_models list {_MODELS!r}"
+    )
+    expect(select).to_have_value("gpt-5.6-luna")
+
+    # Picking another model persists copilot_model and survives the
+    # round-trip re-render.
+    select.select_option("gpt-5.6-sol")
+    expect(select).to_have_value("gpt-5.6-sol", timeout=5_000)
+    assert state["model"] == "gpt-5.6-sol"
+
+    # Default (auto) is a real, persistable choice — '' means "no --model".
+    select.select_option("")
+    expect(select).to_have_value("", timeout=5_000)
+    assert state["model"] == ""

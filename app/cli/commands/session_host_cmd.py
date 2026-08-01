@@ -1,6 +1,6 @@
 """`session-host` subcommand — run the loopback PTY session host.
 
-This is the long-lived process that owns every launcher-spawned ``claude``
+This is the long-lived process that owns every launcher-spawned agent
 ConPTY. The tray starts and owns it automatically; this subcommand exists
 for dev / headless runs.
 """
@@ -20,7 +20,7 @@ class SessionHostCommand(BaseCommand):
     def add_parser(cls, subparsers: argparse._SubParsersAction) -> None:
         p = subparsers.add_parser(
             "session-host",
-            help="Run the loopback PTY session host (owns claude ConPTYs)",
+            help="Run the loopback PTY session host (owns the agent ConPTYs)",
         )
         p.add_argument("--port", type=int, default=None, help="Override port")
 

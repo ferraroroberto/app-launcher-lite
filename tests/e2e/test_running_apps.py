@@ -184,7 +184,7 @@ def test_polling_pauses_on_other_tab(authed_page: Page, base_url: str) -> None:
     authed_page.route("**/api/apps/running", _handler)
     _navigate(authed_page, base_url)
 
-    # Boot lands on the Claude Code tab — fetchRunningApps self-gates, so
+    # Boot lands on the Coding tab — fetchRunningApps self-gates, so
     # no /api/apps/running request should fire there. Wait past one poll.
     authed_page.wait_for_timeout(5_000)
     assert calls == [], f"polled while Apps tab hidden: {len(calls)} call(s)"
@@ -196,7 +196,7 @@ def test_polling_pauses_on_other_tab(authed_page: Page, base_url: str) -> None:
     assert after_open >= 1, "no /api/apps/running request after opening Apps tab"
 
     # Switch away again → polling pauses; count must stop climbing.
-    authed_page.locator("#tabClaude").click()
+    authed_page.locator("#tabCoding").click()
     paused_at = len(calls)
     authed_page.wait_for_timeout(5_000)
     assert len(calls) == paused_at, (
