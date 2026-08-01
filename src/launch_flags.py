@@ -38,7 +38,6 @@ from src.webapp_config import (
     VALID_CLAUDE_EFFORTS,
     VALID_CLAUDE_MODELS,
     VALID_CODEX_EFFORTS,
-    VALID_COPILOT_MODELS,
     VALID_GROK_EFFORTS,
     VALID_PI_EFFORTS,
     VALID_PI_MODELS,
@@ -52,11 +51,10 @@ def build_claude_flags(
     """Compose the `claude` CLI flags from the persisted defaults.
 
     ``model_override`` forces a specific ``--model`` regardless of the
-    persisted ``claude_model`` — used by the Life OS tab (issue #102),
-    whose ``opus`` toggle picks ``opus``/``sonnet`` per launch while the
-    rest of the flags (effort, permission, verbose, debug) still come
-    from the shared Coding options. Other callers pass nothing and keep
-    the persisted model.
+    persisted ``claude_model`` — used by the Board's per-launch model combo
+    (#500/#505), while the rest of the flags (effort, permission, verbose,
+    debug) still come from the shared Coding options. Other callers pass
+    nothing and keep the persisted model.
     """
     parts: list[str] = list(ALWAYS_ON_CLAUDE_FLAGS)
     if cfg.claude_permission_mode == "skip":
@@ -113,19 +111,40 @@ def build_codex_flags(cfg: WebappConfig) -> str:
     return " ".join(parts)
 
 
-def build_copilot_flags(cfg: WebappConfig) -> str:
-    """Compose the `copilot` CLI flags from the persisted Copilot toggle.
+def build_copilot_flags(
+    cfg: WebappConfig, model_override: Optional[str] = None
+) -> str:
+    """Compose the `copilot` CLI flags from the persisted Copilot knobs.
 
-    The Copilot CLI chooses its model in-session, so the only
-    launch-relevant switch is ``--allow-all`` (enable every tool
-    permission without prompting). An all-default config yields an empty
-    string — the CLI is launched bare.
+    Semantics empirically verified on Copilot CLI 1.0.70:
+
+    - ``--model`` is emitted only for a non-empty explicit id ("" and the
+      "default" sentinel both mean "let Copilot pick auto" → omit). Explicit
+      ids are tenant-gated — an unavailable id errors visibly in the PTY,
+      which is acceptable.
+    - ``--effort`` is emitted only when non-empty AND an explicit model is
+      set: the auto model rejects it ("does not support reasoning effort
+      configuration").
+    - ``--context`` is emitted for "default"/"long_context" (omit on "").
+
+    ``model_override`` (mirroring :func:`build_claude_flags`) forces a
+    per-launch model — used by the Team OS launcher and Board — and follows
+    the same rules: an empty/"default" override means no ``--model`` AND no
+    ``--effort``.
     """
     parts: list[str] = []
     if cfg.copilot_skip_permissions:
         parts.append("--allow-all")
-    if cfg.copilot_model in VALID_COPILOT_MODELS:
-        parts.extend(["--model", cfg.copilot_model])
+    raw = model_override if model_override is not None else cfg.copilot_model
+    model = "" if raw in ("", "default") else raw
+    if model:
+        parts.extend(["--model", model])
+    if cfg.copilot_autopilot:
+        parts.append("--autopilot")
+    if cfg.copilot_context in ("default", "long_context"):
+        parts.extend(["--context", cfg.copilot_context])
+    if model and cfg.copilot_effort:
+        parts.extend(["--effort", cfg.copilot_effort])
     return " ".join(parts)
 
 
@@ -205,9 +224,10 @@ def build_resume_flags(
     config override — so a Codex resume carries just
     ``resume -c model_reasoning_effort=<effort>``.
 
-    ``model_override`` forces a specific Claude ``--model`` (used by the
-    Life OS tab's opus toggle); it is ignored for non-Claude agents, which
-    have no launch-time model flag.
+    ``model_override`` forces a specific ``--model`` for the agents with a
+    launch-time model flag (Claude, Copilot — the Team OS tab's per-launch
+    combo rides through here on a Copilot resume); it is ignored for the
+    rest, which have none.
     """
     token = resume_command_for(agent_id)
     if agent_id == "codex":
@@ -220,7 +240,7 @@ def build_resume_flags(
     elif agent_id == "antigravity":
         base = build_antigravity_flags(cfg)
     elif agent_id == "copilot":
-        base = build_copilot_flags(cfg)
+        base = build_copilot_flags(cfg, model_override=model_override)
     elif agent_id == "pi":  # keep the SDK provider/model on resume (issue #273)
         base = build_pi_flags(cfg)
     elif agent_id == "grok":  # no launch knobs — bare `--resume` (issue #626)

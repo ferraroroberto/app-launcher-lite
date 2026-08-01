@@ -1,9 +1,10 @@
-/* Life OS tab (issue #102): skill tiles + one-tap launch + a read-only
+/* Team OS tab (issue #102): skill tiles + one-tap launch + a read-only
  * private-content browser.
  *
- * ~80% a clone of the Coding tab. A tile launches a Claude session in the
- * life-os repo that auto-invokes the bare /<skill> slash-command; the
- * ☁️ Detached + model combo live in the Life OS Skills summary (same UX as
+ * ~80% a clone of the Coding tab. A tile launches a GitHub Copilot CLI
+ * session in the team-os repo that auto-invokes the bare /<skill>
+ * slash-command; the
+ * ☁️ Detached + model combo live in the Team OS Skills summary (same UX as
  * the Coding-options Detached toggle). The 📖 Browse button opens an
  * overlay that reads each skill's files — public SKILL.md/description.md
  * plus the private context/memory/examples/conversations + shared
@@ -21,32 +22,33 @@ import { toggleAriaChecked, wireModelCombo } from './dom-utils.js';
 // The Skills-summary launch-model dropdown controller ({setValue, getValue}),
 // created in the tab's wiring once the DOM exists (#540). Read at launch time;
 // no server round-trip — it's per-launch, like the Board dispatch combo.
-let lifeOsModelCombo = null;
-function lifeOsModel() {
-  return (lifeOsModelCombo && lifeOsModelCombo.getValue()) || 'sonnet';
+// '' is the Default option: let Copilot pick its own (auto) model.
+let teamOsModelCombo = null;
+function teamOsModel() {
+  return (teamOsModelCombo && teamOsModelCombo.getValue()) || '';
 }
 
 // ----------------------------------------------------------- skills list
 export async function fetchSkills() {
   try {
-    const body = await jsonApi('/api/life-os/skills');
-    state.lifeOsSkills = body.skills || [];
+    const body = await jsonApi('/api/team-os/skills');
+    state.teamOsSkills = body.skills || [];
     renderSkills();
   } catch (exc) {
-    logPollFailure('life-os skills fetch failed', exc);
+    logPollFailure('team-os skills fetch failed', exc);
   }
 }
 
 export function renderSkills() {
-  const host = els.lifeOsList;
+  const host = els.teamOsList;
   if (!host) return;
   host.innerHTML = '';
-  const skills = state.lifeOsSkills;
-  els.lifeOsEmpty.hidden = skills.length !== 0;
+  const skills = state.teamOsSkills;
+  els.teamOsEmpty.hidden = skills.length !== 0;
 
   skills.forEach(function (s) {
     const li = document.createElement('li');
-    li.className = 'app-item coding-item lifeos-item';
+    li.className = 'app-item coding-item teamos-item';
     li.dataset.id = s.id;
 
     const main = document.createElement('div');
@@ -70,10 +72,10 @@ export function renderSkills() {
     browseBtn.addEventListener('click', function () { openBrowser(s); });
     actions.appendChild(browseBtn);
 
-    // Launch — fires a fresh Claude session that auto-invokes /<skill>.
+    // Launch — fires a fresh Copilot session that auto-invokes /<skill>.
     const launchBtn = document.createElement('button');
     launchBtn.type = 'button';
-    launchBtn.className = 'icon-btn agent-btn lifeos-launch';
+    launchBtn.className = 'icon-btn agent-btn teamos-launch';
     launchBtn.innerHTML = icon('rocket');
     launchBtn.title = 'Launch ' + s.name;
     launchBtn.setAttribute('aria-label', 'Launch ' + s.name);
@@ -89,27 +91,27 @@ export function renderSkills() {
 // A pinned tile above the skills list: a staleness badge driven by the recap
 // ledger's mtime, and a 🚀 that launches /weekly-recap (the interactive
 // review). The drafting half runs headless on a schedule, so this is
-// review-only. Fetched on every Life OS tab open (cheap stat + glob server-side).
+// review-only. Fetched on every Team OS tab open (cheap stat + glob server-side).
 export async function fetchRecapStatus() {
   try {
-    state.lifeOsRecap = await jsonApi('/api/life-os/recap-status');
+    state.teamOsRecap = await jsonApi('/api/team-os/recap-status');
     renderRecap();
   } catch (exc) {
-    logPollFailure('life-os recap-status fetch failed', exc);
+    logPollFailure('team-os recap-status fetch failed', exc);
   }
 }
 
 function renderRecap() {
-  const host = els.lifeOsRecap;
+  const host = els.teamOsRecap;
   if (!host) return;
-  const r = state.lifeOsRecap;
-  // Hide the tile when life-os isn't checked out — same as the skills list.
+  const r = state.teamOsRecap;
+  // Hide the tile when team-os isn't checked out — same as the skills list.
   if (!r || !r.available) { host.hidden = true; return; }
   host.hidden = false;
 
-  const badge = els.lifeOsRecapBadge;
+  const badge = els.teamOsRecapBadge;
   const status = r.staleness || 'never';
-  badge.className = 'lifeos-recap-badge ' + status;
+  badge.className = 'teamos-recap-badge ' + status;
   let label;
   if (status === 'never') {
     label = 'never run';
@@ -124,20 +126,19 @@ function renderRecap() {
   badge.textContent = label;
 }
 
-// Toast suffix for the launch model: silent on the Sonnet default (the
-// common case), " (Opus)" / " (Fable)" otherwise — mirroring the old opus
-// tag's terseness (#540).
+// Toast suffix for the launch model: silent on the Default (Copilot-auto)
+// case, " (<model id>)" otherwise — mirroring the old tag's terseness.
 function modelTag(model) {
-  if (!model || model === 'sonnet') return '';
-  return ' (' + model.charAt(0).toUpperCase() + model.slice(1) + ')';
+  if (!model) return '';
+  return ' (' + model + ')';
 }
 
 async function launchRecap() {
   // Reuse the Skills summary controls: ☁️ Detached → remote, the model combo
-  // → the launch model (#540, replacing the old opus on/off toggle).
-  const mode = (els.lifeOsDetached && els.lifeOsDetached.getAttribute('aria-checked') === 'true')
+  // → the launch model ('' = Default, Copilot auto).
+  const mode = (els.teamOsDetached && els.teamOsDetached.getAttribute('aria-checked') === 'true')
     ? 'remote' : 'pty';
-  const model = lifeOsModel();
+  const model = teamOsModel();
   const payload = { mode: mode, model: model };
   // A desktop browser launch gets a dedicated PC Edge --app window (issue
   // #241); the phone carries its real terminal size so the PTY spawns at
@@ -145,7 +146,7 @@ async function launchRecap() {
   // launches have no terminal/mirror, so it only matters for pty.
   if (mode !== 'remote') applyLaunchSizePayload(payload);
   try {
-    const body = await jsonApi('/api/life-os/recap/launch', {
+    const body = await jsonApi('/api/team-os/recap/launch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -165,22 +166,22 @@ async function launchRecap() {
 }
 
 async function launchSkill(s) {
-  // Resume (issue #151) reopens Claude's session picker, dropping the
+  // Resume (issue #151) reopens Copilot's session picker, dropping the
   // /<skill> prompt. Detached and Resume are orthogonal (issue #157,
   // matching the Coding tab): Detached → 'remote' independent of Resume, so
   // a Detached+Resume launch renders the picker in the detached console
   // while Resume alone streams it to the phone over a PTY.
-  const resume = !!(els.lifeOsResume && els.lifeOsResume.getAttribute('aria-checked') === 'true');
-  const mode = (els.lifeOsDetached && els.lifeOsDetached.getAttribute('aria-checked') === 'true')
+  const resume = !!(els.teamOsResume && els.teamOsResume.getAttribute('aria-checked') === 'true');
+  const mode = (els.teamOsDetached && els.teamOsDetached.getAttribute('aria-checked') === 'true')
     ? 'remote' : 'pty';
-  const model = lifeOsModel();
+  const model = teamOsModel();
   const payload = { mode: mode, model: model, resume: resume };
   // Same size contract as launchRecap (issue #374, #126, #241). Remote
   // launches have no terminal/mirror, so it only matters for pty.
   if (mode !== 'remote') applyLaunchSizePayload(payload);
   try {
     const body = await jsonApi(
-      '/api/life-os/skills/' + encodeURIComponent(s.id) + '/launch',
+      '/api/team-os/skills/' + encodeURIComponent(s.id) + '/launch',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -209,22 +210,22 @@ async function launchSkill(s) {
 let openDocFile = null;
 
 async function openBrowser(s) {
-  state.lifeOsBrowser = { skillId: s.id, name: s.name, files: [] };
-  els.lifeOsBrowserTitle.textContent = s.name;
+  state.teamOsBrowser = { skillId: s.id, name: s.name, files: [] };
+  els.teamOsBrowserTitle.textContent = s.name;
   closeDoc();                       // start on the full-screen file list
-  els.lifeOsBrowser.hidden = false;
+  els.teamOsBrowser.hidden = false;
   await loadFileList();
 }
 
 // (Re)load the current skill's file list — runs every time the browser
 // overlay opens, so a conversation log added on the PC shows up on reopen.
 async function loadFileList() {
-  const b = state.lifeOsBrowser;
+  const b = state.teamOsBrowser;
   if (!b) return;
-  els.lifeOsFileList.innerHTML = '<li class="muted small">Loading…</li>';
+  els.teamOsFileList.innerHTML = '<li class="muted small">Loading…</li>';
   try {
     const body = await jsonApi(
-      '/api/life-os/skills/' + encodeURIComponent(b.skillId) + '/files'
+      '/api/team-os/skills/' + encodeURIComponent(b.skillId) + '/files'
     );
     b.files = body.files || [];
     renderFileList(b.files);
@@ -236,16 +237,16 @@ async function loadFileList() {
       ? 'The content browser is Tailscale-only (and passkey-gated). Open the ' +
         'launcher over your Tailscale URL on an enrolled device.'
       : 'Could not load files: ' + (exc.message || exc);
-    els.lifeOsFileList.innerHTML = '';
+    els.teamOsFileList.innerHTML = '';
     const li = document.createElement('li');
     li.className = 'muted small';
     li.textContent = msg;
-    els.lifeOsFileList.appendChild(li);
+    els.teamOsFileList.appendChild(li);
   }
 }
 
 function renderFileList(files) {
-  const host = els.lifeOsFileList;
+  const host = els.teamOsFileList;
   host.innerHTML = '';
   if (!files.length) {
     const p = document.createElement('li');
@@ -258,21 +259,21 @@ function renderFileList(files) {
   files.forEach(function (f) {
     if (f.category !== lastCat) {
       const h = document.createElement('li');
-      h.className = 'lifeos-file-cat';
+      h.className = 'teamos-file-cat';
       h.textContent = f.category;
       host.appendChild(h);
       lastCat = f.category;
     }
     const li = document.createElement('li');
-    li.className = 'lifeos-file-row';
+    li.className = 'teamos-file-row';
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'lifeos-file-btn';
+    btn.className = 'teamos-file-btn';
     btn.textContent = f.name;
     btn.title = f.path;
     btn.addEventListener('click', function () {
       Array.prototype.forEach.call(
-        host.querySelectorAll('.lifeos-file-btn.active'),
+        host.querySelectorAll('.teamos-file-btn.active'),
         function (b) { b.classList.remove('active'); }
       );
       btn.classList.add('active');
@@ -293,7 +294,7 @@ async function deleteFile(f) {
   )) return;
   try {
     await jsonApi(
-      '/api/life-os/file?path=' + encodeURIComponent(f.path),
+      '/api/team-os/file?path=' + encodeURIComponent(f.path),
       { method: 'DELETE' }
     );
     toast('Deleted ' + f.name, 'good', { icon: 'trash-2' });
@@ -323,7 +324,7 @@ async function renameFile(f) {
   const slug = slugify(proposed);
   if (!slug) { toast('Name cannot be empty', 'error'); return; }
   try {
-    const body = await jsonApi('/api/life-os/file/rename', {
+    const body = await jsonApi('/api/team-os/file/rename', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: f.path, slug: slug }),
@@ -341,25 +342,25 @@ async function loadFile(f) {
   // button in the bar appears only while it's open.
   openDocFile = f;
   openDoc(f);
-  els.lifeOsFileContent.innerHTML = '<p class="muted small">Loading…</p>';
+  els.teamOsFileContent.innerHTML = '<p class="muted small">Loading…</p>';
   try {
     const body = await jsonApi(
-      '/api/life-os/file?path=' + encodeURIComponent(f.path)
+      '/api/team-os/file?path=' + encodeURIComponent(f.path)
     );
-    els.lifeOsFileContent.innerHTML = renderMarkdown(body.content || '');
+    els.teamOsFileContent.innerHTML = renderMarkdown(body.content || '');
     if (body.truncated) {
       const note = document.createElement('p');
       note.className = 'muted small';
       note.textContent = '… (truncated)';
-      els.lifeOsFileContent.appendChild(note);
+      els.teamOsFileContent.appendChild(note);
     }
-    els.lifeOsFileContent.scrollTop = 0;
+    els.teamOsFileContent.scrollTop = 0;
   } catch (exc) {
-    els.lifeOsFileContent.innerHTML = '';
+    els.teamOsFileContent.innerHTML = '';
     const p = document.createElement('p');
     p.className = 'muted small';
     p.textContent = 'Could not load: ' + (exc.message || exc);
-    els.lifeOsFileContent.appendChild(p);
+    els.teamOsFileContent.appendChild(p);
   }
 }
 
@@ -377,32 +378,32 @@ function isEditableLog(f) {
 // run transcripts, editable while you read them. Every other category (and
 // the .gitkeep placeholder) keeps both hidden.
 function openDoc(f) {
-  els.lifeOsFileContent.hidden = false;
-  if (els.lifeOsDocClose) els.lifeOsDocClose.hidden = false;
+  els.teamOsFileContent.hidden = false;
+  if (els.teamOsDocClose) els.teamOsDocClose.hidden = false;
   const editable = isEditableLog(f);
-  if (els.lifeOsDocDelete) els.lifeOsDocDelete.hidden = !editable;
-  if (els.lifeOsDocRename) els.lifeOsDocRename.hidden = !editable;
+  if (els.teamOsDocDelete) els.teamOsDocDelete.hidden = !editable;
+  if (els.teamOsDocRename) els.teamOsDocRename.hidden = !editable;
 }
 
 // Close the open file → back to the full-screen file list.
 function closeDoc() {
   openDocFile = null;
-  els.lifeOsFileContent.hidden = true;
-  els.lifeOsFileContent.innerHTML = '';
-  if (els.lifeOsDocClose) els.lifeOsDocClose.hidden = true;
-  if (els.lifeOsDocDelete) els.lifeOsDocDelete.hidden = true;
-  if (els.lifeOsDocRename) els.lifeOsDocRename.hidden = true;
+  els.teamOsFileContent.hidden = true;
+  els.teamOsFileContent.innerHTML = '';
+  if (els.teamOsDocClose) els.teamOsDocClose.hidden = true;
+  if (els.teamOsDocDelete) els.teamOsDocDelete.hidden = true;
+  if (els.teamOsDocRename) els.teamOsDocRename.hidden = true;
   Array.prototype.forEach.call(
-    els.lifeOsFileList.querySelectorAll('.lifeos-file-btn.active'),
+    els.teamOsFileList.querySelectorAll('.teamos-file-btn.active'),
     function (b) { b.classList.remove('active'); }
   );
 }
 
 // Close the whole browser → back to the skill tiles.
 function closeBrowser() {
-  state.lifeOsBrowser = null;
+  state.teamOsBrowser = null;
   closeDoc();
-  els.lifeOsBrowser.hidden = true;
+  els.teamOsBrowser.hidden = true;
 }
 
 // ------------------------------------------------ minimal markdown render
@@ -476,34 +477,64 @@ export function renderMarkdown(text) {
 }
 
 // --------------------------------------------------------------- wire
-export function wireLifeOs() {
-  if (els.lifeOsBrowserBack) {
-    els.lifeOsBrowserBack.addEventListener('click', closeBrowser);
+// (Re)build the launch-model menu from server config: a "Default" option
+// (Copilot auto, value "") plus the config-driven copilot_models list —
+// the Team OS combo mirrors how claude-options.js reads state.config,
+// instead of hardcoding model ids in index.html. Idempotent: called at
+// wire time (config may not be loaded yet — boot() awaits fetchConfig
+// before the tab is usable) and again on every tab open, preserving the
+// current selection when it survives the rebuild.
+function populateModelMenu() {
+  const menu = document.getElementById('teamOsModelMenu');
+  const comboRoot = document.getElementById('teamOsModelCombo');
+  if (!menu || !comboRoot) return;
+  const cp = state.config && state.config.copilot;
+  const models = (cp && cp.models_available) || [];
+  const current = comboRoot.dataset.value || '';
+  menu.innerHTML = '';
+  [''].concat(models).forEach(function (m) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'option');
+    b.dataset.value = m;
+    b.setAttribute('aria-selected', String(m === current));
+    b.textContent = m || 'Default';
+    menu.appendChild(b);
+  });
+  // The previous selection vanished from the list — fall back to Default.
+  if (current && models.indexOf(current) === -1 && teamOsModelCombo) {
+    teamOsModelCombo.setValue('');
   }
-  if (els.lifeOsDocClose) {
-    els.lifeOsDocClose.addEventListener('click', closeDoc);
+}
+
+export function wireTeamOs() {
+  if (els.teamOsBrowserBack) {
+    els.teamOsBrowserBack.addEventListener('click', closeBrowser);
   }
-  if (els.lifeOsDocDelete) {
+  if (els.teamOsDocClose) {
+    els.teamOsDocClose.addEventListener('click', closeDoc);
+  }
+  if (els.teamOsDocDelete) {
     // Delete the open conversation log → confirm, DELETE, back to the list
     // (deleteFile closeDoc()s, exactly like ✕).
-    els.lifeOsDocDelete.addEventListener('click', function () {
+    els.teamOsDocDelete.addEventListener('click', function () {
       if (openDocFile) deleteFile(openDocFile);
     });
   }
-  if (els.lifeOsDocRename) {
+  if (els.teamOsDocRename) {
     // Rename the open conversation log → prompt, POST, back to the list.
-    els.lifeOsDocRename.addEventListener('click', function () {
+    els.teamOsDocRename.addEventListener('click', function () {
       if (openDocFile) renameFile(openDocFile);
     });
   }
-  if (els.lifeOsRecapLaunch) {
-    els.lifeOsRecapLaunch.addEventListener('click', launchRecap);
+  if (els.teamOsRecapLaunch) {
+    els.teamOsRecapLaunch.addEventListener('click', launchRecap);
   }
   // Detached/Resume are plain client-side switches (issue #355) — no server
   // config, just read at launch time above. They live in the Skills card's
   // <summary> (#496 round 2, mirroring the Coding tab's Projects card), so
   // stopPropagation keeps a tap from also collapsing the panel.
-  [els.lifeOsDetached, els.lifeOsResume].forEach(function (btn) {
+  [els.teamOsDetached, els.teamOsResume].forEach(function (btn) {
     if (!btn) return;
     btn.addEventListener('click', function (ev) {
       ev.stopPropagation();
@@ -511,14 +542,17 @@ export function wireLifeOs() {
     });
   });
   // The model dropdown (#540) shares that summary; wireModelCombo owns its
-  // open/close + the summary-tap guard. Read at launch time via lifeOsModel().
-  lifeOsModelCombo = wireModelCombo(
-    document.getElementById('lifeOsModelCombo'), null
+  // open/close + the summary-tap guard. Read at launch time via teamOsModel().
+  populateModelMenu();
+  teamOsModelCombo = wireModelCombo(
+    document.getElementById('teamOsModelCombo'), null
   );
   // Refresh skills + recap staleness the moment the tab opens (cheap: a live
-  // directory scan + a single ledger stat).
-  if (els.tabLifeOS) {
-    els.tabLifeOS.addEventListener('click', function () {
+  // directory scan + a single ledger stat), and rebuild the model menu from
+  // the (by now loaded) server config.
+  if (els.tabTeamOS) {
+    els.tabTeamOS.addEventListener('click', function () {
+      populateModelMenu();
       fetchSkills().catch(function () {});
       fetchRecapStatus().catch(function () {});
     });

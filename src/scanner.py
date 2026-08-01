@@ -146,7 +146,7 @@ def scan_project_dirs(
     return results
 
 
-# ------------------------------------------------------------- life-os skills
+# ------------------------------------------------------------- team-os skills
 
 # A skill's slash-command / folder name must be a safe slug — it is
 # interpolated into the launch command line (`claude … /<name>`), so any
@@ -162,10 +162,10 @@ _SKILLS_SKIP_PREFIX = "_"
 
 @dataclass(frozen=True)
 class Skill:
-    """One life-os skill the Life OS tab can launch and browse.
+    """One team-os skill the Team OS tab can launch and browse.
 
     ``id`` is the on-disk folder name — the stable key threaded through
-    the API path (``/api/life-os/skills/<id>/…``). ``command`` is the
+    the API path (``/api/team-os/skills/<id>/…``). ``command`` is the
     slash-command base used at launch (``/journal-daily``); it is the
     frontmatter ``name`` when that is a valid slug, else the folder name,
     and is always validated against :data:`_SKILL_SLUG_RE`. ``name`` is
@@ -217,13 +217,13 @@ def _first_paragraph(path: Path) -> str:
     return ""
 
 
-def skills_dir_for(life_os_dir: Path) -> Path:
-    """The skills root inside a life-os checkout (``.claude/skills``)."""
-    return life_os_dir / ".claude" / "skills"
+def skills_dir_for(team_os_dir: Path) -> Path:
+    """The skills root inside a team-os checkout (``.claude/skills``) — Copilot reads .claude/skills too."""
+    return team_os_dir / ".claude" / "skills"
 
 
-def scan_skills(life_os_dir: Path) -> List[Skill]:
-    """List the life-os skills under ``<life_os_dir>/.claude/skills``.
+def scan_skills(team_os_dir: Path) -> List[Skill]:
+    """List the team-os skills under ``<team_os_dir>/.claude/skills``.
 
     Modelled on :func:`scan_project_dirs`: every direct child directory
     whose name does **not** start with ``_`` (scaffolding) and isn't VCS
@@ -234,9 +234,9 @@ def scan_skills(life_os_dir: Path) -> List[Skill]:
     folder name and frontmatter name are both invalid slugs is dropped —
     it could not be launched safely anyway.
     """
-    skills_root = skills_dir_for(life_os_dir)
+    skills_root = skills_dir_for(team_os_dir)
     if not skills_root.is_dir():
-        logger.warning(f"⚠️ life-os skills dir does not exist: {skills_root}")
+        logger.warning(f"⚠️ team-os skills dir does not exist: {skills_root}")
         return []
 
     results: List[Skill] = []
@@ -261,7 +261,7 @@ def scan_skills(life_os_dir: Path) -> List[Skill]:
             command = folder
         if not command:
             logger.warning(
-                f"⚠️ skipping life-os skill with unsafe name: {folder!r}"
+                f"⚠️ skipping team-os skill with unsafe name: {folder!r}"
             )
             continue
 

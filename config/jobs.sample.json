@@ -48,7 +48,7 @@
     {
       "id": "weekly-recap-draft",
       "name": "Weekly Recap (draft)",
-      "script_path": "E:\\automation\\life-os\\.claude\\skills\\_recap\\run-weekly.bat",
+      "script_path": "E:\\automation\\team-os\\.claude\\skills\\_recap\\run-weekly.bat",
       "args": "",
       "schedule": { "type": "weekly", "day": "SUN", "at": "21:00" },
       "visible": true,

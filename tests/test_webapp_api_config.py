@@ -32,7 +32,7 @@ class TestGetConfig:
         assert "projects_ignore" in body
         assert isinstance(body["projects_ignore"], list)
         assert "apps_scan_root" in body
-        assert "life_os_dir" in body
+        assert "team_os_dir" in body
         assert "terminal_history_lines" in body
         assert isinstance(body["terminal_history_lines"], int)
         assert "terminal_history_lines_min" in body
@@ -126,13 +126,23 @@ class TestGetConfig:
         body = client.get("/api/config").json()
         cp = body["copilot"]
         assert set(cp) == {
-            "skip_permissions", "model", "models_available", "computed_flags"
+            "skip_permissions", "model", "models_available",
+            "autopilot", "context", "contexts_available",
+            "effort", "efforts_available", "computed_flags",
         }
         assert isinstance(cp["skip_permissions"], bool)
-        assert isinstance(cp["models_available"], list) and cp["models_available"]
-        # Default config → no model pinned, the CLI is launched bare.
-        assert cp["model"] == ""
-        assert cp["computed_flags"] == ""
+        assert isinstance(cp["autopilot"], bool)
+        # Config-driven list (lite Phase 3): the defaults ship three ids.
+        assert cp["models_available"] == [
+            "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"
+        ]
+        # Default config → the default model + autopilot/context/effort
+        # compose into the launch line.
+        assert cp["model"] == "gpt-5.6-luna"
+        assert cp["computed_flags"] == (
+            "--model gpt-5.6-luna --autopilot --context long_context "
+            "--effort xhigh"
+        )
 
     def test_pi_block_shape(self, webapp_client):
         client, _, _ = webapp_client
@@ -396,19 +406,81 @@ class TestPatchConfig:
         assert "--allow-all" in cp["computed_flags"]
 
     def test_copilot_model_round_trips(self, webapp_client):
-        """A valid Copilot model patches through and surfaces as a
-        `--model` flag; an invalid one is rejected with 400."""
+        """A model from the config-driven `copilot_models` list patches
+        through and surfaces as `--model` (plus the persisted `--effort`,
+        legal now the model is explicit); an id outside the list falls back
+        to '' (Copilot auto) with a logged warning — never a crash, never a
+        silent launch of a tenant-gated id kept in config."""
         client, app, _ = webapp_client
-        model = client.get("/api/config").json()["copilot"]["models_available"][0]
+        models = client.get("/api/config").json()["copilot"]["models_available"]
+        assert models == ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+        model = models[1]
         resp = client.post("/api/config", json={"copilot_model": model})
         assert resp.status_code == 200
         assert app.state.webapp_config.copilot_model == model
         cp = client.get("/api/config").json()["copilot"]
         assert cp["model"] == model
         assert f"--model {model}" in cp["computed_flags"]
-        # An unknown model is rejected, not silently launched.
-        bad = client.post("/api/config", json={"copilot_model": "gpt-not-real"})
-        assert bad.status_code == 400
+        assert "--effort xhigh" in cp["computed_flags"]
+        # An unknown model self-heals to '' (auto) instead of 400ing —
+        # the validator falls back rather than crashing (lite Phase 3).
+        resp = client.post(
+            "/api/config", json={"copilot_model": "gpt-not-real"}
+        )
+        assert resp.status_code == 200
+        assert app.state.webapp_config.copilot_model == ""
+        cp = client.get("/api/config").json()["copilot"]
+        assert cp["model"] == ""
+        assert "--model" not in cp["computed_flags"]
+
+    def test_copilot_effort_omitted_without_explicit_model(self, webapp_client):
+        """Empirically verified on Copilot CLI 1.0.70: the auto model rejects
+        --effort, so effort must be silently omitted while copilot_model is
+        '' — and reappear once an explicit model is set."""
+        client, app, _ = webapp_client
+        resp = client.post("/api/config", json={"copilot_model": ""})
+        assert resp.status_code == 200
+        cp = client.get("/api/config").json()["copilot"]
+        assert cp["effort"] == "xhigh"          # persisted, but…
+        assert "--effort" not in cp["computed_flags"]  # …not emitted
+        client.post("/api/config", json={"copilot_model": "gpt-5.6-luna"})
+        cp = client.get("/api/config").json()["copilot"]
+        assert "--effort xhigh" in cp["computed_flags"]
+
+    def test_copilot_autopilot_and_context_round_trip(self, webapp_client):
+        """copilot_autopilot / copilot_context patch through and surface as
+        --autopilot / --context; '' context omits the flag; an invalid
+        context falls back to the default with a warning (never a 400)."""
+        client, app, _ = webapp_client
+        cp = client.get("/api/config").json()["copilot"]
+        assert cp["autopilot"] is True
+        assert "--autopilot" in cp["computed_flags"]
+        assert "--context long_context" in cp["computed_flags"]
+        resp = client.post(
+            "/api/config",
+            json={"copilot_autopilot": False, "copilot_context": ""},
+        )
+        assert resp.status_code == 200
+        cp = client.get("/api/config").json()["copilot"]
+        assert cp["autopilot"] is False
+        assert "--autopilot" not in cp["computed_flags"]
+        assert "--context" not in cp["computed_flags"]
+        # Invalid context → validator falls back to the default.
+        resp = client.post("/api/config", json={"copilot_context": "huge"})
+        assert resp.status_code == 200
+        assert app.state.webapp_config.copilot_context == "long_context"
+
+    def test_copilot_models_not_postable(self, webapp_client):
+        """copilot_models is read-only from the UI: exposed in GET as
+        models_available, but a POST attempt is ignored (it's edited in
+        webapp_config.json directly)."""
+        client, app, _ = webapp_client
+        before = list(app.state.webapp_config.copilot_models)
+        resp = client.post(
+            "/api/config", json={"copilot_models": ["evil-model"]}
+        )
+        assert resp.status_code == 200  # unknown keys are dropped, not errors
+        assert app.state.webapp_config.copilot_models == before
 
     def test_pi_model_round_trips(self, webapp_client):
         """A valid Pi model patches through and surfaces in the forced

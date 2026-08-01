@@ -12,7 +12,7 @@ export function iconUrl(name) {
 
 // Flip an aria-checked toggle switch (button or input) and return the new
 // boolean state. Every toggle-switch site across the SPA (options cards,
-// jobs dialog, life-os, board dispatch, apps) reads/writes this same
+// jobs dialog, team-os, board dispatch, apps) reads/writes this same
 // attribute pair — call this instead of re-deriving `next` by hand.
 export function toggleAriaChecked(el) {
   const next = el.getAttribute('aria-checked') !== 'true';

@@ -35,7 +35,7 @@ def _config(model: str) -> dict:
         "projects_dir": "E:/automation",
         "projects_ignore": [],
         "apps_scan_root": "",
-        "life_os_dir": "",
+        "team_os_dir": "",
         "claude": {
             "model": model,
             "models_available": ["opus", "sonnet", "haiku", "fable"],

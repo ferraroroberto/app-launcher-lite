@@ -219,7 +219,7 @@ async def spawn_session_or_400(
     The shared *head* of every session-launch route, the counterpart to
     :func:`audit_session_start_and_maybe_mirror`'s tail: call sites
     across three routers — ``apps.py``'s Coding-tab remote + PTY launches,
-    ``board.py``'s issue-start and dispatch, ``life_os.py``'s
+    ``board.py``'s issue-start and dispatch, ``team_os.py``'s
     skill launch — repeated this identical two-arm mapping verbatim, with
     only the spawn arguments differing.
 
@@ -260,7 +260,7 @@ async def audit_session_start_and_maybe_mirror(
     call site (Coding tab ``apps.py``, Board issue-start/dispatch
     ``board.py``) needs right after ``spawn_claude_session`` (issue #334).
 
-    Life OS (``routers/life_os.py``) already has its own
+    Team OS (``routers/team_os.py``) already has its own
     ``_spawn_skill_session`` covering this same tail plus the "remote" kind
     and response-shaping, so it isn't routed through here — this helper only
     dedupes the three PTY call sites that don't have an equivalent.

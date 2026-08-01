@@ -244,22 +244,26 @@ class TestClaudeCodeDiscovery:
             return {"session_id": "s1", "kind": kind, "agent": agent}
 
         monkeypatch.setattr(apps_router, "spawn_claude_session", fake_spawn)
-        # All-default config → Copilot launches bare.
+        # All-default config → the persisted model/autopilot/context/effort
+        # defaults compose in (lite Phase 3's config-driven Copilot knobs).
         resp = client.post(
             "/api/apps/live-proj/launch",
             json={"mode": "remote", "agent": "copilot"},
         )
         assert resp.status_code == 200
         assert captured["agent"] == "copilot"
-        assert captured["flags"] == ""
+        assert captured["flags"] == (
+            "--model gpt-5.6-luna --autopilot --context long_context "
+            "--effort xhigh"
+        )
         assert resp.json()["agent"] == "copilot"
-        # Enabling the toggle surfaces --allow-all on the next launch.
+        # Enabling the toggle prepends --allow-all on the next launch.
         client.post("/api/config", json={"copilot_skip_permissions": True})
         client.post(
             "/api/apps/live-proj/launch",
             json={"mode": "remote", "agent": "copilot"},
         )
-        assert captured["flags"] == "--allow-all"
+        assert captured["flags"].startswith("--allow-all ")
 
     def test_launch_with_grok_agent(self, webapp_client, monkeypatch):
         """The Grok button posts agent=grok — threaded to

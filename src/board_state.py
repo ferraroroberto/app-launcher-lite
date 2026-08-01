@@ -74,7 +74,7 @@ def read_sessions_state(path: Path, *, now: Optional[datetime] = None) -> Dict[s
     """Read the hook-written state file with full staleness tolerance.
 
     Absent / unreadable / corrupt → ``{"available": False, ...}`` with empty
-    rows (precedent: ``life_os.recap_status`` and ``jobs._read_queue_file``).
+    rows (precedent: ``team_os.recap_status`` and ``jobs._read_queue_file``).
     ``stale`` is true when the newest row is older than
     :data:`STATE_STALE_AFTER` — the hooks have stopped writing.
     """

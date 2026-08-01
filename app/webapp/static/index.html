@@ -369,10 +369,10 @@
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-code-xml"></use></svg>
       <span class="tab-label">Code</span>
     </button>
-    <button id="tabLifeOS" type="button" class="tab" data-tab="lifeos"
-            role="tab" aria-selected="false" aria-controls="paneLifeOS" tabindex="-1">
+    <button id="tabTeamOS" type="button" class="tab" data-tab="teamos"
+            role="tab" aria-selected="false" aria-controls="paneTeamOS" tabindex="-1">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-circle-plus"></use></svg>
-      <span class="tab-label">Life</span>
+      <span class="tab-label">Team</span>
     </button>
     <button id="tabApps" type="button" class="tab" data-tab="apps"
             role="tab" aria-selected="false" aria-controls="paneApps" tabindex="-1">
@@ -566,10 +566,19 @@
             <span class="opt-name">Model</span>
             <select id="copilotModel" class="select-native" aria-label="Copilot model"></select>
           </div>
+          <div class="opt-row">
+            <span class="opt-name">Context</span>
+            <select id="copilotContext" class="select-native" aria-label="Copilot context window"></select>
+          </div>
+          <div class="opt-row">
+            <span class="opt-name">Effort</span>
+            <select id="copilotEffort" class="select-native" aria-label="Copilot reasoning effort"></select>
+          </div>
           <div class="toggles">
+            <span class="switch-row"><span>Autopilot</span><button type="button" id="copilotAutopilot" class="toggle" role="switch" aria-checked="false" aria-label="Copilot autopilot"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
             <span class="switch-row"><span>Skip permission prompts</span><button type="button" id="copilotSkipPerms" class="toggle" role="switch" aria-checked="false" aria-label="Skip Copilot permission prompts"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
           </div>
-          <p class="opt-hint">Sign in with <code>/login</code> inside the session. <strong>Default</strong> leaves the model to the Copilot CLI's own setting.</p>
+          <p class="opt-hint">Sign in with <code>/login</code> inside the session. <strong>Default (auto)</strong> lets Copilot pick the model — Effort only applies with an explicit model (the auto model rejects it). The model list comes from <code>copilot_models</code> in <code>webapp_config.json</code> (tenant-gated ids — edit it there).</p>
           <div id="copilotFlagsPreview" class="flags-preview">copilot</div>
         </div>
 
@@ -729,54 +738,54 @@
       </details>
     </section>
 
-    <section id="paneLifeOS" class="pane" role="tabpanel" aria-labelledby="tabLifeOS" hidden>
+    <section id="paneTeamOS" class="pane" role="tabpanel" aria-labelledby="tabTeamOS" hidden>
       <!-- No separate options card (#496 round 2, mirroring the Coding tab):
            the model combo + Detached/Resume launch controls live in the
            Skills card's summary below — the surface skills are launched from. The recap
            tile leads the tab. -->
-      <section id="lifeOsRecap" class="card card--row lifeos-recap-card" hidden>
+      <section id="teamOsRecap" class="card card--row teamos-recap-card" hidden>
         <div class="card-head">
-          <span class="lifeos-recap-main">
+          <span class="teamos-recap-main">
             <h3 class="card-title"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-notebook-text"></use></svg> Weekly recap</h3>
-            <span id="lifeOsRecapBadge" class="lifeos-recap-badge"></span>
+            <span id="teamOsRecapBadge" class="teamos-recap-badge"></span>
           </span>
-          <button id="lifeOsRecapLaunch" type="button"
-                  class="icon-btn agent-btn lifeos-recap-launch"
+          <button id="teamOsRecapLaunch" type="button"
+                  class="icon-btn agent-btn teamos-recap-launch"
                   title="Review the weekly recap (/weekly-recap)"
                   aria-label="Launch weekly recap review"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rocket"></use></svg></button>
         </div>
       </section>
 
-      <details class="card card--collapsible lifeos-list-card" open>
+      <details class="card card--collapsible teamos-list-card" open>
         <summary class="collapse-summary">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-library-big"></use></svg>
             <h3 class="collapse-title">Skills</h3>
           </span>
           <span class="summary-actions">
-            <div class="lifeos-toggles">
-              <!-- Launch model (#540): the same board-style combo as the
-                   Coding tab, replacing the old opus on/off toggle. Life OS is
-                   a focused Coding tab, so its launch row mirrors it exactly.
-                   Claude-only (life-os skills are Claude /skill commands). -->
-              <span class="model-combo" id="lifeOsModelCombo" data-value="sonnet">
-                <button type="button" id="lifeOsModelBtn" class="model-combo-trigger"
-                        aria-haspopup="listbox" aria-expanded="false" aria-controls="lifeOsModelMenu"
-                        title="Model for the launched life-os skill">Sonnet</button>
-                <span id="lifeOsModelMenu" class="model-combo-menu" role="listbox" aria-label="Skill launch model" hidden>
-                  <button type="button" role="option" data-value="sonnet" aria-selected="true">Sonnet</button>
-                  <button type="button" role="option" data-value="opus" aria-selected="false">Opus</button>
-                  <button type="button" role="option" data-value="fable" aria-selected="false">Fable</button>
+            <div class="teamos-toggles">
+              <!-- Launch model: the same board-style combo as the Coding
+                   tab. Options are populated at wire time from the server
+                   config's copilot_models list (team-os.js), plus the
+                   Default option ("" = let Copilot pick auto) — nothing is
+                   hardcoded here. Copilot-only: team-os skills are invoked
+                   as /skill commands over a Copilot session. -->
+              <span class="model-combo" id="teamOsModelCombo" data-value="">
+                <button type="button" id="teamOsModelBtn" class="model-combo-trigger"
+                        aria-haspopup="listbox" aria-expanded="false" aria-controls="teamOsModelMenu"
+                        title="Model for the launched team-os skill">Default</button>
+                <span id="teamOsModelMenu" class="model-combo-menu" role="listbox" aria-label="Skill launch model" hidden>
+                  <button type="button" role="option" data-value="" aria-selected="true">Default</button>
                 </span>
               </span>
-              <button type="button" id="lifeOsDetached" class="detached-toggle" role="switch" aria-checked="false"
+              <button type="button" id="teamOsDetached" class="detached-toggle" role="switch" aria-checked="false"
                      aria-label="Launch detached"
                      title="Launch detached: a console window on the PC, listed and killable in the Coding tab but no phone terminal">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-cloud"></use></svg>
               </button>
-              <button type="button" id="lifeOsResume" class="detached-toggle" role="switch" aria-checked="false"
+              <button type="button" id="teamOsResume" class="detached-toggle" role="switch" aria-checked="false"
                      aria-label="Resume session"
-                     title="Resume: reopen Claude's session picker (drops the skill prompt) — in a phone terminal, or in the detached console when Detached is also on">
+                     title="Resume: reopen Copilot's session picker (drops the skill prompt) — in a phone terminal, or in the detached console when Detached is also on">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rotate-ccw"></use></svg>
               </button>
             </div>
@@ -784,10 +793,10 @@
           </span>
         </summary>
         <div class="collapse-body">
-        <ul id="lifeOsList" class="card-list" aria-label="Life OS skills"></ul>
-        <div id="lifeOsEmpty" class="empty" hidden>
-          No life-os skills found — point <strong>Life OS dir</strong> in Settings
-          at a life-os checkout (skills live under <code>.claude/skills</code>).
+        <ul id="teamOsList" class="card-list" aria-label="Team OS skills"></ul>
+        <div id="teamOsEmpty" class="empty" hidden>
+          No team-os skills found — point <strong>Team OS dir</strong> in Settings
+          at a team-os checkout (skills live under <code>.claude/skills</code>).
         </div>
         </div>
       </details>
@@ -913,8 +922,8 @@
           <input id="appsScanRoot" type="text" class="input-native">
         </label>
         <label class="stacked">
-          <span>Life OS dir (life-os checkout)</span>
-          <input id="lifeOsDir" type="text" class="input-native">
+          <span>Team OS dir (team-os checkout)</span>
+          <input id="teamOsDir" type="text" class="input-native">
         </label>
         <label class="stacked">
           <span>Terminal scrollback (lines) — how much history a full-screen agent (Codex, etc.) keeps for a reconnect</span>
@@ -967,19 +976,19 @@
       </div>
     </section>
 
-    <div id="lifeOsBrowser" class="terminal-overlay" hidden>
+    <div id="teamOsBrowser" class="terminal-overlay" hidden>
       <div class="terminal-bar">
-        <button id="lifeOsBrowserBack" type="button" class="term-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg> Skills</button>
-        <span id="lifeOsBrowserTitle" class="terminal-title">skill</span>
+        <button id="teamOsBrowserBack" type="button" class="term-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg> Skills</button>
+        <span id="teamOsBrowserTitle" class="terminal-title">skill</span>
         <div class="terminal-bar-actions">
-          <button id="lifeOsDocDelete" type="button" class="term-btn" title="Delete this conversation log" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-trash-2"></use></svg></button>
-          <button id="lifeOsDocRename" type="button" class="term-btn" title="Rename this conversation log" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
-          <button id="lifeOsDocClose" type="button" class="term-btn" title="Close file" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+          <button id="teamOsDocDelete" type="button" class="term-btn" title="Delete this conversation log" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-trash-2"></use></svg></button>
+          <button id="teamOsDocRename" type="button" class="term-btn" title="Rename this conversation log" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
+          <button id="teamOsDocClose" type="button" class="term-btn" title="Close file" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
         </div>
       </div>
-      <div class="lifeos-browser-body">
-        <ul id="lifeOsFileList" class="lifeos-file-list" aria-label="Skill files"></ul>
-        <div id="lifeOsFileContent" class="lifeos-file-content" hidden></div>
+      <div class="teamos-browser-body">
+        <ul id="teamOsFileList" class="teamos-file-list" aria-label="Skill files"></ul>
+        <div id="teamOsFileContent" class="teamos-file-content" hidden></div>
       </div>
     </div>
 

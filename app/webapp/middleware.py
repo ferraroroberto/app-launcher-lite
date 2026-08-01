@@ -113,15 +113,15 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         "Board dispatch (#302): spawn + type — both terminal-grade.",
     ),
     (
-        lambda p: p == "/api/life-os/file" or p.startswith("/api/life-os/file/"),
+        lambda p: p == "/api/team-os/file" or p.startswith("/api/team-os/file/"),
         "passkey",
-        "Life OS private-content browser (#102): file read/delete/rename surfaces "
+        "Team OS private-content browser (#102): file read/delete/rename surfaces "
         "gitignored private knowledge. Skills list/launch stay public (token-gated).",
     ),
     (
-        lambda p: p.startswith("/api/life-os/skills/") and p.endswith("/files"),
+        lambda p: p.startswith("/api/team-os/skills/") and p.endswith("/files"),
         "passkey",
-        "Life OS per-skill file tree (#102) — same sensitivity as the file endpoint above.",
+        "Team OS per-skill file tree (#102) — same sensitivity as the file endpoint above.",
     ),
 )
 

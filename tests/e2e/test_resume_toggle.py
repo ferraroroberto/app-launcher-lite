@@ -5,7 +5,7 @@ the next agent-icon tap POST ``resume: true``. Resume is orthogonal to
 Detached (issue #157): Resume alone streams a pty (no ``mode``); Detached
 + Resume sends ``mode: remote`` so the native picker renders in the
 detached console. This is the client-side contract; the server-side splice
-(resume token, codex flag-dropping, agy --continue, Life OS skill-prompt
+(resume token, codex flag-dropping, agy --continue, Team OS skill-prompt
 drop) is covered by the non-browser suites.
 
 Hermetic: ``/api/agents``, ``/api/apps`` and the launch endpoint are

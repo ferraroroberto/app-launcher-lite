@@ -1,13 +1,13 @@
-"""Life OS tab e2e (issue #102).
+"""Team OS tab e2e (issue #102).
 
 Browser-side coverage: the tab renders skill tiles from
-``/api/life-os/skills``, the model combo + ``☁️ Detached`` toggle are wired,
-and tapping launch POSTs ``/api/life-os/skills/<id>/launch`` with the
+``/api/team-os/skills``, the model combo + ``☁️ Detached`` toggle are wired,
+and tapping launch POSTs ``/api/team-os/skills/<id>/launch`` with the
 combo/toggle state — proving the bare ``/skill`` launch path is reached with
 the right model/mode. Hermetic via route-mocks, like the Jobs e2e tests.
 
 The server-side security (Cloudflare refusal, Tailscale gate, path-jail)
-is covered by the in-process pytest API suite (tests/test_webapp_api_life_os.py),
+is covered by the in-process pytest API suite (tests/test_webapp_api_team_os.py),
 which can set client headers/host directly — over loopback the e2e
 browser bypasses the gate entirely, so those checks belong there.
 """
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.smoke
 
 _FAKE_SKILLS = {
     "available": True,
-    "life_os_dir": "E:/automation/life-os",
+    "team_os_dir": "E:/automation/team-os",
     "skills": [
         {
             "id": "journal-daily",
@@ -46,7 +46,7 @@ _FAKE_SKILLS = {
 
 def _mock_skills(page: Page) -> None:
     page.route(
-        re.compile(r".*/api/life-os/skills(\?.*)?$"),
+        re.compile(r".*/api/team-os/skills(\?.*)?$"),
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps(_FAKE_SKILLS),
@@ -59,7 +59,7 @@ def _mock_recap(
     available: bool = True, proposal_pending: bool = False,
 ) -> None:
     page.route(
-        re.compile(r".*/api/life-os/recap-status$"),
+        re.compile(r".*/api/team-os/recap-status$"),
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({
@@ -73,8 +73,8 @@ def _mock_recap(
 
 @pytest.fixture(autouse=True)
 def _default_recap(authed_page: Page) -> None:
-    """Stub /api/life-os/recap-status for every test so opening the Life OS tab
-    is hermetic — without this the live endpoint answers (life-os is checked
+    """Stub /api/team-os/recap-status for every test so opening the Team OS tab
+    is hermetic — without this the live endpoint answers (team-os is checked
     out beside the repo), unhiding the recap tile asynchronously and reflowing
     the list mid-measurement, which jitters the #124 tile-geometry assertion.
     Default is ``available:false`` → the recap tile stays hidden, so tests that
@@ -84,7 +84,7 @@ def _default_recap(authed_page: Page) -> None:
     _mock_recap(authed_page, available=False)
 
 
-def test_life_os_recap_tile_shows_staleness_badge(
+def test_team_os_recap_tile_shows_staleness_badge(
     authed_page: Page, base_url: str
 ) -> None:
     """Regression for #167: the Weekly-recap tile renders above the skills
@@ -96,21 +96,21 @@ def test_life_os_recap_tile_shows_staleness_badge(
         authed_page, staleness="overdue", age_days=20.0, proposal_pending=True
     )
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.locator("#tabLifeOS").click()
+    authed_page.locator("#tabTeamOS").click()
 
-    recap = authed_page.locator("#lifeOsRecap")
+    recap = authed_page.locator("#teamOsRecap")
     expect(recap).to_be_visible(timeout=5_000)
-    badge = authed_page.locator("#lifeOsRecapBadge")
+    badge = authed_page.locator("#teamOsRecapBadge")
     expect(badge).to_have_class(re.compile(r"\boverdue\b"))
     expect(badge).to_contain_text("20d ago")
     expect(badge).to_contain_text("overdue")
     expect(badge).to_contain_text("draft ready")
 
 
-def test_life_os_recap_launch_posts(
+def test_team_os_recap_launch_posts(
     authed_page: Page, base_url: str
 ) -> None:
-    """Tapping 🚀 on the recap tile POSTs /api/life-os/recap/launch with the
+    """Tapping 🚀 on the recap tile POSTs /api/team-os/recap/launch with the
     options-card toggle state — proving the /weekly-recap review launch path
     is reached. Detached on so it launches remote (no terminal overlay)."""
     _mock_skills(authed_page)
@@ -124,73 +124,73 @@ def test_life_os_recap_launch_posts(
             status=200, content_type="application/json",
             body=_json.dumps({
                 "launched": "weekly-recap", "name": "weekly-recap",
-                "agent": "claude", "mode": "remote", "model": "sonnet",
+                "agent": "copilot", "mode": "remote", "model": "",
                 "session": {"session_id": "r", "kind": "remote"},
             }),
         )
 
     authed_page.route(
-        re.compile(r".*/api/life-os/recap/launch$"), _capture
+        re.compile(r".*/api/team-os/recap/launch$"), _capture
     )
 
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.locator("#tabLifeOS").click()
-    expect(authed_page.locator("#lifeOsRecap")).to_be_visible(timeout=5_000)
+    authed_page.locator("#tabTeamOS").click()
+    expect(authed_page.locator("#teamOsRecap")).to_be_visible(timeout=5_000)
 
-    authed_page.locator("#lifeOsDetached").click()
-    authed_page.locator("#lifeOsRecapLaunch").click()
+    authed_page.locator("#teamOsDetached").click()
+    authed_page.locator("#teamOsRecapLaunch").click()
 
     authed_page.wait_for_timeout(400)
     assert "body" in captured, "recap launch POST was never intercepted"
     payload = _json.loads(captured["body"])
     assert payload["mode"] == "remote", payload
-    # No model picked → the combo's Sonnet default rides along (#540).
-    assert payload["model"] == "sonnet", payload
+    # No model picked → the combo's Default ('' = Copilot auto) rides along.
+    assert payload["model"] == "", payload
 
 
-def test_life_os_tab_renders_skill_tiles(authed_page: Page, base_url: str) -> None:
+def test_team_os_tab_renders_skill_tiles(authed_page: Page, base_url: str) -> None:
     _mock_skills(authed_page)
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.wait_for_selector("#tabLifeOS", state="attached", timeout=5_000)
-    authed_page.locator("#tabLifeOS").click()
+    authed_page.wait_for_selector("#tabTeamOS", state="attached", timeout=5_000)
+    authed_page.locator("#tabTeamOS").click()
 
-    expect(authed_page.locator("#paneLifeOS")).to_be_visible()
-    tiles = authed_page.locator("#lifeOsList li.lifeos-item")
+    expect(authed_page.locator("#paneTeamOS")).to_be_visible()
+    tiles = authed_page.locator("#teamOsList li.teamos-item")
     expect(tiles.first).to_be_visible(timeout=5_000)
     assert tiles.count() == 2
     expect(tiles.first).to_contain_text("journal-daily")
     # The model dropdown + Detached toggle live in the Skills card's summary
-    # (#496; the dropdown replaced the opus toggle in #540).
-    expect(authed_page.locator("#lifeOsModelCombo")).to_be_attached()
-    expect(authed_page.locator("#lifeOsDetached")).to_be_attached()
+    # (#496; options are config-driven from copilot_models).
+    expect(authed_page.locator("#teamOsModelCombo")).to_be_attached()
+    expect(authed_page.locator("#teamOsDetached")).to_be_attached()
 
 
-def test_life_os_toggles_live_in_skills_summary_without_options_card(
+def test_team_os_toggles_live_in_skills_summary_without_options_card(
     authed_page: Page, base_url: str
 ) -> None:
-    """#496 round 2: the separate Life OS options card is gone — the model
+    """#496 round 2: the separate Team OS options card is gone — the model
     combo + Detached/Resume controls sit in the Skills card's summary (same
     structure as the Coding tab's Projects card, #540), and interacting with
     one must not collapse the panel."""
     _mock_skills(authed_page)
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.locator("#tabLifeOS").click()
-    expect(authed_page.locator("#paneLifeOS")).to_be_visible()
+    authed_page.locator("#tabTeamOS").click()
+    expect(authed_page.locator("#paneTeamOS")).to_be_visible()
 
     # The old standalone options card no longer exists.
-    expect(authed_page.locator("#lifeOsOptions")).to_have_count(0)
+    expect(authed_page.locator("#teamOsOptions")).to_have_count(0)
 
     # The model dropdown + both toggles render inside the Skills <details>
     # summary.
-    summary = authed_page.locator("details.lifeos-list-card summary")
-    for cid in ("#lifeOsModelCombo", "#lifeOsDetached", "#lifeOsResume"):
+    summary = authed_page.locator("details.teamos-list-card summary")
+    for cid in ("#teamOsModelCombo", "#teamOsDetached", "#teamOsResume"):
         expect(summary.locator(cid)).to_be_visible()
 
     # A toggle tap flips the switch but must not collapse the open panel.
-    skills_card = authed_page.locator("details.lifeos-list-card")
+    skills_card = authed_page.locator("details.teamos-list-card")
     assert skills_card.evaluate("el => el.open") is True
-    authed_page.locator("#lifeOsDetached").click()
-    expect(authed_page.locator("#lifeOsDetached")).to_have_attribute(
+    authed_page.locator("#teamOsDetached").click()
+    expect(authed_page.locator("#teamOsDetached")).to_have_attribute(
         "aria-checked", "true"
     )
     assert skills_card.evaluate("el => el.open") is True, (
@@ -199,22 +199,22 @@ def test_life_os_toggles_live_in_skills_summary_without_options_card(
 
     # Opening + picking in the model dropdown likewise must not collapse the
     # panel (#540 — its trigger/options are click targets inside the summary).
-    authed_page.locator("#lifeOsModelBtn").click()
-    authed_page.locator("#lifeOsModelMenu button[data-value='opus']").click()
-    expect(authed_page.locator("#lifeOsModelCombo")).to_have_attribute(
-        "data-value", "opus"
+    authed_page.locator("#teamOsModelBtn").click()
+    authed_page.locator("#teamOsModelMenu button[data-value='gpt-5.6-luna']").click()
+    expect(authed_page.locator("#teamOsModelCombo")).to_have_attribute(
+        "data-value", "gpt-5.6-luna"
     )
-    expect(authed_page.locator("#lifeOsModelBtn")).to_have_text("Opus")
+    expect(authed_page.locator("#teamOsModelBtn")).to_have_text("gpt-5.6-luna")
     assert skills_card.evaluate("el => el.open") is True, (
         "model-dropdown pick must not collapse the Skills panel"
     )
 
 
-def test_life_os_launch_posts_mode_and_model(
+def test_team_os_launch_posts_mode_and_model(
     authed_page: Page, base_url: str
 ) -> None:
-    """#540: the launch POST carries the model combo's value (not the old
-    ``opus`` bool) alongside mode + resume."""
+    """The launch POST carries the model combo's value (a copilot_models
+    entry, or "" for Default) alongside mode + resume."""
     _mock_skills(authed_page)
 
     captured: dict = {}
@@ -225,42 +225,42 @@ def test_life_os_launch_posts_mode_and_model(
             status=200, content_type="application/json",
             body=_json.dumps({
                 "launched": "journal-daily", "name": "journal-daily",
-                "agent": "claude", "mode": "remote", "model": "fable",
+                "agent": "copilot", "mode": "remote", "model": "gpt-5.6-terra",
                 "session": {"session_id": "x", "kind": "remote"},
             }),
         )
 
     authed_page.route(
-        re.compile(r".*/api/life-os/skills/journal-daily/launch$"),
+        re.compile(r".*/api/team-os/skills/journal-daily/launch$"),
         _capture_launch,
     )
 
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.locator("#tabLifeOS").click()
-    expect(authed_page.locator("#lifeOsList li.lifeos-item").first).to_be_visible(
+    authed_page.locator("#tabTeamOS").click()
+    expect(authed_page.locator("#teamOsList li.teamos-item").first).to_be_visible(
         timeout=5_000
     )
 
     # Pick a non-default model + Detached on (so it launches detached → no
     # terminal overlay / WS to deal with in the assertion).
-    authed_page.locator("#lifeOsModelBtn").click()
-    authed_page.locator("#lifeOsModelMenu button[data-value='fable']").click()
-    authed_page.locator("#lifeOsDetached").click()
+    authed_page.locator("#teamOsModelBtn").click()
+    authed_page.locator("#teamOsModelMenu button[data-value='gpt-5.6-terra']").click()
+    authed_page.locator("#teamOsDetached").click()
 
     tile = authed_page.locator(
-        "#lifeOsList li.lifeos-item[data-id='journal-daily']"
+        "#teamOsList li.teamos-item[data-id='journal-daily']"
     )
-    tile.locator(".lifeos-launch").click()
+    tile.locator(".teamos-launch").click()
 
     # Wait for the launch route to capture the POST body.
     authed_page.wait_for_timeout(400)
     assert "body" in captured, "launch POST was never intercepted"
     payload = _json.loads(captured["body"])
     # resume defaults to False on a normal (non-resume) launch (issue #151).
-    assert payload == {"mode": "remote", "model": "fable", "resume": False}, payload
+    assert payload == {"mode": "remote", "model": "gpt-5.6-terra", "resume": False}, payload
 
 
-def test_life_os_pty_launch_carries_terminal_size(
+def test_team_os_pty_launch_carries_terminal_size(
     authed_page: Page, base_url: str
 ) -> None:
     """Regression pin for issue #374: a streamed (pty) skill launch sizes
@@ -282,27 +282,27 @@ def test_life_os_pty_launch_carries_terminal_size(
             status=200, content_type="application/json",
             body=_json.dumps({
                 "launched": "journal-daily", "name": "journal-daily",
-                "agent": "claude", "mode": "pty", "model": "sonnet",
+                "agent": "copilot", "mode": "pty", "model": "",
                 "session": {"session_id": "x", "kind": "remote"},
             }),
         )
 
     authed_page.route(
-        re.compile(r".*/api/life-os/skills/journal-daily/launch$"),
+        re.compile(r".*/api/team-os/skills/journal-daily/launch$"),
         _capture_launch,
     )
 
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.locator("#tabLifeOS").click()
-    expect(authed_page.locator("#lifeOsList li.lifeos-item").first).to_be_visible(
+    authed_page.locator("#tabTeamOS").click()
+    expect(authed_page.locator("#teamOsList li.teamos-item").first).to_be_visible(
         timeout=5_000
     )
 
     # Detached stays OFF — this is the streamed pty path #374 is about.
     tile = authed_page.locator(
-        "#lifeOsList li.lifeos-item[data-id='journal-daily']"
+        "#teamOsList li.teamos-item[data-id='journal-daily']"
     )
-    tile.locator(".lifeos-launch").click()
+    tile.locator(".teamos-launch").click()
 
     authed_page.wait_for_timeout(400)
     assert "body" in captured, "launch POST was never intercepted"
@@ -314,10 +314,10 @@ def test_life_os_pty_launch_carries_terminal_size(
         assert payload.get("rows", 0) >= 10 and payload.get("cols", 0) >= 20
 
 
-def test_life_os_detached_resume_posts_remote_console(
+def test_team_os_detached_resume_posts_remote_console(
     authed_page: Page, base_url: str
 ) -> None:
-    """Regression for #239: Detached and Resume are orthogonal on the Life OS
+    """Regression for #239: Detached and Resume are orthogonal on the Team OS
     tab (matching the Coding tab, #157). Flipping both must POST
     ``mode: remote`` AND ``resume: true`` — the picker renders in the detached
     console — rather than Resume silently forcing a streamed PTY."""
@@ -331,32 +331,32 @@ def test_life_os_detached_resume_posts_remote_console(
             status=200, content_type="application/json",
             body=_json.dumps({
                 "launched": "journal-daily", "name": "journal-daily",
-                "agent": "claude", "mode": "remote", "model": "sonnet",
+                "agent": "copilot", "mode": "remote", "model": "",
                 "resume": True,
                 "session": {"session_id": "x", "kind": "remote"},
             }),
         )
 
     authed_page.route(
-        re.compile(r".*/api/life-os/skills/journal-daily/launch$"),
+        re.compile(r".*/api/team-os/skills/journal-daily/launch$"),
         _capture_launch,
     )
 
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.locator("#tabLifeOS").click()
-    expect(authed_page.locator("#lifeOsList li.lifeos-item").first).to_be_visible(
+    authed_page.locator("#tabTeamOS").click()
+    expect(authed_page.locator("#teamOsList li.teamos-item").first).to_be_visible(
         timeout=5_000
     )
 
     # Flip Detached + Resume both on. A remote launch has no terminal overlay
     # / WS, so the assertion stays clean.
-    authed_page.locator("#lifeOsDetached").click()
-    authed_page.locator("#lifeOsResume").click()
+    authed_page.locator("#teamOsDetached").click()
+    authed_page.locator("#teamOsResume").click()
 
     tile = authed_page.locator(
-        "#lifeOsList li.lifeos-item[data-id='journal-daily']"
+        "#teamOsList li.teamos-item[data-id='journal-daily']"
     )
-    tile.locator(".lifeos-launch").click()
+    tile.locator(".teamos-launch").click()
 
     authed_page.wait_for_timeout(400)
     assert "body" in captured, "launch POST was never intercepted"
@@ -365,7 +365,7 @@ def test_life_os_detached_resume_posts_remote_console(
     assert payload.get("resume") is True, payload
 
 
-def test_life_os_tile_keeps_name_and_buttons_on_one_row(
+def test_team_os_tile_keeps_name_and_buttons_on_one_row(
     authed_page: Page, base_url: str
 ) -> None:
     """Regression for #124: a Life tile carries only two actions (📖 + 🚀),
@@ -382,10 +382,10 @@ def test_life_os_tile_keeps_name_and_buttons_on_one_row(
     """
     _mock_skills(authed_page)
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.locator("#tabLifeOS").click()
+    authed_page.locator("#tabTeamOS").click()
 
     tile = authed_page.locator(
-        "#lifeOsList li.lifeos-item[data-id='journal-daily']"
+        "#teamOsList li.teamos-item[data-id='journal-daily']"
     )
     expect(tile).to_be_visible(timeout=5_000)
 
@@ -426,7 +426,7 @@ def test_life_os_tile_keeps_name_and_buttons_on_one_row(
     )
 
 
-def test_life_os_browser_full_screen_doc_toggle(
+def test_team_os_browser_full_screen_doc_toggle(
     authed_page: Page, base_url: str
 ) -> None:
     """📖 Browse shows a full-screen file list; tapping a file opens it
@@ -434,7 +434,7 @@ def test_life_os_browser_full_screen_doc_toggle(
     returns to the list. Hermetic — /files + /file are route-mocked."""
     _mock_skills(authed_page)
     authed_page.route(
-        re.compile(r".*/api/life-os/skills/journal-daily/files$"),
+        re.compile(r".*/api/team-os/skills/journal-daily/files$"),
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({
@@ -449,7 +449,7 @@ def test_life_os_browser_full_screen_doc_toggle(
         ),
     )
     authed_page.route(
-        re.compile(r".*/api/life-os/file\?.*$"),
+        re.compile(r".*/api/team-os/file\?.*$"),
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({
@@ -460,36 +460,36 @@ def test_life_os_browser_full_screen_doc_toggle(
     )
 
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.locator("#tabLifeOS").click()
+    authed_page.locator("#tabTeamOS").click()
     tile = authed_page.locator(
-        "#lifeOsList li.lifeos-item[data-id='journal-daily']"
+        "#teamOsList li.teamos-item[data-id='journal-daily']"
     )
     expect(tile).to_be_visible(timeout=5_000)
     tile.locator("button[title^='Browse']").click()
 
     # File list full-screen; content layer + ✕ hidden.
-    expect(authed_page.locator("#lifeOsBrowser")).to_be_visible()
-    expect(authed_page.locator(".lifeos-file-btn").first).to_be_visible(
+    expect(authed_page.locator("#teamOsBrowser")).to_be_visible()
+    expect(authed_page.locator(".teamos-file-btn").first).to_be_visible(
         timeout=5_000
     )
-    expect(authed_page.locator("#lifeOsFileContent")).to_be_hidden()
-    expect(authed_page.locator("#lifeOsDocClose")).to_be_hidden()
+    expect(authed_page.locator("#teamOsFileContent")).to_be_hidden()
+    expect(authed_page.locator("#teamOsDocClose")).to_be_hidden()
 
     # Open a file → content + ✕ visible.
-    authed_page.locator(".lifeos-file-btn").first.click()
-    expect(authed_page.locator("#lifeOsFileContent")).to_be_visible()
-    expect(authed_page.locator("#lifeOsFileContent")).to_contain_text(
+    authed_page.locator(".teamos-file-btn").first.click()
+    expect(authed_page.locator("#teamOsFileContent")).to_be_visible()
+    expect(authed_page.locator("#teamOsFileContent")).to_contain_text(
         "body text"
     )
-    expect(authed_page.locator("#lifeOsDocClose")).to_be_visible()
+    expect(authed_page.locator("#teamOsDocClose")).to_be_visible()
 
     # ✕ closes the doc → back to the list, ✕ hidden again.
-    authed_page.locator("#lifeOsDocClose").click()
-    expect(authed_page.locator("#lifeOsFileContent")).to_be_hidden()
-    expect(authed_page.locator("#lifeOsDocClose")).to_be_hidden()
+    authed_page.locator("#teamOsDocClose").click()
+    expect(authed_page.locator("#teamOsFileContent")).to_be_hidden()
+    expect(authed_page.locator("#teamOsDocClose")).to_be_hidden()
 
 
-def test_life_os_delete_conversation_log_from_doc_toolbar(
+def test_team_os_delete_conversation_log_from_doc_toolbar(
     authed_page: Page, base_url: str
 ) -> None:
     """🗑️ never appears in the browse list; it shows in the document toolbar
@@ -531,47 +531,47 @@ def test_life_os_delete_conversation_log_from_doc_toolbar(
                                             "truncated": False}))
 
     authed_page.route(
-        re.compile(r".*/api/life-os/skills/journal-daily/files$"), _files
+        re.compile(r".*/api/team-os/skills/journal-daily/files$"), _files
     )
     authed_page.route(
-        re.compile(r".*/api/life-os/file\?.*$"), _file
+        re.compile(r".*/api/team-os/file\?.*$"), _file
     )
     authed_page.on("dialog", lambda d: d.accept())
 
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.locator("#tabLifeOS").click()
+    authed_page.locator("#tabTeamOS").click()
     authed_page.locator(
-        "#lifeOsList li.lifeos-item[data-id='journal-daily'] button[title^='Browse']"
+        "#teamOsList li.teamos-item[data-id='journal-daily'] button[title^='Browse']"
     ).click()
 
     # No delete control anywhere in the list, and the toolbar 🗑️ stays hidden.
-    expect(authed_page.locator(".lifeos-file-btn").first).to_be_visible(
+    expect(authed_page.locator(".teamos-file-btn").first).to_be_visible(
         timeout=5_000
     )
-    expect(authed_page.locator(".lifeos-file-del")).to_have_count(0)
-    expect(authed_page.locator("#lifeOsDocDelete")).to_be_hidden()
+    expect(authed_page.locator(".teamos-file-del")).to_have_count(0)
+    expect(authed_page.locator("#teamOsDocDelete")).to_be_hidden()
 
     # Open the memory file → 🗑️ stays hidden (not a conversation log).
     authed_page.locator(
-        ".lifeos-file-btn:has-text('observations.md')"
+        ".teamos-file-btn:has-text('observations.md')"
     ).click()
-    expect(authed_page.locator("#lifeOsFileContent")).to_be_visible()
-    expect(authed_page.locator("#lifeOsDocDelete")).to_be_hidden()
-    authed_page.locator("#lifeOsDocClose").click()
+    expect(authed_page.locator("#teamOsFileContent")).to_be_visible()
+    expect(authed_page.locator("#teamOsDocDelete")).to_be_hidden()
+    authed_page.locator("#teamOsDocClose").click()
 
     # Open the conversation log → 🗑️ appears in the bar.
     authed_page.locator(
-        ".lifeos-file-btn:has-text('trial.md')"
+        ".teamos-file-btn:has-text('trial.md')"
     ).click()
-    expect(authed_page.locator("#lifeOsFileContent")).to_be_visible()
-    expect(authed_page.locator("#lifeOsDocDelete")).to_be_visible()
+    expect(authed_page.locator("#teamOsFileContent")).to_be_visible()
+    expect(authed_page.locator("#teamOsDocDelete")).to_be_visible()
 
     # Confirm delete → DELETE fires, doc closes back to the list, log gone.
-    authed_page.locator("#lifeOsDocDelete").click()
+    authed_page.locator("#teamOsDocDelete").click()
     authed_page.wait_for_timeout(400)
-    assert deleted["hit"], "DELETE /api/life-os/file was never called"
-    expect(authed_page.locator("#lifeOsFileContent")).to_be_hidden()
-    expect(authed_page.locator("#lifeOsDocDelete")).to_be_hidden()
+    assert deleted["hit"], "DELETE /api/team-os/file was never called"
+    expect(authed_page.locator("#teamOsFileContent")).to_be_hidden()
+    expect(authed_page.locator("#teamOsDocDelete")).to_be_hidden()
     expect(
-        authed_page.locator(".lifeos-file-btn:has-text('trial.md')")
+        authed_page.locator(".teamos-file-btn:has-text('trial.md')")
     ).to_have_count(0)

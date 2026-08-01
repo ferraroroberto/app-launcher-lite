@@ -261,7 +261,7 @@ html, body {
    technique — gentler on iOS fixed-layer repainting across show/hide. */
 @media (pointer: coarse) and (max-width: 520px) {
   body.terminal-open .tabs,
-  body:has(#lifeOsBrowser:not([hidden])) .tabs,
+  body:has(#teamOsBrowser:not([hidden])) .tabs,
   body:has(#loginOverlay:not([hidden])) .tabs {
     visibility: hidden;
     pointer-events: none;
@@ -277,7 +277,7 @@ html, body {
      rule above, plus native <dialog> for completeness (this app has both). */
   @media (display-mode: standalone) {
     body.terminal-open .app,
-    body:has(#lifeOsBrowser:not([hidden])) .app,
+    body:has(#teamOsBrowser:not([hidden])) .app,
     body:has(#loginOverlay:not([hidden])) .app,
     body:has(dialog[open]) .app {
       overflow: hidden;
@@ -319,7 +319,7 @@ html, body {
   border-color: var(--accent);
   background: rgb(from var(--accent) r g b / 0.18);
 }
-/* #540: Detached/Resume are icon-only now (the Coding + Life OS launch rows
+/* #540: Detached/Resume are icon-only now (the Coding + Team OS launch rows
    gained a model combo and needed the room). Render the glyph at the app's
    standard --icon-title size in a square-ish tap target — matching the other
    icon buttons — while keeping the pill's opacity + accent-border on/off
@@ -811,14 +811,14 @@ summary + .opt-group { border-top: 0; }
   .coding-item .row-actions.agent-actions .icon-btn + .icon-btn {
     border-left: 1px solid var(--line);
   }
-  /* Life OS tiles share the .coding-item class but only ever carry two
+  /* Team OS tiles share the .coding-item class but only ever carry two
      actions (📖 + 🚀), which fit beside the name even on the narrowest
      phone. Opt them back out of the stack-on-narrow rule above (issue
-     #124): the higher-specificity .coding-item.lifeos-item selectors win
+     #124): the higher-specificity .coding-item.teamos-item selectors win
      over the bare .coding-item ones, restoring the default inline row +
      side border. The Code tab's agent-icon stack is untouched. */
-  .coding-item.lifeos-item { flex-direction: row; align-items: stretch; }
-  .coding-item.lifeos-item .row-actions.agent-actions {
+  .coding-item.teamos-item { flex-direction: row; align-items: stretch; }
+  .coding-item.teamos-item .row-actions.agent-actions {
     border-left: 1px solid var(--line);
     border-top: 0;
   }
@@ -1824,7 +1824,7 @@ body.terminal-open {
   padding: 9px 12px;
   font-size: var(--font-label);
   /* 44×44 effective minimum app-wide (#496 audit, extending #477 beyond the
-     terminal bar): the base class also dresses the Life OS browser bar. */
+     terminal bar): the base class also dresses the Team OS browser bar. */
   min-height: 44px;
   min-width: 44px;
   cursor: pointer;
@@ -2010,7 +2010,7 @@ body.terminal-open {
   flex-shrink: 0;
 }
 
-/* ---------- Life OS tab (issue #102) ---------- */
+/* ---------- Team OS tab (issue #102) ---------- */
 /* The model combo + Detached/Resume controls live in the Skills card's
    summary (#496 round 2 — no separate options card); the recap tile is the
    only .card--row left on the tab. */
@@ -2022,37 +2022,37 @@ body.terminal-open {
 /* Right-aligned toggle group: keeps a summary row's switches packed together
    as a single flex child so the row stays title-left / toggles-right. Without
    this the Coding row's three children space-between and Detached floats in the
-   center (issue #155). Shared by the Coding + Life OS option rows. */
+   center (issue #155). Shared by the Coding + Team OS option rows. */
 .coding-toggles,
-.lifeos-toggles { display: flex; gap: 6px; }
-.lifeos-launch { font-size: var(--icon-title); }
+.teamos-toggles { display: flex; gap: 6px; }
+.teamos-launch { font-size: var(--icon-title); }
 
 /* Weekly-recap tile (issue #167): title + a staleness badge on the left, the
    🚀 review launch on the right. The badge is a coloured dot + label whose
    colour tracks how stale the recap ledger is — green/accent fresh, amber
    (--attention) past 7 days, red (--danger) past 14, muted when never run. Mirrors
    the .health-dot colour vocabulary used elsewhere. */
-.lifeos-recap-main { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
-.lifeos-recap-badge {
+.teamos-recap-main { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.teamos-recap-badge {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: var(--font-caption); color: var(--muted); white-space: nowrap;
 }
-.lifeos-recap-badge::before {
+.teamos-recap-badge::before {
   content: ''; width: 8px; height: 8px; border-radius: 50%;
   background: var(--muted); flex: 0 0 auto;
 }
-.lifeos-recap-badge.fresh { color: var(--muted); }
-.lifeos-recap-badge.fresh::before { background: var(--accent); }
-.lifeos-recap-badge.due { color: var(--attention); }
-.lifeos-recap-badge.due::before { background: var(--attention); }
-.lifeos-recap-badge.overdue { color: var(--danger); }
-.lifeos-recap-badge.overdue::before { background: var(--danger); }
-.lifeos-recap-badge.never::before { background: var(--muted); }
+.teamos-recap-badge.fresh { color: var(--muted); }
+.teamos-recap-badge.fresh::before { background: var(--accent); }
+.teamos-recap-badge.due { color: var(--attention); }
+.teamos-recap-badge.due::before { background: var(--attention); }
+.teamos-recap-badge.overdue { color: var(--danger); }
+.teamos-recap-badge.overdue::before { background: var(--danger); }
+.teamos-recap-badge.never::before { background: var(--muted); }
 /* The recap card isn't an .app-item, so it doesn't inherit the tab's
    .app-item .row-actions .icon-btn treatment — restate it here so the 🚀
    matches the skill-tile launch buttons instead of rendering as a default
    (white) UA button. */
-.lifeos-recap-card .icon-btn {
+.teamos-recap-card .icon-btn {
   background: transparent;
   border: 0;
   color: var(--muted);
@@ -2064,7 +2064,7 @@ body.terminal-open {
   align-items: center;
   justify-content: center;
 }
-.lifeos-recap-card .icon-btn:active {
+.teamos-recap-card .icon-btn:active {
   background: var(--card-2);
   color: var(--fg);
 }
@@ -2072,18 +2072,18 @@ body.terminal-open {
 /* Read-only content browser: a full-screen file list; tapping a file
    opens it in a full-screen layer that overlays the list (the ✕ in the
    bar closes it back to the list). Inside the reused .terminal-overlay. */
-/* The Life OS browser reuses .terminal-overlay for its full-screen shell,
+/* The Team OS browser reuses .terminal-overlay for its full-screen shell,
    but it is a READING surface, not a terminal screen — it follows the app
    theme instead of the invariant --term-bg (issue #355 PR 3 on-device
    review: dark background stuck in light theme). */
-#lifeOsBrowser.terminal-overlay { background: var(--bg); }
+#teamOsBrowser.terminal-overlay { background: var(--bg); }
 
-.lifeos-browser-body {
+.teamos-browser-body {
   position: relative;
   flex: 1;
   min-height: 0;
 }
-.lifeos-file-list {
+.teamos-file-list {
   list-style: none;
   margin: 0;
   padding: 8px;
@@ -2091,14 +2091,14 @@ body.terminal-open {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
-.lifeos-file-cat {
+.teamos-file-cat {
   font-size: var(--font-caption);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
   margin: 10px 4px 4px;
 }
-.lifeos-file-row {
+.teamos-file-row {
   display: flex;
   align-items: stretch;
   gap: 6px;
@@ -2223,7 +2223,7 @@ body.terminal-open {
   }
 }
 
-/* Launch-model dropdown (#540) for the Coding + Life OS card summaries. A
+/* Launch-model dropdown (#540) for the Coding + Team OS card summaries. A
    native <select> cannot live inside a <summary> — WebKit's HTML parser
    derails on it (closes the <details> early, cascading into a broken tree
    that even zeroes custom-property inheritance on ancestors). So this is
@@ -2368,7 +2368,7 @@ body.terminal-open {
 
 /* Claude 5h/7d usage badges (issue #326) — dot + label, colored by usage
    tier at the same 60/80 thresholds as fleet-config's terminal statusline.
-   Mirrors the .lifeos-recap-badge dot+label shape. Shared between the Board
+   Mirrors the .teamos-recap-badge dot+label shape. Shared between the Board
    tab's strip and the Coding tab's Running-sessions header (dom-utils.js::
    renderUsageBadgeRow) — kept separate from .board-status so a stale
    reading dims instead of disappearing. */
@@ -2708,7 +2708,7 @@ body.terminal-open {
   .board-strip-btn { display: none; }
   .board-strip { justify-content: flex-end; }
 }
-.lifeos-file-btn {
+.teamos-file-btn {
   flex: 1;
   display: block;
   text-align: left;
@@ -2721,11 +2721,11 @@ body.terminal-open {
   min-height: 40px;
   cursor: pointer;
 }
-.lifeos-file-btn.active {
+.teamos-file-btn.active {
   border-color: var(--accent);
   background: rgb(from var(--accent) r g b / 0.18);
 }
-.lifeos-file-content {
+.teamos-file-content {
   position: absolute;
   inset: 0;
   background: var(--bg);
@@ -2733,27 +2733,27 @@ body.terminal-open {
   padding: 12px 16px 32px;
   -webkit-overflow-scrolling: touch;
 }
-.lifeos-file-content h1,
-.lifeos-file-content h2,
-.lifeos-file-content h3,
-.lifeos-file-content h4 { line-height: 1.3; }
-.lifeos-file-content p { line-height: 1.5; }
-.lifeos-file-content a { color: var(--accent); }
-.lifeos-file-content code {
+.teamos-file-content h1,
+.teamos-file-content h2,
+.teamos-file-content h3,
+.teamos-file-content h4 { line-height: 1.3; }
+.teamos-file-content p { line-height: 1.5; }
+.teamos-file-content a { color: var(--accent); }
+.teamos-file-content code {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 1px 5px;
   font-size: var(--font-caption);
 }
-.lifeos-file-content pre.md-code {
+.teamos-file-content pre.md-code {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
   overflow-x: auto;
 }
-.lifeos-file-content pre.md-code code {
+.teamos-file-content pre.md-code code {
   background: none;
   border: none;
   padding: 0;

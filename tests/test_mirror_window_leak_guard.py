@@ -1,7 +1,7 @@
 """Regression guard for issue #279 — non-e2e tests must never spawn a real PC
 mirror window.
 
-The Apps and Life OS launch handlers call ``open_local_terminal_window`` when
+The Apps and Team OS launch handlers call ``open_local_terminal_window`` when
 ``should_mirror_to_pc`` is True, which it is under ``TestClient`` (its request
 host isn't loopback). Left real, every launch test leaks an Edge ``--app``
 window the test never closes. ``tests/conftest.py``'s autouse
@@ -15,12 +15,12 @@ from __future__ import annotations
 import pytest
 
 from app.webapp.routers import apps as apps_router
-from app.webapp.routers import life_os as life_os_router
+from app.webapp.routers import team_os as team_os_router
 from src import launcher
 
 
-@pytest.mark.parametrize("router", [apps_router, life_os_router],
-                         ids=["apps", "life_os"])
+@pytest.mark.parametrize("router", [apps_router, team_os_router],
+                         ids=["apps", "team_os"])
 def test_router_mirror_symbol_is_stubbed(router):
     """The autouse fixture replaces each router's imported
     ``open_local_terminal_window`` with a no-op — so it is NOT the real

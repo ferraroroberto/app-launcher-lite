@@ -12,7 +12,7 @@ import { fetchConfig, patchConfig, wireClaudeOptions } from './claude-options.js
 import { fetchRateLimits, fetchSessions, wireSessions } from './sessions.js';
 import { fetchAgents, fetchApps, fetchListeners, fetchRunningApps, refreshGitStatus, wireApps } from './apps.js';
 import { fetchJobs, renderJobs, wireJobs } from './jobs.js';
-import { fetchSkills, wireLifeOs } from './life-os.js';
+import { fetchSkills, wireTeamOs } from './team-os.js';
 import { fetchBoard, openBoardCard, wireBoard } from './board.js';
 import { wireTokens } from './tokens.js';
 import { openTerminal, wireTerminal } from './terminal.js';
@@ -78,7 +78,7 @@ function wireSettings() {
       projects_dir: els.projectsDir.value.trim(),
       projects_ignore: ignore,
       apps_scan_root: els.appsScanRoot.value.trim(),
-      life_os_dir: els.lifeOsDir.value.trim(),
+      team_os_dir: els.teamOsDir.value.trim(),
     };
     if (els.terminalHistoryLines && els.terminalHistoryLines.value !== '') {
       const lines = parseInt(els.terminalHistoryLines.value, 10);
@@ -261,7 +261,7 @@ wireClaudeOptions();
 wireSessions();
 wireApps();
 wireJobs();
-wireLifeOs();
+wireTeamOs();
 wireBoard();
 wireTerminal();
 wireSettings();

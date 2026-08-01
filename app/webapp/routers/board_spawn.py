@@ -101,7 +101,7 @@ _DISPATCH_CODEX_MODEL = "gpt5.6"
 def _agent_and_flags(cfg: WebappConfig, model: str) -> Tuple[str, str]:
     """Validated ``(agent, flags)`` for a Board per-launch ``model`` (#500/#505).
 
-    The Claude tiers force ``--model`` like the Life OS tab's toggle (#102);
+    The Claude tiers force ``--model`` per launch (the Board's model combo);
     ``gpt5.6`` selects Codex with the Coding tab's shared flags instead
     (``apps.py``'s exact launch shape). The ``is_installed`` check is the
     same defence-in-depth 400 as ``apps.py`` — Board launches bypass the

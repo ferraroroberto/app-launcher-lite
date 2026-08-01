@@ -6,7 +6,7 @@
 
 ## The question this de-risks
 
-The Coding tab treats terminal agents as a registry-driven set (`src/agents.py`): one tap from the phone spawns the agent in a project dir inside the session-host's ConPTY (full-control) or a detached console. Issue #273 asks whether Pi belongs in that set, ideally replacing the Copilot button for a trial, **without** spending API credits and **without** touching the Apps/Jobs/Life OS/terminal-gate/Cloudflare/Tailscale flows. The user's steer narrowed it: drive Pi with the Claude **subscription** via the **Agent SDK** (the `prateekmedia/claude-agent-sdk-pi` extension), not API keys.
+The Coding tab treats terminal agents as a registry-driven set (`src/agents.py`): one tap from the phone spawns the agent in a project dir inside the session-host's ConPTY (full-control) or a detached console. Issue #273 asks whether Pi belongs in that set, ideally replacing the Copilot button for a trial, **without** spending API credits and **without** touching the Apps/Jobs/Team OS/terminal-gate/Cloudflare/Tailscale flows. The user's steer narrowed it: drive Pi with the Claude **subscription** via the **Agent SDK** (the `prateekmedia/claude-agent-sdk-pi` extension), not API keys.
 
 ## What was verified on the bench (autonomous, this machine)
 
@@ -59,7 +59,7 @@ That static signal was **incomplete, and the on-device validation this doc origi
 
 ## How it's wired (as implemented)
 
-Pi is added the same way as the other terminal agents — registry row + flag builder + options block + icon — and touches **none** of the Apps, Jobs, Life OS, terminal-gate, Cloudflare, or Tailscale flows:
+Pi is added the same way as the other terminal agents — registry row + flag builder + options block + icon — and touches **none** of the Apps, Jobs, Team OS, terminal-gate, Cloudflare, or Tailscale flows:
 
 1. **Registry row** — `src/agents.py` `AGENTS["pi"]`: `command="pi"`, `quit_command="/quit"`, `fullscreen=True`, `resume_token="-r"` (native picker), `native_name_flag="--name"`. `fullscreen` was flipped from an assumed `False` to a phone-validated `True` by #291 (see "Fullscreen / repaint" below) — pi is a differential in-place repainter during an active response, not a plain inline emitter, so it takes the skip-replay + forced-repaint path like Codex/Antigravity/Copilot/Grok.
 2. **Explicit provider/model + thinking + trust** — `build_pi_flags` (`src/launch_flags.py`) emits `--provider <p> --model <p>/<id> --thinking <effort> <--approve|--no-approve>`, all explicit because pi's settings.json defaults don't reliably reroute a launch. The provider switches on the chosen model (see point 3) so a launch can never fall back to the billing `anthropic` provider. Wired into the launch dispatch + resume path in `app/webapp/routers/apps.py`.

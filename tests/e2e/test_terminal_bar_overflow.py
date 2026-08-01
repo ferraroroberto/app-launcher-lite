@@ -50,8 +50,8 @@ def test_terminal_bar_buttons_stay_within_viewport(
     viewport_width = authed_page.evaluate("window.innerWidth")
     assert viewport_width == _NARROW_VIEWPORT["width"]
 
-    # .terminal-bar / .terminal-bar-actions are shared classes with the Life
-    # OS doc-browser bar (#lifeOsBrowser) — scope to #terminalOverlay so the
+    # .terminal-bar / .terminal-bar-actions are shared classes with the Team
+    # OS doc-browser bar (#teamOsBrowser) — scope to #terminalOverlay so the
     # measurement targets the actual open terminal, not the other (hidden,
     # zero-size) bar sharing the same class names.
     #

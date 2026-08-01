@@ -88,10 +88,10 @@ export const state = {
   // Session id whose drawer is open (#301). The board poll pauses while
   // set, so a re-render can never wipe a reply being typed.
   boardExpanded: null,
-  // Life OS tab (issue #102): skills from /api/life-os/skills, plus the
+  // Team OS tab (issue #102): skills from /api/team-os/skills, plus the
   // read-only content browser's current skill + loaded files.
-  lifeOsSkills: [],
-  lifeOsBrowser: null,   // { skillId, name, files } while the browser is open
+  teamOsSkills: [],
+  teamOsBrowser: null,   // { skillId, name, files } while the browser is open
   pendingScan: [],
   webauthn: { configured: false, enrollment_open: false, devices: [] },
   terminal: null,   // { sid, ws, term, fit, onWindowResize }
@@ -116,12 +116,12 @@ export const els = {
   tabClaude: document.getElementById('tabClaude'),
   tabApps: document.getElementById('tabApps'),
   tabJobs: document.getElementById('tabJobs'),
-  tabLifeOS: document.getElementById('tabLifeOS'),
+  tabTeamOS: document.getElementById('tabTeamOS'),
   tabBoard: document.getElementById('tabBoard'),
   paneClaude: document.getElementById('paneClaude'),
   paneApps: document.getElementById('paneApps'),
   paneJobs: document.getElementById('paneJobs'),
-  paneLifeOS: document.getElementById('paneLifeOS'),
+  paneTeamOS: document.getElementById('paneTeamOS'),
   paneBoard: document.getElementById('paneBoard'),
 
   boardColumns: document.getElementById('boardColumns'),
@@ -144,22 +144,22 @@ export const els = {
   boardDispatchClear: document.getElementById('boardDispatchClear'),
   boardDispatchSend: document.getElementById('boardDispatchSend'),
 
-  lifeOsDetached: document.getElementById('lifeOsDetached'),
-  lifeOsResume: document.getElementById('lifeOsResume'),
-  lifeOsList: document.getElementById('lifeOsList'),
-  lifeOsEmpty: document.getElementById('lifeOsEmpty'),
-  lifeOsRecap: document.getElementById('lifeOsRecap'),
-  lifeOsRecapBadge: document.getElementById('lifeOsRecapBadge'),
-  lifeOsRecapLaunch: document.getElementById('lifeOsRecapLaunch'),
-  lifeOsDir: document.getElementById('lifeOsDir'),
-  lifeOsBrowser: document.getElementById('lifeOsBrowser'),
-  lifeOsBrowserBack: document.getElementById('lifeOsBrowserBack'),
-  lifeOsBrowserTitle: document.getElementById('lifeOsBrowserTitle'),
-  lifeOsDocClose: document.getElementById('lifeOsDocClose'),
-  lifeOsDocDelete: document.getElementById('lifeOsDocDelete'),
-  lifeOsDocRename: document.getElementById('lifeOsDocRename'),
-  lifeOsFileList: document.getElementById('lifeOsFileList'),
-  lifeOsFileContent: document.getElementById('lifeOsFileContent'),
+  teamOsDetached: document.getElementById('teamOsDetached'),
+  teamOsResume: document.getElementById('teamOsResume'),
+  teamOsList: document.getElementById('teamOsList'),
+  teamOsEmpty: document.getElementById('teamOsEmpty'),
+  teamOsRecap: document.getElementById('teamOsRecap'),
+  teamOsRecapBadge: document.getElementById('teamOsRecapBadge'),
+  teamOsRecapLaunch: document.getElementById('teamOsRecapLaunch'),
+  teamOsDir: document.getElementById('teamOsDir'),
+  teamOsBrowser: document.getElementById('teamOsBrowser'),
+  teamOsBrowserBack: document.getElementById('teamOsBrowserBack'),
+  teamOsBrowserTitle: document.getElementById('teamOsBrowserTitle'),
+  teamOsDocClose: document.getElementById('teamOsDocClose'),
+  teamOsDocDelete: document.getElementById('teamOsDocDelete'),
+  teamOsDocRename: document.getElementById('teamOsDocRename'),
+  teamOsFileList: document.getElementById('teamOsFileList'),
+  teamOsFileContent: document.getElementById('teamOsFileContent'),
 
   jobsList: document.getElementById('jobsList'),
   jobsEmpty: document.getElementById('jobsEmpty'),
@@ -247,6 +247,9 @@ export const els = {
   antigravitySandbox: document.getElementById('antigravitySandbox'),
   antigravityFlagsPreview: document.getElementById('antigravityFlagsPreview'),
   copilotModel: document.getElementById('copilotModel'),
+  copilotAutopilot: document.getElementById('copilotAutopilot'),
+  copilotContext: document.getElementById('copilotContext'),
+  copilotEffort: document.getElementById('copilotEffort'),
   copilotSkipPerms: document.getElementById('copilotSkipPerms'),
   copilotFlagsPreview: document.getElementById('copilotFlagsPreview'),
   piModel: document.getElementById('piModel'),

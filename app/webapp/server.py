@@ -41,7 +41,7 @@ full per-family surface.  Top-level families:
 
     jobs         /api/jobs/*                   → Jobs tab (~30 routes)
 
-    life_os      /api/life-os/*                → Life OS tab
+    team_os      /api/team-os/*                → Team OS tab
 
     webauthn     /api/webauthn/*               → passkey ceremonies
 """
@@ -83,9 +83,9 @@ from app.webapp.routers import (
     claude_code,
     config,
     jobs,
-    life_os,
     misc,
     sessions,
+    team_os,
     tokens,
     webauthn,
 )
@@ -339,7 +339,7 @@ def create_app() -> FastAPI:
     app.include_router(jobs.router)
     app.include_router(sessions.router)
     app.include_router(claude_code.router)
-    app.include_router(life_os.router)
+    app.include_router(team_os.router)
     app.include_router(board.router)
     app.include_router(webauthn.router)
 

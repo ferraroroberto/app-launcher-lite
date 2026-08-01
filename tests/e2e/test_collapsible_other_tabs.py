@@ -1,6 +1,6 @@
-"""Regression pin for issue #226 (collapsible Apps/Jobs/Life panels).
+"""Regression pin for issue #226 (collapsible Apps/Jobs/Team panels).
 
-The feature: the Apps, Jobs and Life tabs' top-level panels are each a
+The feature: the Apps, Jobs and Team tabs' top-level panels are each a
 collapsible ``<details>`` reusing the Code tab's ``.card--collapsible`` /
 ``.collapse-summary`` chrome, with the right-pinned chevron on the summary
 title, so the whole app shares one foldable-section idiom.
@@ -11,7 +11,7 @@ Covered panels:
 - Jobs: 📋 Registered jobs — the ➕ Add job button sits in the summary row
   and a tap there must drive the button only (stopPropagation), never the
   collapse.
-- Life: 📚 Skills.
+- Team: 📚 Skills.
 
 Runs in both projections — the wiring is browser-agnostic but the iPhone
 projection confirms the phone surface too.
@@ -85,22 +85,22 @@ def test_jobs_panel_is_collapsible_and_add_button_does_not_toggle(
     )
 
 
-def test_life_skills_panel_is_collapsible(authed_page: Page, base_url: str) -> None:
+def test_team_skills_panel_is_collapsible(authed_page: Page, base_url: str) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.locator("#tabLifeOS").click()
+    authed_page.locator("#tabTeamOS").click()
 
-    skills = authed_page.locator("#paneLifeOS details.lifeos-list-card")
+    skills = authed_page.locator("#paneTeamOS details.teamos-list-card")
     skills.wait_for(state="attached", timeout=10_000)
-    assert _is_open(authed_page, "#paneLifeOS details.lifeos-list-card"), (
+    assert _is_open(authed_page, "#paneTeamOS details.teamos-list-card"), (
         "skills panel should open by default"
     )
 
-    title = authed_page.locator("#paneLifeOS details.lifeos-list-card .collapse-title")
+    title = authed_page.locator("#paneTeamOS details.teamos-list-card .collapse-title")
     title.click()
-    assert not _is_open(authed_page, "#paneLifeOS details.lifeos-list-card"), (
+    assert not _is_open(authed_page, "#paneTeamOS details.teamos-list-card"), (
         "title tap should collapse the panel"
     )
     title.click()
-    assert _is_open(authed_page, "#paneLifeOS details.lifeos-list-card"), (
+    assert _is_open(authed_page, "#paneTeamOS details.teamos-list-card"), (
         "second title tap should re-expand it"
     )

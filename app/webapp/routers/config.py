@@ -25,7 +25,8 @@ from src.webapp_config import (
     MIN_TERMINAL_HISTORY_LINES,
     VALID_CODEX_EFFORTS,
     VALID_CODEX_PERMISSION_MODES,
-    VALID_COPILOT_MODELS,
+    VALID_COPILOT_CONTEXTS,
+    VALID_COPILOT_EFFORTS,
     VALID_GROK_EFFORTS,
     VALID_GROK_PERMISSION_MODES,
     VALID_PI_EFFORTS,
@@ -59,7 +60,7 @@ async def get_config(request: Request) -> Dict[str, Any]:
         # pseudo-id `github`. The SPA filters the row strip on this.
         "coding_hidden_agents": cfg.coding_hidden_agents,
         "apps_scan_root": cfg.apps_scan_root,
-        "life_os_dir": cfg.life_os_dir,
+        "team_os_dir": cfg.team_os_dir,
         "terminal_history_lines": cfg.terminal_history_lines,
         "terminal_history_lines_min": MIN_TERMINAL_HISTORY_LINES,
         "terminal_history_lines_max": MAX_TERMINAL_HISTORY_LINES,
@@ -79,7 +80,15 @@ async def get_config(request: Request) -> Dict[str, Any]:
         "copilot": {
             "skip_permissions": cfg.copilot_skip_permissions,
             "model": cfg.copilot_model,
-            "models_available": list(VALID_COPILOT_MODELS),
+            # Config-driven (lite Phase 3): the offered ids come from the
+            # `copilot_models` list in webapp_config.json — read-only from
+            # the UI (GET only; not in the POST allow-list below).
+            "models_available": list(cfg.copilot_models),
+            "autopilot": cfg.copilot_autopilot,
+            "context": cfg.copilot_context,
+            "contexts_available": list(VALID_COPILOT_CONTEXTS),
+            "effort": cfg.copilot_effort,
+            "efforts_available": list(VALID_COPILOT_EFFORTS),
             "computed_flags": build_copilot_flags(cfg),
         },
         "pi": {
@@ -117,7 +126,7 @@ async def patch_config(request: Request) -> Dict[str, Any]:
         "projects_ignore",
         "coding_hidden_agents",
         "apps_scan_root",
-        "life_os_dir",
+        "team_os_dir",
         "terminal_history_lines",
         "claude_model",
         "claude_effort",
@@ -128,8 +137,13 @@ async def patch_config(request: Request) -> Dict[str, Any]:
         "antigravity_sandbox",
         "codex_effort",
         "codex_permission_mode",
+        # copilot_models is deliberately absent: read-only from the UI,
+        # edited in webapp_config.json directly (tenant-gated ids).
         "copilot_skip_permissions",
         "copilot_model",
+        "copilot_autopilot",
+        "copilot_context",
+        "copilot_effort",
         "pi_model",
         "pi_effort",
         "pi_trust_mode",

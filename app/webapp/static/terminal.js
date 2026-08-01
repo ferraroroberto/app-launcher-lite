@@ -109,7 +109,7 @@ export function estimateTermSize() {
 }
 
 // Desktop-vs-phone launch-size contract, shared by every PTY-launch call
-// site (Coding tab, Board issue-start/dispatch, Life OS recap/skill launch,
+// site (Coding tab, Board issue-start/dispatch, Team OS recap/skill launch,
 // issue #374): a desktop browser gets the dedicated PC mirror window sized
 // to its own default, a phone carries its real terminal size so the PTY's
 // first frame is painted at the right width. Mutates `payload` in place —
@@ -135,7 +135,7 @@ export function applyLaunchSizePayload(payload) {
 }
 
 // The post-launch tail shared by every PTY-launch response handler (Coding
-// tab's launchApp, Life OS's launchRecap/launchSkill): refresh the sessions
+// tab's launchApp, Team OS's launchRecap/launchSkill): refresh the sessions
 // list, then drop straight into the in-page terminal for a full-control
 // (non-'remote') session on a phone — a desktop browser already got its
 // dedicated PC Edge window instead (issue #241), so it stays on the SPA.

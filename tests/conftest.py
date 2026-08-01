@@ -93,8 +93,8 @@ def project_root() -> Path:
 def _no_real_mirror_window(request, monkeypatch):
     """Never spawn a real PC mirror window from a non-e2e test (issue #279).
 
-    Both launch handlers — the Apps tab (``routers/apps.py``) and the Life OS
-    tab (``routers/life_os.py``) — call ``open_local_terminal_window`` when
+    Both launch handlers — the Apps tab (``routers/apps.py``) and the Team OS
+    tab (``routers/team_os.py``) — call ``open_local_terminal_window`` when
     ``should_mirror_to_pc`` is True, which it is under ``TestClient`` (its
     request host isn't loopback). Left real, each launch spawns an Edge
     ``--app`` window the unit test never tears down, littering the desktop with
@@ -111,7 +111,7 @@ def _no_real_mirror_window(request, monkeypatch):
         return
     for mod_name in (
         "app.webapp.routers.apps",
-        "app.webapp.routers.life_os",
+        "app.webapp.routers.team_os",
         "app.webapp.routers.board",
     ):
         module = importlib.import_module(mod_name)
@@ -216,14 +216,14 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     from app.webapp.routers import apps as apps_router
     from app.webapp.routers import board as board_router
     from app.webapp.routers import board_spawn as board_spawn_router
-    from app.webapp.routers import life_os as life_os_router
+    from app.webapp.routers import team_os as team_os_router
     from app.webapp.routers import misc as misc_router
     from app.webapp.routers import sessions as sessions_router
 
     # Mock the session-host loopback client. Every route that talks to
     # :8446 goes through this module, so patch each router that holds a
     # module-level `session_client` reference of its own. The launch
-    # routers (apps.py, life_os.py) no longer do since #689 moved their
+    # routers (apps.py, team_os.py) no longer do since #689 moved their
     # spawn + error-mapping head into _helpers.spawn_session_or_400 —
     # they reach the host only through the `spawn_claude_session` the
     # per-test fakes replace.
@@ -256,7 +256,7 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     monkeypatch.setattr(apps_router, "audit", audit_mock)
     monkeypatch.setattr(sessions_router, "audit", audit_mock)
     monkeypatch.setattr(webauthn_router, "audit", audit_mock)
-    monkeypatch.setattr(life_os_router, "audit", audit_mock)
+    monkeypatch.setattr(team_os_router, "audit", audit_mock)
     monkeypatch.setattr(board_router, "audit", audit_mock)
 
     # WebAuthnGate doesn't touch disk until configured (rp_id + origin set)

@@ -31,7 +31,7 @@ from playwright.sync_api import Page, expect
 pytestmark = pytest.mark.smoke
 
 TAB_IDS = [
-    "#tabClaude", "#tabApps", "#tabJobs", "#tabLifeOS", "#tabBoard",
+    "#tabClaude", "#tabApps", "#tabJobs", "#tabTeamOS", "#tabBoard",
     "#tabSettings",
 ]
 

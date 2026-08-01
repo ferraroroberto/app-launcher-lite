@@ -230,9 +230,10 @@ async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
             )
         # Each agent has its own flag set: Claude's model / effort /
         # always-on remote-control switches; Antigravity's two opt-in
-        # launch toggles; Copilot's single allow-all toggle. The
-        # non-Claude agents have no model/effort flags — that's chosen
-        # in-TUI with `/model`.
+        # launch toggles; Copilot's config-driven model / autopilot /
+        # context / effort knobs plus the allow-all toggle. The other
+        # agents have no launch-time model flag — that's chosen in-TUI
+        # with `/model`.
         flag_builders = {
             "claude": build_claude_flags,
             "codex": build_codex_flags,

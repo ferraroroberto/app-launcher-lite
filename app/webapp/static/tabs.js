@@ -1,4 +1,4 @@
-/* Six-tab switcher: Board | Code | Life | Apps | Jobs | Settings.
+/* Six-tab switcher: Board | Code | Team | Apps | Jobs | Settings.
  *
  * Wraps the vendored _vendored/nav/nav-tabs.js (issue #355) — that file owns
  * tab/pane discovery, ARIA + roving tabindex, the standalone-PWA fixed-inset

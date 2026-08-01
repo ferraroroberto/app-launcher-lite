@@ -15,7 +15,7 @@ pytestmark = pytest.mark.smoke
 TAB_ORDER = [
     "tabBoard",
     "tabClaude",
-    "tabLifeOS",
+    "tabTeamOS",
     "tabApps",
     "tabJobs",
     "tabSettings",

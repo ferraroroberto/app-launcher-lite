@@ -7,7 +7,7 @@ POSTs the gh refresh, and the phone projection lays the columns out as a
 one-column-per-viewport carousel while desktop gets the five-column grid.
 The #302 dispatch bar POSTs {repo, goal, mode} and keeps its goal for rapid
 multi-dispatch. Hermetic — the
-board API is route-mocked like the Jobs / Life OS e2e tests.
+board API is route-mocked like the Jobs / Team OS e2e tests.
 
 Server-side logic (cwd join, jobs scan, gh cache/degradation, the
 spawn-then-type dispatch endpoint) is covered by the in-process suite in
@@ -45,10 +45,10 @@ _FAKE_BOARD = {
         ],
         "claude_turn": [
             {"session_id": "s-work", "kind": "pty", "agent": "claude",
-             "project_dir": "E:/automation/life-os", "name": "life-os",
+             "project_dir": "E:/automation/team-os", "name": "team-os",
              "alive": True, "started_at": "2026-07-02T11:56:00Z",
              "live_title": "weekly recap", "prompt_title": "",
-             "project": "life-os", "status": "working", "age_seconds": 240},
+             "project": "team-os", "status": "working", "age_seconds": 240},
         ],
         "your_turn": [
             {"session_id": "s-wait", "kind": "pty", "agent": "claude",
@@ -795,8 +795,8 @@ def test_dispatch_repo_dropdown_is_tap_only_and_filters_board_columns(
                  "name": "app-launcher", "project_dir": "E:/automation/app-launcher"},
                 {"id": "cc-voice", "kind": "claude-code",
                  "name": "voice-transcriber", "project_dir": "E:/automation/voice-transcriber"},
-                {"id": "cc-life-os", "kind": "claude-code",
-                 "name": "life-os", "project_dir": "E:/automation/life-os"},
+                {"id": "cc-team-os", "kind": "claude-code",
+                 "name": "team-os", "project_dir": "E:/automation/team-os"},
                 {"id": "cc-photo", "kind": "claude-code",
                  "name": "photo-ocr", "project_dir": "E:/automation/photo-ocr"},
             ]}),
@@ -835,7 +835,7 @@ def test_dispatch_repo_dropdown_is_tap_only_and_filters_board_columns(
     expect(authed_page.locator("#boardDispatchRepo")).to_have_value("app-launcher")
 
     # Filtered to app-launcher: backlog issue (repo=app-launcher) stays;
-    # Claude's turn (life-os session) and Done (voice-transcriber issue) empty
+    # Claude's turn (team-os session) and Done (voice-transcriber issue) empty
     # out; Your turn drops the photo-ocr session (no match); Other keeps only
     # the app-launcher PR, dropping the job card (no project at all).
     expect(authed_page.locator("#boardColBacklog .board-count")).to_have_text("1")

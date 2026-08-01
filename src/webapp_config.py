@@ -13,7 +13,7 @@ Holds:
   together with the ``VALID_*`` / ``PI_MODEL_SPECS`` value sets each field
   validates against
 - sibling-app loopback URLs (voice-transcriber, photo-ocr, local-llm-hub)
-- Life OS tab settings
+- Team OS tab settings
 - terminal display and passkey / WebAuthn config
 - Pushover failure-notification credentials
 - auth secrets (bearer token + login password)
@@ -104,33 +104,24 @@ VALID_CODEX_PERMISSION_MODES = ("auto", "skip")
 DEFAULT_CODEX_PERMISSION_MODE = "auto"
 
 # Models the GitHub Copilot CLI accepts for the `--model` flag (and the
-# in-session `/model` command). Source: `copilot help config`. An empty
-# `copilot_model` means "don't pass --model" — the CLI then uses its own
-# configured default. This list will drift as GitHub adds models; refresh
-# it from `copilot help config` when that happens.
-VALID_COPILOT_MODELS = (
-    "claude-sonnet-5",
-    "claude-sonnet-4.6",
-    "claude-sonnet-4.5",
-    "claude-haiku-4.5",
-    "claude-fable-5",
-    "claude-opus-4.8",
-    "claude-opus-4.8-fast",
-    "claude-opus-4.7",
-    "claude-opus-4.6",
-    "claude-opus-4.5",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.3-codex",
-    "gpt-5.4-mini",
-    "gpt-5-mini",
-    "gemini-3.1-pro-preview",
-    "gemini-3.5-flash",
-    "kimi-k2.7-code",
+# in-session `/model` command) — a *config list*, not a hardcoded tuple:
+# explicit model ids are tenant-gated, so the offered set is edited in
+# webapp_config.json per install. The empty string (or the "default"
+# sentinel) means "don't pass --model" — Copilot then picks its own (auto) —
+# and is always allowed in `copilot_model` regardless of the list.
+DEFAULT_COPILOT_MODELS = ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+DEFAULT_COPILOT_MODEL = "gpt-5.6-luna"
+# `--context` values the Copilot CLI accepts (1.0.70). "" = omit the flag.
+VALID_COPILOT_CONTEXTS = ("", "default", "long_context")
+DEFAULT_COPILOT_CONTEXT = "long_context"
+# `--effort` values the Copilot CLI accepts (1.0.70). "" = omit the flag.
+# NOTE: the auto model (no --model) rejects --effort outright ("does not
+# support reasoning effort configuration"), so build_copilot_flags only
+# emits it alongside an explicit model.
+VALID_COPILOT_EFFORTS = (
+    "", "none", "minimal", "low", "medium", "high", "xhigh", "max"
 )
+DEFAULT_COPILOT_EFFORT = "xhigh"
 
 # Pi coding-agent launch models (issues #273, #288). The Coding tab shows a
 # deliberately small, segmented model control — three options spanning two
@@ -209,9 +200,9 @@ def _default_projects_dir() -> str:
     return str(PROJECT_ROOT.parent)
 
 
-def _default_life_os_dir() -> str:
-    """Default to the sibling ``life-os`` checkout next to this repo."""
-    return str(PROJECT_ROOT.parent / "life-os")
+def _default_team_os_dir() -> str:
+    """Default to the sibling ``team-os`` checkout next to this repo."""
+    return str(PROJECT_ROOT.parent / "team-os")
 
 
 def _default_sessions_state_file() -> str:
@@ -251,12 +242,12 @@ class WebappConfig:
     coding_hidden_agents: list = field(default_factory=list)
     # Where the Apps tab scans recursively for launcher `.bat` files.
     apps_scan_root: str = field(default_factory=_default_projects_dir)
-    # Root of the life-os checkout the Life OS tab surfaces (issue #102).
-    # Skills live at `<life_os_dir>/.claude/skills`, identity at
-    # `<life_os_dir>/identity`. When the skills dir doesn't exist the tab
+    # Root of the team-os checkout the Team OS tab surfaces (issue #102).
+    # Skills live at `<team_os_dir>/.claude/skills`, identity at
+    # `<team_os_dir>/identity`. When the skills dir doesn't exist the tab
     # shows disabled, the same way the Coding tab handles a missing
     # `projects_dir`.
-    life_os_dir: str = field(default_factory=_default_life_os_dir)
+    team_os_dir: str = field(default_factory=_default_team_os_dir)
     # --- Board tab (issue #300 / #164) -----------------------------------
     # The sessions-state file written by fleet-config's session_state hook
     # (fleet-config#91). The board reads it defensively — absent/corrupt/stale
@@ -288,11 +279,24 @@ class WebappConfig:
     # Claude's auto/skip. The model stays the account default — no picker.
     codex_effort: str = DEFAULT_CODEX_EFFORT
     codex_permission_mode: str = DEFAULT_CODEX_PERMISSION_MODE
-    # GitHub Copilot CLI launch settings (issue #48). `copilot_model` is
-    # the `--model` value (empty = let the CLI use its own default);
-    # `copilot_skip_permissions` is the opt-in allow-all switch.
+    # GitHub Copilot CLI launch settings (issue #48; config-driven since the
+    # lite fork's Phase 3). `copilot_models` is the UI/select list of model
+    # ids offered — read-only from the UI, edited in the JSON file directly
+    # (explicit ids are tenant-gated). `copilot_model` is the persisted
+    # `--model` value ("" or "default" = let Copilot pick auto);
+    # `copilot_skip_permissions` is the opt-in allow-all switch;
+    # `copilot_autopilot` maps to `--autopilot`; `copilot_context` to
+    # `--context` ("" = omit); `copilot_effort` to `--effort` ("" = omit,
+    # and only ever emitted alongside an explicit model — see
+    # build_copilot_flags).
     copilot_skip_permissions: bool = False
-    copilot_model: str = ""
+    copilot_models: list = field(
+        default_factory=lambda: list(DEFAULT_COPILOT_MODELS)
+    )
+    copilot_model: str = DEFAULT_COPILOT_MODEL
+    copilot_autopilot: bool = True
+    copilot_context: str = DEFAULT_COPILOT_CONTEXT
+    copilot_effort: str = DEFAULT_COPILOT_EFFORT
     # Grok Build launch settings (issue #667). `grok_effort` is the
     # reasoning tier (low/medium/high); `grok_permission_mode` mirrors
     # Claude's and Codex's auto/skip. No model picker — see VALID_GROK_*.
@@ -469,7 +473,7 @@ def load_webapp_config(
             str(p) for p in (raw.get("coding_hidden_agents") or [])
         ],
         apps_scan_root=str(raw.get("apps_scan_root") or _default_projects_dir()),
-        life_os_dir=str(raw.get("life_os_dir") or _default_life_os_dir()),
+        team_os_dir=str(raw.get("team_os_dir") or _default_team_os_dir()),
         sessions_state_file=str(
             raw.get("sessions_state_file") or _default_sessions_state_file()
         ),
@@ -495,7 +499,17 @@ def load_webapp_config(
         copilot_skip_permissions=bool(
             raw.get("copilot_skip_permissions", False)
         ),
-        copilot_model=str(raw.get("copilot_model", "")),
+        copilot_models=(
+            [str(m) for m in raw["copilot_models"]]
+            if isinstance(raw.get("copilot_models"), list)
+            else list(DEFAULT_COPILOT_MODELS)
+        ),
+        copilot_model=str(raw.get("copilot_model", DEFAULT_COPILOT_MODEL)),
+        copilot_autopilot=bool(raw.get("copilot_autopilot", True)),
+        copilot_context=str(
+            raw.get("copilot_context", DEFAULT_COPILOT_CONTEXT)
+        ),
+        copilot_effort=str(raw.get("copilot_effort", DEFAULT_COPILOT_EFFORT)),
         grok_effort=str(raw.get("grok_effort", DEFAULT_GROK_EFFORT)),
         grok_permission_mode=str(
             raw.get("grok_permission_mode", DEFAULT_GROK_PERMISSION_MODE)
@@ -556,7 +570,7 @@ def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
         "coding_favorites": cfg.coding_favorites,
         "coding_hidden_agents": cfg.coding_hidden_agents,
         "apps_scan_root": cfg.apps_scan_root,
-        "life_os_dir": cfg.life_os_dir,
+        "team_os_dir": cfg.team_os_dir,
         "sessions_state_file": cfg.sessions_state_file,
         "rate_limits_file": cfg.rate_limits_file,
         "github_owner": cfg.github_owner,
@@ -570,7 +584,11 @@ def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
         "codex_effort": cfg.codex_effort,
         "codex_permission_mode": cfg.codex_permission_mode,
         "copilot_skip_permissions": cfg.copilot_skip_permissions,
+        "copilot_models": cfg.copilot_models,
         "copilot_model": cfg.copilot_model,
+        "copilot_autopilot": cfg.copilot_autopilot,
+        "copilot_context": cfg.copilot_context,
+        "copilot_effort": cfg.copilot_effort,
         "grok_effort": cfg.grok_effort,
         "grok_permission_mode": cfg.grok_permission_mode,
         "pi_model": cfg.pi_model,
@@ -677,11 +695,41 @@ def _validate(cfg: WebappConfig) -> None:
             f"grok_permission_mode must be one of {VALID_GROK_PERMISSION_MODES}; "
             f"got {cfg.grok_permission_mode!r}"
         )
-    if cfg.copilot_model and cfg.copilot_model not in VALID_COPILOT_MODELS:
-        raise ValueError(
-            f"copilot_model must be empty or one of {VALID_COPILOT_MODELS}; "
-            f"got {cfg.copilot_model!r}"
+    # Copilot knobs self-heal instead of raising: the model list is a
+    # hand-edited config field (tenant-gated ids), so a stale persisted
+    # value must never brick config loading — fall back with a warning.
+    if not (
+        isinstance(cfg.copilot_models, list)
+        and all(isinstance(m, str) and m.strip() for m in cfg.copilot_models)
+    ):
+        logger.warning(
+            "⚠️  copilot_models must be a list of non-empty strings; got %r "
+            "— falling back to defaults", cfg.copilot_models
         )
+        cfg.copilot_models = list(DEFAULT_COPILOT_MODELS)
+    # "" / "default" always allowed: "let Copilot pick (auto)".
+    if cfg.copilot_model not in ("", "default") and (
+        cfg.copilot_model not in cfg.copilot_models
+    ):
+        logger.warning(
+            "⚠️  copilot_model %r is not in copilot_models %r — falling "
+            "back to '' (Copilot auto)", cfg.copilot_model, cfg.copilot_models
+        )
+        cfg.copilot_model = ""
+    if cfg.copilot_context not in VALID_COPILOT_CONTEXTS:
+        logger.warning(
+            "⚠️  copilot_context must be one of %r; got %r — falling back "
+            "to %r", VALID_COPILOT_CONTEXTS, cfg.copilot_context,
+            DEFAULT_COPILOT_CONTEXT,
+        )
+        cfg.copilot_context = DEFAULT_COPILOT_CONTEXT
+    if cfg.copilot_effort not in VALID_COPILOT_EFFORTS:
+        logger.warning(
+            "⚠️  copilot_effort must be one of %r; got %r — falling back "
+            "to %r", VALID_COPILOT_EFFORTS, cfg.copilot_effort,
+            DEFAULT_COPILOT_EFFORT,
+        )
+        cfg.copilot_effort = DEFAULT_COPILOT_EFFORT
     if cfg.pi_model not in VALID_PI_MODELS:
         raise ValueError(
             f"pi_model must be one of {VALID_PI_MODELS}; got {cfg.pi_model!r}"

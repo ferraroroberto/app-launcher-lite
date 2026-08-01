@@ -1,4 +1,4 @@
-"""src.scanner.scan_skills — life-os skill discovery (issue #102)."""
+"""src.scanner.scan_skills — team-os skill discovery (issue #102)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from src.scanner import scan_skills, skills_dir_for
 
 
 def _make_skill(
-    life_os: Path,
+    team_os: Path,
     folder: str,
     *,
     name: str | None = None,
@@ -17,7 +17,7 @@ def _make_skill(
     skill_md: bool = True,
 ) -> Path:
     """Create a skill folder with an optional frontmatter'd SKILL.md."""
-    skill_dir = skills_dir_for(life_os) / folder
+    skill_dir = skills_dir_for(team_os) / folder
     skill_dir.mkdir(parents=True, exist_ok=True)
     if skill_md:
         fm = ["---"]
@@ -83,4 +83,4 @@ class TestScanSkills:
         assert found[0].command == "meeting-prep"
 
     def test_missing_skills_dir_returns_empty(self, tmp_path: Path):
-        assert scan_skills(tmp_path / "no-life-os") == []
+        assert scan_skills(tmp_path / "no-team-os") == []
