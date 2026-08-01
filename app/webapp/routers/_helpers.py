@@ -1,0 +1,302 @@
+"""Cross-router helpers — no router imports another router; shared utility
+lives here instead.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional
+from urllib.parse import urlencode
+
+from fastapi import HTTPException, Request, WebSocket
+
+from src.launch_flags import build_claude_flags
+from src.session_client import SessionHostError
+from src.webapp_config import (
+    ALWAYS_ON_CLAUDE_FLAGS,
+    VALID_CLAUDE_EFFORTS,
+    VALID_CLAUDE_MODELS,
+    VALID_CLAUDE_PERMISSION_MODES,
+    WebappConfig,
+    append_auth_token,
+)
+from src.webauthn_gate import WebAuthnGate
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+
+def claude_flags_payload(cfg: WebappConfig) -> Dict[str, Any]:
+    """The claude-code flags subtree shared by ``/api/config``'s embedded
+    ``"claude"`` section and ``/api/claude-code/flags``'s own response.
+    """
+    return {
+        "model": cfg.claude_model,
+        "effort": cfg.claude_effort,
+        "verbose": cfg.claude_verbose,
+        "debug": cfg.claude_debug,
+        "permission_mode": cfg.claude_permission_mode,
+        "models_available": list(VALID_CLAUDE_MODELS),
+        "efforts_available": list(VALID_CLAUDE_EFFORTS),
+        "permission_modes_available": list(VALID_CLAUDE_PERMISSION_MODES),
+        "always_on_flags": list(ALWAYS_ON_CLAUDE_FLAGS),
+        "computed_flags": build_claude_flags(cfg),
+    }
+
+
+async def audit_off_loop(
+    write: Callable[..., None], *args: Any, **kwargs: Any
+) -> None:
+    """Run one ``src.audit`` write off the event loop (#660 → #661 → #674).
+
+    Every audit entry point does synchronous ``open``/``write``/``close``:
+    ``session_log``/``session_input`` on ``webapp/sessions/<sid>.log``,
+    ``audit_event`` on the cross-session log through a logging handler. The
+    webapp runs a **single** uvicorn worker (``app/webapp/event_loop.py``), so
+    a slow write — disk contention, an AV scanner walking that directory —
+    freezes every other live session's in-flight WS output: the "terminal
+    opens blank and never paints" class investigated in #610, and fixed for
+    the session-host's own handler in #639.
+
+    Fixed one path at a time until it stopped being one path: #660 threaded
+    the WS proxy's writes, #661 the five remaining HTTP handlers in that same
+    router (behind a local helper), #674 the twenty sites across the four
+    *other* routers — at which point five callers made this the obvious home
+    rather than a helper copied per router.
+
+    Deliberately no try/except: ``audit.session_log``/``session_input``
+    already swallow their own ``OSError``, and ``audit_event`` going bang is a
+    real fault worth surfacing — the failure semantics are exactly what they
+    were before the hop off the loop.
+    """
+    await asyncio.to_thread(write, *args, **kwargs)
+
+
+async def maybe_json(request: Request) -> Dict[str, Any]:
+    if request.headers.get("content-type", "").startswith("application/json"):
+        try:
+            data = await request.json()
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def cert_present() -> bool:
+    return (
+        (PROJECT_ROOT / "webapp" / "certificates" / "cert.pem").exists()
+        and (PROJECT_ROOT / "webapp" / "certificates" / "key.pem").exists()
+    )
+
+
+# (mtime, hostname-or-None) of the last classified cert.pem — the cert only
+# changes on provision/renew, so one parse per change, not per PTY launch.
+_TSNET_CACHE: Optional[tuple[float, Optional[str]]] = None
+
+
+def tsnet_host_from_cert(cert_path: Optional[Path] = None) -> Optional[str]:
+    """The .ts.net hostname the active cert is issued for, or None.
+
+    Returns a hostname only for a genuine ``tailscale cert`` leaf — keyed on
+    the ISSUER (Let's Encrypt), because a legacy self-signed leaf (the
+    retired gen_ssl_cert.py) also carried the ts.net name in its SAN and
+    must keep routing mirrors over loopback (same discriminator as
+    scripts/gen_tailscale_cert.py, issue #354).
+    """
+    global _TSNET_CACHE
+    path = cert_path or (PROJECT_ROOT / "webapp" / "certificates" / "cert.pem")
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return None
+    if cert_path is None and _TSNET_CACHE is not None and _TSNET_CACHE[0] == mtime:
+        return _TSNET_CACHE[1]
+    host: Optional[str] = None
+    try:
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+
+        cert = x509.load_pem_x509_certificate(path.read_bytes())
+        issuer_orgs = [
+            attr.value
+            for attr in cert.issuer.get_attributes_for_oid(NameOID.ORGANIZATION_NAME)
+        ]
+        if any("let's encrypt" in str(org).lower() for org in issuer_orgs):
+            san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+            for name in san.value.get_values_for_type(x509.DNSName):
+                if ".ts.net" in name:
+                    host = name
+                    break
+    except Exception:
+        host = None
+    if cert_path is None:
+        _TSNET_CACHE = (mtime, host)
+    return host
+
+
+def mirror_url(request: Request, cfg: WebappConfig, sid: str) -> str:
+    """The URL a launcher-spawned PC terminal window opens for ``sid``.
+
+    Self-signed / no cert → loopback, whose auth bypass the mirror rides
+    (issue #20/#241). With a Tailscale LE cert the loopback URL would hit a
+    hostname-mismatch interstitial (the cert names only the ts.net host), so
+    the mirror targets the ts.net URL instead and carries its credentials
+    explicitly: ``?token=`` bootstraps the bearer (same mechanism as the
+    tunnel URL) and ``?tt=`` a server-minted terminal token when the passkey
+    gate is configured. Trust-equivalent to the loopback bypass — the window
+    is spawned by this server, on this machine, for this user (issue #356);
+    the SPA strips both params from the visible URL on boot.
+    """
+    ts_host = tsnet_host_from_cert()
+    if ts_host is None:
+        scheme = "https" if cert_present() else "http"
+        return f"{scheme}://127.0.0.1:{cfg.port}/?terminal={sid}"
+    url = append_auth_token(
+        f"https://{ts_host}:{cfg.port}/?terminal={sid}", cfg.auth_token
+    )
+    gate = getattr(request.app.state, "webauthn_gate", None)
+    if gate is not None and WebAuthnGate.configured(cfg):
+        url += "&" + urlencode({"tt": gate.mint_local_token()})
+    return url
+
+
+def client_ip(request: Request) -> str:
+    return request.client.host if request.client else "?"
+
+
+def should_mirror_to_pc(
+    show_local_window: bool, request: Request, body: Dict[str, Any]
+) -> bool:
+    """Whether a PTY launch should open the PC mirror window (issue #20).
+
+    The default is to mirror; only a caller that explicitly says it will
+    render the session itself skips it (issue #609):
+
+    * **Phone** — non-loopback and no ``desktop`` flag: the PC has no window
+      of its own, so mirror to one.
+    * **Desktop browser** — ``desktop: true`` in the launch body (issue
+      #241): mirror to a dedicated, independently-closable Edge window rather
+      than rendering the terminal inside the user's own browser. This
+      reverses issue #159's desktop-skips-mirror optimization for the PTY
+      case — the "redundant" in-page render was the very thing that let Stop
+      & Close tear down the controlling Chrome window, so the dedicated
+      window is the fix, not the redundancy. The flag (set client-side by
+      ``isDesktopClient``) is what distinguishes a desktop from a phone
+      regardless of loopback vs tunnel.
+    * **Genuine in-page loopback browser** — ``in_page: true`` in the launch
+      body (issue #609): the SPA itself sets this whenever it's about to
+      render the session in-page (``applyLaunchSizePayload``'s non-desktop
+      branch — a phone always takes this branch too, but the non-loopback
+      check above already mirrors it before this is ever consulted). An
+      *explicit* signal, not an inference from "loopback and no desktop
+      flag" — that inference used to double as "skip", which silently
+      starved every non-browser loopback API caller (a script, the fleet
+      chief orchestrator dispatching over ``127.0.0.1``) of a window at all:
+      there was no page for them to render into, so "skip" meant "renders
+      nowhere". Any other loopback caller — including one that sends neither
+      flag — now mirrors by default.
+    """
+    # Imported here to avoid a module-load cycle (middleware imports nothing
+    # from the routers package, but keep the dependency edge one-directional).
+    from app.webapp.middleware import LOOPBACK_HOSTS
+
+    if not show_local_window:
+        return False
+    if bool(body.get("desktop")):
+        return True
+    if client_ip(request) not in LOOPBACK_HOSTS:
+        return True
+    return not bool(body.get("in_page"))
+
+
+async def spawn_session_or_400(
+    spawn_fn: Callable[..., Dict[str, Any]], /, *args: Any, **kwargs: Any
+) -> Dict[str, Any]:
+    """Run ``spawn_claude_session`` off the event loop, mapping its two
+    failure modes onto HTTP responses (issue #689).
+
+    The shared *head* of every session-launch route, the counterpart to
+    :func:`audit_session_start_and_maybe_mirror`'s tail: six call sites
+    across three routers — ``apps.py``'s Coding-tab remote + PTY launches,
+    ``board.py``'s issue-start, dispatch and chief-ensure, ``life_os.py``'s
+    skill launch — repeated this identical two-arm mapping verbatim, with
+    only the spawn arguments differing.
+
+    ``SessionHostError`` carries the session-host's own status through
+    (``exc.status``) so a 409 "already running" doesn't flatten into a 400;
+    an ``OSError`` — an unreadable project dir, a missing executable — is a
+    bad request by the time it reaches here.
+
+    ``spawn_fn`` is passed in rather than imported here so
+    ``tests/conftest.py``'s per-router ``spawn_claude_session``
+    monkeypatches still bite when the spawn runs on the caller's behalf —
+    same contract as ``audit_mod`` / ``mirror_fn`` below.
+    """
+    try:
+        return await asyncio.to_thread(spawn_fn, *args, **kwargs)
+    except SessionHostError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+async def audit_session_start_and_maybe_mirror(
+    cfg: WebappConfig,
+    request: Request,
+    body: Dict[str, Any],
+    *,
+    sid: str,
+    agent: str,
+    name: str,
+    project: str,
+    audit_mod: Any,
+    mirror_fn: Callable[[str, str], Any],
+    resume: Optional[bool] = None,
+    skill: Optional[str] = None,
+) -> None:
+    """Audit a freshly spawned PTY session, then mirror it to a PC terminal
+    window if appropriate (issue #241) — the shared tail every PTY-launch
+    call site (Coding tab ``apps.py``, Board issue-start/dispatch
+    ``board.py``) needs right after ``spawn_claude_session`` (issue #334).
+
+    Life OS (``routers/life_os.py``) already has its own
+    ``_spawn_skill_session`` covering this same tail plus the "remote" kind
+    and response-shaping, so it isn't routed through here — this helper only
+    dedupes the three PTY call sites that don't have an equivalent.
+
+    ``audit_mod`` / ``mirror_fn`` must be the *caller's own* module-level
+    ``audit`` / ``open_local_terminal_window`` references (not this module's)
+    so ``tests/conftest.py``'s per-router monkeypatches — which stub the
+    audit writer and stub the mirror spawn to keep unit tests from spawning
+    real windows or writing real audit logs — still take effect when this
+    helper runs on the caller's behalf.
+    """
+    audit_mod.audit_event(
+        "session_start",
+        session=sid,
+        agent=agent,
+        skill=skill,
+        name=name,
+        project=project,
+        resume=resume,
+        client=client_ip(request),
+    )
+    audit_mod.session_log(
+        sid, "start", agent=agent, skill=skill, name=name, project=project,
+    )
+    # Mirror the session into a dedicated interactive terminal window on the
+    # PC — the default for every caller (issue #241, widened by #609); only
+    # an explicit in-page loopback browser skips it (see should_mirror_to_pc).
+    # mirror_url picks loopback (auth-bypass) or the ts.net URL with explicit
+    # credentials, keyed on the active cert (#356).
+    if should_mirror_to_pc(cfg.claude_show_local_window, request, body):
+        # Pass sid so launcher tracks the mirror window's HWND for Stop &
+        # Close to dismiss it later (issue #20).
+        asyncio.create_task(
+            asyncio.to_thread(mirror_fn, mirror_url(request, cfg, sid), sid)
+        )
+
+
+def client_ip_ws(websocket: WebSocket) -> str:
+    return websocket.client.host if websocket.client else "?"

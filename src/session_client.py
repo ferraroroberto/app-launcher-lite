@@ -1,0 +1,185 @@
+"""Thin HTTP client for the loopback PTY session-host.
+
+The webapp owns all auth, Tailscale gating, and WebAuthn; it talks to the
+session-host (``app/session_host/server.py``) purely over loopback. These
+are blocking ``requests`` calls — webapp routes wrap them in
+``asyncio.to_thread`` so the event loop never stalls. The WebSocket proxy
+is handled separately in ``app/webapp/server.py``.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List, Optional
+
+import requests
+
+from src import _loopback_http
+
+logger = logging.getLogger(__name__)
+
+_TIMEOUT = 8.0
+# Spawning a PTY session is slow (cold pywinpty + agent cold-start can take
+# 10–20 s on a freshly booted box). Reuse of the 8 s default here was
+# surfacing 'session-host unreachable' to the phone while the spawn was
+# still in flight, prompting retries that stacked orphan sessions.
+_CREATE_TIMEOUT = 45.0
+# A graceful stop polls for the agent to exit on its quit command (up to the
+# host's ~5 s grace window) before force-falling-back, so the stop call needs
+# more headroom than the 8 s default (issue #253).
+_STOP_TIMEOUT = 10.0
+
+
+def base_url(port: int) -> str:
+    return f"http://127.0.0.1:{port}"
+
+
+def ws_url(port: int, session_id: str, role: str = "phone") -> str:
+    return f"ws://127.0.0.1:{port}/sessions/{session_id}/ws?role={role}"
+
+
+class SessionHostError(_loopback_http.LoopbackError):
+    """Raised when the session-host is unreachable or returns an error."""
+
+
+def _request(method: str, port: int, path: str, *, timeout: float = _TIMEOUT, **kwargs) -> Any:
+    return _loopback_http.request(
+        method,
+        base_url(port) + path,
+        error=SessionHostError,
+        service="session-host",
+        timeout=timeout,
+        **kwargs,
+    )
+
+
+def health(port: int) -> bool:
+    try:
+        resp = _loopback_http.pooled_request(
+            "GET", base_url(port) + "/healthz", timeout=2.0
+        )
+        return resp.status_code == 200
+    except requests.RequestException:
+        return False
+
+
+def identity(port: int) -> Optional[Dict[str, Any]]:
+    """The session-host's ``/healthz`` body (``git_sha``/``started_at``, #615),
+    or ``None`` when unreachable — the build-identity companion to
+    :func:`health`'s plain up/down check, used by ``/api/version`` to report
+    whether the session-host is running current code."""
+    try:
+        resp = _loopback_http.pooled_request(
+            "GET", base_url(port) + "/healthz", timeout=2.0
+        )
+        if resp.status_code != 200:
+            return None
+        body = resp.json()
+        return body if isinstance(body, dict) else None
+    except (requests.RequestException, ValueError):
+        return None
+
+
+def create_session(
+    port: int,
+    project_dir: str,
+    name: str,
+    flags: str,
+    kind: str = "pty",
+    agent: str = "claude",
+    rows: int = 40,
+    cols: int = 120,
+    history_lines: Optional[int] = None,
+    label: Optional[str] = None,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "project_dir": project_dir,
+        "name": name,
+        "flags": flags,
+        "kind": kind,
+        "agent": agent,
+        # Phone's real terminal size, so the PTY's first frame is the
+        # right width for a ratatui TUI (issue #126).
+        "rows": rows,
+        "cols": cols,
+    }
+    # User-configurable scrollback depth for full-screen agents (issue
+    # #435 follow-up). Omitted → the session-host's own default.
+    if history_lines is not None:
+        payload["history_lines"] = history_lines
+    # Role tag (#245, e.g. "chief"). Omitted when unset — a legacy host
+    # ignores unknown keys, so this stays backward compatible either way.
+    if label:
+        payload["label"] = label
+    return _request(
+        "POST",
+        port,
+        "/sessions",
+        timeout=_CREATE_TIMEOUT,
+        json=payload,
+    )
+
+
+def list_sessions(port: int) -> List[Dict[str, Any]]:
+    data = _request("GET", port, "/sessions")
+    return list(data.get("sessions") or [])
+
+
+def get_session(port: int, session_id: str) -> Dict[str, Any]:
+    return _request("GET", port, f"/sessions/{session_id}")
+
+
+def send_input(port: int, session_id: str, data: str, submit: bool = True) -> Dict[str, Any]:
+    """Write ``data`` and, if ``submit``, submit it (issue #611).
+
+    One call, not two — the session-host now owns the whole framing +
+    settle-then-submit sequence internally (``PtySession.submit_input``), so
+    the caller no longer needs to send the text and the CR as two separate
+    requests.
+    """
+    return _request(
+        "POST", port, f"/sessions/{session_id}/input",
+        json={"data": data, "submit": submit},
+    )
+
+
+def resize(port: int, session_id: str, rows: int, cols: int) -> Dict[str, Any]:
+    return _request(
+        "POST",
+        port,
+        f"/sessions/{session_id}/resize",
+        json={"rows": rows, "cols": cols},
+    )
+
+
+def stop(port: int, session_id: str, mode: str = "quit") -> Dict[str, Any]:
+    return _request(
+        "POST", port, f"/sessions/{session_id}/stop",
+        json={"mode": mode}, timeout=_STOP_TIMEOUT,
+    )
+
+
+def rename(port: int, session_id: str, title: str) -> Dict[str, Any]:
+    """Set (empty ``title`` clears) a manual title override (issue #458)."""
+    return _request(
+        "POST", port, f"/sessions/{session_id}/rename", json={"title": title}
+    )
+
+
+def upload_image(
+    port: int,
+    session_id: str,
+    filename: str,
+    content: bytes,
+    content_type: str,
+    inline: bool = False,
+) -> Dict[str, Any]:
+    """Upload an image into a session. With ``inline`` the session-host
+    skips pasting the path into the PTY and just returns it (issue #41)."""
+    return _request(
+        "POST",
+        port,
+        f"/sessions/{session_id}/image",
+        files={"file": (filename, content, content_type)},
+        params={"inline": "1"} if inline else None,
+    )

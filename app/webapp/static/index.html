@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Launcher">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  <link rel="icon" href="/static/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" href="/static/icon-512.png">
+  <link rel="stylesheet" href="/static/vendor/xterm.css">
+  <link rel="stylesheet" href="/static/_vendored/card/card.css">
+  <!-- home-head.css must load AFTER card.css — it overrides the card's own
+       padding for the 52px header row (its README's load-order contract). -->
+  <link rel="stylesheet" href="/static/_vendored/home-head/home-head.css">
+  <link rel="stylesheet" href="/static/_vendored/disclosure/disclosure.css">
+  <link rel="stylesheet" href="/static/_vendored/nav/nav-tabs.css">
+  <link rel="stylesheet" href="/static/_vendored/button/button.css">
+  <link rel="stylesheet" href="/static/_vendored/switch/switch.css">
+  <link rel="stylesheet" href="/static/styles.css">
+  <title>Launcher</title>
+  <script>
+    (function(){
+      var t = localStorage.getItem('app-launcher.theme');
+      var dark = t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    })();
+  </script>
+</head>
+<body>
+  <!-- Lucide icon sprite — vendored from _vendored/icons/ (issue #355 PR 3).
+       Inline (not external) so iOS Safari resolves <use> references; hidden via
+       the 0-size idiom, never display:none. Symbol set is the per-app trim the
+       icons README allows; template: /static/_vendored/icons/icons-sprite.html -->
+<svg width="0" height="0" aria-hidden="true" focusable="false"
+     style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none">
+  <symbol id="i-code-xml" viewBox="0 0 24 24" fill="none">
+    <path d="m18 16 4-4-4-4" />
+    <path d="m6 8-4 4 4 4" />
+    <path d="m14.5 4-5 16" />
+  </symbol>
+  <symbol id="i-layout-grid" viewBox="0 0 24 24" fill="none">
+    <rect width="7" height="7" x="3" y="3" rx="1" />
+    <rect width="7" height="7" x="14" y="3" rx="1" />
+    <rect width="7" height="7" x="14" y="14" rx="1" />
+    <rect width="7" height="7" x="3" y="14" rx="1" />
+  </symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24" fill="none">
+    <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />
+  </symbol>
+  <symbol id="i-circle-plus" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M8 12h8" />
+    <path d="M12 8v8" />
+  </symbol>
+  <symbol id="i-square-kanban" viewBox="0 0 24 24" fill="none">
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="M8 7v7" />
+    <path d="M12 7v4" />
+    <path d="M16 7v9" />
+  </symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24" fill="none">
+    <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+    <circle cx="12" cy="12" r="3" />
+  </symbol>
+  <symbol id="i-crown" viewBox="0 0 24 24" fill="none">
+    <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.735H5.81a1 1 0 0 1-.957-.735L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" />
+    <path d="M5 21h14" />
+  </symbol>
+  <symbol id="i-sprout" viewBox="0 0 24 24" fill="none">
+    <path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3" />
+    <path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4" />
+    <path d="M5 21h14" />
+  </symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24" fill="none">
+    <path d="M12 19h8" />
+    <path d="m4 17 6-6-6-6" />
+  </symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none">
+    <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+  </symbol>
+  <symbol id="i-git-branch" viewBox="0 0 24 24" fill="none">
+    <path d="M15 6a9 9 0 0 0-9 9V3" />
+    <circle cx="18" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+  </symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none">
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+  </symbol>
+  <symbol id="i-star" viewBox="0 0 24 24" fill="none">
+    <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+  </symbol>
+  <symbol id="i-map" viewBox="0 0 24 24" fill="none">
+    <path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" />
+    <path d="M15 5.764v15" />
+    <path d="M9 3.236v15" />
+  </symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24" fill="none">
+    <path d="M12 22v-5" />
+    <path d="M15 8V2" />
+    <path d="M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z" />
+    <path d="M9 8V2" />
+  </symbol>
+  <symbol id="i-package" viewBox="0 0 24 24" fill="none">
+    <path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" />
+    <path d="M12 22V12" />
+    <polyline points="3.29 7 12 12 20.71 7" />
+    <path d="m7.5 4.27 9 5.15" />
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none">
+    <path d="m21 21-4.34-4.34" />
+    <circle cx="11" cy="11" r="8" />
+  </symbol>
+  <symbol id="i-calendar-days" viewBox="0 0 24 24" fill="none">
+    <path d="M8 2v4" />
+    <path d="M16 2v4" />
+    <rect width="18" height="18" x="3" y="4" rx="2" />
+    <path d="M3 10h18" />
+    <path d="M8 14h.01" />
+    <path d="M12 14h.01" />
+    <path d="M16 14h.01" />
+    <path d="M8 18h.01" />
+    <path d="M12 18h.01" />
+    <path d="M16 18h.01" />
+  </symbol>
+  <symbol id="i-clipboard-list" viewBox="0 0 24 24" fill="none">
+    <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    <path d="M12 11h4" />
+    <path d="M12 16h4" />
+    <path d="M8 11h.01" />
+    <path d="M8 16h.01" />
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none">
+    <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none">
+    <path d="M5 12h14" />
+    <path d="M12 5v14" />
+  </symbol>
+  <symbol id="i-notebook-text" viewBox="0 0 24 24" fill="none">
+    <path d="M2 6h4" />
+    <path d="M2 10h4" />
+    <path d="M2 14h4" />
+    <path d="M2 18h4" />
+    <rect width="16" height="20" x="4" y="2" rx="2" />
+    <path d="M9.5 8h5" />
+    <path d="M9.5 12H16" />
+    <path d="M9.5 16H14" />
+  </symbol>
+  <symbol id="i-rocket" viewBox="0 0 24 24" fill="none">
+    <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+    <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09" />
+    <path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z" />
+    <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05" />
+  </symbol>
+  <symbol id="i-library-big" viewBox="0 0 24 24" fill="none">
+    <rect width="8" height="18" x="3" y="3" rx="1" />
+    <path d="M7 3v18" />
+    <path d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z" />
+  </symbol>
+  <symbol id="i-book-open" viewBox="0 0 24 24" fill="none">
+    <path d="M12 7v14" />
+    <path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
+  </symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none">
+    <path d="M12 19v3" />
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+    <rect x="9" y="2" width="6" height="13" rx="3" />
+  </symbol>
+  <symbol id="i-send-horizontal" viewBox="0 0 24 24" fill="none">
+    <path d="M3.714 3.048a.498.498 0 0 0-.683.627l2.843 7.627a2 2 0 0 1 0 1.396l-2.842 7.627a.498.498 0 0 0 .682.627l18-8.5a.5.5 0 0 0 0-.904z" />
+    <path d="M6 12h16" />
+  </symbol>
+  <symbol id="i-trash-2" viewBox="0 0 24 24" fill="none">
+    <path d="M10 11v6" />
+    <path d="M14 11v6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+    <path d="M3 6h18" />
+    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none">
+    <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+    <path d="m15 5 4 4" />
+  </symbol>
+  <symbol id="i-triangle-alert" viewBox="0 0 24 24" fill="none">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+    <path d="M12 9v4" />
+    <path d="M12 17h.01" />
+  </symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none">
+    <path d="M10.268 21a2 2 0 0 0 3.464 0" />
+    <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" />
+  </symbol>
+  <symbol id="i-flask-conical" viewBox="0 0 24 24" fill="none">
+    <path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2" />
+    <path d="M6.453 15h11.094" />
+    <path d="M8.5 2h7" />
+  </symbol>
+  <symbol id="i-save" viewBox="0 0 24 24" fill="none">
+    <path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+    <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" />
+    <path d="M7 3v4a1 1 0 0 0 1 1h7" />
+  </symbol>
+  <symbol id="i-volume-2" viewBox="0 0 24 24" fill="none">
+    <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" />
+    <path d="M16 9a5 5 0 0 1 0 6" />
+    <path d="M19.364 18.364a9 9 0 0 0 0-12.728" />
+  </symbol>
+  <symbol id="i-image" viewBox="0 0 24 24" fill="none">
+    <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+    <circle cx="9" cy="9" r="2" />
+    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+  </symbol>
+  <symbol id="i-keyboard" viewBox="0 0 24 24" fill="none">
+    <path d="M10 8h.01" />
+    <path d="M12 12h.01" />
+    <path d="M14 8h.01" />
+    <path d="M16 12h.01" />
+    <path d="M18 8h.01" />
+    <path d="M6 8h.01" />
+    <path d="M7 16h10" />
+    <path d="M8 12h.01" />
+    <rect width="20" height="16" x="2" y="4" rx="2" />
+  </symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24" fill="none">
+    <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+    <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+    <path d="M10 9H8" />
+    <path d="M16 13H8" />
+    <path d="M16 17H8" />
+  </symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24" fill="none">
+    <path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z" />
+    <circle cx="12" cy="13" r="3" />
+  </symbol>
+  <symbol id="i-scan-text" viewBox="0 0 24 24" fill="none">
+    <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+    <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+    <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+    <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+    <path d="M7 8h8" />
+    <path d="M7 12h10" />
+    <path d="M7 16h6" />
+  </symbol>
+  <symbol id="i-rotate-ccw" viewBox="0 0 24 24" fill="none">
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+  </symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none">
+    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </symbol>
+  <symbol id="i-smartphone" viewBox="0 0 24 24" fill="none">
+    <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+    <path d="M12 18h.01" />
+  </symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none">
+    <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />
+  </symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2" />
+    <path d="M12 20v2" />
+    <path d="m4.93 4.93 1.41 1.41" />
+    <path d="m17.66 17.66 1.41 1.41" />
+    <path d="M2 12h2" />
+    <path d="M20 12h2" />
+    <path d="m6.34 17.66-1.41 1.41" />
+    <path d="m19.07 4.93-1.41 1.41" />
+  </symbol>
+  <symbol id="i-square" viewBox="0 0 24 24" fill="none">
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+  </symbol>
+  <symbol id="i-hourglass" viewBox="0 0 24 24" fill="none">
+    <path d="M5 22h14" />
+    <path d="M5 2h14" />
+    <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" />
+    <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" />
+  </symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+    <path d="M2 12h20" />
+  </symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24" fill="none">
+    <line x1="10" x2="14" y1="2" y2="2" />
+    <line x1="12" x2="15" y1="14" y2="11" />
+    <circle cx="12" cy="14" r="8" />
+  </symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24" fill="none">
+    <rect x="14" y="3" width="5" height="18" rx="1" />
+    <rect x="5" y="3" width="5" height="18" rx="1" />
+  </symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+  </symbol>
+  <symbol id="i-webhook" viewBox="0 0 24 24" fill="none">
+    <path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c.01-.7.2-1.4.57-2" />
+    <path d="m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06" />
+    <path d="m12 6 3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 0 1 0 8" />
+  </symbol>
+  <symbol id="i-circle-check" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" />
+    <path d="m9 12 2 2 4-4" />
+  </symbol>
+  <symbol id="i-circle-x" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" />
+    <path d="m15 9-6 6" />
+    <path d="m9 9 6 6" />
+  </symbol>
+  <symbol id="i-skip-forward" viewBox="0 0 24 24" fill="none">
+    <path d="M21 4v16" />
+    <path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z" />
+  </symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24" fill="none">
+    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+  </symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24" fill="none">
+    <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+  </symbol>
+  <symbol id="i-octagon-x" viewBox="0 0 24 24" fill="none">
+    <path d="m15 9-6 6" />
+    <path d="M2.586 16.726A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2h6.624a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586z" />
+    <path d="m9 9 6 6" />
+  </symbol>
+  <symbol id="i-arrow-down-up" viewBox="0 0 24 24" fill="none">
+    <path d="m3 16 4 4 4-4" />
+    <path d="M7 20V4" />
+    <path d="m21 8-4-4-4 4" />
+    <path d="M17 4v16" />
+  </symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24" fill="none">
+    <path d="m15 18-6-6 6-6" />
+  </symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24" fill="none">
+    <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
+  </symbol>
+  <symbol id="i-git-pull-request" viewBox="0 0 24 24" fill="none">
+    <circle cx="18" cy="18" r="3" />
+    <circle cx="6" cy="6" r="3" />
+    <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+    <line x1="6" x2="6" y1="9" y2="21" />
+  </symbol>
+  <symbol id="i-square-check" viewBox="0 0 24 24" fill="none">
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="m9 12 2 2 4-4" />
+  </symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none">
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </symbol>
+</svg>
+  <!-- Body-level nav, sibling of <main class="app"> — never nested inside it
+       (issue #355, _vendored/nav/README.md "Pinning the bar (iOS)"). An
+       installed iOS PWA can capture a fixed nav nested inside a momentum/
+       content scroller and anchor it to that scroller's content instead of
+       the physical viewport (home-automation#232). -->
+  <nav class="tabs" role="tablist" aria-label="Primary navigation" data-active-tab="claude">
+    <button id="tabBoard" type="button" class="tab" data-tab="board"
+            role="tab" aria-selected="false" aria-controls="paneBoard" tabindex="-1">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-square-kanban"></use></svg>
+      <span class="tab-label">Board</span>
+    </button>
+    <button id="tabClaude" type="button" class="tab active" data-tab="claude"
+            role="tab" aria-selected="true" aria-controls="paneClaude">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-code-xml"></use></svg>
+      <span class="tab-label">Code</span>
+    </button>
+    <button id="tabLifeOS" type="button" class="tab" data-tab="lifeos"
+            role="tab" aria-selected="false" aria-controls="paneLifeOS" tabindex="-1">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-circle-plus"></use></svg>
+      <span class="tab-label">Life</span>
+    </button>
+    <button id="tabApps" type="button" class="tab" data-tab="apps"
+            role="tab" aria-selected="false" aria-controls="paneApps" tabindex="-1">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-layout-grid"></use></svg>
+      <span class="tab-label">Apps</span>
+    </button>
+    <button id="tabJobs" type="button" class="tab" data-tab="jobs"
+            role="tab" aria-selected="false" aria-controls="paneJobs" tabindex="-1">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg>
+      <span class="tab-label">Jobs</span>
+    </button>
+    <button id="tabSettings" type="button" class="tab" data-tab="settings"
+            role="tab" aria-selected="false" aria-controls="paneSettings" tabindex="-1">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>
+      <span class="tab-label">Settings</span>
+    </button>
+  </nav>
+
+  <main class="app">
+    <section id="paneClaude" class="pane" role="tabpanel" aria-labelledby="tabClaude">
+      <!-- Vendored home-head summary card (#496): one-line dashboard row —
+           app title + live stats (sessions / running apps / git aggregate)
+           + the theme toggle pinned right (home-head.css contract). The
+           toggle keeps its #themeToggle id so main.js's wireTheme and the
+           CSS-keyed sun/moon swap carry over unchanged. -->
+      <div class="card home-head">
+        <span class="home-title">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rocket"></use></svg>
+          Launcher
+        </span>
+        <span id="homeHeadStatus" class="status"></span>
+        <button type="button" id="themeToggle" class="home-toggle hit-target"
+                title="Toggle theme" aria-label="Toggle dark mode">
+          <svg class="theme-toggle-icon theme-icon-moon hit-target" aria-hidden="true" focusable="false"><use href="#i-moon"></use></svg>
+          <svg class="theme-toggle-icon theme-icon-sun hit-target" aria-hidden="true" focusable="false"><use href="#i-sun"></use></svg>
+        </button>
+      </div>
+
+      <!-- Options moved below the launch surfaces (#496 item 2): the
+           per-agent option groups are configuration, not launch controls,
+           so the card sits last on the tab (see the bottom of this pane).
+           The launch-time Detached/Resume toggles moved into the Projects
+           card's summary — the surface sessions are actually started from. -->
+      <details class="card card--collapsible sessions-card" open>
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-terminal"></use></svg>
+            <h3 class="collapse-title">Running sessions</h3>
+          </span>
+          <span class="summary-actions">
+            <div class="sessions-header-actions">
+              <button id="gitStatusBtn" type="button" class="button-ghost git-status-btn"
+                      title="Check each project's git branch + uncommitted changes"
+                      aria-label="Check git status of all projects"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-git-branch"></use></svg> status</button>
+              <div id="gitStatusSummary" class="git-summary" hidden
+                   role="list" aria-label="Projects not on their default branch"></div>
+            </div>
+            <span class="collapse-chevron" aria-hidden="true">›</span>
+          </span>
+        </summary>
+        <div class="collapse-body">
+        <div id="codingUsage" class="usage-badges" hidden>
+          <span id="codingUsageSession" class="usage-badge" hidden></span>
+          <span id="codingUsageWeekly" class="usage-badge" hidden></span>
+        </div>
+        <!-- Fleet chief status (#547) — Coding-tab parity with the Board's
+             chat-mode status row: same crown + text + Start affordance so
+             the chief can be spotted/started here too, not only in Board
+             chat mode. renderCodingChiefStatus() only flips hidden/text. -->
+        <div id="codingChiefStatus" class="board-chief-status" hidden>
+          <span class="board-chief-crown"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-crown"></use></svg></span>
+          <span id="codingChiefStatusText" class="board-chief-status-text"></span>
+          <button id="codingChiefStart" type="button" class="board-chief-start">Start</button>
+          <button id="codingChiefResume" type="button" class="board-chief-start" title="Reattach the most recent chief conversation" aria-label="Resume chief">Resume</button>
+        </div>
+        <ul id="sessionsList" class="card-list" aria-label="Running Claude Code sessions"></ul>
+        <p id="sessionsEmpty" class="muted small">No sessions launched from here yet — tap a project below to start one.</p>
+        <p class="launcher-note">Only sessions launched from here appear — Claude windows started directly on the PC can't be attached.</p>
+        </div>
+      </details>
+
+      <!-- Collapsed by default (#383 review round): the running-sessions
+           card above is the tab's working set; expand to reach the tiles.
+           Detached + Resume live here (#496 item 2): they are launch-time
+           controls, so they sit beside the tiles they modify. -->
+      <details class="card card--collapsible projects-card">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-folder"></use></svg>
+            <h3 class="collapse-title">Projects</h3>
+          </span>
+          <span class="summary-actions">
+            <div class="coding-toggles">
+              <!-- Launch model (#540): a board-style combo (mirrors the Board
+                   dispatch bar's model selector) that stays in sync with the
+                   Claude Model segmented control in the options card below —
+                   both write/read the same claude_model config, so picking in
+                   one updates the other (no double-setting). Claude-only:
+                   Codex/others are their own per-tile launch buttons. -->
+              <span class="model-combo" id="codingModelCombo" data-value="sonnet">
+                <button type="button" id="codingModelBtn" class="model-combo-trigger"
+                        aria-haspopup="listbox" aria-expanded="false" aria-controls="codingModelMenu"
+                        title="Model for Claude Code launches — stays in sync with the Model control in options below">Sonnet</button>
+                <span id="codingModelMenu" class="model-combo-menu" role="listbox" aria-label="Claude launch model" hidden>
+                  <button type="button" role="option" data-value="sonnet" aria-selected="true">Sonnet</button>
+                  <button type="button" role="option" data-value="opus" aria-selected="false">Opus</button>
+                  <button type="button" role="option" data-value="fable" aria-selected="false">Fable</button>
+                </span>
+              </span>
+              <button type="button" id="claudeDetached" class="detached-toggle" role="switch" aria-checked="false"
+                     aria-label="Launch detached"
+                     title="Launch detached: a console window on the PC, listed and killable here but no phone terminal">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-cloud"></use></svg>
+              </button>
+              <button type="button" id="claudeResume" class="detached-toggle" role="switch" aria-checked="false"
+                     aria-label="Resume session"
+                     title="Resume: reopen the agent's own session picker — in a phone terminal, or in the detached console when Detached is also on">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rotate-ccw"></use></svg>
+              </button>
+            </div>
+            <button id="favFilterBtn" type="button" class="button-ghost fav-filter-btn"
+                    aria-pressed="false" title="Show only favorites"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg> Favorites</button>
+            <span class="collapse-chevron" aria-hidden="true">›</span>
+          </span>
+        </summary>
+        <div class="collapse-body">
+        <ul id="claudeList" class="card-list" aria-label="Claude Code projects"></ul>
+        <div id="claudeEmpty" class="empty" hidden>
+          No Claude Code projects found — point <strong>Projects dir</strong> in Settings at a folder that has project subdirectories.
+        </div>
+        <p id="gitStatusLegend" class="muted small git-legend" hidden>
+          <span class="git-swatch off-main"></span> not on main ·
+          <span class="git-swatch dirty"></span> uncommitted changes
+        </p>
+        </div>
+      </details>
+
+      <details id="systemMapCard" class="card card--collapsible system-map-card" hidden>
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-map"></use></svg>
+            <h3 class="collapse-title">System map</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">›</span>
+        </summary>
+        <div class="collapse-body system-map-body">
+          <img id="systemMapImage" class="system-map-img" alt="Fleet system map" hidden>
+          <p id="systemMapStatus" class="muted small system-map-status" hidden></p>
+        </div>
+      </details>
+
+      <details id="codingOptions" class="card card--collapsible">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>
+            <h3 class="collapse-title">options</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">›</span>
+        </summary>
+
+        <div class="opt-group">
+          <h3 class="opt-group-title">Visible agents</h3>
+          <p class="opt-hint">Which launch buttons each project row paints. Hiding one only trims the row — a running session still shows its agent in the sessions list and on the Board.</p>
+          <div id="agentVisibility" class="toggles"></div>
+        </div>
+
+        <div class="opt-group">
+          <h3 class="opt-group-title">Claude Code</h3>
+          <div class="opt-row">
+            <span class="opt-name">Model</span>
+            <div id="claudeModel" class="segmented" role="radiogroup" aria-label="Claude model"></div>
+          </div>
+          <div class="opt-row">
+            <span class="opt-name">Effort</span>
+            <div id="claudeEffort" class="segmented" role="radiogroup" aria-label="Effort"></div>
+          </div>
+          <div class="opt-row">
+            <span class="opt-name">Permission</span>
+            <div id="claudePermission" class="segmented" role="radiogroup" aria-label="Permission mode"></div>
+          </div>
+          <div class="toggles">
+            <span class="switch-row"><span>Verbose</span><button type="button" id="claudeVerbose" class="toggle" role="switch" aria-checked="false" aria-label="Verbose output"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+            <span class="switch-row"><span>Debug</span><button type="button" id="claudeDebug" class="toggle" role="switch" aria-checked="false" aria-label="Debug output"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+          </div>
+          <div id="claudeFlagsPreview" class="flags-preview">claude …</div>
+        </div>
+
+        <div class="opt-group">
+          <h3 class="opt-group-title">Codex</h3>
+          <div class="opt-row">
+            <span class="opt-name">Reasoning</span>
+            <div id="codexEffort" class="segmented" role="radiogroup" aria-label="Codex reasoning"></div>
+          </div>
+          <div class="opt-row">
+            <span class="opt-name">Permission</span>
+            <div id="codexPermission" class="segmented" role="radiogroup" aria-label="Codex permission mode"></div>
+          </div>
+          <p class="opt-hint">Runs on your ChatGPT-plan login (<code>codex login</code>) — model stays the account default (<code>gpt-5-codex</code>); the tiers map to reasoning effort.</p>
+          <div id="codexFlagsPreview" class="flags-preview">codex</div>
+        </div>
+
+        <div class="opt-group">
+          <h3 class="opt-group-title">Antigravity</h3>
+          <div class="toggles">
+            <span class="switch-row"><span>Skip permission prompts</span><button type="button" id="antigravitySkipPerms" class="toggle" role="switch" aria-checked="false" aria-label="Skip Antigravity permission prompts"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+            <span class="switch-row"><span>Sandbox</span><button type="button" id="antigravitySandbox" class="toggle" role="switch" aria-checked="false" aria-label="Antigravity sandbox"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+          </div>
+          <p class="opt-hint">Model is chosen with <code>/model</code> inside the session — the Antigravity CLI has no launch-time model flag.</p>
+          <div id="antigravityFlagsPreview" class="flags-preview">agy</div>
+        </div>
+
+        <div class="opt-group">
+          <h3 class="opt-group-title">GitHub Copilot</h3>
+          <div class="opt-row">
+            <span class="opt-name">Model</span>
+            <select id="copilotModel" class="select-native" aria-label="Copilot model"></select>
+          </div>
+          <div class="toggles">
+            <span class="switch-row"><span>Skip permission prompts</span><button type="button" id="copilotSkipPerms" class="toggle" role="switch" aria-checked="false" aria-label="Skip Copilot permission prompts"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+          </div>
+          <p class="opt-hint">Sign in with <code>/login</code> inside the session. <strong>Default</strong> leaves the model to the Copilot CLI's own setting.</p>
+          <div id="copilotFlagsPreview" class="flags-preview">copilot</div>
+        </div>
+
+        <div class="opt-group">
+          <h3 class="opt-group-title">Pi</h3>
+          <div class="opt-row">
+            <span class="opt-name">Model</span>
+            <div id="piModel" class="segmented" role="radiogroup" aria-label="Pi model"></div>
+          </div>
+          <div class="opt-row">
+            <span class="opt-name">Effort</span>
+            <div id="piEffort" class="segmented" role="radiogroup" aria-label="Pi reasoning"></div>
+          </div>
+          <div class="opt-row">
+            <span class="opt-name">Project trust</span>
+            <div id="piTrust" class="segmented" role="radiogroup" aria-label="Pi project trust"></div>
+          </div>
+          <p class="opt-hint"><strong>Opus</strong>/<strong>Sonnet</strong> run on your <strong>Claude subscription</strong> (<code>claude-agent-sdk</code>); <strong>GPT</strong> runs on your <strong>ChatGPT plan</strong> (<code>openai-codex</code>) — no API credits either way. Needs the one-time <code>pi install npm:claude-agent-sdk-pi</code>. Effort maps to <code>--thinking</code>; switch models/effort in-session with <code>/model</code> / <code>Shift+Tab</code>. <strong>Trust</strong> loads project-local <code>.pi/</code> resources (not a tool-permission gate — pi has no sandbox).</p>
+          <div id="piFlagsPreview" class="flags-preview">pi</div>
+        </div>
+
+        <div class="opt-group">
+          <h3 class="opt-group-title">Grok Build</h3>
+          <div class="opt-row">
+            <span class="opt-name">Reasoning</span>
+            <div id="grokEffort" class="segmented" role="radiogroup" aria-label="Grok reasoning"></div>
+          </div>
+          <div class="opt-row">
+            <span class="opt-name">Permission</span>
+            <div id="grokPermission" class="segmented" role="radiogroup" aria-label="Grok permission mode"></div>
+          </div>
+          <p class="opt-hint">Runs on your <code>grok.com</code> login (<code>grok login</code>) — model stays the account default (<code>grok-4.5</code>, the only one <code>grok models</code> lists); the tiers map to <code>--reasoning-effort</code>.</p>
+          <div id="grokFlagsPreview" class="flags-preview">grok</div>
+        </div>
+      </details>
+    </section>
+
+    <section id="paneApps" class="pane" role="tabpanel" aria-labelledby="tabApps" hidden>
+      <details class="card card--collapsible sessions-card" open>
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-play"></use></svg>
+            <h3 class="collapse-title">Running apps</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">›</span>
+        </summary>
+        <div class="collapse-body">
+        <ul id="runningAppsList" class="card-list" aria-label="Running apps"></ul>
+        <p id="runningAppsEmpty" class="muted small">Nothing running. (A webapp restart forgets running apps — check Port listeners for orphans.)</p>
+        <p class="launcher-note">Only apps launched from here appear — tap a registered app below to start one.</p>
+        </div>
+      </details>
+
+      <!-- Collapsed by default (#383 review round) — Running apps above is
+           the tab's working set. -->
+      <details class="card card--collapsible listeners-card">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plug"></use></svg>
+            <h3 class="collapse-title">Port listeners</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">›</span>
+        </summary>
+        <div class="collapse-body">
+        <div id="listenersList" class="listeners"></div>
+        <p id="listenersEmpty" class="muted small">Nothing running on common app ports.</p>
+        <p class="launcher-note">The launcher itself isn't listed — it can't kill its own process.</p>
+        </div>
+      </details>
+
+      <details class="card card--collapsible apps-list-card">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-package"></use></svg>
+            <h3 class="collapse-title">Registered apps</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">›</span>
+        </summary>
+        <div class="collapse-body">
+        <ul id="appsList" class="card-list" aria-label="Apps"></ul>
+        <div id="appsEmpty" class="empty" hidden>
+          No apps registered yet — tap <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> to scan your projects root.
+        </div>
+        </div>
+      </details>
+
+      <!-- Collapsed by default, matching Port listeners — a setup-once panel,
+           not the tab's working set (issue #456 part 2/2). -->
+      <details class="card card--collapsible registered-trays-card">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-package"></use></svg>
+            <h3 class="collapse-title">Autostart registered trays</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">›</span>
+        </summary>
+        <div class="collapse-body">
+        <ul id="registeredTraysList" class="card-list" aria-label="Autostart registered trays"></ul>
+        <div id="registeredTraysEmpty" class="empty" hidden>
+          No sister trays discovered yet — tap <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> in Settings to scan for <code>tray.bat</code> files.
+        </div>
+        <p class="launcher-note">Autostart-enabled trays launch one at a time, in order, once app-launcher's own webapp is up.</p>
+        </div>
+      </details>
+    </section>
+
+    <section id="paneJobs" class="pane" role="tabpanel" aria-labelledby="tabJobs" hidden>
+      <details id="jobsAgendaCard" class="card card--collapsible sessions-card jobs-agenda-card">
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-calendar-days"></use></svg>
+            <h3 class="collapse-title">Schedule</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">›</span>
+        </summary>
+        <div id="jobsAgendaBody" class="jobs-agenda-body">
+          <p class="muted small">Loading…</p>
+        </div>
+      </details>
+      <details class="card card--collapsible sessions-card jobs-card" open>
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard-list"></use></svg>
+            <h3 class="collapse-title">Registered jobs</h3>
+          </span>
+          <span class="summary-actions">
+            <div class="jobs-header-actions">
+              <button id="jobsAddBtn" type="button" class="button-ghost jobs-add-btn" aria-label="Add job" title="Add job" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg></button>
+              <span class="jobs-edit-control">
+                <span class="jobs-edit-label">Edit mode</span>
+                <button type="button" id="jobsEditBtn" class="toggle" role="switch" aria-checked="false"
+                       aria-label="Edit mode"
+                       title="Edit mode — reveal Add job plus edit + remove on job rows (same switch as Settings)">
+                  <span class="knob"></span><span class="toggle-label">OFF</span>
+                </button>
+              </span>
+              <button id="jobsSortBtn" type="button" class="button-ghost jobs-sort-btn" aria-label="Change job sort order"></button>
+            </div>
+            <span class="collapse-chevron" aria-hidden="true">›</span>
+          </span>
+        </summary>
+        <div class="collapse-body">
+        <div class="jobs-search-bar" role="search">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
+          <input id="jobsSearchInput" type="search" autocomplete="off"
+                 placeholder="Search run output" aria-label="Search run output">
+          <button id="jobsSearchClear" type="button" class="button-ghost hit-target"
+                  aria-label="Clear run search" title="Clear run search" hidden>
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <ul id="jobsList" class="card-list" aria-label="Jobs"></ul>
+        <p id="jobsEmpty" class="muted small" hidden>
+          No jobs registered yet — tap the <strong><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></strong> edit toggle above, then <strong><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg></strong> to add one.
+        </p>
+        </div>
+      </details>
+    </section>
+
+    <section id="paneLifeOS" class="pane" role="tabpanel" aria-labelledby="tabLifeOS" hidden>
+      <!-- No separate options card (#496 round 2, mirroring the Coding tab):
+           the model combo + Detached/Resume launch controls live in the
+           Skills card's summary below — the surface skills are launched from. The recap
+           tile leads the tab. -->
+      <section id="lifeOsRecap" class="card card--row lifeos-recap-card" hidden>
+        <div class="card-head">
+          <span class="lifeos-recap-main">
+            <h3 class="card-title"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-notebook-text"></use></svg> Weekly recap</h3>
+            <span id="lifeOsRecapBadge" class="lifeos-recap-badge"></span>
+          </span>
+          <button id="lifeOsRecapLaunch" type="button"
+                  class="icon-btn agent-btn lifeos-recap-launch"
+                  title="Review the weekly recap (/weekly-recap)"
+                  aria-label="Launch weekly recap review"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rocket"></use></svg></button>
+        </div>
+      </section>
+
+      <details class="card card--collapsible lifeos-list-card" open>
+        <summary class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-library-big"></use></svg>
+            <h3 class="collapse-title">Skills</h3>
+          </span>
+          <span class="summary-actions">
+            <div class="lifeos-toggles">
+              <!-- Launch model (#540): the same board-style combo as the
+                   Coding tab, replacing the old opus on/off toggle. Life OS is
+                   a focused Coding tab, so its launch row mirrors it exactly.
+                   Claude-only (life-os skills are Claude /skill commands). -->
+              <span class="model-combo" id="lifeOsModelCombo" data-value="sonnet">
+                <button type="button" id="lifeOsModelBtn" class="model-combo-trigger"
+                        aria-haspopup="listbox" aria-expanded="false" aria-controls="lifeOsModelMenu"
+                        title="Model for the launched life-os skill">Sonnet</button>
+                <span id="lifeOsModelMenu" class="model-combo-menu" role="listbox" aria-label="Skill launch model" hidden>
+                  <button type="button" role="option" data-value="sonnet" aria-selected="true">Sonnet</button>
+                  <button type="button" role="option" data-value="opus" aria-selected="false">Opus</button>
+                  <button type="button" role="option" data-value="fable" aria-selected="false">Fable</button>
+                </span>
+              </span>
+              <button type="button" id="lifeOsDetached" class="detached-toggle" role="switch" aria-checked="false"
+                     aria-label="Launch detached"
+                     title="Launch detached: a console window on the PC, listed and killable in the Coding tab but no phone terminal">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-cloud"></use></svg>
+              </button>
+              <button type="button" id="lifeOsResume" class="detached-toggle" role="switch" aria-checked="false"
+                     aria-label="Resume session"
+                     title="Resume: reopen Claude's session picker (drops the skill prompt) — in a phone terminal, or in the detached console when Detached is also on">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rotate-ccw"></use></svg>
+              </button>
+            </div>
+            <span class="collapse-chevron" aria-hidden="true">›</span>
+          </span>
+        </summary>
+        <div class="collapse-body">
+        <ul id="lifeOsList" class="card-list" aria-label="Life OS skills"></ul>
+        <div id="lifeOsEmpty" class="empty" hidden>
+          No life-os skills found — point <strong>Life OS dir</strong> in Settings
+          at a life-os checkout (skills live under <code>.claude/skills</code>).
+        </div>
+        </div>
+      </details>
+    </section>
+
+    <section id="paneBoard" class="pane" role="tabpanel" aria-labelledby="tabBoard" hidden>
+      <div id="boardDispatch" class="board-dispatch">
+        <textarea
+          id="boardDispatchGoal"
+          class="compose-input board-dispatch-goal"
+          rows="2"
+          placeholder="Speak or type a goal — send dispatches an /issue-* session."
+          enterkeyhint="enter"></textarea>
+        <div class="board-repo-combo">
+          <button type="button" id="boardDispatchRepoBtn" class="board-repo-input"
+                  aria-haspopup="listbox" aria-expanded="false"
+                  aria-controls="boardDispatchRepoList" aria-label="Project filter / dispatch target">All projects</button>
+          <input type="hidden" id="boardDispatchRepo">
+          <ul id="boardDispatchRepoList" class="board-repo-list" role="listbox" hidden></ul>
+        </div>
+        <div class="board-dispatch-row">
+          <!-- Wrapper spans carry the ▾ affordance on the phone, where each
+               select is flattened to the row's shared button recipe (#496) —
+               same pattern as .board-repo-combo's ::after chevron. Mode was
+               a 4-segment radiogroup until #547 collapsed it into a select
+               matching the model dropdown beside it — the segments no
+               longer fit an iPhone-width row once chat mode (#245) landed. -->
+          <span class="board-model-combo">
+            <select id="boardDispatchMode" class="select-native" aria-label="Dispatch mode"
+                    title="add — file the issue only / build — file and build straight away / yolo — file, build, and ship / chat — talk to the standing fleet chief (#245)">
+              <option value="add" selected>Add</option>
+              <option value="build">Build</option>
+              <option value="yolo">Yolo</option>
+              <option value="chat">Chat</option>
+            </select>
+          </span>
+          <span class="board-model-combo">
+            <select id="boardDispatchModel" class="select-native" aria-label="Dispatch model"
+                    title="model for dispatches and one-tap start/YOLO: Sonnet / Opus / Fable spawn Claude Code; GPT-5.6 spawns Codex CLI (high effort)">
+              <option value="sonnet" selected>Sonnet</option>
+              <option value="opus">Opus</option>
+              <option value="fable">Fable</option>
+              <option value="gpt5.6">GPT-5.6</option>
+            </select>
+          </span>
+          <button id="boardDispatchRecord" type="button" class="compose-record"
+                  title="Dictate (voice → text)" aria-pressed="false" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-mic"></use></svg></button>
+          <button id="boardDispatchClear" type="button" class="compose-record"
+                  title="Clear the goal"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+          <button id="boardDispatchSend" type="button" class="compose-send"
+                  title="Dispatch the goal"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-send-horizontal"></use></svg></button>
+        </div>
+        <!-- Chief status row (#245) — chat mode only. Static markup like the
+             rest of the bar; renderChiefStatus() only flips hidden/text. -->
+        <div id="boardChiefStatus" class="board-chief-status" hidden>
+          <span class="board-chief-crown"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-crown"></use></svg></span>
+          <span id="boardChiefStatusText" class="board-chief-status-text"></span>
+          <button id="boardChiefStart" type="button" class="board-chief-start" hidden>Start</button>
+          <button id="boardChiefResume" type="button" class="board-chief-start" hidden title="Reattach the most recent chief conversation" aria-label="Resume chief">Resume</button>
+          <button id="boardChiefRestart" type="button" class="board-chief-start" hidden>Restart</button>
+          <button id="boardChiefSettings" type="button" class="compose-record"
+                  title="Chief settings" aria-label="Chief settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg></button>
+        </div>
+      </div>
+      <div class="board-strip" role="tablist" aria-label="Board columns">
+        <button id="boardColBacklog" type="button" class="board-strip-btn" data-col="backlog"
+                role="tab" aria-selected="false">git <span class="board-count">0</span></button>
+        <button id="boardColClaude" type="button" class="board-strip-btn" data-col="claude_turn"
+                role="tab" aria-selected="false">bot <span class="board-count">0</span></button>
+        <button id="boardColYours" type="button" class="board-strip-btn active" data-col="your_turn"
+                role="tab" aria-selected="true">you <span class="board-count">0</span></button>
+        <button id="boardColOther" type="button" class="board-strip-btn" data-col="other"
+                role="tab" aria-selected="false">Other <span class="board-count">0</span></button>
+        <button id="boardColDone" type="button" class="board-strip-btn" data-col="done"
+                role="tab" aria-selected="false">Done <span class="board-count">0</span></button>
+        <button id="boardRefresh" type="button" class="icon-btn board-refresh"
+                title="Refresh GitHub issues / PRs / done-today (runs gh)"
+                aria-label="Refresh GitHub data">↻</button>
+      </div>
+      <div id="boardStatus" class="board-status" hidden></div>
+      <div id="boardUsage" class="usage-badges" hidden>
+        <span id="boardUsageSession" class="usage-badge" hidden></span>
+        <span id="boardUsageWeekly" class="usage-badge" hidden></span>
+      </div>
+      <div id="boardColumns" class="board-columns">
+        <section class="board-col" data-col="backlog" aria-label="Backlog">
+          <h3 class="board-col-title">Backlog <span class="board-col-count" data-col="backlog">(0)</span></h3>
+          <ul class="card-list board-list" data-col="backlog"></ul>
+          <div class="empty board-empty" data-col="backlog" hidden></div>
+        </section>
+        <section class="board-col" data-col="claude_turn" aria-label="Claude's turn">
+          <h3 class="board-col-title">Claude's turn <span class="board-col-count" data-col="claude_turn">(0)</span></h3>
+          <ul class="card-list board-list" data-col="claude_turn"></ul>
+          <div class="empty board-empty" data-col="claude_turn" hidden></div>
+        </section>
+        <section class="board-col" data-col="your_turn" aria-label="Your turn">
+          <h3 class="board-col-title">Your turn <span class="board-col-count" data-col="your_turn">(0)</span></h3>
+          <ul class="card-list board-list" data-col="your_turn"></ul>
+          <div class="empty board-empty" data-col="your_turn" hidden></div>
+        </section>
+        <section class="board-col" data-col="other" aria-label="Other">
+          <h3 class="board-col-title">Other <span class="board-col-count" data-col="other">(0)</span></h3>
+          <ul class="card-list board-list" data-col="other"></ul>
+          <div class="empty board-empty" data-col="other" hidden></div>
+        </section>
+        <section class="board-col" data-col="done" aria-label="Done today">
+          <h3 class="board-col-title">Done today <span class="board-col-count" data-col="done">(0)</span></h3>
+          <ul class="card-list board-list" data-col="done"></ul>
+          <div class="empty board-empty" data-col="done" hidden></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="paneSettings" class="pane" role="tabpanel" aria-labelledby="tabSettings" hidden>
+      <div id="settingsPanel" class="card settings-card">
+        <div class="settings-head">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>
+            <h3 class="collapse-title">Settings</h3>
+          </span>
+          <span class="summary-actions">
+            <span class="switch-row settings-edit-row"><span>Edit mode</span><button type="button" id="editMode" class="toggle" role="switch" aria-checked="false" aria-label="Edit mode" title="Edit mode — reveal rename + remove on Apps tab rows, Add on Jobs tab"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+          </span>
+        </div>
+        <div class="collapse-body">
+        <label class="stacked">
+          <span>Projects dir (Claude Code)</span>
+          <input id="projectsDir" type="text" class="input-native">
+        </label>
+        <label class="stacked">
+          <span>Ignored folders — one per line, names or <code>*</code> globs</span>
+          <textarea id="projectsIgnore" class="input-native" rows="3"
+                    placeholder="archive&#10;*-old&#10;scratch"></textarea>
+        </label>
+        <label class="stacked">
+          <span>Apps scan root</span>
+          <input id="appsScanRoot" type="text" class="input-native">
+        </label>
+        <label class="stacked">
+          <span>Life OS dir (life-os checkout)</span>
+          <input id="lifeOsDir" type="text" class="input-native">
+        </label>
+        <label class="stacked">
+          <span>Fleet-config dir (system map)</span>
+          <input id="claudeConfigDir" type="text" class="input-native">
+        </label>
+        <label class="stacked">
+          <span>Terminal scrollback (lines) — how much history a full-screen agent (Codex, etc.) keeps for a reconnect</span>
+          <input id="terminalHistoryLines" type="number" class="input-native" step="100">
+        </label>
+        <div class="switch-row settings-switch-row">
+          <span>Start app-launcher at log on</span>
+          <button type="button" id="bootAutostartToggle" class="toggle" role="switch" aria-checked="false" aria-label="Start app-launcher at log on" title="Start app-launcher automatically at log on (Startup folder — no admin needed)"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+        </div>
+        <div class="row settings-actions">
+          <button id="saveSettings" type="button" class="button-ghost accent-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-save"></use></svg> Save</button>
+          <button id="rescanBtn" type="button" class="button-ghost"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> Scan for new apps</button>
+        </div>
+        <hr>
+        <p id="statusReadout" class="muted small"></p>
+        <!-- THROWAWAY spike #246 link — token-bearing href set in main.js so a
+             full page-load passes the bearer gate over the tunnel. Settings-only
+             (not every tab) since it's a dev/spike link, not app chrome. -->
+        <p class="muted small"><a id="spikeVoiceLink" href="/spike/voice-loop"><svg class="icon" aria-hidden="true"><use href="#i-mic"></use></svg> Voice loop spike (#246)</a></p>
+        </div>
+      </div>
+
+      <div id="tokensPanel" class="card settings-card">
+        <div class="settings-head">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>
+            <h3 class="collapse-title">API tokens</h3>
+          </span>
+        </div>
+        <div class="collapse-body">
+          <p class="muted small">Job-scoped bearer tokens (issue #72) — safe to bake into a Stream Deck button URL: each token can fire only its chosen job and nothing else, and revoking one never touches the main login.</p>
+          <ul id="tokensList" class="card-list"></ul>
+          <p id="tokensEmpty" class="empty muted small" hidden>No tokens minted yet.</p>
+          <label class="stacked">
+            <span>Label</span>
+            <input id="tokenLabelInput" type="text" class="input-native" placeholder="Stream Deck — daily reporting">
+          </label>
+          <label class="stacked">
+            <span>Job it may fire</span>
+            <select id="tokenJobSelect" class="input-native"></select>
+          </label>
+          <div class="row settings-actions">
+            <button id="tokenMintBtn" type="button" class="button-ghost accent-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg> Mint token</button>
+          </div>
+          <div id="tokenMintResult" class="stacked" hidden>
+            <span class="muted small">Copy it now — it is shown only once.</span>
+            <div class="row">
+              <input id="tokenMintValue" type="text" class="input-native" readonly>
+              <button id="tokenCopyBtn" type="button" class="button-ghost"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg> Copy</button>
+            </div>
+            <span id="tokenMintUrl" class="muted small"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div id="lifeOsBrowser" class="terminal-overlay" hidden>
+      <div class="terminal-bar">
+        <button id="lifeOsBrowserBack" type="button" class="term-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg> Skills</button>
+        <span id="lifeOsBrowserTitle" class="terminal-title">skill</span>
+        <div class="terminal-bar-actions">
+          <button id="lifeOsDocDelete" type="button" class="term-btn" title="Delete this conversation log" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-trash-2"></use></svg></button>
+          <button id="lifeOsDocRename" type="button" class="term-btn" title="Rename this conversation log" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
+          <button id="lifeOsDocClose" type="button" class="term-btn" title="Close file" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+        </div>
+      </div>
+      <div class="lifeos-browser-body">
+        <ul id="lifeOsFileList" class="lifeos-file-list" aria-label="Skill files"></ul>
+        <div id="lifeOsFileContent" class="lifeos-file-content" hidden></div>
+      </div>
+    </div>
+
+    <dialog id="jobDialog" class="rename-dialog">
+      <form id="jobForm">
+        <div class="dialog-head">
+          <h2 id="jobDialogTitle">Add job</h2>
+          <button type="button" id="jobCancel" class="dialog-close" aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <input type="hidden" id="jobIdField">
+        <label class="stacked">
+          <span>Name</span>
+          <input id="jobNameInput" type="text" class="input-native" required>
+        </label>
+        <label class="stacked">
+          <span>Kind</span>
+          <select id="jobKindInput" class="input-native">
+            <option value="">Auto (from extension)</option>
+            <option value="python">Python (.py)</option>
+            <option value="batch">Batch (.bat)</option>
+            <option value="powershell">PowerShell (.ps1)</option>
+            <option value="shell-wsl">Shell — WSL (.sh)</option>
+            <option value="inline-shell">Inline shell (body below, no file)</option>
+            <option value="http-check">HTTP check (poll a URL)</option>
+          </select>
+        </label>
+        <label class="stacked" id="jobScriptRow">
+          <span>Script path</span>
+          <input id="jobScriptInput" type="text" class="input-native"
+                 placeholder="E:\automation\content-management\launch_reporting.bat">
+        </label>
+        <div class="job-kind-group" id="jobInlineShellFields" hidden>
+          <label class="stacked">
+            <span>Script type</span>
+            <select id="jobInlineExtInput" class="input-native">
+              <option value=".ps1">PowerShell (.ps1)</option>
+              <option value=".bat">Batch (.bat)</option>
+              <option value=".sh">Shell — WSL (.sh)</option>
+            </select>
+          </label>
+          <label class="stacked">
+            <span>Script body</span>
+            <textarea id="jobInlineBodyInput" class="input-native job-inline-body" rows="6"
+                      placeholder="Write-Host 'hi'"></textarea>
+          </label>
+        </div>
+        <div class="job-kind-group" id="jobHttpCheckFields" hidden>
+          <label class="stacked">
+            <span>URL</span>
+            <input id="jobHttpUrlInput" type="text" class="input-native"
+                   placeholder="https://example.com/health">
+          </label>
+          <label class="stacked">
+            <span>Method</span>
+            <select id="jobHttpMethodInput" class="input-native">
+              <option value="GET">GET</option>
+              <option value="HEAD">HEAD</option>
+              <option value="POST">POST</option>
+            </select>
+          </label>
+          <label class="stacked">
+            <span>Expected status</span>
+            <input id="jobHttpExpectStatusInput" type="number" class="input-native"
+                   min="100" max="599" placeholder="200">
+          </label>
+          <label class="stacked">
+            <span>Timeout (seconds)</span>
+            <input id="jobHttpTimeoutInput" type="number" class="input-native"
+                   min="1" max="120" placeholder="10">
+          </label>
+        </div>
+        <label class="stacked" id="jobArgsRow">
+          <span>Arguments (optional)</span>
+          <input id="jobArgsInput" type="text" class="input-native" placeholder="auto">
+        </label>
+        <label class="stacked">
+          <span>Schedule</span>
+          <select id="jobScheduleType" class="input-native">
+            <option value="none">None (manual only)</option>
+            <option value="minutes">Every N minutes</option>
+            <option value="hourly">Every N hours</option>
+            <option value="daily">Daily at HH:MM</option>
+            <option value="daily_times">Daily at multiple times</option>
+            <option value="weekly">Weekly</option>
+            <option value="once">Once (specific date + time)</option>
+          </select>
+        </label>
+        <label class="stacked" id="jobScheduleOnceRow" hidden>
+          <span>At (date + time, fires once)</span>
+          <input id="jobScheduleOnceAt" type="datetime-local" class="input-native">
+        </label>
+        <label class="stacked" id="jobScheduleEveryRow" hidden>
+          <span>Every</span>
+          <input id="jobScheduleEvery" type="number" class="input-native" min="1" value="1">
+        </label>
+        <label class="stacked" id="jobScheduleAtRow" hidden>
+          <span>At (HH:MM)</span>
+          <input id="jobScheduleAt" type="text" class="input-native" placeholder="06:00" pattern="[0-2][0-9]:[0-5][0-9]">
+        </label>
+        <label class="stacked" id="jobScheduleTimesRow" hidden>
+          <span>Times — comma-separated HH:MM list</span>
+          <input id="jobScheduleTimes" type="text" class="input-native" placeholder="06:00, 12:00, 18:00">
+        </label>
+        <label class="stacked" id="jobScheduleDayRow" hidden>
+          <span>Day</span>
+          <select id="jobScheduleDay" class="input-native">
+            <option value="MON">Monday</option>
+            <option value="TUE">Tuesday</option>
+            <option value="WED">Wednesday</option>
+            <option value="THU">Thursday</option>
+            <option value="FRI">Friday</option>
+            <option value="SAT">Saturday</option>
+            <option value="SUN">Sunday</option>
+          </select>
+        </label>
+        <label class="stacked">
+          <span>Cooldown (seconds, optional)</span>
+          <input id="jobCooldownInput" type="number" class="input-native"
+                 min="0" max="86400" placeholder="0">
+        </label>
+        <label class="stacked">
+          <span>Mutex group (optional)</span>
+          <input id="jobMutexGroupInput" type="text" class="input-native"
+                 maxlength="32" placeholder="e.g. chrome-profile">
+        </label>
+        <div class="job-alert-row switch-row">
+          <span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-bell"></use></svg> Alert to Telegram if failed</span>
+          <button type="button" id="jobAlertOnFailureInput" class="toggle" role="switch" aria-checked="false" aria-label="Alert to Telegram if failed"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+        </div>
+        <div class="job-confirm-row switch-row">
+          <span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-triangle-alert"></use></svg> Require confirmation before running</span>
+          <button type="button" id="jobConfirmInput" class="toggle" role="switch" aria-checked="false" aria-label="Require confirmation before running"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+        </div>
+        <section class="dialog-section">
+          <h3 class="dialog-section-title">Run on success (chain)</h3>
+          <p class="dialog-section-hint">Pick jobs to fire after a successful run.</p>
+          <ul id="jobOnSuccessList" class="job-chain-list"></ul>
+        </section>
+        <section class="dialog-section">
+          <h3 class="dialog-section-title">Run on failure (chain)</h3>
+          <p class="dialog-section-hint">Pick jobs to fire after a failed run.</p>
+          <ul id="jobOnFailureList" class="job-chain-list"></ul>
+        </section>
+        <section class="dialog-section">
+          <h3 class="dialog-section-title">Parameters (optional)</h3>
+          <p class="dialog-section-hint">
+            Typed inputs collected on Run-now. Add a row per parameter;
+            empty list → one-tap fire as today.
+          </p>
+          <ol id="jobParamsList" class="job-params-list"></ol>
+          <button type="button" id="jobParamsAdd" class="button-ghost"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg> Add parameter</button>
+        </section>
+        <section class="dialog-section">
+          <h3 class="dialog-section-title">Webhook</h3>
+          <p class="dialog-section-hint">
+            Fire this job from an external service (GitHub, Stripe, or a
+            generic POST) instead of a phone tap — gated by its own
+            signature, never the app's bearer token.
+          </p>
+          <label class="stacked">
+            <span>Provider</span>
+            <select id="jobWebhookProvider" class="input-native">
+              <option value="">None (disabled)</option>
+              <option value="github">GitHub</option>
+              <option value="stripe">Stripe</option>
+              <option value="generic">Generic</option>
+            </select>
+          </label>
+          <label class="stacked" id="jobWebhookSecretRow" hidden>
+            <span>Secret</span>
+            <input id="jobWebhookSecretInput" type="text" class="input-native"
+                   placeholder="literal value or $secret:key">
+          </label>
+          <label class="stacked" id="jobWebhookEventsRow" hidden>
+            <span>Event allowlist (comma-separated; empty = all)</span>
+            <input id="jobWebhookEventsInput" type="text" class="input-native"
+                   placeholder="push, pull_request">
+          </label>
+          <div id="jobWebhookMappingSection" hidden>
+            <p class="dialog-section-hint">
+              Map payload fields (JSONPath, e.g. <code>$.repository.full_name</code>)
+              to this job's parameter names above.
+            </p>
+            <ol id="jobWebhookMappingList" class="job-params-list"></ol>
+            <button type="button" id="jobWebhookMappingAdd" class="button-ghost"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg> Add mapping</button>
+          </div>
+        </section>
+        <ul id="jobPreflightProblems" class="job-preflight-problems" hidden></ul>
+        <div class="dialog-actions dialog-actions--stacked">
+          <button type="button" id="jobSaveAnyway" class="button-tint warn" hidden>Save anyway</button>
+          <button type="submit" id="jobSaveBtn" class="button-primary">Add and verify</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="jobRunDialog" class="rename-dialog">
+      <form id="jobRunForm">
+        <div class="dialog-head">
+          <h2 id="jobRunDialogTitle">Run job</h2>
+          <button type="button" id="jobRunCancel" class="dialog-close" aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <p id="jobRunDialogStaleNote" class="muted small" hidden></p>
+        <div id="jobRunDialogFields"></div>
+        <div class="job-run-dryrow switch-row">
+          <span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-flask-conical"></use></svg> Dry-run (sets <code>JOB_DRY_RUN=1</code> — opted-in scripts skip side effects)</span>
+          <button type="button" id="jobRunDialogDryRun" class="toggle" role="switch" aria-checked="false" aria-label="Dry-run"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+        </div>
+        <div class="dialog-actions dialog-actions--stacked">
+          <button type="submit" class="button-primary"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-play"></use></svg> Run</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Build identity: plain footer line outside every card/block. -->
+    <div class="page-foot">
+      <p id="buildReadout" class="muted small"></p>
+    </div>
+
+    <dialog id="scanDialog" class="scan-dialog">
+      <div class="dialog-head">
+        <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> New entries</h2>
+        <button type="button" id="scanCancel" class="dialog-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+        </button>
+      </div>
+      <div id="scanResults" class="scan-results"></div>
+      <div class="dialog-actions dialog-actions--stacked">
+        <button id="scanSave" type="button" class="button-primary">Add selected</button>
+      </div>
+    </dialog>
+
+    <dialog id="renameDialog" class="rename-dialog">
+      <form id="renameForm">
+        <div class="dialog-head">
+          <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg> Rename</h2>
+          <button type="button" id="renameCancel" class="dialog-close" aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <input id="renameInput" type="text" class="input-native" required>
+        <div class="dialog-actions dialog-actions--stacked">
+          <button type="submit" class="button-primary">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="chiefSettingsDialog" class="rename-dialog chief-settings-dialog">
+      <form id="chiefSettingsForm">
+        <div class="dialog-head">
+          <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-crown"></use></svg> Chief settings</h2>
+          <button type="button" id="chiefSettingsCancel" class="dialog-close" aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="chief-settings-row">
+          <label for="chiefModelSelect">Model</label>
+          <select id="chiefModelSelect" class="select-native">
+            <option value="sonnet">Sonnet</option>
+            <option value="opus">Opus</option>
+            <option value="fable" selected>Fable</option>
+          </select>
+        </div>
+        <div class="chief-settings-row">
+          <label for="chiefWorkerCap">Worker cap</label>
+          <input id="chiefWorkerCap" type="number" class="input-native" min="1" max="10" step="1" value="3">
+        </div>
+        <div class="dialog-actions dialog-actions--stacked">
+          <button type="submit" class="button-primary">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="sessionRenameDialog" class="rename-dialog">
+      <form id="sessionRenameForm">
+        <div class="dialog-head">
+          <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg> Rename session</h2>
+          <button type="button" id="sessionRenameCancel" class="dialog-close" aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <input id="sessionRenameInput" type="text" class="input-native" placeholder="Leave blank for the automatic title">
+        <div class="dialog-actions dialog-actions--stacked">
+          <button type="submit" class="button-primary">Save</button>
+        </div>
+      </form>
+    </dialog>
+  </main>
+
+  <!-- Body-level toast, sibling of <main class="app"> — never nested inside
+       it (issue #404, mirrors the nav's own #355 fix above). A fixed
+       descendant of the standalone-PWA .app scroller (nav-tabs.css) can get
+       trapped/clipped behind the equally body-level floating nav bar on real
+       iOS WebKit instead of escaping to the physical viewport. -->
+  <div id="toast" class="toast" hidden></div>
+
+  <div id="loginOverlay" class="login-overlay" hidden>
+    <form id="loginForm" class="login-card" autocomplete="off">
+      <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg> Sign in</h2>
+      <p class="muted small">Enter the password to use the launcher.</p>
+      <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" required>
+      <button type="submit" class="button-tint">Unlock</button>
+      <div id="loginError" class="login-error" hidden></div>
+    </form>
+  </div>
+
+  <div id="terminalOverlay" class="terminal-overlay" hidden>
+    <div class="terminal-bar">
+      <button id="terminalBack" type="button" class="term-btn" title="Back to sessions" aria-label="Back to sessions"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+      <button id="terminalKill" type="button" class="term-btn term-kill" title="Stop and kill this session" aria-label="Stop and kill this session"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+      <span id="terminalTitle" class="terminal-title">session</span>
+      <div class="terminal-bar-actions">
+        <button id="terminalJumpEnd" type="button" class="term-btn" title="Jump to latest">↓</button>
+        <button id="terminalSpeak" type="button" class="term-btn" title="Read the last reply aloud" aria-pressed="false" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-volume-2"></use></svg></button>
+        <button id="terminalPaste" type="button" class="term-btn" title="Paste from clipboard"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg></button>
+        <button id="terminalImage" type="button" class="term-btn" title="Send image"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-image"></use></svg></button>
+        <button id="terminalCompose" type="button" class="term-btn" title="Compose text with predictive keyboard"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
+        <button id="terminalKeys" type="button" class="term-btn" title="Keyboard keys"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-keyboard"></use></svg></button>
+      </div>
+      <div id="terminalSpeakPopover" class="speak-popover" hidden>
+        <button type="button" class="speak-action" data-action="read"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-volume-2"></use></svg> Read aloud</button>
+        <button type="button" class="speak-action" data-action="summarize" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-file-text"></use></svg> Summarize &amp; read</button>
+      </div>
+      <div id="terminalKeysPopover" class="keys-popover" hidden>
+        <button type="button" class="key-btn" data-key="esc">Esc</button>
+        <button type="button" class="key-btn" data-key="up">↑</button>
+        <button type="button" class="key-btn" data-key="tab">Tab</button>
+        <button type="button" class="key-btn" data-key="left">←</button>
+        <button type="button" class="key-btn" data-key="enter">↵</button>
+        <button type="button" class="key-btn" data-key="right">→</button>
+        <button type="button" class="key-btn key-shift" data-key="shift" aria-pressed="false">⇧</button>
+        <button type="button" class="key-btn" data-key="down">↓</button>
+        <span class="key-spacer"></span>
+      </div>
+    </div>
+    <div id="terminalHost" class="terminal-host"></div>
+    <div id="terminalOcrTray" class="ocr-tray" hidden>
+      <div id="terminalOcrThumbs" class="ocr-thumbs"></div>
+      <button id="terminalOcrExtract" type="button" class="ocr-extract"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-scan-text"></use></svg> Extract text</button>
+    </div>
+    <div id="terminalComposeBar" class="compose-bar" hidden>
+      <textarea
+        id="terminalComposeInput"
+        class="compose-input"
+        rows="2"
+        placeholder="Type a prompt — predictive on."
+        enterkeyhint="enter"></textarea>
+      <div class="compose-tools">
+        <button id="terminalRecord" type="button" class="compose-record" title="Dictate (voice → text)" aria-pressed="false"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-mic"></use></svg></button>
+        <button id="terminalScreenshot" type="button" class="compose-record" title="Extract text from screenshots (OCR)" aria-pressed="false"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-scan-text"></use></svg></button>
+        <!-- General attach (issue #366): same sendImage()/#terminalImageInput
+             flow as the outer-bar 🖼 button, reachable from the compose view;
+             the OCR control above carries the distinct scan-text glyph so the
+             two no longer both read as "photo". -->
+        <button id="terminalComposeAttach" type="button" class="compose-record" title="Attach image or file (path added to the prompt)"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-image"></use></svg></button>
+        <button id="terminalComposeSend" type="button" class="compose-send" title="Send (with Enter)"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-send-horizontal"></use></svg></button>
+      </div>
+    </div>
+    <div id="terminalStatus" class="terminal-status" hidden></div>
+    <!-- No accept filter (issue #366): iOS then offers Photo Library / Take
+         Photo / Choose Files, so arbitrary files can be attached — the
+         session-host stores any type (size-capped) and returns the path.
+         `multiple` (issue #448): one gallery tap can pick several photos at
+         once instead of a pick-upload-repeat loop. -->
+    <input id="terminalImageInput" type="file" multiple hidden>
+    <input id="terminalScreenshotInput" type="file" accept="image/*" multiple hidden>
+  </div>
+
+  <!-- Read-aloud summary modal (issue #210): shows the hub summary text while
+       it's read aloud; auto-closes when the read finishes, or tap to dismiss. -->
+  <div id="summaryModal" class="summary-modal" hidden>
+    <div class="summary-card" role="dialog" aria-label="Reply summary">
+      <div class="summary-head">
+        <span class="summary-title"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-file-text"></use></svg> Summary</span>
+        <button id="summaryModalClose" type="button" class="summary-close" title="Close"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+      </div>
+      <p id="summaryModalText" class="summary-text"></p>
+      <div class="summary-foot muted small"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-volume-2"></use></svg> Reading aloud… tap anywhere to dismiss</div>
+    </div>
+  </div>
+
+  <!-- System map lightbox (issue #173): tap the inline map to open it
+       full-screen for pan/zoom; tap anywhere (or ✕) to dismiss. -->
+  <div id="systemMapLightbox" class="system-map-lightbox" hidden>
+    <button id="systemMapLightboxClose" type="button" class="system-map-lightbox-close" title="Close"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+    <img id="systemMapLightboxImage" class="system-map-lightbox-img" alt="Fleet system map (full screen)">
+  </div>
+
+  <script src="/static/vendor/xterm.js"></script>
+  <script src="/static/vendor/addon-fit.js"></script>
+  <script src="/static/vendor/addon-web-links.js"></script>
+  <script src="/static/vendor/addon-webgl.js"></script>
+  <script type="module" src="/static/main.js"></script>
+</body>
+</html>

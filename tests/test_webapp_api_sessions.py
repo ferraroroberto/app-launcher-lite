@@ -1,0 +1,440 @@
+"""/api/claude-code/sessions — list + stop (kill/quit/interrupt modes)."""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
+from starlette.websockets import WebSocketDisconnect
+from websockets.exceptions import InvalidHandshake
+
+
+class TestListSessions:
+    def test_empty_list_when_session_host_returns_none(self, webapp_client):
+        client, _, overrides = webapp_client
+        overrides["session"].list_sessions.return_value = []
+        resp = client.get("/api/claude-code/sessions")
+        assert resp.status_code == 200
+        assert resp.json() == {"sessions": []}
+
+    def test_lists_sessions_from_session_host(self, webapp_client):
+        client, _, overrides = webapp_client
+        overrides["session"].list_sessions.return_value = [
+            {
+                "session_id": "abc-123",
+                "kind": "pty",
+                "name": "MyProject",
+                "project_dir": "C:\\stub",
+            }
+        ]
+        resp = client.get("/api/claude-code/sessions")
+        assert resp.status_code == 200
+        sessions = resp.json()["sessions"]
+        assert len(sessions) == 1
+        assert sessions[0]["session_id"] == "abc-123"
+
+    def test_session_host_error_returns_empty_not_500(self, webapp_client):
+        """When session-host is down, the SPA should still render — the
+        list endpoint logs and returns empty rather than 500ing."""
+        client, _, overrides = webapp_client
+        sess = overrides["session"]
+        sess.list_sessions.side_effect = sess.SessionHostError(
+            "session-host unreachable", status=503
+        )
+        resp = client.get("/api/claude-code/sessions")
+        assert resp.status_code == 200
+        assert resp.json() == {"sessions": []}
+
+
+class TestSharedSessionName:
+    """#396: the Coding tab's list is joined with the same cwd-keyed shared
+    title (fleet-config#302) the Board tab reads, so a live session shows
+    an identical title on both tabs."""
+
+    def test_matched_state_row_attaches_shared_name(self, webapp_client):
+        client, app, overrides = webapp_client
+        overrides["session"].list_sessions.return_value = [
+            {
+                "session_id": "abc-123",
+                "kind": "pty",
+                "name": "photo-ocr",
+                "project_dir": "E:/automation/photo-ocr",
+                "live_title": "",
+                "prompt_title": "",
+                "started_at": "2026-07-08T10:00:00Z",
+            }
+        ]
+        state_file = Path(app.state.webapp_config.sessions_state_file)
+        state_file.write_text(json.dumps({
+            "t-uuid": {
+                "project": "photo-ocr", "status": "needs-you",
+                "cwd": "E:/automation/photo-ocr",
+                "name": "Fixing the chunk merge bug",
+                "name_source": None,
+                "updated_at": (
+                    datetime.now(timezone.utc) - timedelta(minutes=3)
+                ).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            },
+        }), encoding="utf-8")
+
+        resp = client.get("/api/claude-code/sessions")
+        assert resp.status_code == 200
+        sessions = resp.json()["sessions"]
+        assert len(sessions) == 1
+        assert sessions[0]["shared_name"] == "Fixing the chunk merge bug"
+        assert sessions[0]["shared_name_source"] is None
+        # The session-host's own fields still ride through untouched.
+        assert sessions[0]["session_id"] == "abc-123"
+        assert sessions[0]["live_title"] == ""
+
+    def test_no_state_file_shared_name_is_none(self, webapp_client):
+        """No sessions-state.json at all (hooks not writing yet) → the
+        join degrades gracefully, same contract as the Board tab."""
+        client, _, overrides = webapp_client
+        overrides["session"].list_sessions.return_value = [
+            {
+                "session_id": "abc-123",
+                "kind": "pty",
+                "name": "photo-ocr",
+                "project_dir": "E:/automation/photo-ocr",
+            }
+        ]
+        resp = client.get("/api/claude-code/sessions")
+        assert resp.status_code == 200
+        sessions = resp.json()["sessions"]
+        assert sessions[0]["shared_name"] is None
+        assert sessions[0]["shared_name_source"] is None
+
+    def test_empty_session_list_skips_state_read(self, webapp_client):
+        """No live sessions → nothing to join; must still return []."""
+        client, _, overrides = webapp_client
+        overrides["session"].list_sessions.return_value = []
+        resp = client.get("/api/claude-code/sessions")
+        assert resp.status_code == 200
+        assert resp.json() == {"sessions": []}
+
+
+class TestStopSession:
+    def test_kill_mode_forwarded_to_session_client(self, webapp_client):
+        client, _, overrides = webapp_client
+        sess = overrides["session"]
+        sess.stop.return_value = {"ok": True, "mode": "kill"}
+        resp = client.post(
+            "/api/claude-code/sessions/abc-123/stop",
+            json={"mode": "kill"},
+        )
+        assert resp.status_code == 200
+        # Exact arg shape — session-host port from default config + sid +
+        # mode — mirrors session_client.stop signature (issue #253 dropped
+        # the close_window axis; every stop now closes).
+        sess.stop.assert_called_once_with(8446, "abc-123", "kill")
+
+    def test_quit_mode_forwarded_to_session_client(self, webapp_client):
+        client, _, overrides = webapp_client
+        sess = overrides["session"]
+        sess.stop.return_value = {"ok": True}
+        resp = client.post(
+            "/api/claude-code/sessions/abc-123/stop",
+            json={"mode": "quit"},
+        )
+        assert resp.status_code == 200
+        sess.stop.assert_called_once_with(8446, "abc-123", "quit")
+
+    def test_default_mode_is_quit(self, webapp_client):
+        """Empty body → mode falls back to quit per the endpoint contract."""
+        client, _, overrides = webapp_client
+        sess = overrides["session"]
+        sess.stop.return_value = {"ok": True}
+        resp = client.post(
+            "/api/claude-code/sessions/abc-123/stop", json={}
+        )
+        assert resp.status_code == 200
+        sess.stop.assert_called_once_with(8446, "abc-123", "quit")
+
+    def test_session_host_error_maps_to_http_status(self, webapp_client):
+        client, _, overrides = webapp_client
+        sess = overrides["session"]
+        sess.stop.side_effect = sess.SessionHostError(
+            "no such session", status=404
+        )
+        resp = client.post(
+            "/api/claude-code/sessions/missing/stop",
+            json={"mode": "kill"},
+        )
+        assert resp.status_code == 404
+        assert "no such session" in resp.json()["detail"]
+
+
+class TestStopSessionMirrorClose:
+    """Issue #20 / #253: every stop must also dismiss the PC mirror window.
+
+    Since #253 unified the button, every stop closes the window, so the
+    webapp's stop route always asks ``launcher.close_mirror_window`` to
+    PostMessage WM_CLOSE to the stashed HWND, on top of the cooperative
+    WS-shutdown frame the session-host fires. Either path is enough on its
+    own — both run because the cooperative one is silent if the page is
+    unresponsive, and the Win32 one is silent if the HWND was never
+    captured (e.g. launch came from the PC itself).
+    """
+
+    def test_mirror_close_always_invoked_and_stop_forwarded(
+        self, webapp_client, monkeypatch
+    ):
+        client, _, overrides = webapp_client
+        sess = overrides["session"]
+        sess.stop.return_value = {"ok": True, "mode": "quit"}
+        # Stub the launcher hook the sessions router will call.
+        from app.webapp.routers import sessions as sessions_router
+        mock_close = MagicMock(return_value=True)
+        monkeypatch.setattr(
+            sessions_router.launcher, "close_mirror_window", mock_close
+        )
+
+        resp = client.post(
+            "/api/claude-code/sessions/abc-123/stop",
+            json={"mode": "quit"},
+        )
+
+        assert resp.status_code == 200
+        # Even a plain graceful quit closes the mirror window now (#253).
+        mock_close.assert_called_once_with("abc-123")
+        sess.stop.assert_called_once_with(8446, "abc-123", "quit")
+
+    def test_mirror_close_no_stashed_hwnd_still_forwards(
+        self, webapp_client, monkeypatch
+    ):
+        """When the HWND lookup never captured one (launch from PC, or
+        the title-set race lost), the mirror-close is a no-op but the
+        session-host stop still goes through — cooperative WS shutdown
+        is the fallback path."""
+        client, _, overrides = webapp_client
+        sess = overrides["session"]
+        sess.stop.return_value = {"ok": True}
+        from app.webapp.routers import sessions as sessions_router
+        # close_mirror_window returns False — HWND was never stashed.
+        mock_close = MagicMock(return_value=False)
+        monkeypatch.setattr(
+            sessions_router.launcher, "close_mirror_window", mock_close
+        )
+
+        resp = client.post(
+            "/api/claude-code/sessions/abc-123/stop",
+            json={"mode": "kill"},
+        )
+
+        assert resp.status_code == 200
+        mock_close.assert_called_once_with("abc-123")
+        sess.stop.assert_called_once_with(8446, "abc-123", "kill")
+
+    def test_mirror_close_failure_does_not_break_stop(
+        self, webapp_client, monkeypatch
+    ):
+        """If WM_CLOSE PostMessage blows up, the stop request must still
+        succeed — the session-host kill is the load-bearing part."""
+        client, _, overrides = webapp_client
+        sess = overrides["session"]
+        sess.stop.return_value = {"ok": True}
+        from app.webapp.routers import sessions as sessions_router
+        mock_close = MagicMock(side_effect=OSError("hwnd is rubbish"))
+        monkeypatch.setattr(
+            sessions_router.launcher, "close_mirror_window", mock_close
+        )
+
+        resp = client.post(
+            "/api/claude-code/sessions/abc-123/stop",
+            json={"mode": "kill"},
+        )
+
+        assert resp.status_code == 200
+        sess.stop.assert_called_once_with(8446, "abc-123", "kill")
+
+
+class TestRenameSession:
+    """Issue #458: a launcher-native rename that wins over every
+    auto-derived title source, proxied straight through to the session-host.
+    """
+
+    def test_title_forwarded_to_session_client(self, webapp_client):
+        client, _, overrides = webapp_client
+        sess = overrides["session"]
+        sess.rename.return_value = {"session_id": "abc-123", "manual_title": "custom"}
+        resp = client.post(
+            "/api/claude-code/sessions/abc-123/rename",
+            json={"title": "custom"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"session_id": "abc-123", "manual_title": "custom"}
+        sess.rename.assert_called_once_with(8446, "abc-123", "custom")
+
+    def test_empty_title_clears_override(self, webapp_client):
+        client, _, overrides = webapp_client
+        sess = overrides["session"]
+        sess.rename.return_value = {"session_id": "abc-123", "manual_title": ""}
+        resp = client.post(
+            "/api/claude-code/sessions/abc-123/rename",
+            json={"title": ""},
+        )
+        assert resp.status_code == 200
+        sess.rename.assert_called_once_with(8446, "abc-123", "")
+
+    def test_missing_body_defaults_to_empty_title(self, webapp_client):
+        client, _, overrides = webapp_client
+        sess = overrides["session"]
+        sess.rename.return_value = {"session_id": "abc-123", "manual_title": ""}
+        resp = client.post("/api/claude-code/sessions/abc-123/rename", json={})
+        assert resp.status_code == 200
+        sess.rename.assert_called_once_with(8446, "abc-123", "")
+
+    def test_session_host_error_maps_to_http_status(self, webapp_client):
+        client, _, overrides = webapp_client
+        sess = overrides["session"]
+        sess.rename.side_effect = sess.SessionHostError(
+            "no such session", status=404
+        )
+        resp = client.post(
+            "/api/claude-code/sessions/missing/rename",
+            json={"title": "x"},
+        )
+        assert resp.status_code == 404
+        assert "no such session" in resp.json()["detail"]
+
+
+class TestMirrorSession:
+    """Issue #282: a desktop click on an existing session opens (or focuses)
+    the same dedicated Edge mirror window the new-session launch opens, instead
+    of rendering the terminal in the controlling browser."""
+
+    def test_open_invokes_launcher_and_reports_opened(
+        self, webapp_client, monkeypatch
+    ):
+        client, app, _ = webapp_client
+        app.state.webapp_config.claude_show_local_window = True
+        from app.webapp.routers import sessions as sessions_router
+        mock_open = MagicMock(return_value="opened")
+        monkeypatch.setattr(
+            sessions_router.launcher, "open_or_focus_mirror_window", mock_open
+        )
+
+        resp = client.post("/api/claude-code/sessions/abc-123/mirror")
+
+        assert resp.status_code == 200
+        assert resp.json() == {"mirrored": True, "action": "opened"}
+        # Called with the loopback mirror URL (no cert in tests → http) + sid.
+        url, sid = mock_open.call_args.args
+        assert sid == "abc-123"
+        assert url.startswith("http") and url.endswith("/?terminal=abc-123")
+
+    def test_focus_reports_focused(self, webapp_client, monkeypatch):
+        client, app, _ = webapp_client
+        app.state.webapp_config.claude_show_local_window = True
+        from app.webapp.routers import sessions as sessions_router
+        monkeypatch.setattr(
+            sessions_router.launcher,
+            "open_or_focus_mirror_window",
+            MagicMock(return_value="focused"),
+        )
+
+        resp = client.post("/api/claude-code/sessions/abc-123/mirror")
+
+        assert resp.status_code == 200
+        assert resp.json() == {"mirrored": True, "action": "focused"}
+
+    def test_disabled_mirroring_returns_not_mirrored_without_spawning(
+        self, webapp_client, monkeypatch
+    ):
+        """With local-window mirroring off, the endpoint opens nothing and the
+        client falls back to the in-page terminal (old behaviour preserved)."""
+        client, app, _ = webapp_client
+        app.state.webapp_config.claude_show_local_window = False
+        from app.webapp.routers import sessions as sessions_router
+        mock_open = MagicMock()
+        monkeypatch.setattr(
+            sessions_router.launcher, "open_or_focus_mirror_window", mock_open
+        )
+
+        resp = client.post("/api/claude-code/sessions/abc-123/mirror")
+
+        assert resp.status_code == 200
+        assert resp.json()["mirrored"] is False
+        mock_open.assert_not_called()
+
+
+class TestProxySessionWS:
+    """Issue #61: an upstream WS handshake rejection must not escape.
+
+    When the session-host rejects the upstream WS upgrade at the HTTP
+    layer (e.g. 403 for a reaped/unknown session, raised by the
+    ``websockets`` client as ``InvalidStatus`` — a subclass of
+    ``InvalidHandshake``), the proxy must close the browser socket
+    cleanly with code 4502 rather than raising an unhandled ASGI
+    exception with a full traceback in the webapp log.
+    """
+
+    def _patch_loopback(self, sessions_router, monkeypatch):
+        """TestClient connects as host 'testclient'; treat it as loopback
+        so the Tailscale/passkey gate is skipped and the proxy reaches
+        the upstream ``ws_connect`` call under test."""
+        monkeypatch.setattr(
+            sessions_router,
+            "LOOPBACK_HOSTS",
+            frozenset({"testclient", "127.0.0.1", "::1", "localhost"}),
+        )
+
+    def test_upstream_handshake_rejection_closes_4502(
+        self, webapp_client, monkeypatch
+    ):
+        client, _, _ = webapp_client
+        from app.webapp.routers import sessions as sessions_router
+        self._patch_loopback(sessions_router, monkeypatch)
+
+        class _RejectingConnect:
+            """Stand-in for ``ws_connect`` whose handshake is rejected."""
+
+            def __init__(self, *args, **kwargs) -> None:
+                pass
+
+            async def __aenter__(self):
+                raise InvalidHandshake("simulated session-host 403")
+
+            async def __aexit__(self, *exc) -> bool:
+                return False
+
+        monkeypatch.setattr(sessions_router, "ws_connect", _RejectingConnect)
+
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            with client.websocket_connect(
+                "/api/claude-code/sessions/reaped-sid/ws"
+            ) as ws:
+                ws.receive_text()
+        assert excinfo.value.code == 4502
+
+    def test_upstream_unreachable_still_closes_4502(
+        self, webapp_client, monkeypatch
+    ):
+        """Regression guard: the existing OSError path (session-host not
+        listening at all) keeps mapping to the same 4502 close."""
+        client, _, _ = webapp_client
+        from app.webapp.routers import sessions as sessions_router
+        self._patch_loopback(sessions_router, monkeypatch)
+
+        class _UnreachableConnect:
+            def __init__(self, *args, **kwargs) -> None:
+                pass
+
+            async def __aenter__(self):
+                raise OSError("connection refused")
+
+            async def __aexit__(self, *exc) -> bool:
+                return False
+
+        monkeypatch.setattr(sessions_router, "ws_connect", _UnreachableConnect)
+
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            with client.websocket_connect(
+                "/api/claude-code/sessions/no-host-sid/ws"
+            ) as ws:
+                ws.receive_text()
+        assert excinfo.value.code == 4502

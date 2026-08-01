@@ -1,0 +1,106 @@
+"""Regression pin for issue #226 (collapsible Apps/Jobs/Life panels).
+
+The feature: the Apps, Jobs and Life tabs' top-level panels are each a
+collapsible ``<details>`` reusing the Code tab's ``.card--collapsible`` /
+``.collapse-summary`` chrome, with the right-pinned chevron on the summary
+title, so the whole app shares one foldable-section idiom.
+
+Covered panels:
+- Apps: 🟢 Running apps (open by default), 🔌 Port listeners and
+  📦 Registered apps (collapsed by default, #383 review round).
+- Jobs: 📋 Registered jobs — the ➕ Add job button sits in the summary row
+  and a tap there must drive the button only (stopPropagation), never the
+  collapse.
+- Life: 📚 Skills.
+
+Runs in both projections — the wiring is browser-agnostic but the iPhone
+projection confirms the phone surface too.
+"""
+
+from __future__ import annotations
+
+import pytest
+from playwright.sync_api import Page
+
+pytestmark = pytest.mark.smoke
+
+
+def _is_open(page: Page, selector: str) -> bool:
+    return bool(page.locator(selector).evaluate("el => el.open"))
+
+
+def test_apps_tab_panels_default_states(
+    authed_page: Page, base_url: str
+) -> None:
+    authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
+    authed_page.locator("#tabApps").click()
+
+    for sel, should_open in (
+        ("#paneApps details.sessions-card", True),
+        ("#paneApps details.listeners-card", False),
+        ("#paneApps details.apps-list-card", False),
+    ):
+        panel = authed_page.locator(sel)
+        panel.wait_for(state="attached", timeout=10_000)
+        assert _is_open(authed_page, sel) is should_open, (
+            f"{sel} default should be open={should_open} (#383 review round)"
+        )
+
+    # Tapping the Registered-apps summary title expands, then re-collapses it.
+    title = authed_page.locator("#paneApps details.apps-list-card .collapse-title")
+    title.click()
+    assert _is_open(authed_page, "#paneApps details.apps-list-card"), (
+        "title tap should expand the panel"
+    )
+    title.click()
+    assert not _is_open(authed_page, "#paneApps details.apps-list-card"), (
+        "second title tap should re-collapse it"
+    )
+
+
+def test_jobs_panel_is_collapsible_and_add_button_does_not_toggle(
+    authed_page: Page, base_url: str
+) -> None:
+    authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
+    authed_page.locator("#tabJobs").click()
+
+    jobs = authed_page.locator("#paneJobs details.jobs-card")
+    jobs.wait_for(state="attached", timeout=10_000)
+    assert _is_open(authed_page, "#paneJobs details.jobs-card"), (
+        "jobs panel should open by default"
+    )
+
+    # The ➕ Add job button lives in the jobs <summary>. Use the real Edit-mode
+    # control to reveal it: forcing ``hidden = false`` races a pending
+    # renderJobs(), which correctly hides it while Edit mode is still off.
+    authed_page.locator("#jobsEditBtn").click()
+    add_job = authed_page.locator("#jobsAddBtn")
+    add_job.wait_for(state="visible", timeout=10_000)
+    add_job.click()
+    assert _is_open(authed_page, "#paneJobs details.jobs-card"), (
+        "header action tap must not collapse the jobs panel"
+    )
+    assert bool(authed_page.locator("#jobDialog").evaluate("el => el.open")), (
+        "Add job should open its dialog through the real Edit-mode path"
+    )
+
+
+def test_life_skills_panel_is_collapsible(authed_page: Page, base_url: str) -> None:
+    authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
+    authed_page.locator("#tabLifeOS").click()
+
+    skills = authed_page.locator("#paneLifeOS details.lifeos-list-card")
+    skills.wait_for(state="attached", timeout=10_000)
+    assert _is_open(authed_page, "#paneLifeOS details.lifeos-list-card"), (
+        "skills panel should open by default"
+    )
+
+    title = authed_page.locator("#paneLifeOS details.lifeos-list-card .collapse-title")
+    title.click()
+    assert not _is_open(authed_page, "#paneLifeOS details.lifeos-list-card"), (
+        "title tap should collapse the panel"
+    )
+    title.click()
+    assert _is_open(authed_page, "#paneLifeOS details.lifeos-list-card"), (
+        "second title tap should re-expand it"
+    )

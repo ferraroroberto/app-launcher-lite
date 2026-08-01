@@ -1,0 +1,325 @@
+"""Regression pin for issues #37 / #41 (mobile compose bar).
+
+The feature: a ``✏️`` toolbar button toggles a slim ``<textarea>`` compose
+bar above the iOS keyboard. xterm.js wipes its helper textarea after
+every keystroke, so iOS/Android predictive keyboards can't suggest there
+— the compose bar is a normal textarea with default predictive
+attributes. ``➤`` Send forwards ``<text>`` to the PTY over the WS
+``input`` channel, then a submitting ``\\r`` as a *separate* frame so it
+can't be absorbed into bracketed-paste finalization (#166).
+
+Phase 2 (#41): with the bar open, the ``🖼`` image button uploads with
+``?inline=1`` so the session-host returns the stored path *without*
+pasting it into the PTY, and the browser drops that path into the
+textarea at the caret — the review-before-send pattern ``📋`` uses.
+
+The e2e harness connects from loopback, so every terminal open is
+detected as the PC mirror (``isMirror`` true). That is itself the case
+issue #37 verification step 4 pins: the ``✏️`` button must be hidden in
+the mirror. To exercise the Send path we un-hide the toggle button and
+drive the real handler — the Send logic is not mirror-gated, only the
+button's visibility is.
+
+Predictive suggestions themselves are an OS-keyboard behaviour and can
+only be confirmed on a real phone; this test pins the wiring underneath.
+"""
+
+from __future__ import annotations
+
+import base64
+import re
+
+import pytest
+from playwright.sync_api import Page, expect
+
+# 1x1 transparent PNG — smallest valid image the session-host will accept.
+_PNG_1x1 = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk"
+    "YAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+)
+
+# The session-host stores uploads under <project>\.launcher-tmp\ — the
+# inline path dropped into the compose bar must point there.
+_PATH_RE = re.compile(r"\.launcher-tmp.*\.png$")
+
+pytestmark = pytest.mark.smoke
+
+
+def _open_terminal(page: Page, base_url: str, sid: str) -> None:
+    page.goto(f"{base_url}/?terminal={sid}", wait_until="domcontentloaded")
+    page.wait_for_selector("#terminalOverlay:not([hidden])", timeout=10_000)
+    page.wait_for_function(
+        "() => document.getElementById('terminalStatus') "
+        "&& document.getElementById('terminalStatus').hidden === true",
+        timeout=10_000,
+    )
+
+
+def test_compose_button_hidden_in_mirror(
+    authed_page: Page, base_url: str, launched_pty_session: str
+) -> None:
+    """Loopback open is the PC mirror — the ✏️ button must stay hidden."""
+    _open_terminal(authed_page, base_url, launched_pty_session)
+    expect(authed_page.locator("#terminalCompose")).to_be_hidden()
+    expect(authed_page.locator("#terminalComposeBar")).to_be_hidden()
+
+
+def test_compose_send_forwards_text_to_pty(
+    authed_page: Page,
+    base_url: str,
+    launched_pty_session: str,
+    wait_for_session_log,
+) -> None:
+    """➤ Send forwards the textarea contents + Enter to the PTY."""
+    sid = launched_pty_session
+    _open_terminal(authed_page, base_url, sid)
+
+    # The button is hidden under loopback (mirror) — un-hide it so the
+    # real toggle handler / setComposeOpen() runs. Send itself is not
+    # mirror-gated, so this exercises the genuine production path.
+    authed_page.evaluate(
+        "document.getElementById('terminalCompose').hidden = false"
+    )
+    authed_page.locator("#terminalCompose").click()
+    expect(authed_page.locator("#terminalComposeBar")).to_be_visible()
+
+    payload = "compose-{regress}"
+    authed_page.locator("#terminalComposeInput").fill(payload)
+    authed_page.locator("#terminalComposeSend").click()
+
+    # Bar clears and stays open after Send.
+    expect(authed_page.locator("#terminalComposeInput")).to_have_value("")
+    expect(authed_page.locator("#terminalComposeBar")).to_be_visible()
+
+    assert wait_for_session_log(authed_page, sid, payload), (
+        f"➤ Send did not deliver the compose text to webapp/sessions/{sid}.log "
+        "— the text never reached the live PTY session"
+    )
+
+
+def test_compose_send_submits_cr_in_its_own_frame(
+    authed_page: Page, base_url: str, launched_pty_session: str
+) -> None:
+    r"""➤ Send delivers the submitting CR immediately after the text (#166).
+
+    The intermittent "Send does nothing" bug was the trailing ``\r`` riding
+    in the same WS frame as the ``\x1b[201~`` paste-end marker, where the TUI
+    sometimes swallowed it into paste finalization instead of submitting. We
+    spy on every outgoing ``input`` frame and pin that the payload frame is
+    followed immediately by a lone ``\r`` with no CR glued onto the text — the
+    ordering invariant, holding whether or not the live agent has bracketed
+    paste enabled. Xterm may emit unrelated focus-report input frames before
+    or after that pair.
+    """
+    sid = launched_pty_session
+    _open_terminal(authed_page, base_url, sid)
+
+    # Record the data of every outgoing WS `input` frame, in order. Patching
+    # the prototype catches the already-open socket too (send resolves on the
+    # prototype at call time); resize frames are type!='input' and skipped.
+    authed_page.evaluate(
+        """() => {
+            window.__sentInput = [];
+            const orig = WebSocket.prototype.send;
+            WebSocket.prototype.send = function (d) {
+                try {
+                    const m = JSON.parse(d);
+                    if (m && m.type === 'input') window.__sentInput.push(m.data);
+                } catch (_) { /* non-JSON frame */ }
+                return orig.call(this, d);
+            };
+        }"""
+    )
+
+    # Un-hide + open the compose bar (mirror trick — see module docstring).
+    authed_page.evaluate(
+        "document.getElementById('terminalCompose').hidden = false"
+    )
+    authed_page.locator("#terminalCompose").click()
+    expect(authed_page.locator("#terminalComposeBar")).to_be_visible()
+
+    payload = "compose-cr-frame"
+    authed_page.locator("#terminalComposeInput").fill(payload)
+    authed_page.locator("#terminalComposeSend").click()
+
+    frames = authed_page.evaluate("() => window.__sentInput")
+    assert len(frames) >= 2, f"➤ Send produced too few input frames: {frames!r}"
+    payload_indexes = [i for i, frame in enumerate(frames) if payload in frame]
+    assert payload_indexes, f"payload frame was not sent: {frames!r}"
+    payload_index = payload_indexes[-1]
+    payload_frame = frames[payload_index]
+    assert "\r" not in payload_frame, f"CR leaked into the text frame: {frames!r}"
+    assert payload_index + 1 < len(frames), (
+        f"submit CR did not follow the payload frame: {frames!r}"
+    )
+    assert frames[payload_index + 1] == "\r", (
+        f"submit CR was not its own frame immediately after the payload: {frames!r}"
+    )
+
+
+def test_compose_image_inserts_path_into_bar(
+    authed_page: Page, base_url: str, launched_pty_session: str
+) -> None:
+    """🖼 with the bar open drops the uploaded path into the textarea (#41)."""
+    sid = launched_pty_session
+    _open_terminal(authed_page, base_url, sid)
+
+    # Un-hide + open the compose bar (mirror trick — see module docstring).
+    authed_page.evaluate(
+        "document.getElementById('terminalCompose').hidden = false"
+    )
+    authed_page.locator("#terminalCompose").click()
+    expect(authed_page.locator("#terminalComposeBar")).to_be_visible()
+
+    # The file input is triggered by the 🖼 button click; set it directly.
+    authed_page.locator("#terminalImageInput").set_input_files(
+        files=[{"name": "regress.png", "mimeType": "image/png", "buffer": _PNG_1x1}]
+    )
+
+    # The uploaded image path lands in the textarea, not the PTY.
+    compose = authed_page.locator("#terminalComposeInput")
+    expect(compose).to_have_value(_PATH_RE, timeout=10_000)
+    expect(authed_page.locator("#terminalComposeBar")).to_be_visible()
+
+
+def test_compose_attach_appends_at_end_with_blank_line(
+    authed_page: Page, base_url: str, launched_pty_session: str
+) -> None:
+    r"""Issue #366: inline uploads always append at the very end as their own
+    paragraph — ``<text>\n\n<path1>\n\n<path2>`` — regardless of the caret,
+    and the compose-bar's own attach button drives the same input. Also pins
+    the accept-broadening: a non-image file (text/plain) uploads fine."""
+    sid = launched_pty_session
+    _open_terminal(authed_page, base_url, sid)
+
+    authed_page.evaluate(
+        "document.getElementById('terminalCompose').hidden = false"
+    )
+    authed_page.locator("#terminalCompose").click()
+    expect(authed_page.locator("#terminalComposeBar")).to_be_visible()
+
+    # Type text, then park the caret at position 0 — the append must ignore it.
+    compose = authed_page.locator("#terminalComposeInput")
+    compose.fill("look at this file")
+    authed_page.evaluate(
+        "() => { const ta = document.getElementById('terminalComposeInput');"
+        " ta.selectionStart = ta.selectionEnd = 0; }"
+    )
+
+    # First attach: a plain-text file through the compose-bar attach button's
+    # input (same #terminalImageInput the button clicks).
+    authed_page.locator("#terminalImageInput").set_input_files(
+        files=[{"name": "notes.txt", "mimeType": "text/plain",
+                "buffer": b"hello attach"}]
+    )
+    expect(compose).to_have_value(
+        re.compile(r"^look at this file\n\n.*\.launcher-tmp.*notes\.txt$"),
+        timeout=10_000,
+    )
+
+    # Second attach stacks below the first, blank-line separated.
+    authed_page.locator("#terminalImageInput").set_input_files(
+        files=[{"name": "shot.png", "mimeType": "image/png", "buffer": _PNG_1x1}]
+    )
+    expect(compose).to_have_value(
+        re.compile(
+            r"^look at this file\n\n.*notes\.txt\n\n.*\.launcher-tmp.*\.png$"
+        ),
+        timeout=10_000,
+    )
+
+    # The compose-bar's own attach button exists and is wired to the input.
+    expect(authed_page.locator("#terminalComposeAttach")).to_be_attached()
+
+
+def test_compose_attach_multiple_images_in_one_pick(
+    authed_page: Page, base_url: str, launched_pty_session: str
+) -> None:
+    """Issue #448: picking several gallery images in ONE file-picker
+    interaction (a single ``set_input_files`` call with 2+ files, mirroring
+    a multi-select gallery pick on the phone) uploads all of them and lands
+    every path in the compose bar, in order, blank-line separated — the
+    same append shape as two sequential single-file attaches, but from one
+    picker action instead of a pick-upload-repeat loop."""
+    sid = launched_pty_session
+    _open_terminal(authed_page, base_url, sid)
+
+    authed_page.evaluate(
+        "document.getElementById('terminalCompose').hidden = false"
+    )
+    authed_page.locator("#terminalCompose").click()
+    expect(authed_page.locator("#terminalComposeBar")).to_be_visible()
+
+    # #terminalImageInput must accept a multi-select pick.
+    expect(authed_page.locator("#terminalImageInput")).to_have_attribute(
+        "multiple", re.compile(r".*")
+    )
+
+    authed_page.locator("#terminalImageInput").set_input_files(
+        files=[
+            {"name": "shot1.png", "mimeType": "image/png", "buffer": _PNG_1x1},
+            {"name": "shot2.png", "mimeType": "image/png", "buffer": _PNG_1x1},
+        ]
+    )
+
+    compose = authed_page.locator("#terminalComposeInput")
+    expect(compose).to_have_value(
+        re.compile(r"^.*\.launcher-tmp.*shot1\.png\n\n.*\.launcher-tmp.*shot2\.png$"),
+        timeout=10_000,
+    )
+
+
+def test_compose_send_and_attach_stay_put_during_autogrow(
+    authed_page: Page, base_url: str, launched_pty_session: str
+) -> None:
+    """Issue #447: the ➤ Send button (and the compose-tools column, e.g.
+    the 🖼 attach button) must not move when the textarea auto-grows on a
+    dictation transcript landing. `.compose-bar` used to be
+    `align-items: stretch`, so a taller textarea stretched every sibling
+    button to match — measured 46px of top-edge drift on a realistic
+    transcript on the WebKit/iPhone projection, a moving-target race
+    against a tap aimed at the pre-grow position (a second tap could land
+    on a shifted-away button, or on whatever the growing textarea now
+    covers, reading as "Send did nothing" or "the tap became a newline").
+    `align-items: flex-end` anchors every button to the row's one stable
+    edge (the bar's bottom never moves; only its top climbs), so only the
+    textarea itself grows."""
+    sid = launched_pty_session
+    _open_terminal(authed_page, base_url, sid)
+
+    authed_page.evaluate(
+        "document.getElementById('terminalCompose').hidden = false"
+    )
+    authed_page.locator("#terminalCompose").click()
+    expect(authed_page.locator("#terminalComposeBar")).to_be_visible()
+
+    send = authed_page.locator("#terminalComposeSend")
+    attach = authed_page.locator("#terminalComposeAttach")
+    send_before = send.bounding_box()
+    attach_before = attach.bounding_box()
+    assert send_before and attach_before
+
+    # A realistic dictated transcript length (~2-3 sentences) — long enough
+    # to push the textarea well past its resting min-height.
+    long_text = (
+        "Hey can you check the login flow again because yesterday I noticed "
+        "the button was not responding on the first tap and I had to tap it "
+        "twice before it actually submitted the form so please take a look."
+    )
+    authed_page.locator("#terminalComposeInput").fill(long_text)
+    authed_page.wait_for_timeout(200)
+
+    send_after = send.bounding_box()
+    attach_after = attach.bounding_box()
+    assert send_after and attach_after
+
+    # Sub-pixel rounding tolerance only — any real drift here is the #447 bug.
+    assert abs(send_after["y"] - send_before["y"]) < 1, (
+        f"Send button moved during autogrow: {send_before} -> {send_after}"
+    )
+    assert abs(send_after["height"] - send_before["height"]) < 1, (
+        f"Send button resized during autogrow: {send_before} -> {send_after}"
+    )
+    assert abs(attach_after["y"] - attach_before["y"]) < 1, (
+        f"Attach button moved during autogrow: {attach_before} -> {attach_after}"
+    )

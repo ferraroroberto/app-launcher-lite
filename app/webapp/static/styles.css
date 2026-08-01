@@ -1,0 +1,3056 @@
+/* Phone-first launcher hub.
+ * Touch targets >= 56 px, tuned for one-thumb use.
+ */
+
+/* ============================================================ design tokens
+   Fleet design system (~/.claude/design.md + design.dark.md, canonical spec
+   ferraroroberto/fleet-config#178; this app's migration: issue #355). Token
+   *names* are this app's; their *values* are the spec's. Light = :root,
+   dark = [data-theme="dark"] (stamped pre-paint by the index.html boot
+   script — localStorage override, prefers-color-scheme fallback). P3
+   wide-gamut (oklch) twins override the saturated tokens behind
+   @media (color-gamut: p3) below. */
+:root {
+  /* colors — neutrals */
+  --bg: #ffffff;             /* canvas (page background) */
+  --card: #ffffff;           /* elevated card surface */
+  --card-2: #f6f8fa;         /* elevation-2: hover/active + raised chrome */
+  --card-off: #f6f8fa;       /* canvas-subtle: inset chips / code blocks */
+  --fg: #1f2328;             /* primary text */
+  --ink: #1f2328;            /* vendored card.css token name (== --fg) */
+  --muted: #656d76;          /* fg-muted (secondary text) */
+  --line: #d1d9e0;           /* border — default hairline, the dominant border */
+  --line-muted: #d8dee4;     /* border-muted — quieter ghost-toggle border */
+  /* colors — accent + status (status colors signal state only) */
+  --accent: #0969da;
+  --accent-fg: #ffffff;      /* text/icon on an accent (or danger) fill */
+  --success: #1a7f37;
+  --attention: #9a6700;
+  --attention-fg: #ffffff;   /* text on an attention fill */
+  --danger: #cf222e;
+  --star: #bf8700;           /* favorite-star gold (spec tile-yellow) */
+  --code-fg: #1f2328;        /* text inside a code/output inset */
+  /* Terminal screen: dark in both themes by default (ANSI output is
+     authored against dark), same model as home-automation's --video-matte
+     (#383). terminal.js reads these. The opt-in override after the dark
+     block (issue #359) flips them light when the user asks the terminal
+     to follow the app theme. */
+  --term-bg: #0a0a0a;
+  --term-fg: #f3f3f3;
+  /* elevation — cards lean on surface + hairline; popovers/toasts share one
+     shadow token, the floating bottom bar its own (the only real shadow). */
+  --shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+  --shadow-nav: 0 10px 34px rgba(31, 35, 40, 0.16);
+  --tabbar-bg: rgba(255, 255, 255, 0.85);
+  --tabbar-border: rgba(31, 35, 40, 0.12);
+  /* Brand-colour alpha overlays derive from the tokens above via relative
+     colour syntax — e.g. rgb(from var(--accent) r g b / 0.18) — so a tint
+     never forks from its base colour. */
+  /* Accent-ghost button recipe (home-automation's Net-tab .big-btn):
+     soft accent tint + accent text + soft accent border — no solid fills
+     (issue #383 review round). Derived from --accent so both themes ride. */
+  --accent-soft: rgb(from var(--accent) r g b / 0.16);
+  --accent-border-soft: rgb(from var(--accent) r g b / 0.24);
+  --accent-border-strong: rgb(from var(--accent) r g b / 0.28);
+  /* Vendored button.css's danger-tier token names (issue #477) — this app's
+     equivalent status color is --danger, so alias rather than fork a second
+     red. Lazily re-resolves per theme same as the accent-soft trio above. */
+  --deficit: var(--danger);
+  --deficit-soft: rgb(from var(--danger) r g b / 0.12);
+  --deficit-border-soft: rgb(from var(--danger) r g b / 0.30);
+  /* radii (rounded scale) — theme-independent */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius: 16px;            /* rounded.lg — cards */
+  --radius-pill: 9999px;
+  --radius-nav: 30px;        /* the floating bottom-tab bar */
+  /* spacing scale + the uniform gutter (between cards and from page edges) */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --gap: 12px;
+  /* typography roles — system stack; the five sizes cover every text need
+     (nav labels keep the vendored nav-tabs.css's phone-validated 11px
+     default via --bottom-tabs-label) */
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-heading-xl: 2rem;
+  --font-heading-lg: 1.5rem;
+  --font-body: 1rem;
+  --font-label: 0.92rem;
+  --font-caption: 0.78rem;
+  /* shared inline-control height (select / input / compact buttons) */
+  --control-h: 36px;
+  /* unified row-height scale for repeated list rows (issue #365): sm =
+     utility/action targets (iOS 44px tap minimum), md = single-line rows,
+     lg = the standard two-line row (name + meta). Every list row height
+     derives from these three — no more per-tab ad hoc values. */
+  --row-sm: 44px;
+  --row-md: 52px;
+  --row-lg: 60px;
+  /* canonical icon-size steps — emoji glyph buttons size via font-size */
+  --icon-inline: 16px;
+  --icon-title: 18px;
+  --icon-feature: 24px;
+  /* home-head's toggle fill (vendored home-head.css contract): a subtle-
+     contrast surface on the card — --card-2 here, not --card-off, because
+     this app's dark --card-off is true black and would vanish on the card. */
+  --close-bg: var(--card-2);
+  /* Vendored switch.css contract (project-scaffolding#120). */
+  --toggle-track: var(--line);
+  --toggle-knob: #ffffff;
+  --on: var(--success);
+  color-scheme: light;
+  /* --bottom-tabs-* geometry (height/margin/pill-height/padding/gap/icon/
+     label) is intentionally undefined here (issue #355) — nav-tabs.css's
+     own canonical var(..., fallback) defaults (61/21/53/4/4/20/11px) are
+     the fleet-standard floating-bar geometry, phone-validated on
+     home-automation. Define one here only to deliberately diverge. */
+}
+
+[data-theme="dark"] {
+  --bg: #0d1117;             /* canvas (GitHub dark canvas) */
+  --card: #161b22;           /* elevated card surface */
+  --card-2: #21262d;         /* elevation-2: hover/active + raised chrome */
+  --card-off: #010409;       /* canvas-subtle: true-black inset */
+  --fg: #e6edf3;
+  --ink: #e6edf3;
+  --muted: #7d8590;
+  --line: #30363d;
+  --line-muted: #21262d;
+  --accent: #2f81f7;
+  --accent-fg: #ffffff;
+  --success: #3fb950;
+  --attention: #d29922;
+  --attention-fg: #181818;   /* the brighter dark amber carries dark text */
+  --danger: #f85149;
+  --star: #d29922;           /* spec tile-yellow, dark value */
+  --code-fg: #e6edf3;
+  /* Depth on a near-black canvas comes from surface lightness, not shadow. */
+  --shadow: 0 8px 24px rgba(1, 4, 9, 0.6);
+  --shadow-nav: 0 10px 34px rgba(0, 0, 0, 0.5);
+  --tabbar-bg: rgba(22, 27, 34, 0.86);
+  --tabbar-border: rgba(255, 255, 255, 0.13);
+  --toggle-knob: var(--ink);
+  color-scheme: dark;
+}
+
+/* Light terminal screen: the terminal always follows the app theme
+   (issue #383; supersedes the #359 opt-in switch). The matching
+   ANSI palette rides terminal.js (xterm colors live in the renderer, not
+   CSS). Values are the spec's colors.canvas / colors.fg. */
+:root:not([data-theme="dark"]) {
+  --term-bg: #ffffff;
+  --term-fg: #1f2328;
+}
+
+/* P3 wide-gamut twins — on a wide-gamut display the saturated tokens render
+   the richer oklch() value; sRGB displays keep the hex values above. Only
+   saturated tokens have twins; neutrals are sRGB-only by design. Values are
+   the fleet spec's exact oklch (design.md / design.dark.md). */
+@media (color-gamut: p3) {
+  :root {
+    --accent: oklch(0.52 0.18 256);
+    --success: oklch(0.55 0.14 150);
+    --danger: oklch(0.55 0.20 25);
+    --attention: oklch(0.55 0.11 80);
+  }
+  [data-theme="dark"] {
+    --accent: oklch(0.64 0.18 256);
+    --success: oklch(0.72 0.18 150);
+    --danger: oklch(0.68 0.20 25);
+    --attention: oklch(0.77 0.13 85);
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+/* Canonical focus-visible ring (design.md v2 focus contract, issue #355).
+   One tokenized rule covers every interactive element app-wide; without it
+   keyboard focus falls to the browser default, which on Windows Chrome is
+   themed off the OS accent, not this app's --accent. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Lucide sprite glyphs (_vendored/icons required CSS contract — verbatim
+   from its README). Icons inherit currentColor; size via width/height or
+   the surrounding font-size (1em default). */
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -0.15em;
+}
+/* Icons are decorative (aria-hidden) and must never win hit-testing — taps
+   land on the owning button, the same rule .agent-icon already carries.
+   Belt-and-braces for iOS touch adjudication around svg <use> content. */
+.icon { pointer-events: none; }
+
+/* Shared 44px hit-area expansion for an isolated compact control (design.md
+   "Touch targets"): keeps the compact visual (e.g. the home-head's 34px
+   toggle) while the invisible ::before inset grows the effective target to
+   44×44 (34 + 2×5). Only for controls with clearance on every side —
+   adjacent clusters need real geometry, never overlapping expansions. */
+.hit-target { position: relative; }
+.hit-target::before { content: ""; position: absolute; inset: -5px; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: var(--font-body);
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: contain;
+  /* No system double-tap-to-zoom on the page itself — pairs with the
+     viewport meta's maximum-scale=1/user-scalable=no zoom lock (design.md
+     Layout; fleet-config#296). Individual elements still opt into their own
+     gesture handling (e.g. touch-action: pan-y on scrollable lists). */
+  touch-action: manipulation;
+  /* Reserve the scrollbar gutter so the centred .app container doesn't
+     shift ~8 px sideways when one tab needs a vertical scrollbar and
+     another doesn't — visible as a "tabs aren't aligned" jitter on
+     desktop when switching Coding ↔ Apps ↔ Jobs. */
+  scrollbar-gutter: stable;
+}
+
+.app {
+  max-width: 772px;
+  margin: 0 auto;
+  padding-top: env(safe-area-inset-top, 0);
+  padding-left: var(--gap);
+  padding-right: var(--gap);
+}
+/* Bottom padding is desktop/wide-only, deliberately split out of the rule
+   above (issue #355): the coarse-pointer + narrow breakpoint below is where
+   nav-tabs.css reserves .app's bottom padding for the floating tab bar (its
+   own `.app { padding: ... }` in that same media condition) — a shorthand
+   `padding` here would win the cascade (equal specificity, later in source
+   order) and silently clobber that reservation. */
+@media (pointer: fine), (min-width: 521px) {
+  .app {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0) + 24px);
+    scroll-padding-bottom: calc(env(safe-area-inset-bottom, 0) + 24px);
+  }
+}
+
+/* ---------- tabs ----------
+   Nav geometry + the desktop segmented control / mobile floating pill are
+   now owned by the vendored _vendored/nav/nav-tabs.css (issue #355) — see
+   its <link> in index.html. `.tab.active`, `.tab-icon` sizing, the
+   standalone fixed-inset .app shell, and the visualViewport pin all live
+   there; do not re-add them here.
+
+   The overlay-hide rule below is app-specific glue the vendored file
+   anticipates (its README: "a non-<dialog> overlay -> add the class
+   nav-hidden to <body>") — these five are hand-rolled [hidden]-toggled
+   overlays, not native <dialog>, which the vendored file already covers via
+   body:has(dialog[open]). visibility (not display) matches the vendored
+   technique — gentler on iOS fixed-layer repainting across show/hide. */
+@media (pointer: coarse) and (max-width: 520px) {
+  body.terminal-open .tabs,
+  body:has(#lifeOsBrowser:not([hidden])) .tabs,
+  body:has(#loginOverlay:not([hidden])) .tabs,
+  body:has(#systemMapLightbox:not([hidden])) .tabs,
+  body:has(#summaryModal:not([hidden])) .tabs {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  /* In the standalone shell .app (not the document) is the real scroller
+     (home-automation#303, via nav-tabs.css). terminal.js's lockBodyScroll()
+     pins document.body during an overlay — a no-op there since body was
+     never the scroller in standalone — so without this, .app's own content
+     stays touch-scrollable behind a hand-rolled overlay. Mirrors
+     home-automation's `body:has(dialog[open]) .app { overflow: hidden }`;
+     the five app-specific overlays get the same treatment as the .tabs hide
+     rule above, plus native <dialog> for completeness (this app has both). */
+  @media (display-mode: standalone) {
+    body.terminal-open .app,
+    body:has(#lifeOsBrowser:not([hidden])) .app,
+    body:has(#loginOverlay:not([hidden])) .app,
+    body:has(#systemMapLightbox:not([hidden])) .app,
+    body:has(#summaryModal:not([hidden])) .app,
+    body:has(dialog[open]) .app {
+      overflow: hidden;
+    }
+  }
+}
+
+@media (pointer: coarse) and (max-width: 520px) and (prefers-reduced-motion: reduce) {
+  .tab { transition: none; }
+}
+
+/* ---------- card ---------- */
+/* Surface/border/radius/padding come from the vendored card.css; the app
+   adds only the inter-card gutter. */
+.card { margin: 0 0 var(--gap); }
+/* Detached toggle — modelled on voice-transcriber's `.incognito-btn`: a
+   real button, role="switch" + aria-checked (issue #355). Opacity + accent
+   border flip on `[aria-checked="true"]` so it reads as on/off instead of
+   a tick that everyone misses on a phone. */
+.detached-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: var(--font-caption);
+  white-space: nowrap;
+  padding: 6px 10px;
+  min-height: var(--control-h);
+  border: 1px solid var(--line-muted);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  opacity: 0.55;
+  transition: opacity 0.15s, border-color 0.15s, background 0.15s;
+}
+.detached-toggle:active { background: var(--card-2); }
+.detached-toggle[aria-checked="true"] {
+  opacity: 1;
+  border-color: var(--accent);
+  background: rgb(from var(--accent) r g b / 0.18);
+}
+/* #540: Detached/Resume are icon-only now (the Coding + Life OS launch rows
+   gained a model combo and needed the room). Render the glyph at the app's
+   standard --icon-title size in a square-ish tap target — matching the other
+   icon buttons — while keeping the pill's opacity + accent-border on/off
+   shading that marks them as toggles rather than one-shot actions. */
+.detached-toggle .icon { font-size: var(--icon-title); }
+.detached-toggle { padding: 6px; min-width: var(--control-h); }
+.settings-actions { flex-wrap: wrap; gap: 8px; }
+
+/* Theme toggle (issue #355; #392 put it in the options summary, #496 moved
+   it into the vendored home-head card's .home-toggle slot — the same
+   position as the other fleet apps). The button's box now comes from
+   home-head.css; only the sun/moon glyph pair lives here. Shows the glyph
+   for the ACTION: moon in light (tap → dark), sun in dark (tap → light). */
+.home-head .home-toggle:active { background: var(--card-2); color: var(--fg); }
+.theme-toggle-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+:root[data-theme="dark"] .theme-icon-moon { display: none; }
+:root:not([data-theme="dark"]) .theme-icon-sun { display: none; }
+
+/* ---------- collapsible cards (vendored disclosure) ---------- */
+/* Structure and closed-box geometry come from _vendored/disclosure — the
+   .card--collapsible modifier + .collapse-summary/.collapse-main/
+   .collapse-title/.collapse-chevron/.collapse-body classes. The app adds
+   only the action cluster that rides between title and chevron (git
+   status, favorites filter, sort/add, the option toggles, Edit mode). */
+.summary-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* The Coding-options card keeps its .opt-group children as direct body
+   content (they bring their own padding + dividers); the [open] summary
+   hairline is the only divider under the header. */
+summary + .opt-group { border-top: 0; }
+/* Favorites filter: the star fills gold when the filter is active. */
+.fav-filter-btn.active .icon { fill: currentColor; }
+
+/* System map (issue #173): the inline PNG fills the card width and is
+   tappable to open the full-screen lightbox for pan/zoom. */
+.system-map-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  cursor: zoom-in;
+}
+.system-map-status { margin: 6px 0 0; }
+.system-map-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 350;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: env(safe-area-inset-top, 8px) 8px env(safe-area-inset-bottom, 8px);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  cursor: zoom-out;
+}
+.system-map-lightbox-img {
+  max-width: 100%;
+  height: auto;
+  /* Wider than the viewport when zoomed: let the overlay scroll to pan. */
+  border-radius: var(--radius-sm);
+}
+.system-map-lightbox-close {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  right: 14px;
+  z-index: 360;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(22, 27, 34, 0.9);
+  color: #fff;
+  font-size: var(--icon-title);
+  cursor: pointer;
+}
+/* Invisible hit-area expansion to the 44px effective floor (design.md Touch
+   targets); a co-applied .hit-target class can't be used here — it sets
+   position: relative, which would break this control's position: fixed. */
+.system-map-lightbox-close::before { content: ""; position: absolute; inset: -2px; }
+/* Tighter inter-tile gap on the Projects list — part of the vertical
+   compaction (issue #212); horizontal rhythm is left alone. */
+.opt-group {
+  padding: 6px 14px 14px;
+  border-top: 1px solid var(--line);
+}
+/* Agent group headers read in the app font, normal case — the uppercase
+   spaced-caption treatment looked like a different typeface next to the
+   mixed-case option rows (issue #383). */
+.opt-group-title {
+  font-size: var(--font-label);
+  font-weight: 600;
+  color: var(--muted);
+  margin: 12px 0 10px;
+}
+.opt-hint {
+  font-size: var(--font-caption);
+  color: var(--muted);
+  margin: 8px 2px;
+  line-height: 1.45;
+}
+.opt-hint code {
+  background: var(--card-off);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+  font-size: var(--font-caption);
+}
+
+/* ---------- claude / antigravity option rows ---------- */
+.opt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.opt-row .select-native { flex: 1; }
+.opt-name {
+  font-size: var(--font-caption);
+  color: var(--muted);
+  width: 56px;
+  flex-shrink: 0;
+}
+.segmented {
+  display: flex;
+  flex: 1;
+  background: var(--card-off);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 2px;
+}
+.segmented button {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  padding: 7px 4px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-caption);
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+}
+.segmented button.active { background: var(--card); color: var(--fg); }
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-bottom: 10px;
+}
+/* App-level composition around the vendored track. The component owns the
+   button's geometry; callers own the adjacent human-readable label. */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--row-sm);
+  font-size: var(--font-label);
+}
+.toggles .switch-row { flex: 1 1 180px; }
+/* The Visible agents list (issue #666) is a *list*, not a pair of related
+   switches like Verbose/Debug: one entry per line, name left and switch
+   pinned right, on the shared list-row divider. Wrapping three-to-a-line
+   (the default .toggles flow) made it ambiguous which switch belonged to
+   which agent, and the list grows with every new harness. */
+#agentVisibility.toggles { display: block; margin-bottom: 4px; }
+#agentVisibility .switch-row { display: flex; }
+#agentVisibility .switch-row + .switch-row { border-top: 1px solid var(--line-muted); }
+.flags-preview {
+  font-family: "SF Mono", "Fira Mono", monospace;
+  font-size: var(--font-caption);
+  color: var(--muted);
+  background: var(--card-off);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin: 4px 0 0;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+/* ---------- card list ---------- */
+.card-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+/* Repeated list rows render flat (issue #365, generalizing the Board
+   backlog's #337/#339 pattern app-wide): no per-row box — a hairline
+   separator between rows is the row boundary, GitHub-issue-list style.
+   The outer collapsible section containers (the vendored disclosure
+   component) keep their card look; only the rows inside them changed. */
+.app-item {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+}
+.app-item:last-child { border-bottom: none; }
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.launch-btn {
+  width: 100%;
+  padding: 16px 18px;
+  font-size: var(--font-body);
+  font-weight: 600;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  min-height: var(--row-lg);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+.launch-btn:active { background: var(--card-2); }
+.launch-btn .meta {
+  font-size: var(--font-caption);
+  color: var(--muted);
+  font-weight: 400;
+  word-break: break-all;
+}
+.launch-btn .kind-pill {
+  display: inline-block;
+  font-size: var(--font-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  background: var(--card-off);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  margin-right: 6px;
+}
+.app-item .tunnel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 18px 10px;
+  border-top: 1px solid var(--line);
+  font-size: var(--font-caption);
+  color: var(--muted);
+}
+.app-item .tunnel-row a {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+.app-item .tray-autostart-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px 10px;
+  border-top: 1px solid var(--line);
+}
+.app-item .tray-autostart-row .meta {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-caption);
+  color: var(--muted);
+  word-break: break-all;
+}
+.app-item .row-actions {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  /* No border-left: the divider was part of the boxed-card look; flat
+     rows (issue #365) keep the action rail as plain glyphs. */
+}
+.app-item .row-actions .icon-btn {
+  flex: 1;
+  width: 52px;
+  /* Two stacked rail buttons fit one standard two-line row exactly. */
+  min-height: calc(var(--row-lg) / 2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-body);
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+.app-item .row-actions.session-actions .icon-btn {
+  min-height: var(--row-sm);
+}
+.app-item .row-actions .icon-btn + .icon-btn {
+  border-top: 1px solid var(--line);
+}
+.app-item .row-actions .icon-btn:active {
+  background: var(--card-2);
+  color: var(--fg);
+}
+.app-item .row-actions .icon-btn.danger:active { color: var(--danger); }
+.app-item .row-actions .action-stop-close:active {
+  background: rgb(from var(--danger) r g b / 0.2);
+  color: var(--danger);
+}
+/* Open button before its app has bound a port / with no tailnet_host */
+.app-item .row-actions .icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.app-item .health-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.app-item .health-dot.up { background: var(--success); }
+.app-item .health-dot.down { background: var(--danger); }
+.app-item .health-dot.stuck { background: var(--attention); }
+
+/* Jobs tab action rail (issue #232): job tiles use the shared .app-item
+   layout — info block on the left, a compact vertical action rail on the
+   right (▶ / ⏸ always, 🧪 / ✏️ / 🗑️ revealed only in edit mode). This
+   reclaims the full-width bottom button row that #69 spent on just ▶ / ⏸,
+   so more jobs fit on screen, and keeps the three tabs consistent. The
+   rail is sized by its icons; the tile height stays bound by the info
+   text. No Jobs-only flex override here — falling back to .app-item is
+   the layout. (Reverts #69's flex-column / horizontal-strip override; the
+   #66 two-line info layout below is unaffected.) */
+
+/* ---------- Jobs tab: two-line row layout (issue #66) ---------- */
+/* The row is two stacked lines: dot + name on top, then a compact
+   chip bar (kind, schedule, duration, sparkline) underneath. We let
+   the chip bar flex-wrap when the phone is too narrow for one line,
+   but pin every chip to nowrap so the contents never word-break into
+   a single-letter vertical stack — that was the v1 bug. */
+.job-item .job-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.job-item .job-row-head .name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+/* Alert-on-failure marker (issue #597) — mirrors the board-chief-crown
+   convention: a colored glyph beside the title, not inside the status dot. */
+.job-item .job-alert-icon { color: var(--accent); display: inline-flex; flex: none; }
+/* Two sibling rows under the name, always rendered separately so the
+   eye lands in the same place across every job:
+     row 2 — type pill + schedule chip
+     row 3 — duration (load) chip + sparkline (recent dots) */
+.job-item .job-row-pills,
+.job-item .job-row-load {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 2px;
+}
+.job-item .job-row-pills .kind-pill,
+.job-item .job-row-load .kind-pill {
+  white-space: nowrap;
+  margin-right: 0;
+}
+/* Keep the load row visually distinct (slightly tighter) — its
+   contents are quantitative, not categorical. */
+.job-item .job-row-load { gap: 4px 8px; }
+.job-sparkline {
+  display: inline-flex;
+  gap: 1px;
+  letter-spacing: 0;
+  font-size: var(--font-caption);
+  line-height: 1;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.job-spark-dot {
+  color: var(--muted);
+}
+.job-spark-dot.up { color: var(--success); }
+.job-spark-dot.down { color: var(--danger); }
+.job-spark-dot.live { color: var(--attention); }
+.job-spark-dot.unknown { color: var(--muted); }
+
+.job-duration-chip {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.jobs-kill-btn {
+  margin: 0 0 8px;
+  align-self: flex-start;
+  font-size: var(--font-caption);
+  padding: 4px 10px;
+}
+
+/* ---------- Coding tab tiles (issue #45) ---------- */
+/* Bare folder name on the left, one icon button per coding agent on
+   the right — sat side by side, not stacked. */
+.coding-item .app-main { justify-content: center; }
+.coding-name {
+  /* Vertical padding trimmed (was 16px) so tiles take less height and more
+     projects fit per screen (issue #212). Horizontal padding is unchanged —
+     the tiles still breathe sideways. */
+  padding: 7px 18px;
+  font-size: var(--font-body);
+  font-weight: 600;
+  color: var(--fg);
+  word-break: break-all;   /* raw on-disk name — shown verbatim */
+}
+/* ---------- Coding tab git-status flags (issue #115) ---------- */
+/* On-demand only: tap the header button to annotate tiles. Yellow name
+   = parked on a non-default branch; red name = uncommitted changes. */
+.sessions-header-actions {
+  position: relative;   /* anchors the off-main summary popover (issue #139) */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.git-status-btn { font-size: var(--font-caption); padding: 6px 10px; }
+.git-status-btn.loading { opacity: 0.5; pointer-events: none; }
+/* Compact off-main summary popover (issue #139): anchored below the
+   status button, right-aligned with the card edge. */
+.git-summary {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 200px;
+  max-width: min(92vw, 460px);
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 11px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+}
+.git-summary-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--font-caption);
+  line-height: 1.3;
+}
+.git-summary-row .git-branch-tag { margin-left: 0; font-size: var(--font-caption); }
+.git-summary-name { font-weight: 600; word-break: break-all; }
+.git-summary-name.git-off-main { color: var(--attention); }
+.git-summary-name.git-dirty { color: var(--danger); }
+.git-summary-empty { font-size: var(--font-caption); color: var(--muted); }
+.coding-name.git-off-main { color: var(--attention); }
+.coding-name.git-dirty { color: var(--danger); }
+.git-branch-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-caption);
+  font-weight: 500;
+  color: var(--attention);
+  background: rgb(from var(--attention) r g b / 0.12);
+  vertical-align: middle;
+  word-break: break-all;
+}
+.git-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin: 8px 2px 0;
+}
+.git-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 2px;
+  vertical-align: middle;
+}
+.git-swatch.off-main { background: var(--attention); }
+.git-swatch.dirty { background: var(--danger); }
+
+.row-actions.agent-actions { flex-direction: row; }
+/* The agent icon strip (one button per registry agent + GitHub + star)
+   shares the row with the folder name (issue #120). Buttons are tightened
+   to 52px — still a comfortable ≥44px tap target — so the set fits one
+   row on PC and wider phones. On narrow phones the tile stacks (see the
+   media query below) and the icon strip wraps as the final fallback. */
+.app-item .row-actions.agent-actions .icon-btn {
+  width: 52px;
+  /* Shorter than the two-line row to fit more tiles per screen (issue
+     #212); --row-sm keeps the iOS 44px tap minimum around the 24px glyph
+     (unified scale, issue #365). */
+  min-height: var(--row-sm);
+  padding: 5px;
+}
+.app-item .row-actions.agent-actions .icon-btn + .icon-btn {
+  border-top: 0;
+  border-left: 1px solid var(--line);
+}
+@media (max-width: 520px) {
+  /* Stack: folder name on its own full-width line, agent icons on a
+     row beneath it. flex-wrap lets the icons spill to a second line on
+     the very narrowest phones rather than clipping. */
+  .coding-item { flex-direction: column; align-items: stretch; }
+  .coding-item .row-actions.agent-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .coding-item .row-actions.agent-actions .icon-btn + .icon-btn {
+    border-left: 1px solid var(--line);
+  }
+  /* Life OS tiles share the .coding-item class but only ever carry two
+     actions (📖 + 🚀), which fit beside the name even on the narrowest
+     phone. Opt them back out of the stack-on-narrow rule above (issue
+     #124): the higher-specificity .coding-item.lifeos-item selectors win
+     over the bare .coding-item ones, restoring the default inline row +
+     side border. The Code tab's agent-icon stack is untouched. */
+  .coding-item.lifeos-item { flex-direction: row; align-items: stretch; }
+  .coding-item.lifeos-item .row-actions.agent-actions {
+    border-left: 1px solid var(--line);
+    border-top: 0;
+  }
+}
+.agent-icon {
+  width: 24px;                    /* icons.size feature step (issue #355) */
+  height: 24px;
+  display: block;
+  pointer-events: none;   /* clicks land on the button, not the img */
+  /* Brand-logo SVGs ship glyph-only (no baked tile, issue #361) — the chip
+     is CSS so it can be theme-aware; the internal glyph fill can't reach
+     page CSS vars (separate <img> document), so glyphs needing recolor use
+     a fixed mid-tone (#6e7781) that clears both --card-2 surfaces. */
+  background: var(--card-2);
+  border-radius: 22%;             /* matches the SVGs' original rx14/64 ratio */
+}
+.app-item .row-actions.agent-actions .icon-btn:disabled .agent-icon {
+  filter: grayscale(1);
+}
+
+/* ---------- Coding tab favorites (issue #250) ---------- */
+/* Per-tile star toggle — rightmost in the agent-action strip, the vendored
+   Lucide `star` glyph. Outline + muted colour when unstarred (like the
+   other idle icons); the `.is-fav` rule below fills it gold when starred —
+   the sprite has one star symbol, not a filled/outline pair (#563). */
+.app-item .row-actions.agent-actions .icon-btn.star-btn {
+  font-size: 20px;
+  line-height: 1;
+}
+.app-item .row-actions.agent-actions .icon-btn.star-btn.is-fav,
+.app-item .row-actions.agent-actions .icon-btn.star-btn.is-fav:active {
+  color: var(--star);
+}
+.app-item .row-actions.agent-actions .icon-btn.star-btn.is-fav .icon {
+  fill: var(--star);
+}
+/* "Favorites" header filter toggle — compact ghost button sized like the
+   git-status button; gold outline + filled star glyph when the filter is
+   active (fill rule: `.fav-filter-btn.active .icon`, near `.opt-group`). */
+.fav-filter-btn { font-size: var(--font-caption); padding: 6px 10px; }
+.fav-filter-btn.active { color: var(--star); border-color: var(--star); }
+/* Icon-only on narrow phones (#496): the Projects summary also carries the
+   Detached/Resume toggles now — four labelled controls overflow a 390px
+   row (same compaction precedent as the Registered-jobs summary). */
+@media (max-width: 520px) {
+  .fav-filter-btn .fav-filter-label { display: none; }
+}
+/* Shown in place of the list when the filter is on but nothing is starred. */
+.coding-fav-empty {
+  list-style: none;
+  padding: 10px 4px;
+  text-align: center;
+}
+.session-agent-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  background: var(--card-2);      /* theme-aware brand chip, issue #361 */
+}
+
+/* ---------- running sessions ---------- */
+.sessions-card .card-list { margin-top: 4px; }
+
+/* ---------- jobs tab ---------- */
+/* The list lives inside a collapsible `.sessions-card.card--collapsible` (issue
+   #226). The ➕ Add job button sits in the summary row alongside the title,
+   mirroring the Running-sessions card's ⎇ status button. */
+.jobs-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.jobs-edit-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.jobs-add-btn {
+  font-size: var(--font-caption);
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+/* Sort toggle (issue #229) — same compact footprint as the Add button,
+   always visible (Add is edit-mode-only). */
+.jobs-sort-btn {
+  font-size: var(--font-caption);
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+.jobs-search-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: var(--muted);
+}
+.jobs-search-bar input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card-off);
+  color: var(--fg);
+  font: inherit;
+}
+/* Scoped to the .button-ghost class (the sole search-bar button, #jobsSearchClear)
+   rather than the bare element: the button co-applies the shared .hit-target
+   utility in markup, which reaches the 44px effective floor around this 36px
+   visual (design.md Touch targets). */
+.jobs-search-bar .button-ghost {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+.jobs-search-empty {
+  list-style: none;
+  padding: 16px 4px;
+  text-align: center;
+}
+.job-search-hit .launch-btn { width: 100%; }
+.jobs-search-snippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+}
+/* Edit mode uses the canonical compact track here; its accessible name and
+   title carry the label so the three-control summary still fits a phone. */
+/* Never let the action cluster shove the title into a two-line wrap —
+   truncate the title instead (the vendored disclosure grid stays 1fr auto). */
+.jobs-card .collapse-main { min-width: 0; }
+.jobs-card .collapse-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Agenda panel (issue #230) — foldable 🗓️ Schedule list above Registered
+   jobs. Day headers separate time-ordered rows; tapping a row reveals that
+   job in the list below. */
+.jobs-agenda-body { padding: 4px 0 8px; }
+.jobs-agenda-day {
+  font-size: var(--font-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 8px 16px 4px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+.jobs-agenda-day:first-child { border-top: 0; margin-top: 0; }
+.jobs-agenda-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 16px;
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.jobs-agenda-row:hover { background: rgb(from var(--fg) r g b / 0.04); }
+.jobs-agenda-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 42px;
+}
+.jobs-agenda-name {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jobs-agenda-frequent {
+  padding: 8px 16px 2px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+
+/* Countdown chip on the pills row. Reuses .kind-pill (muted, no border);
+   an accent text colour sets "when it next fires" apart from the cadence
+   chip. Scoped under .launch-btn to beat `.launch-btn .kind-pill`'s
+   `color: var(--muted)` (equal specificity, later in the cascade). */
+.launch-btn .job-countdown-chip {
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Missed-fire coverage badge (issue #697) — "this schedule is not firing".
+   Same .kind-pill geometry as its row neighbours, danger-coloured because it
+   means the job silently produced nothing. Scoped under .launch-btn for the
+   same specificity reason as the countdown chip above. */
+.launch-btn .job-coverage-pill {
+  color: var(--danger);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* The history sits in its OWN <li> right under the job row — previously
+   it was nested inside the row's <li> and the row's display:flex squeezed
+   the row's contents into a vertical strip while the panel took the rest.
+   As a sibling <li> it gets the full UL width without fighting the row's
+   flex context. */
+.jobs-history-li {
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  margin-top: -1px;
+  padding: 0;
+  display: block;
+  overflow: hidden;
+}
+.jobs-history-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--card-2);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.jobs-history-bar .jobs-history-title {
+  font-size: var(--font-caption);
+  color: var(--muted);
+  /* Long job names shouldn't push ✕ Close off the right edge. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jobs-history-bar .jobs-history-close {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--fg);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: var(--font-label);
+  min-height: var(--control-h);
+  flex-shrink: 0;
+}
+.jobs-history-body { padding: 8px 12px 12px; }
+
+.jobs-runs-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.jobs-runs-list > li {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+}
+.jobs-run-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--font-caption);
+  line-height: 1.3;
+  text-align: left;
+  min-height: 40px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.jobs-run-btn .jobs-run-icon { font-size: var(--font-label); }
+.jobs-run-btn .jobs-run-meta {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--font-caption);
+}
+.jobs-run-btn.selected {
+  border-color: var(--accent);
+  background: rgb(from var(--accent) r g b / 0.12);
+}
+.jobs-run-btn.selected .jobs-run-meta { color: var(--fg); }
+.jobs-pin-btn {
+  min-width: 44px;
+  min-height: 44px;
+  filter: grayscale(1);
+}
+.jobs-pin-btn.selected {
+  filter: none;
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.jobs-output-label {
+  margin: 4px 0 6px;
+  font-size: var(--font-caption);
+  color: var(--muted);
+}
+.jobs-output-tail {
+  margin: 0;
+  padding: 8px;
+  background: var(--card-off);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--code-fg);
+  font: 11px/1.35 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  max-height: 50vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  cursor: pointer;
+}
+.jobs-artifacts {
+  margin-top: 10px;
+}
+.jobs-artifacts h4 {
+  margin: 0 0 4px;
+  font-size: var(--font-label);
+}
+.jobs-artifacts ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.jobs-artifacts li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--font-caption);
+}
+.jobs-artifacts a {
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jobs-artifacts span { color: var(--muted); flex-shrink: 0; }
+.jobs-webhook-payload {
+  margin-top: 8px;
+}
+.jobs-webhook-payload > summary {
+  font-size: var(--font-caption);
+  color: var(--muted);
+  cursor: pointer;
+}
+.jobs-webhook-payload > summary .icon {
+  width: 16px;
+  height: 16px;
+  vertical-align: -3px;
+}
+.jobs-webhook-payload-body {
+  margin: 6px 0 0;
+  padding: 8px;
+  background: var(--card-off);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--code-fg);
+  font: 11px/1.35 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  max-height: 30vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ---------- empty / toast ---------- */
+.empty {
+  padding: 24px;
+  background: var(--card);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-align: center;
+  font-size: var(--font-label);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0) + 20px);
+  transform: translateX(-50%);
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-label);
+  max-width: calc(100vw - 32px);
+  box-shadow: var(--shadow);
+  /* Above the full-screen terminal overlay (z-index 300) — otherwise every
+     toast raised while the terminal is open (read-aloud feedback #190, the
+     🎤 dictation / 📷 OCR / paste results) renders behind it and is invisible
+     on the phone. A transient toast should sit above everything. */
+  z-index: 400;
+}
+.toast.error { border-color: var(--danger); }
+.toast.good  { border-color: var(--success); }
+
+/* ---------- settings ---------- */
+/* Settings is its own tab (issue #383): a plain card whose head mirrors
+   the disclosure summary's box (52px, 0 14px, divider) without the
+   collapse behavior — a dedicated pane has nothing to collapse. */
+.settings-card { padding: 0; }
+.settings-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  height: 52px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line-muted);
+}
+.settings-edit-row { min-height: 0; font-size: var(--font-caption); }
+/* API-tokens panel (issue #72) */
+.token-row { justify-content: space-between; }
+.token-meta { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+#tokenMintValue { flex: 1; min-width: 0; font-family: ui-monospace, monospace; }
+#tokenMintUrl { overflow-wrap: anywhere; }
+.settings-switch-row { margin: 4px 0 10px; }
+.settings-card .stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0;
+}
+.input-native, .select-native {
+  background: var(--card-off);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: var(--font-label);
+  min-height: var(--control-h);
+}
+/* .big-btn / .ghost-btn migrated to the vendored button-tint / button-ghost
+   tiers (issue #477, project-scaffolding's button/ component) — fill,
+   border, radius, cursor and the shared :disabled recipe now come from
+   _vendored/button/button.css. What's left here is app-launcher's own
+   layout/size/weight/press-feedback, kept as-is so this migration doesn't
+   restyle any existing button. */
+.button-tint {
+  width: 100%;
+  padding: 14px 18px;
+  font-size: var(--font-label);
+  font-weight: 600;
+  min-height: 44px;
+}
+.button-tint:active { filter: brightness(0.9); }
+.button-ghost {
+  padding: 8px 12px;
+}
+.button-ghost:active { color: var(--fg); }
+.button-ghost.accent-btn {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-border-soft);
+  font-weight: 600;
+}
+.button-ghost.accent-btn:active { color: var(--accent); filter: brightness(0.9); }
+.row { display: flex; gap: 8px; align-items: center; }
+.muted { color: var(--muted); }
+.small { font-size: var(--font-caption); }
+
+/* Status + build identity footer (issue #212): centred plain text at the
+   very bottom of the page, outside every card. */
+.page-foot {
+  margin: 16px 4px;
+  text-align: center;
+}
+.page-foot p { margin: 2px 0; }
+
+.listeners {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 10px 0;
+}
+/* Flat separator rows (issue #365) — same treatment as .app-item. */
+.listener-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: var(--row-md);
+  border-bottom: 1px solid var(--line);
+  padding: 6px 12px;
+  font-size: var(--font-caption);
+}
+.listener-row:last-child { border-bottom: none; }
+.listener-row > div { min-width: 0; }
+/* A helper service nested under its parent app's row (#224). */
+.listener-row.child {
+  margin-left: 18px;
+  border-left: 2px solid var(--accent);
+}
+.listener-row strong { word-break: break-word; }
+.listener-row .meta { color: var(--muted); font-size: var(--font-caption); }
+/* Parent row whose dependent children are collapsed behind a tap (#480). */
+.listener-row.expandable { cursor: pointer; }
+.listener-chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.listener-row[aria-expanded="true"] .listener-chevron { transform: rotate(90deg); }
+.listener-row button {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-caption);
+  min-height: var(--row-sm);
+}
+.listener-row button:active { background: rgb(from var(--danger) r g b / 0.15); }
+.launcher-note {
+  margin: 10px 2px 0;
+  font-size: var(--font-caption);
+  font-style: italic;
+  color: var(--muted);
+}
+
+/* ---------- dialogs ---------- */
+.scan-dialog, .rename-dialog {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--fg);
+  padding: 16px;
+  max-width: 560px;
+  width: calc(100vw - 32px);
+}
+/* Editor dialogs are top-anchored (design modal contract) so a tall form
+   never jumps vertically as conditional rows show/hide; the dialog itself
+   scrolls once it outgrows the viewport. The native <dialog> renders in the
+   browser's top layer (outside .app's own safe-area padding), so its own
+   margin has to add env(safe-area-inset-top) explicitly — otherwise, in an
+   installed iOS PWA where the webview extends under the status bar, a
+   bare 16px anchors the dialog (and its × close button) right under the
+   clock/battery icons, unreachable to tap. */
+.rename-dialog {
+  margin-top: calc(env(safe-area-inset-top, 0px) + 16px);
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px));
+  overflow-y: auto;
+}
+/* Modal header (design modal contract): heading-lg title on the left, a
+   34px square × close on the right — replaces the old footer Cancel. */
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+.rename-dialog .dialog-head h2,
+.scan-dialog .dialog-head h2 {
+  margin: 0;
+  font-size: var(--font-heading-lg);
+  line-height: 1.2;
+}
+.dialog-close {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  cursor: pointer;
+}
+/* Invisible hit-area expansion: keep the 34px modal.closeSize visual, reach
+   the 44px effective floor (design.md Touch targets). 34 + 2×5 = 44. */
+.dialog-close::before { content: ""; position: absolute; inset: -5px; }
+.dialog-close .icon { width: 18px; height: 18px; }
+.dialog-close:active { color: var(--fg); background: var(--card-off); }
+/* Stacked label/value rows (design modal contract): 12px 0 padding on a
+   border-muted top divider, caption label above a full-width control.
+   Scoped to dialogs — the Settings card keeps its own .stacked recipe. */
+.rename-dialog .stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+  margin: 0;
+  border-top: 1px solid var(--line-muted);
+}
+.rename-dialog .stacked > span {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--muted);
+}
+/* Titled groups inside the job editor (chains, parameters) — a plain
+   divided section, not a browser <fieldset> box. */
+.dialog-section {
+  padding: 12px 0;
+  border-top: 1px solid var(--line-muted);
+}
+.dialog-section-title {
+  margin: 0;
+  font-size: var(--font-label);
+  font-weight: 600;
+}
+.dialog-section-hint {
+  margin: 2px 0 8px;
+  font-size: var(--font-caption);
+  color: var(--muted);
+}
+.scan-dialog::backdrop, .rename-dialog::backdrop {
+  background: rgba(0,0,0,0.65);
+}
+.scan-dialog h2, .rename-dialog h2 { margin: 0 0 12px; font-size: var(--font-body); }
+.scan-results {
+  max-height: 60vh;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+.scan-section { margin-bottom: 12px; }
+.scan-section h3 {
+  font-size: var(--font-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 12px 0 6px;
+}
+/* role="switch" row (issue #355) — was a <label><input type=checkbox>. */
+.scan-section .scan-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  width: 100%;
+  background: var(--card-off);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+  font-size: var(--font-caption);
+  text-align: left;
+}
+.scan-section .scan-row > div { flex: 1; min-width: 0; }
+.scan-section .meta {
+  color: var(--muted);
+  font-size: var(--font-caption);
+  word-break: break-all;
+}
+.dialog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+/* Editor-dialog footer (design modal contract): one full-width solid-accent
+   primary on a top divider; × in the header replaced the footer Cancel. */
+.dialog-actions--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-muted);
+}
+/* The rename forms' bare title field: .input-native has no width rule, so
+   outside a .stacked flex column it renders at the browser's intrinsic
+   <input> width. Stacked editor controls already stretch; this makes the
+   bare case match, full-width like the footer primary below it. */
+.rename-dialog .input-native {
+  width: 100%;
+}
+/* Acknowledge-warnings alternative — the tint recipe restated on attention
+   (status colors never fill a non-status button solid). */
+.button-tint.warn {
+  background: rgb(from var(--attention) r g b / 0.16);
+  color: var(--attention);
+  border-color: rgb(from var(--attention) r g b / 0.24);
+}
+
+/* Dry-run toggle in the run-now dialog + confirm-on-fire toggle in the
+   job editor (issue #69) — role="switch" rows (issue #355), styled as a
+   full modal row (44px tap target on a top divider). */
+.job-run-dryrow,
+.job-confirm-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 12px 0;
+  font-size: var(--font-label);
+  color: var(--fg);
+  background: none;
+  border-top: 1px solid var(--line-muted);
+  text-align: left;
+}
+.job-run-dryrow code {
+  background: var(--card-off);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
+
+/* Save-time pre-flight problems (issue #69) — rendered inline in the job
+ * dialog above the actions row. Errors block the save (red); warnings
+ * save once acknowledged via "Save anyway" (amber). */
+.job-preflight-problems {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.job-preflight-problem {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-caption);
+  line-height: 1.35;
+}
+.job-preflight-problem.error {
+  background: rgb(from var(--danger) r g b / 0.12);
+  border: 1px solid var(--danger);
+}
+.job-preflight-problem.warning {
+  background: rgb(from var(--attention) r g b / 0.12);
+  border: 1px solid var(--attention);
+}
+.job-preflight-tag { flex: 0 0 auto; }
+
+/* Job-kind registry (issue #70) — inline-shell body + http-check config
+ * groups swapped in/out of #jobForm by kind (jobs-dialog.js syncKindFields). */
+.job-kind-group {
+  display: flex;
+  flex-direction: column;
+}
+.job-inline-body {
+  font: 12px/1.4 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  resize: vertical;
+}
+
+/* Job chain checklist (on-success / on-failure) — role="switch" rows
+   (issue #355) rendered per the list-row contract: flat full-bleed rows on
+   a hairline divider, capped with an inner scroll so a dozen registered
+   jobs don't triple the dialog's height. */
+.job-chain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.job-chain-row + .job-chain-row { border-top: 1px solid var(--line-muted); }
+.job-chain-row.muted { padding: 8px 0; }
+.job-chain-row-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  background: none;
+  border: none;
+  padding: 6px 0;
+  font-size: var(--font-label);
+  color: inherit;
+  text-align: left;
+}
+
+/* Job parameters editor (issue #67) — embedded inside #jobDialog as a
+ * .dialog-section. The Run-now dialog uses the same stacked label pattern
+ * as the rest of the form, so no extra styling is needed there. */
+.job-params-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.job-param-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  background: var(--card-off);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.job-param-row-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.job-param-row-head .input-native { flex: 1; }
+.job-param-row-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.job-param-row .danger { color: var(--danger, #f55); }
+
+/* ---------- login ---------- */
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+.login-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.login-card h2 { margin: 0; font-size: var(--font-body); }
+.login-card input {
+  background: var(--card-off);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  font-size: var(--font-label);
+}
+.login-error {
+  background: rgb(from var(--danger) r g b / 0.15);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-caption);
+}
+
+/* ---------- running sessions (tap to open the terminal) ---------- */
+.session-item .session-open {
+  width: 100%;
+  text-align: left;
+}
+/* Single declaration for `.session-head` (issue #690 — it used to be declared
+   twice, non-adjacently, and the two halves both mattered: the earlier copy
+   carried the font, this one the gap). Emitted by `sessions.js`, `apps.js`,
+   `jobs.js` and `jobs-row.js`. */
+.session-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-body);
+  font-weight: 600;
+}
+/* Title on its own full-width line above the badges (issue #113), but
+   clamped to a single line with an ellipsis (issue #120): a long title
+   no longer wraps to a second line and eats vertical space — the
+   `up <ago> · <folder>` meta line below already disambiguates. */
+.session-item .session-open .name {
+  display: block;
+  max-width: 100%;
+  font-size: var(--font-label);
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-chevron {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+}
+/* kind tag — full-control PTY vs detached console window */
+.session-kind {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+.session-kind.pty { background: rgb(from var(--success) r g b / 0.16); color: var(--success); }
+.session-kind.remote { background: rgb(from var(--fg) r g b / 0.08); color: var(--muted); }
+/* detached rows aren't tappable — they have no streamable terminal */
+.session-item .session-open.inert {
+  cursor: default;
+  display: block;
+}
+
+/* ---------- interactive terminal overlay ---------- */
+/* Stop iOS rubber-band / pull-to-refresh chrome from leaking through
+   into the underlying page when the terminal overlay is open. Applied
+   globally (harmless on the launcher home view) because Safari's
+   negative-overscroll behaviour is rooted at the document, not body. */
+html, body { overscroll-behavior: none; }
+/* When the terminal is open the body is scroll-locked so the overlay is
+   the only thing on screen — long output can't push the bar off-screen
+   or reveal the app list underneath. The JS lockBodyScroll() also pins
+   position:fixed + top:-Ypx + width:100%; the rules below cap the height
+   and isolate touch gestures so iOS doesn't try to scroll the page that
+   isn't there. 100dvh handles the dynamic chrome (URL bar show/hide). */
+body.terminal-open {
+  overflow: hidden;
+  height: 100dvh;
+  height: 100vh;            /* fallback for engines without dvh */
+  touch-action: none;       /* iOS: no system pan/zoom on body itself */
+}
+.terminal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: var(--term-bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top, 0);
+  /* No padding-bottom: let the xterm host extend edge-to-edge so the
+     dead black band above the iOS home-indicator goes away. The home
+     gesture area itself remains touch-reserved by iOS, so content
+     there isn't interactive but it does fill the screen visually.
+     If a future row of bottom UI ever needs to sit *above* the home
+     indicator, switch this back to env(safe-area-inset-bottom, 0). */
+  /* Containment + the iOS-supported `overscroll-behavior: contain`
+     stop any scroll attempt that exits the overlay from bubbling up
+     to the (now-pinned) body and triggering rubber-band. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  overflow-anchor: none;
+}
+.terminal-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* (#514) 6px, matching .terminal-bar-actions' own gap, so all eight
+     buttons sit at one uniform distance — and the full row (8 × 44px
+     + gaps + bar padding = 420px) fits a 430px phone viewport at once. */
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.terminal-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: var(--font-label);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Fleet chief crown in the terminal overlay's own title (#547) — same marker
+   as the Board card and the Coding-tab row, set by terminal-mirror.js's
+   setTerminalTitleText(). */
+.terminal-title-crown {
+  display: inline-flex;
+  color: var(--accent);
+  margin-right: 4px;
+  vertical-align: -0.15em;
+}
+/* (#514) .terminal-bar-actions is a flex item of the row-flex .terminal-bar;
+   without min-width: 0 a flex item's automatic minimum size is its content's
+   min-content width, so this group refused to shrink below the sum of its
+   six 44px buttons and pushed past the viewport edge once #496 widened the
+   adjacent Back/Kill buttons — same shrinkable-scroll-container contract as
+   design.md's grid minmax(0, 1fr) rule, applied to a flex row. overflow-x:
+   auto lets it scroll internally, within the bar's own padding, instead of
+   clipping the last button off-screen. */
+.terminal-bar-actions {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.terminal-bar-actions::-webkit-scrollbar { display: none; }
+.term-btn {
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 9px 12px;
+  font-size: var(--font-label);
+  /* 44×44 effective minimum app-wide (#496 audit, extending #477 beyond the
+     terminal bar): the base class also dresses the Life OS browser bar. */
+  min-height: 44px;
+  min-width: 44px;
+  cursor: pointer;
+}
+/* Reading the last reply aloud (issue #190) — success-green pulse so the ⏹
+   stop state is unmistakable while speech is playing (on-state, #391). */
+.term-btn.speaking {
+  background: var(--success);
+  color: var(--accent-fg);
+  border-color: transparent;
+  animation: compose-record-pulse 1.2s ease-in-out infinite;
+}
+/* Every icon-only button in the terminal toolbar meets the 44x44pt HIG
+   minimum (issue #477) — restated here for clarity even though the base
+   .term-btn now carries 44×44 itself (#496). */
+.terminal-bar .term-btn { min-width: 44px; min-height: 44px; }
+/* ‹ Back button — #496 had widened it to 64px (+ 4px kill clearance) after
+   the #259 close-tap complaint, but the extra 24px pushed the eight-button
+   row past the phone viewport (#514). Reverted to the uniform 44px HIG
+   target (#477) every other bar button uses, at the bar's uniform 6px gap,
+   so the whole row fits on-screen at once. */
+#terminalBack { text-align: center; }
+/* ✕ Stop-and-kill in the terminal bar (issue #253) — a muted glyph that
+   blends with the dark bar by default, flashing danger-red on press like
+   the list row's stop button (so it doesn't shout a loud red emoji). */
+.term-btn.term-kill {
+  color: var(--muted);
+}
+.term-btn.term-kill:active {
+  background: rgb(from var(--danger) r g b / 0.25);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+/* Read-aloud action menu (issue #210): a small dropdown anchored below the
+   terminal bar under the 🔊 button — "Read aloud" (verbatim) and
+   "Summarize & read" (hub-condensed for hands-free / driving). */
+.speak-popover {
+  position: absolute;
+  top: 48px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  z-index: 30;
+  box-shadow: var(--shadow);
+}
+.speak-action {
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: var(--font-label);
+  text-align: left;
+  white-space: nowrap;
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.speak-action:active { background: var(--card-2); }
+/* Read-aloud summary modal (issue #210): the hub summary shown on screen while
+   it's read aloud (and readable on its own), auto-closing when the read ends or
+   on a tap. Sits above the terminal overlay (300), below the toast (400). */
+.summary-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 350;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+}
+.summary-card {
+  width: min(560px, 100%);
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+.summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.summary-title { font-weight: 700; font-size: var(--font-body); }
+.summary-close {
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  min-width: 36px;
+  min-height: var(--control-h);
+  font-size: var(--font-label);
+  cursor: pointer;
+}
+.summary-text {
+  margin: 0 0 12px;
+  font-size: var(--font-body);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.summary-foot { text-align: center; }
+/* On-screen keys popover (issue #36): D-pad anchored below the
+   terminal bar, right-aligned under the ⌨️ button. */
+.keys-popover {
+  position: absolute;
+  top: 48px;
+  right: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  gap: 8px;
+  padding: 10px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  z-index: 30;
+  box-shadow: var(--shadow);
+}
+/* Not migrated to the button tiers (issue #477 audit): this is a fixed 3-col
+   D-pad grid keyboard popover, not a standalone action button. */
+.key-btn {
+  min-height: 52px;
+  font-size: var(--icon-title);
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.key-btn:active { background: var(--card-2); }
+/* Sticky-Shift engaged (issue #137): ⇧ stays lit until tapped off so the
+   user can see Shift is being held for the next key. */
+.key-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+/* Empty grid cell to the right of ⇧ keeps the down-arrow centered in row 3. */
+.key-spacer { display: block; }
+.terminal-host {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 4px 4px 8px;
+  background: var(--term-bg);
+  overflow: hidden;
+  /* xterm.js owns the inner scrollback; tell iOS the host is a
+     vertical pan target so edge touches don't get hijacked by
+     system gestures. (Momentum-scrolling hints belong on
+     .xterm-viewport — the actual scrolling element — see below.) */
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+/* The element xterm.js actually scrolls is .xterm-viewport, not
+   .terminal-host (host has overflow:hidden). On iOS this is where
+   the -webkit-overflow-scrolling: touch hint earns its keep —
+   inside the rendered window xterm can give the browser a real
+   scrollable area, and iOS will apply native momentum there. */
+.terminal-host .xterm-viewport {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.terminal-host .xterm { height: 100%; }
+/* Compose bar (issue #37): a predictive-keyboard text surface docked
+   at the bottom of the overlay, between the xterm host and the status
+   line. flex-shrink:0 lets it claim its height; the host (flex:1)
+   shrinks and xterm re-fits on the visualViewport resize. */
+.compose-bar {
+  display: flex;
+  /* flex-end, not stretch (issue #447): the textarea auto-grows on every
+     dictation partial, and its growth pushes the row's TOP edge up while
+     the bottom stays put. With align-items:stretch the mic/OCR/attach
+     column and the Send button stretched to match the taller row, moving
+     their buttons up with it — measured 46px of drift on a realistic
+     transcript, a moving-target race against a tap aimed at the pre-grow
+     position. flex-end keeps every button's own natural size, anchored to
+     the row's one stable edge (the bottom), so only the textarea grows. */
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+/* 🎤 / 🔍 / 🖼 / ➤ sit in a 2x2 grid, anchored bottom-right of the bar, so
+   the textarea keeps the horizontal space (issue #171 UX) while all four
+   buttons read as one matched cluster (issue #453) instead of a tall 1x4
+   column. Fixed cell size + the size rule below give every button the same
+   canonical footprint and tap area. */
+.compose-tools {
+  display: grid;
+  grid-template-columns: repeat(2, 44px);
+  grid-template-rows: repeat(2, 44px);
+  gap: 6px;
+  flex-shrink: 0;
+}
+/* Override the base .compose-record/.compose-send padding (which differ
+   from each other, and are reused/re-sized by the board dispatch row) so
+   all four buttons in the terminal compose grid are identical squares. */
+.compose-tools .compose-record,
+.compose-tools .compose-send {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.compose-input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  /* Taller start so the bar is a roomy writing area from the first tap;
+     JS auto-grows up to 8 rows from there. */
+  min-height: 92px;
+  /* System font, not the xterm monospace — predictive UI looks native.
+     16px keeps iOS from auto-zooming the page on focus. */
+  font-family: var(--font);
+  font-size: var(--font-body);
+  line-height: 20px;
+  padding: 10px 12px;
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.compose-send {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: var(--icon-title);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border-soft);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.compose-send:active { opacity: 0.85; }
+.compose-record {
+  flex-shrink: 0;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  font-size: var(--icon-title);
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.compose-record:active { opacity: 0.85; }
+.compose-record:disabled { opacity: 0.4; cursor: default; }
+/* Background work in progress (OCR / transcribe) — keep the ticking timer
+   legible despite the disabled dim, and tint it so it reads as "busy". */
+.compose-record.working { opacity: 1; color: var(--accent); font-size: var(--font-label); }
+/* Recording in progress — red pulse so the state is unmistakable. */
+.compose-record.recording {
+  background: var(--danger, #d9534f);
+  color: var(--accent-fg);
+  border-color: transparent;
+  animation: compose-record-pulse 1.2s ease-in-out infinite;
+}
+@keyframes compose-record-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+/* OCR staging tray (issue #171): images accumulate here as the 📷 button is
+   tapped; one Extract call collates them all into deduplicated text. */
+.ocr-tray {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.ocr-thumbs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+.ocr-thumb { position: relative; flex-shrink: 0; }
+.ocr-thumb img {
+  height: 44px;
+  width: 44px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  display: block;
+}
+.ocr-thumb-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: var(--danger, #d9534f);
+  color: var(--accent-fg);
+  font-size: var(--font-caption);
+  line-height: 18px;
+  padding: 0;
+  cursor: pointer;
+}
+.ocr-extract {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: var(--font-label);
+  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border-soft);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.ocr-extract:active { opacity: 0.85; }
+.ocr-extract:disabled { opacity: 0.6; cursor: default; }
+.ocr-extract.working { opacity: 1; }
+.terminal-status {
+  padding: 8px 12px;
+  font-size: var(--font-caption);
+  color: var(--attention);
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+/* ---------- Life OS tab (issue #102) ---------- */
+/* The model combo + Detached/Resume controls live in the Skills card's
+   summary (#496 round 2 — no separate options card); the recap tile is the
+   only .card--row left on the tab. */
+/* Single-row (non-collapsible) cards inherit the disclosure closed-box:
+   zero vertical padding, a 52px .card-head (vendored card.css) owns the
+   height, so they sit pixel-identical beside collapsed disclosure cards. */
+.card--row { padding: 0 14px; }
+.card--row .card-head { min-height: 52px; }
+/* Right-aligned toggle group: keeps a summary row's switches packed together
+   as a single flex child so the row stays title-left / toggles-right. Without
+   this the Coding row's three children space-between and Detached floats in the
+   center (issue #155). Shared by the Coding + Life OS option rows. */
+.coding-toggles,
+.lifeos-toggles { display: flex; gap: 6px; }
+.lifeos-launch { font-size: var(--icon-title); }
+
+/* Weekly-recap tile (issue #167): title + a staleness badge on the left, the
+   🚀 review launch on the right. The badge is a coloured dot + label whose
+   colour tracks how stale the recap ledger is — green/accent fresh, amber
+   (--attention) past 7 days, red (--danger) past 14, muted when never run. Mirrors
+   the .health-dot colour vocabulary used elsewhere. */
+.lifeos-recap-main { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.lifeos-recap-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--font-caption); color: var(--muted); white-space: nowrap;
+}
+.lifeos-recap-badge::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted); flex: 0 0 auto;
+}
+.lifeos-recap-badge.fresh { color: var(--muted); }
+.lifeos-recap-badge.fresh::before { background: var(--accent); }
+.lifeos-recap-badge.due { color: var(--attention); }
+.lifeos-recap-badge.due::before { background: var(--attention); }
+.lifeos-recap-badge.overdue { color: var(--danger); }
+.lifeos-recap-badge.overdue::before { background: var(--danger); }
+.lifeos-recap-badge.never::before { background: var(--muted); }
+/* The recap card isn't an .app-item, so it doesn't inherit the tab's
+   .app-item .row-actions .icon-btn treatment — restate it here so the 🚀
+   matches the skill-tile launch buttons instead of rendering as a default
+   (white) UA button. */
+.lifeos-recap-card .icon-btn {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--icon-title);
+  min-width: 52px;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lifeos-recap-card .icon-btn:active {
+  background: var(--card-2);
+  color: var(--fg);
+}
+
+/* Read-only content browser: a full-screen file list; tapping a file
+   opens it in a full-screen layer that overlays the list (the ✕ in the
+   bar closes it back to the list). Inside the reused .terminal-overlay. */
+/* The Life OS browser reuses .terminal-overlay for its full-screen shell,
+   but it is a READING surface, not a terminal screen — it follows the app
+   theme instead of the invariant --term-bg (issue #355 PR 3 on-device
+   review: dark background stuck in light theme). */
+#lifeOsBrowser.terminal-overlay { background: var(--bg); }
+
+.lifeos-browser-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.lifeos-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.lifeos-file-cat {
+  font-size: var(--font-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 10px 4px 4px;
+}
+.lifeos-file-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+/* ---------- Board tab (issue #300 / #164) ---------- */
+/* Dispatch bar (#302): speak/type a goal → a fresh /issue-* session.
+   Static markup above the column strip — renderBoard() never touches it,
+   so the poll can't wipe a goal being typed. */
+.board-dispatch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+/* The compose textarea look, but shorter — the bar is a launcher, not a
+   writing surface. */
+.board-dispatch-goal { min-height: 56px; }
+.board-dispatch-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+/* Repo/project dropdown (#337): tap-to-open/tap-to-select, not a typable
+   field — a <button> trigger, not a native <select> (which paints its own
+   OS chrome) or a text input (which would invite typing). Doubles as the
+   dispatch target AND a live filter over the board's kanban cards; "All
+   projects" (the default) shows everything. */
+.board-repo-combo { position: relative; }
+.board-repo-combo::after {
+  content: '▾';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: var(--font-caption);
+  pointer-events: none;
+}
+.board-repo-input {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 0 28px 0 10px;
+  font-size: var(--font-caption);
+  text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+.board-repo-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+}
+.board-repo-list li {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-caption);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.board-repo-list li[data-repo]:hover,
+.board-repo-list li[aria-selected="true"] { background: var(--card); color: var(--accent); }
+/* Dispatch mode + model dropdowns (#500, mode collapsed from a 4-segment
+   radiogroup into a matching select in #547 — the segments no longer fit an
+   iPhone-width row once chat mode landed): native <select>s like the Copilot
+   model picker, shrunk to the row's shared control height + caption size so
+   they line up with the compose buttons. */
+.board-dispatch-row .select-native {
+  padding: 0 10px;
+  font-size: var(--font-caption);
+}
+/* Phone (#496, from on-device feedback): iOS paints a native <select> with
+   its own pill chrome — a different control family than the flat rounded
+   buttons beside it. Flatten it to the row's exact shared recipe (36px
+   control height, 12px radius, hairline border, --card-2 fill — the mic/✕
+   .compose-record recipe) and let the wrapping .board-model-combo span draw
+   the ▾ affordance, the same pattern as .board-repo-combo. Mobile only —
+   desktop keeps the native select. */
+.board-model-combo { display: inline-flex; position: relative; }
+@media (pointer: coarse) {
+  .board-dispatch-row .select-native {
+    appearance: none;
+    -webkit-appearance: none;
+    height: var(--control-h);
+    min-height: var(--control-h);
+    background: var(--card-2);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 0 24px 0 10px;
+  }
+  .board-model-combo::after {
+    content: '▾';
+    position: absolute;
+    right: 9px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: var(--font-caption);
+    pointer-events: none;
+  }
+}
+
+/* Fleet chief (#245): the chat-mode status row under the dispatch bar —
+   crown + one-line liveness + Start (only when down) + the settings gear.
+   Same caption voice as .board-status; the row is static markup like the
+   rest of the bar, renderChiefStatus() only flips hidden/text. */
+.board-chief-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: var(--font-caption);
+}
+.board-chief-status .board-chief-crown { display: inline-flex; color: var(--accent); }
+.board-chief-status-text { flex: 1; min-width: 0; }
+/* The settings gear sits outside .board-dispatch-row, so it misses that
+   row's .compose-record shrink rule and rendered at the base 44px size —
+   visibly bigger than every other icon button in the bar (#547). Match the
+   same 36px --control-h square footprint here directly. */
+.board-chief-status .compose-record {
+  min-height: var(--control-h);
+  min-width: var(--control-h);
+  padding: 0;
+}
+.board-chief-start {
+  min-height: var(--control-h);
+  padding: 0 14px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border-soft);
+  border-radius: var(--radius-md);
+  font-size: var(--font-caption);
+  font-weight: 700;
+  cursor: pointer;
+}
+/* Chief settings dialog rows: label/value on the modal contract's 12px
+   rhythm, value control right-aligned (the rename-dialog base supplies the
+   surface, the header with its ✕ close, and the one full-width primary
+   footer — #545). */
+.chief-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line-muted);
+}
+.chief-settings-row label,
+.chief-settings-row > span:first-child {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--muted);
+}
+.chief-settings-row .select-native,
+.chief-settings-row .input-native {
+  width: auto;
+  min-width: 110px;
+}
+
+/* Launch-model dropdown (#540) for the Coding + Life OS card summaries. A
+   native <select> cannot live inside a <summary> — WebKit's HTML parser
+   derails on it (closes the <details> early, cascading into a broken tree
+   that even zeroes custom-property inheritance on ancestors). So this is
+   built from phrasing-only content — a <button> trigger + a
+   <span role="listbox"> of <button role="option"> — which is valid in a
+   summary, styled to match the flattened .board-dispatch-row select (36px
+   control height, 12px radius, --card-2 fill, ▾ affordance). */
+.model-combo { position: relative; display: inline-flex; }
+.model-combo-trigger {
+  height: var(--control-h);
+  min-height: var(--control-h);
+  padding: 0 24px 0 10px;
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: var(--font-caption);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.model-combo-trigger:active { background: var(--card); }
+.model-combo::after {
+  content: '▾';
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: var(--font-caption);
+  pointer-events: none;
+}
+/* Opens downward from the summary; cards don't clip overflow, so a high
+   z-index keeps it above the collapsed card body below it. */
+.model-combo-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.model-combo-menu[hidden] { display: none; }
+.model-combo-menu button {
+  padding: 8px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-size: var(--font-caption);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.model-combo-menu button:hover,
+.model-combo-menu button[aria-selected="true"] {
+  background: var(--card);
+  color: var(--accent);
+}
+/* The compose-bar buttons (🎤 / ✕ / ➤) shrink to the shared 36px control
+   height so the dispatch row lines up. (The drawer reply mic is NOT in
+   this shrink set any more — #496 round 2: inside the drawer every button
+   keeps the canonical 44px footprint.) */
+.board-dispatch-row .compose-record,
+.board-dispatch-row .compose-send {
+  min-height: var(--control-h);
+  min-width: 36px;
+  padding: 0 10px;
+  font-size: var(--font-label);
+}
+/* When the row wraps on a narrow phone, ➤ right-aligns on its wrap line
+   instead of stranding at the left edge. */
+.board-dispatch-row .compose-send { margin-left: auto; }
+
+/* Column switcher strip: four count buttons + the gh refresh. Doubles as
+   the column header on the phone, where the carousel shows one column. */
+.board-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+/* Not migrated to the button tiers (issue #477 audit): the column-switcher
+   strip is a segmented control (has an .active state). */
+.board-strip-btn {
+  flex: 1;
+  min-width: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  padding: 8px 2px;
+  font-size: var(--font-caption);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.board-strip-btn.active { background: var(--card-2); color: var(--fg); }
+.board-count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: var(--radius-pill);
+  background: var(--card-2);
+  font-size: var(--font-caption);
+}
+/* "Your turn" holding work is the one number that matters. State signal,
+   not decoration — the warn color marks pending human action. */
+.board-strip-btn.attention .board-count { background: var(--attention); color: var(--attention-fg); }
+/* Had no icon-button box at all before #547 (only flex: 0 0 auto — a bare
+   default browser button, visibly smaller/different than the dispatch bar's
+   ↻/send buttons above it). Same 36px --control-h square recipe as
+   .board-dispatch-row .compose-record and .model-combo-trigger, so every
+   icon-sized button in the Board tab now shares one footprint. */
+.board-refresh {
+  flex: 0 0 auto;
+  height: var(--control-h);
+  min-height: var(--control-h);
+  width: var(--control-h);
+  min-width: var(--control-h);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-label);
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.board-refresh:active { background: var(--card); }
+.board-status { color: var(--muted); font-size: var(--font-caption); margin: 0 0 8px; }
+
+/* Claude 5h/7d usage badges (issue #326) — dot + label, colored by usage
+   tier at the same 60/80 thresholds as fleet-config's terminal statusline.
+   Mirrors the .lifeos-recap-badge dot+label shape. Shared between the Board
+   tab's strip and the Coding tab's Running-sessions header (dom-utils.js::
+   renderUsageBadgeRow) — kept separate from .board-status so a stale
+   reading dims instead of disappearing. */
+.usage-badges { display: flex; gap: 12px; margin: 0 0 8px; }
+.usage-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--font-caption); color: var(--muted); white-space: nowrap;
+}
+.usage-badge::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted); flex: 0 0 auto;
+}
+.usage-badge.good { color: var(--success); }
+.usage-badge.good::before { background: var(--success); }
+.usage-badge.warn { color: var(--attention); }
+.usage-badge.warn::before { background: var(--attention); }
+.usage-badge.danger { color: var(--danger); }
+.usage-badge.danger::before { background: var(--danger); }
+.usage-badge.stale { opacity: 0.6; }
+
+/* Phone-first carousel: one column per viewport, swipe between them.
+   scroll-snap gives the swipe for free — no gesture JS. */
+.board-columns {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.board-columns::-webkit-scrollbar { display: none; }
+.board-col {
+  flex: 0 0 100%;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+/* The strip is the column header on the carousel; the per-column title
+   only earns space in the desktop grid below. */
+.board-col-title { display: none; }
+
+.board-list { list-style: none; margin: 0; padding: 0; }
+/* Column, not the shared .app-item row: the drawer and the issue-action
+   buttons must land BELOW the card, never split it horizontally (#301
+   phone feedback). */
+.board-item {
+  margin: 0;
+  flex-direction: column;
+  align-items: stretch;
+}
+/* Flat separator row (issue #365 — the backlog's #337/#339 look extended
+   to Claude's/Yours/Done): no per-card box; the status accents below keep
+   signalling on the row's left edge. */
+.board-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  min-height: var(--row-lg);
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 12px 14px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.board-card:disabled { cursor: default; opacity: 0.75; }
+.board-card-top {
+  font-size: var(--font-caption);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-agent-icon { width: 16px; height: 16px; }
+.board-card-title {
+  font-size: var(--font-label);
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+/* Status accents on the card's left edge — state colors signal state. #608
+   split needs-you into four values: awaiting-decision/awaiting-input stay
+   the same attention accent as the old needs-you; stalled is a genuine
+   anomaly and gets the danger accent; idle-finished is dimmed like idle —
+   nothing pending, just Claude holding a workspace. */
+.board-item.is-awaiting-decision .board-card,
+.board-item.is-awaiting-input .board-card { border-left: 3px solid var(--attention); }
+.board-item.is-stalled .board-card { border-left: 3px solid var(--danger); }
+.board-item.is-working .board-card { border-left: 3px solid var(--accent); }
+.board-item.is-failed .board-card,
+.board-item.is-stuck .board-card { border-left: 3px solid var(--danger); }
+.board-item.is-idle .board-card,
+.board-item.is-idle-finished .board-card { opacity: 0.7; }
+/* Fleet chief card (#245): the standing orchestrator reads distinct from
+   worker sessions — the canonical accent tint (the #528 in-progress recipe)
+   plus an accent left edge and the crown glyph colored to match. The tint
+   works in both themes (accent-soft is a color-mix over the per-theme
+   accent). Status accents above still win the left edge when more urgent
+   (needs-you/failed) because they share specificity and come first — the
+   chief rule below overrides via the extra class. */
+.board-item.board-item-chief .board-card {
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  opacity: 1;
+}
+.board-item-chief .board-chief-crown { color: var(--accent); display: inline-flex; }
+.board-empty { margin: 4px 0 12px; }
+
+/* Fleet chief row in the Coding tab's session list (#547) — same accent-soft
+   tint + accent left edge as the Board card above, adapted to this tab's
+   flat GitHub-list row shape (.app-item has no card box of its own). */
+.app-item.session-item.session-item-chief {
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+}
+.session-item-chief .board-chief-crown { color: var(--accent); display: inline-flex; }
+
+/* Backlog issue tiles (#337, restyled #339): a flat separator row — no card
+   background/border/radius, just a bottom-border divider between rows
+   (GitHub-issue-list style) — with repo/# and the title on their own lines
+   and the ▶/⚡ actions vertically centered against the full row height.
+   .app-item is already a row flexbox by default; .board-item overrides that
+   to a column for the stacked layout the other card kinds use, so this
+   pairs both classes to opt back into a row. Since issue #365 the flat
+   look IS the .app-item base (this pattern got generalized app-wide), so
+   the old box-resetting overrides are gone — only the row direction and
+   the flat button geometry remain. The truncating spans still need
+   `min-width: 0` on the flex item along the row axis (.board-card-text),
+   not just its ancestors — a flex item's default min-width is `auto`
+   (content-based), which silently defeats overflow/ellipsis by letting
+   the item grow to fit its content instead of shrinking to the row's
+   available space (the textbook "ellipsis inside flex doesn't truncate"
+   bug, not a mobile-Safari quirk). */
+.board-item.board-item-issue {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+/* Active workflow marker (#528): keep the flat issue-row geometry while the
+   canonical accent tint distinguishes in-flight work in both themes. Git
+   dirty/off-main colours remain on the meta text independently. */
+.board-item.board-item-issue.is-in-progress {
+  background: var(--accent-soft);
+}
+.board-card-flat {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  padding: 10px 4px;
+}
+.board-card-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+.board-card-title-compact {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--font-label);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.board-card-meta-inline {
+  color: var(--muted);
+  font-size: var(--font-caption);
+  font-weight: 400;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.board-issue-actions.board-issue-actions-compact {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 0;
+}
+.board-issue-btn.icon-only {
+  /* Real 44px geometry (#496 audit): the ▶/⚡ pair is an adjacent cluster,
+     so the rectangles are grown for real, not via overlapping insets. */
+  min-width: 44px;
+  padding: 8px 10px;
+  font-size: var(--font-label);
+  text-align: center;
+}
+.board-issue-btn:disabled {
+  background: var(--card-off);
+  color: var(--muted);
+  border-color: var(--line);
+  cursor: default;
+}
+
+/* Backlog repo-state annotation (#496 item 4): the meta line inherits the
+   Coding tab's git colour vocabulary — red = dirty tree, yellow = parked
+   off the default branch (red wins when both; same precedence as
+   annotateGitStatus). Fed from the shared state.gitStatus cache — the
+   board's own 5 s poll does no git work. */
+.board-card-meta-inline.git-dirty { color: var(--danger); }
+.board-card-meta-inline.git-off-main { color: var(--attention); }
+
+/* Drill-down drawer (#301): last exchange + reply, inline under the card. */
+.board-drawer {
+  margin: 6px 0 4px;
+  padding: 10px 12px;
+  background: var(--card-2);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.board-exchange {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 40vh;
+  overflow-y: auto;
+  font-size: var(--font-caption);
+}
+.board-exchange[data-state="loading"],
+.board-exchange[data-state="empty"],
+.board-exchange[data-state="error"] {
+  color: var(--muted);
+  min-height: 44px;
+  justify-content: center;
+}
+.board-exchange-user {
+  color: var(--muted);
+  font-size: var(--font-caption);
+  white-space: pre-wrap;
+  border-left: 2px solid var(--muted);
+  padding-left: 8px;
+}
+.board-exchange-assistant { white-space: pre-wrap; }
+/* Drawer action layout (#496 round 2, on-device feedback): the reply box
+   takes a full line of its own, and the buttons form one right-aligned
+   row beneath it — canonical 44px footprints, leftover space on the left
+   is fine. flex-wrap keeps the row inside its own column at narrow
+   desktop grid widths too (#473). */
+.board-drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.board-reply-input {
+  flex: 1 1 100%;
+  min-width: 0;
+  resize: vertical;
+  background: var(--card-off);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-size: var(--font-label);
+  font-family: inherit;
+}
+/* One-tap issue start (#301) — a compact row under the card button. */
+.board-issue-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 0 10px 10px;
+}
+/* Every board action button gets the dark theme explicitly — without this
+   they render as the UA's native white buttons (phone feedback, #301). */
+.board-refresh,
+.board-issue-btn,
+.board-reply-send,
+.board-open-terminal,
+.board-rename-btn,
+.board-stop-btn {
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  font-size: var(--font-caption);
+  cursor: pointer;
+}
+.board-reply-send { font-size: var(--font-body); }
+.board-issue-btn:active,
+.board-reply-send:active,
+.board-open-terminal:active,
+.board-rename-btn:active { background: var(--card); }
+/* Drawer action row at the 44px floor (#496 audit) — these sit in an
+   adjacent cluster, so they get real height, not hit-target insets. The
+   icon-only Rename/Stop also need real width around their lone glyph. */
+.board-reply-send,
+.board-open-terminal,
+.board-rename-btn,
+.board-stop-btn {
+  min-height: var(--row-sm);
+}
+.board-reply-send,
+.board-rename-btn,
+.board-stop-btn { min-width: 44px; }
+/* Stop (#496 item 5): same unified stop path as the Coding tab's row ✕
+   (#253) — muted glyph at rest, danger-red on press. */
+.board-stop-btn { color: var(--muted); }
+.board-stop-btn:active {
+  background: rgb(from var(--danger) r g b / 0.2);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* Desktop / wide: all five columns side by side; titles come back.
+   Board (only) also breaks out of the phone-first `.app` 720px cap —
+   full-bleed to the viewport, since `.app`'s horizontal centering makes
+   the standard breakout offsets cancel out exactly (issue #325). Every
+   other tab stays inside the 720px column unchanged. */
+@media (min-width: 700px) and (pointer: fine) {
+  #paneBoard {
+    width: 100vw;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+    padding: 0 24px;
+    box-sizing: border-box;
+  }
+  .board-columns {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 20px;
+    overflow-x: visible;
+    scroll-snap-type: none;
+  }
+  .board-col-title {
+    display: block;
+    margin: 0 0 8px;
+    font-size: var(--font-caption);
+    font-weight: 600;
+    text-transform: none;
+    color: var(--muted);
+  }
+  .board-col-count { font-weight: 400; }
+  /* #495: the phone tab-switcher strip duplicates the grid's own aligned
+     .board-col-title headers, with no shared width/gap math between the two
+     rows. Hide just the switcher buttons — .board-strip also hosts the gh
+     refresh button, which still needs a home on desktop. */
+  .board-strip-btn { display: none; }
+  .board-strip { justify-content: flex-end; }
+}
+.lifeos-file-btn {
+  flex: 1;
+  display: block;
+  text-align: left;
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: var(--font-label);
+  min-height: 40px;
+  cursor: pointer;
+}
+.lifeos-file-btn.active {
+  border-color: var(--accent);
+  background: rgb(from var(--accent) r g b / 0.18);
+}
+.lifeos-file-content {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 12px 16px 32px;
+  -webkit-overflow-scrolling: touch;
+}
+.lifeos-file-content h1,
+.lifeos-file-content h2,
+.lifeos-file-content h3,
+.lifeos-file-content h4 { line-height: 1.3; }
+.lifeos-file-content p { line-height: 1.5; }
+.lifeos-file-content a { color: var(--accent); }
+.lifeos-file-content code {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+  font-size: var(--font-caption);
+}
+.lifeos-file-content pre.md-code {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+.lifeos-file-content pre.md-code code {
+  background: none;
+  border: none;
+  padding: 0;
+}
