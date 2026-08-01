@@ -72,7 +72,7 @@ pytestmark = [
 ]
 
 # Five concurrent sessions — the load the issue reports ("five concurrent PTY
-# workers plus chief"), not a round number picked for symmetry.
+# workers"), not a round number picked for symmetry.
 _SESSION_COUNT = 5
 # Generous: a ConPTY spawn plus a Python interpreter start is ~0.5 s on an
 # idle box, and this must not go red merely because the machine is busy. The

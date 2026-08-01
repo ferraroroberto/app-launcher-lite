@@ -207,7 +207,7 @@ async def session_image(
 async def session_input(sid: str, request: Request) -> Dict[str, Any]:
     """Write composed text into a session's PTY (Tailscale-only + passkey, #301).
 
-    The Board drawer's reply path — chief's only way to steer a running
+    The Board drawer's reply path for steering a running
     worker. Body: ``{"data": str, "submit": bool}``. One call to the
     session-host, which now owns the whole framing + settle-then-submit
     sequence (``PtySession.submit_input``, issue #611, ported from the

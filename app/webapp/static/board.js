@@ -25,9 +25,8 @@
  *
  * Split off a single-file module (issue #691, `/codebase-audit`), the way
  * `jobs.js` and `terminal.js` already were: the dispatch bar above the
- * columns — free-text dispatch (#302), the repo/project combo that doubles
- * as the card filter (#337), chat mode and the whole fleet-chief lifecycle
- * plus its settings dialog (#245/#547) — lives in `board-dispatch.js`. This
+ * columns — free-text dispatch (#302) and the repo/project combo that
+ * doubles as the card filter (#337) — lives in `board-dispatch.js`. This
  * module keeps card rendering, the drill-down drawer, one-tap issue-start
  * and the column carousel, and calls into that one for the bar.
  */
@@ -39,10 +38,9 @@ import { openSessionRename, sessionTitle, stopSession } from './sessions.js';
 import { applyLaunchSizePayload, openTerminal } from './terminal.js';
 import { icon } from './_vendored/icons/icons.js';
 import { ensureTerminalToken } from './webauthn.js';
-import { CHIEF_KILL_CONFIRM, iconUrl, renderUsageBadgeRow } from './dom-utils.js';
+import { iconUrl, renderUsageBadgeRow } from './dom-utils.js';
 import {
   boardRepoFilter,
-  isChiefCard,
   matchesRepoFilter,
   syncDispatchBar,
   wireDispatch,
@@ -94,17 +92,6 @@ const STATUS_META = {
   unknown: { icon: null, text: '', cls: 'is-unknown' },
 };
 
-// The chief's Stop-hook status sits in the needs-you family for nearly all
-// of its life between dispatches (#575) — the server already routes it out
-// of Your turn (build_board's _is_chief_card carve-out). #608 sharpened
-// what "resting state" actually means: idle-finished/awaiting-input/
-// awaiting-decision are all ordinary waiting for a long-lived chat session,
-// so they get the same "standing by" label. stalled is deliberately
-// excluded — a chief dispatch that's been outstanding this long is a real
-// anomaly worth surfacing, not hiding behind a benign label.
-const CHIEF_STANDING_BY_STATUSES = new Set(['idle-finished', 'awaiting-input', 'awaiting-decision']);
-const CHIEF_STANDING_BY_META = { icon: 'moon', text: 'standing by', cls: 'is-idle' };
-
 // ----------------------------------------------------------------- cards
 
 function cardShell(iconName, topText, titleText, cls) {
@@ -133,22 +120,9 @@ function cardShell(iconName, topText, titleText, cls) {
 }
 
 function renderSessionCard(card) {
-  const meta =
-    isChiefCard(card) && CHIEF_STANDING_BY_STATUSES.has(card.status)
-      ? CHIEF_STANDING_BY_META
-      : STATUS_META[card.status] || STATUS_META.unknown;
+  const meta = STATUS_META[card.status] || STATUS_META.unknown;
   const bits = [card.project || '', meta.text, fmtAge(card.age_seconds)].filter(Boolean);
   const shell = cardShell(meta.icon, ' ' + bits.join(' · '), sessionLabel(card), meta.cls);
-  // The chief's card is visually distinct (#245): accent tint + crown, so
-  // the standing orchestrator never blends in with worker sessions.
-  if (isChiefCard(card)) {
-    shell.li.classList.add('board-item-chief');
-    const crown = document.createElement('span');
-    crown.className = 'board-card-top-icon board-chief-crown';
-    crown.innerHTML = icon('crown');
-    const chiefTop = shell.btn.querySelector('.board-card-top');
-    chiefTop.insertBefore(crown, chiefTop.firstChild);
-  }
   // The Board now includes every launcher-owned agent, not only Claude Code
   // (#455). Show the same registry-backed brand identity as the Coding tab so
   // an unknown/degraded status never hides which terminal the card belongs to.
@@ -183,14 +157,6 @@ function renderSessionCard(card) {
 
 // ------------------------------------------------------ drill-down drawer
 
-// Chief-only exchange refresh (#245): loadExchange is one-shot, fine for a
-// worker drawer you glance at — but a chat conversation needs the chief's
-// reply to *arrive*. While the chief's drawer is open, re-run loadExchange
-// on a short interval. Cleared unconditionally at the top of renderBoard()
-// (drawers are rebuilt every render, and every close path goes through it).
-let chiefExchangeTimer = null;
-const CHIEF_EXCHANGE_POLL_MS = 5000;
-
 function buildDrawer(card) {
   const drawer = document.createElement('div');
   drawer.className = 'board-drawer';
@@ -203,14 +169,6 @@ function buildDrawer(card) {
   exchange.textContent = 'Reading last exchange…';
   drawer.appendChild(exchange);
   loadExchange(card, exchange);
-  if (isChiefCard(card)) {
-    chiefExchangeTimer = setInterval(function () {
-      // Defensive: a tab switch doesn't re-render the board, so gate on
-      // the drawer actually still being the visible one.
-      if (state.tab !== 'board' || state.boardExpanded !== card.session_id) return;
-      loadExchange(card, exchange);
-    }, CHIEF_EXCHANGE_POLL_MS);
-  }
 
   const actions = document.createElement('div');
   actions.className = 'board-drawer-actions';
@@ -268,10 +226,6 @@ function buildDrawer(card) {
     stop.title = 'Stop and kill this session';
     stop.setAttribute('aria-label', 'Stop and kill this session');
     stop.addEventListener('click', async function () {
-      // Kill protection (#245): the chief is the one session a mis-tap
-      // shouldn't take down — same confirm() convention as Apps/Jobs kills.
-      // Every other card keeps the deliberate one-tap stop (#253).
-      if (isChiefCard(card) && !confirm(CHIEF_KILL_CONFIRM)) return;
       stop.disabled = true;
       // Close the drawer first — fetchBoard() self-gates while it's open,
       // so a stop with the drawer up would never see the card clear.
@@ -601,12 +555,6 @@ function renderStatusLine(body) {
 // dom-utils.js::renderUsageBadgeRow.
 
 export function renderBoard() {
-  // Drawers rebuild every render — the chief exchange poll (#245) must
-  // never outlive the DOM node it writes into.
-  if (chiefExchangeTimer) {
-    clearInterval(chiefExchangeTimer);
-    chiefExchangeTimer = null;
-  }
   const body = state.board;
   if (!body || !els.boardColumns) return;
   const columns = body.columns || {};

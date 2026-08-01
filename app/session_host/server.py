@@ -141,8 +141,8 @@ def create_app() -> FastAPI:
         flags = str(body.get("flags") or "").strip()
         kind = str(body.get("kind") or "pty").strip().lower()
         agent = str(body.get("agent") or DEFAULT_AGENT).strip().lower()
-        # Role tag (e.g. "chief", #245) so callers can find a purpose-built
-        # session deterministically. PTY-only; remote sessions ignore it.
+        # Role tag (#245) so callers can find a purpose-built session
+        # deterministically. PTY-only; remote sessions ignore it.
         label = str(body.get("label") or "").strip().lower()
         # Phone-supplied spawn dimensions (issue #126): size the PTY to the
         # real viewport before first paint so a ratatui TUI isn't cut.

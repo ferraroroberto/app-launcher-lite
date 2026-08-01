@@ -66,10 +66,8 @@ from src.board_sessions import (  # noqa: F401 — re-exported for board.<name> 
     attach_shared_names,
     merge_sessions,
     state_row_for_session,
-    state_sid_for_session,
 )
 from src.board_transcript import (  # noqa: F401 — re-exported
-    has_typed_user_prompt,
     last_exchange,
 )
 
@@ -137,16 +135,6 @@ def jobs_attention(*, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
 _NEEDS_YOU_STATUSES = frozenset({"stalled", "awaiting-decision", "awaiting-input"})
 
 
-def _is_chief_card(card: Dict[str, Any]) -> bool:
-    """Board-side mirror of the frontend's ``isChiefSession`` (dom-utils.js) —
-    label-first, ``kind``/``name`` fallback for a session-host predating the
-    label field. Kept in lockstep with that JS predicate (#575)."""
-    return bool(
-        card.get("label") == "chief"
-        or (card.get("kind") == "pty" and card.get("name") == "chief")
-    )
-
-
 def build_board(
     session_cards: List[Dict[str, Any]],
     github: Dict[str, Any],
@@ -164,20 +152,14 @@ def build_board(
     Other = everything else that needs attention but isn't a terminal: open
     PRs, then failed/stuck jobs. Done = today's closed issues only — a merged
     PR that closed one is already reflected by the issue itself.
-
-    The standing fleet chief (#245) never routes to Your turn (#575): its
-    ``Stop``-hook-driven status sits in the needs-you family for nearly its
-    entire life between dispatches — for a long-lived chat session that's a
-    resting state, not a transient alert like it is for a worker session. It
-    always lands in Claude's turn instead, regardless of its raw status.
     """
     claude_turn = [
         c for c in session_cards
-        if c["status"] not in _NEEDS_YOU_STATUSES or _is_chief_card(c)
+        if c["status"] not in _NEEDS_YOU_STATUSES
     ]
     your_turn = [
         c for c in session_cards
-        if c["status"] in _NEEDS_YOU_STATUSES and not _is_chief_card(c)
+        if c["status"] in _NEEDS_YOU_STATUSES
     ]
     return {
         "backlog": list(github.get("issues") or []),

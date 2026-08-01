@@ -191,8 +191,8 @@ def should_mirror_to_pc(
       check above already mirrors it before this is ever consulted). An
       *explicit* signal, not an inference from "loopback and no desktop
       flag" — that inference used to double as "skip", which silently
-      starved every non-browser loopback API caller (a script, the fleet
-      chief orchestrator dispatching over ``127.0.0.1``) of a window at all:
+      starved every non-browser loopback API caller (a script, an
+      orchestrator dispatching over ``127.0.0.1``) of a window at all:
       there was no page for them to render into, so "skip" meant "renders
       nowhere". Any other loopback caller — including one that sends neither
       flag — now mirrors by default.
@@ -217,9 +217,9 @@ async def spawn_session_or_400(
     failure modes onto HTTP responses (issue #689).
 
     The shared *head* of every session-launch route, the counterpart to
-    :func:`audit_session_start_and_maybe_mirror`'s tail: six call sites
+    :func:`audit_session_start_and_maybe_mirror`'s tail: call sites
     across three routers — ``apps.py``'s Coding-tab remote + PTY launches,
-    ``board.py``'s issue-start, dispatch and chief-ensure, ``life_os.py``'s
+    ``board.py``'s issue-start and dispatch, ``life_os.py``'s
     skill launch — repeated this identical two-arm mapping verbatim, with
     only the spawn arguments differing.
 

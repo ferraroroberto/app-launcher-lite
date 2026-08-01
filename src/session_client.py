@@ -107,7 +107,7 @@ def create_session(
     # #435 follow-up). Omitted → the session-host's own default.
     if history_lines is not None:
         payload["history_lines"] = history_lines
-    # Role tag (#245, e.g. "chief"). Omitted when unset — a legacy host
+    # Role tag (#245). Omitted when unset — a legacy host
     # ignores unknown keys, so this stays backward compatible either way.
     if label:
         payload["label"] = label

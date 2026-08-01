@@ -638,8 +638,8 @@ summary + .opt-group { border-top: 0; }
   text-overflow: ellipsis;
   min-width: 0;
 }
-/* Alert-on-failure marker (issue #597) — mirrors the board-chief-crown
-   convention: a colored glyph beside the title, not inside the status dot. */
+/* Alert-on-failure marker (issue #597) — a colored glyph beside the title,
+   not inside the status dot. */
 .job-item .job-alert-icon { color: var(--accent); display: inline-flex; flex: none; }
 /* Two sibling rows under the name, always rendered separately so the
    eye lands in the same place across every job:
@@ -1799,15 +1799,6 @@ body.terminal-open {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Fleet chief crown in the terminal overlay's own title (#547) — same marker
-   as the Board card and the Coding-tab row, set by terminal-mirror.js's
-   setTerminalTitleText(). */
-.terminal-title-crown {
-  display: inline-flex;
-  color: var(--accent);
-  margin-right: 4px;
-  vertical-align: -0.15em;
-}
 /* (#514) .terminal-bar-actions is a flex item of the row-flex .terminal-bar;
    without min-width: 0 a flex item's automatic minimum size is its content's
    min-content width, so this group refused to shrink below the sum of its
@@ -2232,63 +2223,6 @@ body.terminal-open {
   }
 }
 
-/* Fleet chief (#245): the chat-mode status row under the dispatch bar —
-   crown + one-line liveness + Start (only when down) + the settings gear.
-   Same caption voice as .board-status; the row is static markup like the
-   rest of the bar, renderChiefStatus() only flips hidden/text. */
-.board-chief-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: var(--font-caption);
-}
-.board-chief-status .board-chief-crown { display: inline-flex; color: var(--accent); }
-.board-chief-status-text { flex: 1; min-width: 0; }
-/* The settings gear sits outside .board-dispatch-row, so it misses that
-   row's .compose-record shrink rule and rendered at the base 44px size —
-   visibly bigger than every other icon button in the bar (#547). Match the
-   same 36px --control-h square footprint here directly. */
-.board-chief-status .compose-record {
-  min-height: var(--control-h);
-  min-width: var(--control-h);
-  padding: 0;
-}
-.board-chief-start {
-  min-height: var(--control-h);
-  padding: 0 14px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--accent-border-soft);
-  border-radius: var(--radius-md);
-  font-size: var(--font-caption);
-  font-weight: 700;
-  cursor: pointer;
-}
-/* Chief settings dialog rows: label/value on the modal contract's 12px
-   rhythm, value control right-aligned (the rename-dialog base supplies the
-   surface, the header with its ✕ close, and the one full-width primary
-   footer — #545). */
-.chief-settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 0;
-  border-top: 1px solid var(--line-muted);
-}
-.chief-settings-row label,
-.chief-settings-row > span:first-child {
-  font-size: var(--font-caption);
-  font-weight: 600;
-  color: var(--muted);
-}
-.chief-settings-row .select-native,
-.chief-settings-row .input-native {
-  width: auto;
-  min-width: 110px;
-}
-
 /* Launch-model dropdown (#540) for the Coding + Life OS card summaries. A
    native <select> cannot live inside a <summary> — WebKit's HTML parser
    derails on it (closes the <details> early, cascading into a broken tree
@@ -2536,29 +2470,7 @@ body.terminal-open {
 .board-item.is-stuck .board-card { border-left: 3px solid var(--danger); }
 .board-item.is-idle .board-card,
 .board-item.is-idle-finished .board-card { opacity: 0.7; }
-/* Fleet chief card (#245): the standing orchestrator reads distinct from
-   worker sessions — the canonical accent tint (the #528 in-progress recipe)
-   plus an accent left edge and the crown glyph colored to match. The tint
-   works in both themes (accent-soft is a color-mix over the per-theme
-   accent). Status accents above still win the left edge when more urgent
-   (needs-you/failed) because they share specificity and come first — the
-   chief rule below overrides via the extra class. */
-.board-item.board-item-chief .board-card {
-  background: var(--accent-soft);
-  border-left: 3px solid var(--accent);
-  opacity: 1;
-}
-.board-item-chief .board-chief-crown { color: var(--accent); display: inline-flex; }
 .board-empty { margin: 4px 0 12px; }
-
-/* Fleet chief row in the Coding tab's session list (#547) — same accent-soft
-   tint + accent left edge as the Board card above, adapted to this tab's
-   flat GitHub-list row shape (.app-item has no card box of its own). */
-.app-item.session-item.session-item-chief {
-  background: var(--accent-soft);
-  border-left: 3px solid var(--accent);
-}
-.session-item-chief .board-chief-crown { color: var(--accent); display: inline-flex; }
 
 /* Backlog issue tiles (#337, restyled #339): a flat separator row — no card
    background/border/radius, just a bottom-border divider between rows

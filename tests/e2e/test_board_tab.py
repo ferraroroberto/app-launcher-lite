@@ -116,8 +116,8 @@ def _mock_board(page: Page, payload: dict | None = None) -> None:
     # completion calls renderBoard() whenever the Board tab is up with no
     # drawer open (apps.js), rebuilding the DOM mid-test (#510/#680). Clean
     # payload so it can't perturb the rendered annotations other tests read.
-    # test_board_chief.py's own _mock_board already does this; the two tests
-    # below that care about the response register their route *after* this.
+    # The two tests below that care about the response register their route
+    # *after* this.
     page.route(
         re.compile(r".*/api/claude-code/git-status$"),
         lambda route: route.fulfill(

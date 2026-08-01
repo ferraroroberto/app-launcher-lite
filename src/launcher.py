@@ -113,7 +113,7 @@ def spawn_claude_session(
     full-screen agent's reconnect scrollback (issue #435 follow-up,
     Settings-tab configurable) — ``None`` falls back to the session-host's
     own default; ignored for ``remote`` and for non-fullscreen agents.
-    ``label`` tags the session with a role (e.g. ``"chief"``, #245) that
+    ``label`` tags the session with a role (#245) that
     rides through ``to_api()`` and board cards; ``""`` for normal sessions.
     Returns the new session's API dict (``session_id``, ``kind``, ``agent``,
     ``name``, …). Raises :class:`session_client.SessionHostError` when the

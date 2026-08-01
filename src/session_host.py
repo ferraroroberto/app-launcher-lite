@@ -449,8 +449,8 @@ class PtySession:
     _loop: asyncio.AbstractEventLoop
     _pty: "PtyProcess"  # type: ignore[name-defined]
     agent: str = DEFAULT_AGENT
-    # Free-form role tag set at create time (e.g. "chief", #245) so callers
-    # can find a purpose-built session deterministically; "" for normal ones.
+    # Free-form role tag set at create time (#245) so callers can find a
+    # purpose-built session deterministically; "" for normal ones.
     label: str = ""
     rows: int = 40
     cols: int = 120

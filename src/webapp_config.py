@@ -74,23 +74,6 @@ DEFAULT_TERMINAL_HISTORY_LINES = 10_000
 MIN_TERMINAL_HISTORY_LINES = 200
 MAX_TERMINAL_HISTORY_LINES = 50_000
 
-# --- Fleet chief (issue #245) ---------------------------------------
-# The standing conversational orchestrator the Board's chat mode talks to.
-# `chief_model` must be a dispatchable Claude tier; the worker cap is read
-# by the /chief skill over loopback as its dispatch rail — it caps how many
-# worker sessions the chief may have running at once. #616 retired the
-# daily-respawn setting: fleet-config#442/#449 shipped compact-and-continue
-# (chief hands its own handover log back to itself on every session start),
-# so an unattended daily respawn would now discard a live batch's context
-# rather than protect it. A restart is still available, but only as an
-# explicit operator action (the Board's chief Restart button, #617) — never
-# a schedule that fires unattended.
-VALID_CHIEF_MODELS = ("sonnet", "opus", "fable")
-DEFAULT_CHIEF_MODEL = "fable"
-DEFAULT_CHIEF_WORKER_CAP = 3
-MIN_CHIEF_WORKER_CAP = 1
-MAX_CHIEF_WORKER_CAP = 10
-
 VALID_CLAUDE_MODELS = ("opus", "sonnet", "haiku", "fable")
 VALID_CLAUDE_EFFORTS = ("off", "low", "medium", "high")
 DEFAULT_CLAUDE_MODEL = "opus"
@@ -326,12 +309,6 @@ class WebappConfig:
     pi_model: str = DEFAULT_PI_MODEL
     pi_effort: str = DEFAULT_PI_EFFORT
     pi_trust_mode: str = DEFAULT_PI_TRUST_MODE
-    # --- Fleet chief (issue #245) ----------------------------------------
-    # Settings for the standing conversational orchestrator (Board chat
-    # mode). Editable from the Board's chief-settings dialog; the worker
-    # cap is also read by the /chief skill over loopback.
-    chief_model: str = DEFAULT_CHIEF_MODEL
-    chief_worker_cap: int = DEFAULT_CHIEF_WORKER_CAP
     # Bearer token enforced when the request did NOT come from a
     # loopback IP. Empty string disables enforcement entirely.
     auth_token: str = ""
@@ -526,10 +503,6 @@ def load_webapp_config(
         pi_model=str(raw.get("pi_model", DEFAULT_PI_MODEL)),
         pi_effort=str(raw.get("pi_effort", DEFAULT_PI_EFFORT)),
         pi_trust_mode=str(raw.get("pi_trust_mode", DEFAULT_PI_TRUST_MODE)),
-        chief_model=str(raw.get("chief_model", DEFAULT_CHIEF_MODEL)),
-        chief_worker_cap=int(
-            raw.get("chief_worker_cap", DEFAULT_CHIEF_WORKER_CAP)
-        ),
         auth_token=str(raw.get("auth_token", "")),
         auth_password=str(raw.get("auth_password", "")),
         session_host_port=int(
@@ -603,8 +576,6 @@ def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
         "pi_model": cfg.pi_model,
         "pi_effort": cfg.pi_effort,
         "pi_trust_mode": cfg.pi_trust_mode,
-        "chief_model": cfg.chief_model,
-        "chief_worker_cap": cfg.chief_worker_cap,
         "auth_token": cfg.auth_token,
         "auth_password": cfg.auth_password,
         "session_host_port": cfg.session_host_port,
@@ -732,13 +703,4 @@ def _validate(cfg: WebappConfig) -> None:
         raise ValueError(
             "jobs_coverage_interval_minutes must be >= 0; got "
             f"{cfg.jobs_coverage_interval_minutes}"
-        )
-    if cfg.chief_model not in VALID_CHIEF_MODELS:
-        raise ValueError(
-            f"chief_model must be one of {VALID_CHIEF_MODELS}; got {cfg.chief_model!r}"
-        )
-    if not (MIN_CHIEF_WORKER_CAP <= cfg.chief_worker_cap <= MAX_CHIEF_WORKER_CAP):
-        raise ValueError(
-            f"chief_worker_cap must be between {MIN_CHIEF_WORKER_CAP} and "
-            f"{MAX_CHIEF_WORKER_CAP}; got {cfg.chief_worker_cap}"
         )

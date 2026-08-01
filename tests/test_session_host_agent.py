@@ -371,7 +371,7 @@ def test_pty_session_to_api_carries_agent():
 
 
 def test_create_threads_label_to_api(tmp_path, monkeypatch):
-    """The role tag (#245, e.g. the fleet chief) rides create() → to_api()
+    """The role tag (#245) rides create() → to_api()
     so callers can find a purpose-built session deterministically; omitted
     stays the empty string."""
     captured: dict = {}
@@ -383,8 +383,8 @@ def test_create_threads_label_to_api(tmp_path, monkeypatch):
     mgr = SessionManager()
     mgr.attach_loop(MagicMock())
 
-    chief = mgr.create(str(tmp_path), "chief", "", "claude", label="chief")
-    assert chief.to_api()["label"] == "chief"
+    tagged = mgr.create(str(tmp_path), "special", "", "claude", label="special")
+    assert tagged.to_api()["label"] == "special"
 
     plain = mgr.create(str(tmp_path), "proj", "", "claude")
     assert plain.to_api()["label"] == ""

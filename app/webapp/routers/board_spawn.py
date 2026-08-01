@@ -12,11 +12,8 @@ reused across *both* route modules:
   :func:`_type_into_session` — the readiness, quiescence and framing rules for
   writing text into a freshly spawned PTY (#64/#166/#245/#302/#549/#611).
 
-Kept as its own module so neither route module has to import the other:
-``board.py`` (columns, drill-down, issue-start, dispatch) and
-``board_chief.py`` (the fleet-chief lifecycle) both need this machinery, and
-``board.py`` already imports ``board_chief`` to mount its router — a shared
-dependency, not a ``board.py`` <-> ``board_chief.py`` cycle.
+Kept as its own module: ``board.py`` (columns, drill-down, issue-start,
+dispatch) routes through this machinery.
 
 The timing constants are module-level so tests can patch them tiny; patch them
 **here**, not on the route modules that call through.
@@ -53,9 +50,9 @@ def _safe_list_sessions(port: int) -> List[Dict[str, Any]]:
 def _resolve_repo_entry(cfg: WebappConfig, repo: str) -> AppEntry:
     """Resolve ``repo`` to a live claude-code entry, or 404.
 
-    Shared by ``start_issue``, ``dispatch_goal`` and the chief ensure — all
-    take a bare repo name (or the hardcoded ``fleet-config``) and need the
-    same case-insensitive lookup against the live projects-folder listing.
+    Shared by ``start_issue`` and ``dispatch_goal`` — both take a bare repo
+    name and need the same case-insensitive lookup against the live
+    projects-folder listing.
     """
     entries = live_claude_code_entries(
         Path(cfg.projects_dir), list(cfg.projects_ignore)
@@ -83,8 +80,8 @@ DISPATCH_LEGACY_GRACE_S = 5.0
 # settle is NOT always "input ready" for a fresh --remote-control agent — a
 # CR typed while boot output (handshake, banner) is still growing gets
 # swallowed, leaving the typed text sitting unsubmitted (observed on-device
-# 2026-07-18, first on the chief's own rename, then on a chief-dispatched
-# /issue-add worker left idle with its goal typed but never submitted). Stable
+# 2026-07-18, on a dispatched /issue-add worker left idle with its goal typed
+# but never submitted). Stable
 # output for PTY_QUIESCENT_STABLE_S is the strongest cheap signal the prompt
 # has settled; cap and proceed best-effort rather than failing the spawn.
 # Module-level so tests can patch them tiny.
@@ -176,7 +173,7 @@ async def _await_pty_quiescent(port: int, sid: str) -> None:
     agent keeps booting (handshake, banner) well past first paint, and a CR
     typed in that window is swallowed, merging the typed text with whatever
     is typed next (#245 review; generalized to every typed submission in
-    #549 after the same race hit a chief-dispatched worker). Stable output
+    #549 after the same race hit a dispatched worker). Stable output
     for ``PTY_QUIESCENT_STABLE_S`` is the strongest cheap signal the prompt
     is settled. On cap: proceed — typing slightly early degrades, failing
     the spawn is worse. A session dict without ``output_chars`` or a dead
@@ -221,9 +218,9 @@ async def _type_into_session(port: int, sid: str, command: str) -> None:
     typing while the agent's boot output is still growing, which can swallow
     the submitting CR — first-paint alone is not enough. On any failure past
     the spawn the half-spawned session is killed, so a timeout can't strand
-    an orphan the user never asked for. Shared by dispatch (#302) and the
-    chief ensure (#245) so the timing rules stay single-sourced instead of
-    drifting between call sites.
+    an orphan the user never asked for. Used by dispatch (#302) so the
+    timing rules stay single-sourced instead of drifting between call
+    sites.
     """
     try:
         await _await_dispatch_ready(port, sid)

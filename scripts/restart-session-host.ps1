@@ -7,11 +7,10 @@
 # documented way to do that: an explicit, operator-initiated action, never
 # a side effect of a normal ship.
 #
-# THIS KILLS EVERY LIVE CODING-TAB / CHIEF SESSION ON THIS MACHINE. There is
-# no drain, no idle check -- every PTY dies immediately, including any
-# standing fleet chief. Only run this at a clean boundary (no live sessions
-# mid-work), never unattended, never as part of building or testing a
-# session-host change itself.
+# THIS KILLS EVERY LIVE CODING-TAB SESSION ON THIS MACHINE. There is
+# no drain, no idle check -- every PTY dies immediately. Only run this at a
+# clean boundary (no live sessions mid-work), never unattended, never as
+# part of building or testing a session-host change itself.
 #
 # Usage:
 #   pwsh -File scripts/restart-session-host.ps1 -Confirm
@@ -29,7 +28,7 @@ $psExe = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
 if (-not $Confirm) {
     Write-Host "This restarts the app-launcher session-host (:8446)." -ForegroundColor Yellow
-    Write-Host "It KILLS EVERY LIVE PTY SESSION ON THIS MACHINE, including any standing chief." -ForegroundColor Red
+    Write-Host "It KILLS EVERY LIVE PTY SESSION ON THIS MACHINE." -ForegroundColor Red
     Write-Host "There is no drain and no idle check. Only proceed at a clean boundary." -ForegroundColor Red
     Write-Host ""
     Write-Host "Re-run with -Confirm to proceed:" -ForegroundColor Yellow

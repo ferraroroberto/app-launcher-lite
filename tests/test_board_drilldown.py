@@ -23,7 +23,6 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -120,52 +119,6 @@ def test_last_exchange_no_assistant_text_in_tail(tmp_path: Path):
         _assistant_line([{"type": "tool_use", "name": "Bash"}]),
     ])
     assert board.last_exchange(target)["available"] is False
-
-
-# ------------------------------------------------- has_typed_user_prompt (#670)
-
-# The exact user-line shapes a launcher-spawned, never-talked-to session
-# writes — verified against the real 2026-07-28 blank chief transcript: the
-# slash-command wrapper is a plain string, the skill body it expands to rides
-# as a content *list*, and the rename lands as a <system-reminder>.
-_BOOTSTRAP_ONLY = [
-    _user_line("<command-message>chief</command-message>\n"
-               "<command-name>/chief</command-name>"),
-    _user_line([{"type": "text", "text": "Base directory for this skill: ..."}]),
-    _assistant_line([{"type": "text", "text": "reading the handover"}]),
-    _user_line([{"type": "tool_result", "content": "..."}]),
-    _user_line('<system-reminder>\nThe user named this session "chief".\n'
-               "</system-reminder>"),
-]
-
-
-def test_typed_prompt_detected(tmp_path: Path):
-    target = _write_jsonl(
-        tmp_path / "t.jsonl", _BOOTSTRAP_ONLY + [_user_line("how is it going?")]
-    )
-    assert board.has_typed_user_prompt(target) is True
-
-
-def test_bootstrap_only_transcript_is_a_confident_no(tmp_path: Path):
-    target = _write_jsonl(tmp_path / "t.jsonl", _BOOTSTRAP_ONLY)
-    assert board.has_typed_user_prompt(target) is False
-
-
-def test_unreadable_transcript_is_unknown_not_no():
-    assert board.has_typed_user_prompt(None) is None
-    assert board.has_typed_user_prompt("") is None
-    assert board.has_typed_user_prompt("C:/nope/missing.jsonl") is None
-
-
-def test_oversized_tail_without_a_prompt_is_unknown_not_no(tmp_path: Path):
-    """A file bigger than the tail window can hold a typed prompt the window
-    never saw (a long autonomous stretch pushes it out of view) — that has to
-    read as unknown, never as a confident "nothing was ever typed"."""
-    filler = [_assistant_line([{"type": "text", "text": "x" * 4000}], f"m{i}")
-              for i in range(80)]
-    target = _write_jsonl(tmp_path / "t.jsonl", _BOOTSTRAP_ONLY + filler)
-    assert Path(target).stat().st_size > 256 * 1024
-    assert board.has_typed_user_prompt(target) is None
 
 
 # ------------------------------------------ agent-aware source fallbacks (#457)
@@ -722,116 +675,6 @@ class TestIssueStart:
                 "repo": "myrepo", "number": 42, "mode": "yolo",
                 "title": "some issue title",
             },
-        )
-        assert resp.status_code == 200
-        assert resp.json()["session"]["session_id"] == "spawned-1"
-
-
-# ---------------------------------------------- chief-managed marking (#474)
-#
-# `start_issue` is the path chief actually calls over loopback -- never
-# through `chief_ops.py dispatch`'s own CLI-side marking, so without this
-# the worker it spawns never got a `chief-managed.json` entry. Gated on a
-# live chief PTY session being present so a human driving the Board on this
-# same machine never gets their own dispatch marked.
-
-
-class TestChiefManagedMarking:
-
-    @pytest.fixture
-    def _spawn(self, webapp_client, monkeypatch):
-        from app.webapp.routers import board as board_router
-        captured: dict = {}
-
-        def fake_spawn(project_dir, name, flags, port, kind, agent, rows, cols,
-                       history_lines=None):
-            captured.update(name=name)
-            return {"session_id": "spawned-1", "kind": "pty", "name": name}
-
-        monkeypatch.setattr(board_router, "spawn_claude_session", fake_spawn)
-        return captured
-
-    @pytest.fixture
-    def _fleet_config_repo(self, webapp_client):
-        """A resolvable ``fleet-config`` project dir with a fake venv python
-        and `chief_managed.py`, so `_resolve_repo_entry` + the two
-        `.exists()` checks in `_mark_chief_managed` succeed without ever
-        really invoking a subprocess (`subprocess.run` is faked below)."""
-        _, _, overrides = webapp_client
-        repo = overrides["tmp_projects_dir"] / "fleet-config"
-        (repo / ".venv" / "Scripts").mkdir(parents=True)
-        (repo / ".venv" / "Scripts" / "python.exe").touch()
-        (repo / "skills" / "_lib").mkdir(parents=True)
-        (repo / "skills" / "_lib" / "chief_managed.py").touch()
-        return repo
-
-    @pytest.fixture
-    def _fake_run(self, monkeypatch):
-        from app.webapp.routers import board_chief
-        calls: list = []
-
-        def fake_run(cmd, **kwargs):
-            calls.append(cmd)
-            return MagicMock(returncode=0)
-
-        monkeypatch.setattr(board_chief.subprocess, "run", fake_run)
-        return calls
-
-    def _set_live_sessions(self, overrides, sessions):
-        overrides["session"].list_sessions.return_value = sessions
-
-    def test_marks_when_chief_alive_and_loopback(
-        self, webapp_client, _bypass_gate, _spawn, _fleet_config_repo, _fake_run,
-    ):
-        client, _, overrides = webapp_client
-        (overrides["tmp_projects_dir"] / "myrepo").mkdir()
-        self._set_live_sessions(overrides, [
-            {"session_id": "chief-1", "kind": "pty", "alive": True, "label": "chief"},
-        ])
-        resp = client.post(
-            "/api/board/issues/start",
-            json={"repo": "myrepo", "number": 42, "mode": "start"},
-        )
-        assert resp.status_code == 200
-        assert len(_fake_run) == 1
-        cmd = _fake_run[0]
-        assert cmd[2:] == ["mark", "spawned-1", "myrepo", "42"]
-        assert cmd[0].endswith("python.exe")
-        assert cmd[1].endswith("chief_managed.py")
-
-    def test_does_not_mark_without_a_live_chief_session(
-        self, webapp_client, _bypass_gate, _spawn, _fleet_config_repo, _fake_run,
-    ):
-        client, _, overrides = webapp_client
-        (overrides["tmp_projects_dir"] / "myrepo").mkdir()
-        self._set_live_sessions(overrides, [])  # no chief session alive
-        resp = client.post(
-            "/api/board/issues/start",
-            json={"repo": "myrepo", "number": 42, "mode": "start"},
-        )
-        assert resp.status_code == 200
-        assert _fake_run == []
-
-    def test_marking_failure_does_not_fail_the_launch(
-        self, webapp_client, _bypass_gate, _spawn, _fleet_config_repo, monkeypatch,
-    ):
-        """Mirrors `test_rename_failure_does_not_fail_the_launch` -- a
-        subprocess error while marking is best-effort, never fatal to the
-        dispatch (matches `chief_ops.py cmd_dispatch`'s own try/except)."""
-        from app.webapp.routers import board_chief
-
-        def raising_run(cmd, **kwargs):
-            raise OSError("boom")
-
-        monkeypatch.setattr(board_chief.subprocess, "run", raising_run)
-        client, _, overrides = webapp_client
-        (overrides["tmp_projects_dir"] / "myrepo").mkdir()
-        self._set_live_sessions(overrides, [
-            {"session_id": "chief-1", "kind": "pty", "alive": True, "label": "chief"},
-        ])
-        resp = client.post(
-            "/api/board/issues/start",
-            json={"repo": "myrepo", "number": 42, "mode": "start"},
         )
         assert resp.status_code == 200
         assert resp.json()["session"]["session_id"] == "spawned-1"

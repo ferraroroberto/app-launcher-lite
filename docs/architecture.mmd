@@ -50,7 +50,7 @@ flowchart TB
       R_CC["claude_code.py — flags, git-status, generate"]
       R_JOBS["jobs.py + jobs_run_store_routes.py\n/api/jobs/* (Jobs tab)"]
       R_LIFEOS["life_os.py — /api/life-os/* (Life OS tab)"]
-      R_BOARD["board.py — /api/board (Board tab) + dispatch\n+ board_chief.py (fleet-chief ensure/settings, #245)\n+ board_spawn.py (shared spawn-then-type)"]
+      R_BOARD["board.py — /api/board (Board tab) + dispatch\n+ board_spawn.py (shared spawn-then-type)"]
       R_WEBAUTHN["webauthn.py — passkey ceremonies"]
     end
   end
@@ -130,13 +130,12 @@ flowchart TB
   JOBSFACADE --> JOBSPREFLIGHT
   JOBSFACADE --> JOBSARGV
   R_BOARD --> BOARD
-  R_BOARD -->|"dispatch + chief spawn-then-type\n(chief session cwd = fleet-config,\nbrain = its /chief skill)"| SESSCLIENT
+  R_BOARD -->|"dispatch spawn-then-type"| SESSCLIENT
   BOARD --> SESSCLIENT
   BOARD --> JOBSFACADE
   BOARD --> GHCLIENT
   BOARD -->|reads| SESSSTATE["~/.claude/hooks/state/sessions-state.json\n(fleet-config session_state hook)"]
   BOARD -->|reads| ACTIVEISSUES["~/.claude/hooks/state/active-issues.json\n(fleet-config issue workflows)"]
-  R_BOARD -->|"reads + writes\n(which conversation the chief is, #675)"| CHIEFPTR["src/chief_pointer.py →\nwebapp/chief-pointer.json"]
   R_CONFIG --> WEBAPPCFG
   R_CONFIG --> LAUNCHFLAGS
   R_APPS --> LAUNCHFLAGS

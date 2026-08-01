@@ -67,21 +67,21 @@ def test_create_defaults_history_lines_to_none_when_omitted(monkeypatch):
 
 
 def test_create_forwards_normalized_label(monkeypatch):
-    """#245: the role tag rides through lowercased/stripped — the chief
-    ensure endpoint matches on it, so normalization lives server-side."""
+    """#245: the role tag rides through lowercased/stripped — callers
+    match on it, so normalization lives server-side."""
     captured = _stub_manager(monkeypatch)
     client = TestClient(server.app)
 
     resp = client.post(
         "/sessions",
         json={
-            "project_dir": r"C:\proj", "name": "chief", "flags": "",
-            "agent": "claude", "label": " Chief ",
+            "project_dir": r"C:\proj", "name": "special", "flags": "",
+            "agent": "claude", "label": " Special ",
         },
     )
 
     assert resp.status_code == 200
-    assert captured["label"] == "chief"
+    assert captured["label"] == "special"
 
 
 def test_create_accepts_ssh_agent_for_loopback_pty(monkeypatch):

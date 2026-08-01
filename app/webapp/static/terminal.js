@@ -119,8 +119,8 @@ export function estimateTermSize() {
 // `in_page: true` (issue #609) is the explicit "I will render this myself"
 // signal the server's `should_mirror_to_pc` now requires from a genuine SPA
 // loopback client, instead of inferring it from "loopback and no desktop
-// flag" — an inference a non-browser loopback API caller (a script, the
-// fleet chief) also matched, silently leaving it with no window at all. A
+// flag" — an inference a non-browser loopback API caller (a script, an
+// orchestrator) also matched, silently leaving it with no window at all. A
 // phone sets it too, but it's moot there: the server already mirrors any
 // non-loopback caller before this flag is ever consulted.
 export function applyLaunchSizePayload(payload) {
@@ -292,8 +292,7 @@ export async function openTerminal(session) {
   lockBodyScroll();
   // Use the same stripping sessionTitle() applies elsewhere so Claude's
   // leading ✻/☁️/emoji prefix doesn't show up on first paint — the
-  // agent icon next to the title is the redundancy. Also prepends the
-  // chief's crown marker (#547) when this session is the chief.
+  // agent icon next to the title is the redundancy.
   setTerminalTitleText(session);
   setTerminalStatus('Connecting…');
 

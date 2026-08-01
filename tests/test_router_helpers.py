@@ -4,7 +4,7 @@ Focus: ``should_mirror_to_pc`` — the decision (issue #20 / #241, widened by
 #609) of whether a PTY launch opens the dedicated PC mirror window.
 Mirroring is the *default* for every caller — a phone launch (non-loopback),
 a desktop-browser launch (``desktop: true``), and a bare loopback API caller
-(chief, a script — no flags at all) all open it. Only a loopback caller that
+(a script — no flags at all) all open it. Only a loopback caller that
 explicitly sets ``in_page: true`` (a genuine SPA rendering the session
 itself) skips it.
 
@@ -69,8 +69,8 @@ def test_loopback_in_page_flag_skips_mirror() -> None:
 
 
 def test_loopback_api_launch_with_no_flags_opens_mirror() -> None:
-    """Issue #609: the actual bug. A non-browser loopback API caller — the
-    fleet chief dispatching over 127.0.0.1, or any script — sends neither
+    """Issue #609: the actual bug. A non-browser loopback API caller — an
+    orchestrator dispatching over 127.0.0.1, or any script — sends neither
     ``desktop`` nor ``in_page``. There is no page for it to render into, so
     unlike the old "loopback + no flag = skip" inference, this must now
     default to mirroring rather than silently rendering nowhere."""

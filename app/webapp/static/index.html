@@ -67,10 +67,6 @@
     <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
     <circle cx="12" cy="12" r="3" />
   </symbol>
-  <symbol id="i-crown" viewBox="0 0 24 24" fill="none">
-    <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.735H5.81a1 1 0 0 1-.957-.735L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" />
-    <path d="M5 21h14" />
-  </symbol>
   <symbol id="i-sprout" viewBox="0 0 24 24" fill="none">
     <path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3" />
     <path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4" />
@@ -441,16 +437,6 @@
         <div id="codingUsage" class="usage-badges" hidden>
           <span id="codingUsageSession" class="usage-badge" hidden></span>
           <span id="codingUsageWeekly" class="usage-badge" hidden></span>
-        </div>
-        <!-- Fleet chief status (#547) — Coding-tab parity with the Board's
-             chat-mode status row: same crown + text + Start affordance so
-             the chief can be spotted/started here too, not only in Board
-             chat mode. renderCodingChiefStatus() only flips hidden/text. -->
-        <div id="codingChiefStatus" class="board-chief-status" hidden>
-          <span class="board-chief-crown"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-crown"></use></svg></span>
-          <span id="codingChiefStatusText" class="board-chief-status-text"></span>
-          <button id="codingChiefStart" type="button" class="board-chief-start">Start</button>
-          <button id="codingChiefResume" type="button" class="board-chief-start" title="Reattach the most recent chief conversation" aria-label="Resume chief">Resume</button>
         </div>
         <ul id="sessionsList" class="card-list" aria-label="Running Claude Code sessions"></ul>
         <p id="sessionsEmpty" class="muted small">No sessions launched from here yet — tap a project below to start one.</p>
@@ -828,14 +814,13 @@
                same pattern as .board-repo-combo's ::after chevron. Mode was
                a 4-segment radiogroup until #547 collapsed it into a select
                matching the model dropdown beside it — the segments no
-               longer fit an iPhone-width row once chat mode (#245) landed. -->
+               longer fit an iPhone-width row. -->
           <span class="board-model-combo">
             <select id="boardDispatchMode" class="select-native" aria-label="Dispatch mode"
-                    title="add — file the issue only / build — file and build straight away / yolo — file, build, and ship / chat — talk to the standing fleet chief (#245)">
+                    title="add — file the issue only / build — file and build straight away / yolo — file, build, and ship">
               <option value="add" selected>Add</option>
               <option value="build">Build</option>
               <option value="yolo">Yolo</option>
-              <option value="chat">Chat</option>
             </select>
           </span>
           <span class="board-model-combo">
@@ -851,17 +836,6 @@
                   title="Clear the goal"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
           <button id="boardDispatchSend" type="button" class="compose-send"
                   title="Dispatch the goal"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-send-horizontal"></use></svg></button>
-        </div>
-        <!-- Chief status row (#245) — chat mode only. Static markup like the
-             rest of the bar; renderChiefStatus() only flips hidden/text. -->
-        <div id="boardChiefStatus" class="board-chief-status" hidden>
-          <span class="board-chief-crown"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-crown"></use></svg></span>
-          <span id="boardChiefStatusText" class="board-chief-status-text"></span>
-          <button id="boardChiefStart" type="button" class="board-chief-start" hidden>Start</button>
-          <button id="boardChiefResume" type="button" class="board-chief-start" hidden title="Reattach the most recent chief conversation" aria-label="Resume chief">Resume</button>
-          <button id="boardChiefRestart" type="button" class="board-chief-start" hidden>Restart</button>
-          <button id="boardChiefSettings" type="button" class="compose-record"
-                  title="Chief settings" aria-label="Chief settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg></button>
         </div>
       </div>
       <div class="board-strip" role="tablist" aria-label="Board columns">
@@ -1256,31 +1230,6 @@
       </form>
     </dialog>
 
-    <dialog id="chiefSettingsDialog" class="rename-dialog chief-settings-dialog">
-      <form id="chiefSettingsForm">
-        <div class="dialog-head">
-          <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-crown"></use></svg> Chief settings</h2>
-          <button type="button" id="chiefSettingsCancel" class="dialog-close" aria-label="Close">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
-          </button>
-        </div>
-        <div class="chief-settings-row">
-          <label for="chiefModelSelect">Model</label>
-          <select id="chiefModelSelect" class="select-native">
-            <option value="sonnet">Sonnet</option>
-            <option value="opus">Opus</option>
-            <option value="fable" selected>Fable</option>
-          </select>
-        </div>
-        <div class="chief-settings-row">
-          <label for="chiefWorkerCap">Worker cap</label>
-          <input id="chiefWorkerCap" type="number" class="input-native" min="1" max="10" step="1" value="3">
-        </div>
-        <div class="dialog-actions dialog-actions--stacked">
-          <button type="submit" class="button-primary">Save</button>
-        </div>
-      </form>
-    </dialog>
 
     <dialog id="sessionRenameDialog" class="rename-dialog">
       <form id="sessionRenameForm">

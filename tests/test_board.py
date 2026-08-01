@@ -248,17 +248,17 @@ def test_merge_joins_by_normalized_cwd():
 
 def test_merge_carries_label_from_live_session():
     """The role tag (#245) rides the live session into the board card so the
-    frontend can single out e.g. the fleet chief; absent → empty string."""
+    frontend can single out a purpose-built session; absent → empty string."""
     cards = board.merge_sessions(
         [
-            _live("aaa", "E:\\automation\\fleet-config", 30, label="chief"),
+            _live("aaa", "E:\\automation\\fleet-config", 30, label="special"),
             _live("bbb", "E:\\automation\\photo-ocr", 20),
         ],
         {},
         now=NOW,
     )
     by_id = {c["session_id"]: c for c in cards}
-    assert by_id["aaa"]["label"] == "chief"
+    assert by_id["aaa"]["label"] == "special"
     assert by_id["bbb"]["label"] == ""
 
 
@@ -775,7 +775,7 @@ def test_overlay_inside_stop_epsilon_keeps_needs_you(tmp_path: Path):
 def test_live_title_is_busy_glyph_range():
     from src.board_transcript import _live_title_is_busy
 
-    assert _live_title_is_busy("⠂ chief") is True  # a real observed spinner frame
+    assert _live_title_is_busy("⠂ working") is True  # a real observed spinner frame
     assert _live_title_is_busy("⠐ Start work on issue 635") is True  # another frame
     assert _live_title_is_busy("✳ Some Conversation Title") is False  # idle marker
     assert _live_title_is_busy("") is False
@@ -1498,7 +1498,7 @@ def test_refine_only_applies_to_needs_you_not_idle(tmp_path: Path):
 
 def test_stalled_background_dispatch_under_threshold_stays_working(tmp_path: Path):
     """A background dispatch outstanding 10 minutes is healthy waiting, not
-    a stall — mirrors the fleet chief's own observed ~9-minute e2e-gate wait
+    a stall — mirrors an observed ~9-minute e2e-gate wait
     that must never misread as stalled."""
     stamp_time = NOW - timedelta(minutes=25)
     launch_time = NOW - timedelta(minutes=10)
@@ -1914,31 +1914,6 @@ def test_api_board_merges_live_sessions_and_state(webapp_client):
     # safe generic value — still routed to Your turn either way.
     assert your_turn[0]["status"] == "awaiting-input"
     assert body["columns"]["claude_turn"] == []
-
-
-def test_api_board_chief_never_lands_in_your_turn(webapp_client):
-    """The standing fleet chief's needs-you card routes to Claude's turn, not
-    Your turn (#575) — its Stop-hook status is its normal resting state
-    between dispatches, not a transient alert like a worker session's."""
-    client, app, overrides = webapp_client
-    overrides["session"].list_sessions.return_value = [
-        _live("chief-1", "E:/automation/fleet-config", 20, label="chief"),
-    ]
-    state_file = Path(app.state.webapp_config.sessions_state_file)
-    state_file.write_text(json.dumps({
-        "t-uuid": {"project": "fleet-config", "status": "needs-you",
-                   "cwd": "E:/automation/fleet-config",
-                   "updated_at": _iso(datetime.now(timezone.utc) - timedelta(minutes=3))},
-    }), encoding="utf-8")
-
-    body = client.get("/api/board").json()
-    assert body["columns"]["your_turn"] == []
-    claude_turn = body["columns"]["claude_turn"]
-    assert [c["session_id"] for c in claude_turn] == ["chief-1"]
-    # #608: no transcript to check, so the needs-you split lands on the
-    # safe generic value — still routed to Claude's turn regardless (the
-    # chief carve-out), and the client relabels it "standing by" for display.
-    assert claude_turn[0]["status"] == "awaiting-input"
 
 
 def test_api_board_survives_session_host_down(webapp_client):

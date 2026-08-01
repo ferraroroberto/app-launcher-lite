@@ -11,13 +11,9 @@
                                             + passkey)
 
 Split off a single-file god-router (issue #691, `/codebase-audit`), the way
-``jobs.py`` and ``sessions.py`` already were: the fleet-chief lifecycle and its
-settings routes (``/api/board/chief/*``) live in
-:mod:`app.webapp.routers.board_chief`, mounted here via ``include_router`` so
-``app/webapp/server.py`` still registers one ``board.router``. The spawn-then-
-type mechanics both route modules share (readiness, quiescence, framing, the
-per-launch model selector) live in :mod:`app.webapp.routers.board_spawn`, which
-neither imports the other through.
+``jobs.py`` and ``sessions.py`` already were: the spawn-then-type mechanics
+(readiness, quiescence, framing, the per-launch model selector) live in
+:mod:`app.webapp.routers.board_spawn`.
 
 ``GET /api/board`` is the 5s poll target, so it does only cheap work: the live
 session list from the session-host, one state-file read, one jobs-runs walk
@@ -67,7 +63,6 @@ from src.launch_flags import build_claude_flags
 from src.launcher import open_local_terminal_window, spawn_claude_session
 from src.webapp_config import WebappConfig
 
-from app.webapp.routers import board_chief
 from app.webapp.routers._helpers import (
     audit_session_start_and_maybe_mirror,
     maybe_json,
@@ -82,7 +77,6 @@ from app.webapp.routers.board_spawn import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-router.include_router(board_chief.router)
 
 
 def _github_section(snap: Dict[str, Any]) -> Dict[str, Any]:
@@ -126,7 +120,6 @@ async def get_board(request: Request) -> Dict[str, Any]:
     )
     github = github_client.snapshot()
 
-    live = board_chief._reconcile_chief_labels(live, state["rows"])
     session_cards = board.merge_sessions(
         live, state["rows"],
         active_issue_repos=board.active_issue_repos(active_issues["rows"]),
@@ -287,7 +280,6 @@ async def start_issue(request: Request) -> Dict[str, Any]:
     )
 
     sid = str(session.get("session_id") or "")
-    await board_chief._mark_chief_managed(cfg, request, sid, entry.name, number)
     await audit_session_start_and_maybe_mirror(
         cfg, request, body,
         sid=sid, agent=agent, name=entry.name, project=entry.project_dir,
@@ -371,7 +363,6 @@ async def dispatch_goal(request: Request) -> Dict[str, Any]:
     sid = str(session.get("session_id") or "")
     command = f"{_DISPATCH_COMMANDS[mode]} {goal}"
     await _type_into_session(cfg.session_host_port, sid, command)
-    await board_chief._mark_chief_managed(cfg, request, sid, entry.name, 0)
 
     await audit_session_start_and_maybe_mirror(
         cfg, request, body,

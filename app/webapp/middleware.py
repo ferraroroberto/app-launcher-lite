@@ -113,13 +113,6 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         "Board dispatch (#302): spawn + type — both terminal-grade.",
     ),
     (
-        lambda p: p.startswith("/api/board/chief/"),
-        "passkey",
-        "Fleet chief (#245): ensure spawns + types into a PTY, settings steer "
-        "it — both terminal-grade. Loopback (the daily job, the /chief skill) "
-        "bypasses like everything else.",
-    ),
-    (
         lambda p: p == "/api/life-os/file" or p.startswith("/api/life-os/file/"),
         "passkey",
         "Life OS private-content browser (#102): file read/delete/rename surfaces "

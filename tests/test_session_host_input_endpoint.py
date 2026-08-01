@@ -2,8 +2,8 @@
 
 #607: before that fix, the route unconditionally returned ``{"ok": true}``
 even when the write silently dropped (session already exited but not yet
-reaped, or the underlying PTY write raised) — a caller (chief's steering
-nudge) had no way to tell a delivered message from a lost one. The route now
+reaped, or the underlying PTY write raised) — a caller had no way to tell a
+delivered message from a lost one. The route now
 surfaces a drop as HTTP 409 instead of a false 200.
 
 #611: the route now delegates to ``PtySession.submit_input`` (data + submit

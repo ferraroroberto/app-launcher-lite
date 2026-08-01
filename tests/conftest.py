@@ -113,38 +113,12 @@ def _no_real_mirror_window(request, monkeypatch):
         "app.webapp.routers.apps",
         "app.webapp.routers.life_os",
         "app.webapp.routers.board",
-        "app.webapp.routers.board_chief",
     ):
         module = importlib.import_module(mod_name)
         if hasattr(module, "open_local_terminal_window"):
             monkeypatch.setattr(
                 module, "open_local_terminal_window", lambda *a, **k: None
             )
-
-
-@pytest.fixture(autouse=True)
-def _isolated_chief_pointer(request, tmp_path, monkeypatch):
-    """Never read or write the real chief pointer from a test (issue #675).
-
-    ``src.chief_pointer`` resolves ``webapp/chief-pointer.json`` off the repo
-    root, and the chief resume lookup consults it on every call — so without
-    this, a pointer sitting on the dev box would silently steer
-    ``_find_resumable_chief_session_id`` tests, and a test that exercised the
-    write path would clobber the real standing chief's pointer. Autouse rather
-    than opt-in for exactly that reason: the risk is to tests that never
-    mention the pointer at all. Skipped for the ``smoke`` suite, which drives a
-    separate webapp process this in-process patch can't reach.
-    """
-    if request.node.get_closest_marker("smoke"):
-        return
-    from app.webapp.routers import board_chief as chief_router
-    from src import chief_pointer as chief_pointer_mod
-    monkeypatch.setattr(
-        chief_pointer_mod, "CHIEF_POINTER_FILE", tmp_path / "chief-pointer.json"
-    )
-    # The write-side memo is module-level and would otherwise leak one test's
-    # chief into the next (a second test would then observe "no write").
-    monkeypatch.setattr(chief_router, "_last_noted_chief_conversation", "")
 
 
 @pytest.fixture
@@ -241,7 +215,6 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     from app.webapp import server as server_mod
     from app.webapp.routers import apps as apps_router
     from app.webapp.routers import board as board_router
-    from app.webapp.routers import board_chief as board_chief_router
     from app.webapp.routers import board_spawn as board_spawn_router
     from app.webapp.routers import life_os as life_os_router
     from app.webapp.routers import misc as misc_router
@@ -269,9 +242,8 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     session_mock.SessionHostError = real_session_client.SessionHostError
     monkeypatch.setattr(sessions_router, "session_client", session_mock)
     monkeypatch.setattr(board_router, "session_client", session_mock)
-    # The Board's chief lifecycle and its shared spawn-then-type mechanics
-    # each hold their own module-level reference since the #691 split.
-    monkeypatch.setattr(board_chief_router, "session_client", session_mock)
+    # The Board's shared spawn-then-type mechanics hold their own
+    # module-level reference since the #691 split.
     monkeypatch.setattr(board_spawn_router, "session_client", session_mock)
     monkeypatch.setattr(misc_router, "session_client", session_mock)
 
@@ -286,7 +258,6 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     monkeypatch.setattr(webauthn_router, "audit", audit_mock)
     monkeypatch.setattr(life_os_router, "audit", audit_mock)
     monkeypatch.setattr(board_router, "audit", audit_mock)
-    monkeypatch.setattr(board_chief_router, "audit", audit_mock)
 
     # WebAuthnGate doesn't touch disk until configured (rp_id + origin set)
     # so default tests are safe. We still stub it for the few endpoints that

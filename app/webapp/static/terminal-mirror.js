@@ -16,8 +16,6 @@
 
 import { els, state } from './state.js';
 import { sessionTitle } from './sessions.js';
-import { isChiefSession } from './dom-utils.js';
-import { icon } from './_vendored/icons/icons.js';
 
 // The PC mirror window's OS title: the human session title first (so it shows
 // in the Windows/PTI title bar) followed by the hidden marker the launcher's
@@ -44,22 +42,14 @@ export function isMirrorWindowSession() {
     (reason === 'loopback' || reason === 'tailnet');
 }
 
-// Set the overlay header's title text, prepending the fleet chief's crown
-// marker (#547) when this session is the chief — same crown as the Board
-// and Coding-tab rows. Built from DOM nodes, not string concat, since
-// sessionTitle() can surface arbitrary agent-emitted text. Returns the
-// plain title string for callers (refreshTerminalTitle) that also need it
-// for the OS title bar, which carries no icon.
+// Set the overlay header's title text. Built from DOM nodes, not string
+// concat, since sessionTitle() can surface arbitrary agent-emitted text.
+// Returns the plain title string for callers (refreshTerminalTitle) that
+// also need it for the OS title bar, which carries no icon.
 export function setTerminalTitleText(session) {
   const title = sessionTitle(session);
   if (!els.terminalTitle) return title;
   els.terminalTitle.textContent = '';
-  if (isChiefSession(session)) {
-    const crown = document.createElement('span');
-    crown.className = 'terminal-title-crown';
-    crown.innerHTML = icon('crown');
-    els.terminalTitle.appendChild(crown);
-  }
   els.terminalTitle.appendChild(document.createTextNode(title));
   return title;
 }
