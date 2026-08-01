@@ -167,7 +167,7 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
                 # temp path so a test can never read the real hook-written
                 # ~/.copilot/hooks/state/sessions-state.json.
                 "sessions_state_file": str(tmp_path / "sessions-state.json"),
-                "github_owner": "testowner",
+                "gitlab_group": "testgroup",
             }
         ),
         encoding="utf-8",

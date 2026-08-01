@@ -1,16 +1,16 @@
-"""Board tab e2e (issues #300 / #301 / #302 / #164 / #399).
+"""Board tab e2e (issues #300 / #301 / #302 / #164 / #399; 4 columns since Phase 5).
 
-Browser-side coverage: the fifth tab renders the five single-purpose kanban
+Browser-side coverage: the fifth tab renders the four single-purpose kanban
 columns from a route-mocked ``/api/board`` payload, the strip shows
 per-column counts (with the Your-turn attention highlight), the ↻ button
-POSTs the gh refresh, and the phone projection lays the columns out as a
-one-column-per-viewport carousel while desktop gets the five-column grid.
+POSTs the glab refresh, and the phone projection lays the columns out as a
+one-column-per-viewport carousel while desktop gets the four-column grid.
 The #302 dispatch bar POSTs {repo, goal, mode} and keeps its goal for rapid
 multi-dispatch. Hermetic — the
 board API is route-mocked like the Jobs / Team OS e2e tests.
 
-Server-side logic (cwd join, jobs scan, gh cache/degradation, the
-spawn-then-type dispatch endpoint) is covered by the in-process suite in
+Server-side logic (cwd join, glab cache/degradation, the spawn-then-type
+dispatch endpoint) is covered by the in-process suite in
 tests/test_board.py + tests/test_board_dispatch.py.
 """
 
@@ -40,10 +40,10 @@ _FAKE_BOARD = {
         "backlog": [
             {"kind": "issue", "repo": "app-launcher", "number": 301,
              "title": "Board tab 2/3: drill-down + reply",
-             "url": "https://github.com/ferraroroberto/app-launcher/issues/301",
+             "url": "https://gitlab.com/testgroup/app-launcher/-/issues/301",
              "updated_at": "2026-07-01T10:00:00Z", "labels": ["enhancement"]},
         ],
-        "claude_turn": [
+        "bot_turn": [
             {"session_id": "s-work", "kind": "pty", "agent": "copilot",
              "project_dir": "E:/automation/team-os", "name": "team-os",
              "alive": True, "started_at": "2026-07-02T11:56:00Z",
@@ -57,35 +57,26 @@ _FAKE_BOARD = {
              "live_title": "chunk merge fix", "prompt_title": "",
              "project": "photo-ocr", "status": "awaiting-input", "age_seconds": 720},
         ],
-        "other": [
-            {"kind": "pr", "repo": "app-launcher", "number": 158,
-             "title": "keyboard-aware overlay",
-             "url": "https://github.com/ferraroroberto/app-launcher/pull/158",
-             "updated_at": "2026-07-02T09:00:00Z", "is_draft": False},
-            {"kind": "job", "job_id": "reporting", "job_name": "reporting pipeline",
-             "state": "failed", "run_id": "20260702T090200",
-             "finished_at": "2026-07-02T09:02:00", "age_seconds": 10680},
-        ],
         "done": [
             {"kind": "issue", "repo": "voice-transcriber", "number": 87,
              "title": "read-aloud segmentation",
-             "url": "https://github.com/ferraroroberto/voice-transcriber/issues/87",
+             "url": "https://gitlab.com/testgroup/voice-transcriber/-/issues/87",
              "updated_at": "2026-07-02T08:00:00Z", "state": "closed", "labels": []},
         ],
     },
-    "github": {"fetched_at": "2026-07-02T11:00:00Z", "error": None},
+    "gitlab": {"fetched_at": "2026-07-02T11:00:00Z", "error": None},
     "sessions_state": {"available": True, "stale": False,
                        "updated_at": "2026-07-02T11:58:00Z"},
 }
 
 
-def _board_payload(gh_age_seconds: int = 0) -> dict:
+def _board_payload(gl_age_seconds: int = 0) -> dict:
     """_FAKE_BOARD with ``fetched_at`` stamped relative to the real clock —
     fresh by default so opening the tab does not trigger the stale-cache
     auto-refresh; pass a large age to test that it does."""
     payload = copy.deepcopy(_FAKE_BOARD)
-    payload["github"]["fetched_at"] = _iso_utc(
-        datetime.now(timezone.utc) - timedelta(seconds=gh_age_seconds)
+    payload["gitlab"]["fetched_at"] = _iso_utc(
+        datetime.now(timezone.utc) - timedelta(seconds=gl_age_seconds)
     )
     return payload
 
@@ -98,12 +89,12 @@ def _mock_board(page: Page, payload: dict | None = None) -> None:
             status=200, content_type="application/json", body=body,
         ),
     )
-    # Default stub for the gh-refresh POST so an auto-refresh can never
-    # escape to the real server (and its real gh subprocess). Tests that
+    # Default stub for the glab-refresh POST so an auto-refresh can never
+    # escape to the real server (and its real glab subprocess). Tests that
     # care about the POST register their own capturing route *after* this
     # one — Playwright matches the most recently added route first.
     page.route(
-        re.compile(r".*/api/board/github/refresh$"),
+        re.compile(r".*/api/board/gitlab/refresh$"),
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps(
@@ -151,13 +142,18 @@ def test_board_renders_columns_counts_and_cards(
 
     # Per-column counts on the strip; Your turn (1) carries the attention mark.
     expect(authed_page.locator("#boardColBacklog .board-count")).to_have_text("1")
-    expect(authed_page.locator("#boardColClaude .board-count")).to_have_text("1")
+    expect(authed_page.locator("#boardColBot .board-count")).to_have_text("1")
     expect(authed_page.locator("#boardColYours .board-count")).to_have_text("1")
-    expect(authed_page.locator("#boardColOther .board-count")).to_have_text("2")
     expect(authed_page.locator("#boardColDone .board-count")).to_have_text("1")
     expect(authed_page.locator("#boardColYours")).to_have_class(
         re.compile(r"\battention\b")
     )
+
+    # Exactly four columns since Phase 5 — the old Other column is gone.
+    expect(authed_page.locator("#boardColumns .board-col")).to_have_count(4)
+    expect(
+        authed_page.locator('#boardColumns .board-col[data-col="other"]')
+    ).to_have_count(0)
 
     # Your-turn holds the needs-you session only (#399: terminal-only column).
     yours = authed_page.locator('.board-list[data-col="your_turn"] li.board-item')
@@ -167,13 +163,6 @@ def test_board_renders_columns_counts_and_cards(
     expect(yours.nth(0)).to_contain_text("needs you")
     expect(yours.nth(0)).to_contain_text("chunk merge fix")
 
-    # Other holds the open PR + failed job, in that order.
-    other = authed_page.locator('.board-list[data-col="other"] li.board-item')
-    expect(other.first).to_be_visible(timeout=5_000)
-    assert other.count() == 2
-    expect(other.nth(0)).to_contain_text("PR #158")
-    expect(other.nth(1)).to_contain_text("failed")
-
     # Backlog card is repo · #N · title; done card is a closed issue.
     backlog = authed_page.locator('.board-list[data-col="backlog"] li.board-item')
     expect(backlog.first).to_contain_text("app-launcher #301")
@@ -182,7 +171,7 @@ def test_board_renders_columns_counts_and_cards(
     expect(done.first).to_contain_text("closed")
 
 
-def test_board_refresh_button_posts_gh_refresh(
+def test_board_refresh_button_posts_gitlab_refresh(
     authed_page: Page, base_url: str
 ) -> None:
     _mock_board(authed_page)
@@ -196,23 +185,23 @@ def test_board_refresh_button_posts_gh_refresh(
             body=_json.dumps({"fetched_at": "2026-07-02T12:05:00Z", "error": None}),
         )
 
-    authed_page.route(re.compile(r".*/api/board/github/refresh$"), _capture)
+    authed_page.route(re.compile(r".*/api/board/gitlab/refresh$"), _capture)
 
     _open_board(authed_page, base_url)
     authed_page.locator("#boardRefresh").click()
     authed_page.wait_for_timeout(400)
 
     assert captured.get("method") == "POST", (
-        "↻ never POSTed /api/board/github/refresh"
+        "↻ never POSTed /api/board/gitlab/refresh"
     )
 
 
-def test_board_auto_refreshes_stale_github_on_open(
+def test_board_auto_refreshes_stale_gitlab_on_open(
     authed_page: Page, base_url: str
 ) -> None:
-    """Opening the tab with a gh cache older than the client's staleness
+    """Opening the tab with a glab cache older than the client's staleness
     window (2 min) fires one automatic refresh POST — no ↻ tap needed."""
-    _mock_board(authed_page, _board_payload(gh_age_seconds=15 * 60))
+    _mock_board(authed_page, _board_payload(gl_age_seconds=15 * 60))
 
     posts: list[str] = []
 
@@ -225,25 +214,25 @@ def test_board_auto_refreshes_stale_github_on_open(
             ),
         )
 
-    authed_page.route(re.compile(r".*/api/board/github/refresh$"), _capture)
+    authed_page.route(re.compile(r".*/api/board/gitlab/refresh$"), _capture)
 
     _open_board(authed_page, base_url)
     authed_page.wait_for_timeout(1_000)
 
     assert posts == ["POST"], (
-        f"stale gh cache should auto-refresh exactly once on tab open, got {posts}"
+        f"stale glab cache should auto-refresh exactly once on tab open, got {posts}"
     )
 
 
-def test_board_fresh_github_not_refreshed_on_open(
+def test_board_fresh_gitlab_not_refreshed_on_open(
     authed_page: Page, base_url: str
 ) -> None:
     """A fresh cache must NOT auto-refresh — tab-open stays free."""
-    _mock_board(authed_page, _board_payload(gh_age_seconds=0))
+    _mock_board(authed_page, _board_payload(gl_age_seconds=0))
 
     posts: list[str] = []
     authed_page.route(
-        re.compile(r".*/api/board/github/refresh$"),
+        re.compile(r".*/api/board/gitlab/refresh$"),
         lambda route: (posts.append(route.request.method), route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({"fetched_at": None, "error": None}),
@@ -253,7 +242,7 @@ def test_board_fresh_github_not_refreshed_on_open(
     _open_board(authed_page, base_url)
     authed_page.wait_for_timeout(1_000)
 
-    assert posts == [], f"fresh gh cache must not auto-refresh on open, got {posts}"
+    assert posts == [], f"fresh glab cache must not auto-refresh on open, got {posts}"
 
 
 def test_board_strip_click_scrolls_carousel_not_page(
@@ -362,7 +351,7 @@ def test_board_card_drawer_shows_exchange_and_posts_reply(
 def test_board_reply_optimistically_moves_card_off_your_turn(
     authed_page: Page, base_url: str
 ) -> None:
-    """#461: sending a reply relocates the card into Claude's turn right
+    """#461: sending a reply relocates the card into Bot's turn right
     away — no waiting on the next poll, and no reverting back once it's
     mocked ``/api/board`` (which, unaware of the reply, still reports the
     session as needs-you) resolves."""
@@ -378,7 +367,7 @@ def test_board_reply_optimistically_moves_card_off_your_turn(
 
     _open_board(authed_page, base_url)
     expect(authed_page.locator("#boardColYours .board-count")).to_have_text("1")
-    expect(authed_page.locator("#boardColClaude .board-count")).to_have_text("1")
+    expect(authed_page.locator("#boardColBot .board-count")).to_have_text("1")
 
     authed_page.locator(
         '.board-list[data-col="your_turn"] li.board-item'
@@ -388,9 +377,9 @@ def test_board_reply_optimistically_moves_card_off_your_turn(
 
     # Immediate — no fetchBoard() round trip needed to see this.
     expect(authed_page.locator("#boardColYours .board-count")).to_have_text("0")
-    expect(authed_page.locator("#boardColClaude .board-count")).to_have_text("2")
+    expect(authed_page.locator("#boardColBot .board-count")).to_have_text("2")
     moved_card = authed_page.locator(
-        '.board-list[data-col="claude_turn"] li.board-item', has_text="photo-ocr"
+        '.board-list[data-col="bot_turn"] li.board-item', has_text="photo-ocr"
     )
     expect(moved_card).to_be_visible()
     expect(moved_card).to_have_class(re.compile(r"\bis-working\b"))
@@ -399,7 +388,7 @@ def test_board_reply_optimistically_moves_card_off_your_turn(
     # reports needs-you for s-wait — confirms nothing reverts the move.
     authed_page.wait_for_timeout(1_000)
     expect(authed_page.locator("#boardColYours .board-count")).to_have_text("0")
-    expect(authed_page.locator("#boardColClaude .board-count")).to_have_text("2")
+    expect(authed_page.locator("#boardColBot .board-count")).to_have_text("2")
 
 
 def test_board_card_drawer_shows_agent_native_exchange(
@@ -408,7 +397,7 @@ def test_board_card_drawer_shows_agent_native_exchange(
     """#457: a card opens its own structured native exchange, rather than
     degrading to an empty message."""
     payload = _board_payload()
-    payload["columns"]["claude_turn"].append({
+    payload["columns"]["bot_turn"].append({
         "session_id": "s-native", "kind": "pty", "agent": "copilot",
         "project_dir": "E:/automation/app-launcher", "name": "app-launcher",
         "alive": True, "started_at": "2026-07-02T11:57:00Z",
@@ -423,7 +412,7 @@ def test_board_card_drawer_shows_agent_native_exchange(
     })
     _open_board(authed_page, base_url)
     card = authed_page.locator(
-        '.board-list[data-col="claude_turn"] li.board-item',
+        '.board-list[data-col="bot_turn"] li.board-item',
         has_text="app-launcher",
     ).locator("button.board-card")
     card.click()
@@ -631,7 +620,7 @@ def test_backlog_issue_tile_truncates_a_long_title_instead_of_wrapping(
     payload["columns"]["backlog"] = [{
         "kind": "issue", "repo": "app-launcher", "number": 999,
         "title": long_title,
-        "url": "https://github.com/ferraroroberto/app-launcher/issues/999",
+        "url": "https://gitlab.com/testgroup/app-launcher/-/issues/999",
         "updated_at": "2026-07-01T10:00:00Z", "labels": [],
     }]
     _mock_apps_with_app_launcher(authed_page)
@@ -786,9 +775,7 @@ def test_dispatch_repo_dropdown_is_tap_only_and_filters_board_columns(
     """#337: the project selector is a tap-to-select dropdown (no typing —
     a <button> trigger, not a text field), defaults to "All projects" (every
     card visible), and picking a specific project filters every kanban
-    column down to that project's cards (job cards, which carry no
-    repo/project, drop out of any specific-project filter). #399: Your turn
-    and Other are now separate single-purpose columns."""
+    column down to that project's cards."""
     authed_page.route(
         re.compile(r".*/api/apps$"),
         lambda route: route.fulfill(
@@ -819,9 +806,8 @@ def test_dispatch_repo_dropdown_is_tap_only_and_filters_board_columns(
     expect(repo_btn).to_have_text("All projects", timeout=15_000)
     expect(authed_page.locator("#boardDispatchRepo")).to_have_value("")
     expect(authed_page.locator("#boardColBacklog .board-count")).to_have_text("1")
-    expect(authed_page.locator("#boardColClaude .board-count")).to_have_text("1")
+    expect(authed_page.locator("#boardColBot .board-count")).to_have_text("1")
     expect(authed_page.locator("#boardColYours .board-count")).to_have_text("1")
-    expect(authed_page.locator("#boardColOther .board-count")).to_have_text("2")
     expect(authed_page.locator("#boardColDone .board-count")).to_have_text("1")
 
     repo_btn.click()
@@ -838,24 +824,19 @@ def test_dispatch_repo_dropdown_is_tap_only_and_filters_board_columns(
     expect(authed_page.locator("#boardDispatchRepo")).to_have_value("app-launcher")
 
     # Filtered to app-launcher: backlog issue (repo=app-launcher) stays;
-    # Claude's turn (team-os session) and Done (voice-transcriber issue) empty
-    # out; Your turn drops the photo-ocr session (no match); Other keeps only
-    # the app-launcher PR, dropping the job card (no project at all).
+    # Bot's turn (team-os session) and Done (voice-transcriber issue) empty
+    # out; Your turn drops the photo-ocr session (no match).
     expect(authed_page.locator("#boardColBacklog .board-count")).to_have_text("1")
-    expect(authed_page.locator("#boardColClaude .board-count")).to_have_text("0")
+    expect(authed_page.locator("#boardColBot .board-count")).to_have_text("0")
     expect(authed_page.locator("#boardColYours .board-count")).to_have_text("0")
-    expect(authed_page.locator("#boardColOther .board-count")).to_have_text("1")
     expect(authed_page.locator("#boardColDone .board-count")).to_have_text("0")
-    other = authed_page.locator('.board-list[data-col="other"] li.board-item')
-    expect(other).to_have_count(1)
-    expect(other.first).to_contain_text("PR #158")
 
     # Picking "All projects" again restores every column.
     repo_btn.click()
     combo_list.locator('li[data-repo=""]').click()
     expect(repo_btn).to_have_text("All projects")
     expect(authed_page.locator("#boardColYours .board-count")).to_have_text("1")
-    expect(authed_page.locator("#boardColOther .board-count")).to_have_text("2")
+    expect(authed_page.locator("#boardColDone .board-count")).to_have_text("1")
 
 
 def test_board_drawer_rename_first_icon_only_and_stop_kills_session(
@@ -1081,7 +1062,7 @@ def test_board_columns_layout_matches_projection(
 ) -> None:
     """Phone (WebKit / iPhone projection): the carousel shows one column per
     viewport — a column spans ~the full container width. Desktop (Chromium,
-    fine pointer ≥700px): the grid shows all five columns — each column is
+    fine pointer ≥700px): the grid shows all four columns — each column is
     well under half the container. Same DOM, projection-dependent CSS."""
     _mock_board(authed_page)
     _open_board(authed_page, base_url)
@@ -1102,6 +1083,6 @@ def test_board_columns_layout_matches_projection(
         )
     else:
         assert box_col["width"] <= box_container["width"] * 0.35, (
-            f"desktop column should sit in a 5-col grid: col={box_col['width']}, "
+            f"desktop column should sit in a 4-col grid: col={box_col['width']}, "
             f"container={box_container['width']}"
         )

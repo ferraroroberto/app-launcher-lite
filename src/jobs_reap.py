@@ -33,8 +33,8 @@ never triggers a re-entrant mutex-queue spawn off stale information:
 - :func:`reap_stranded_runs` — the above, plus draining the job's mutex
   queue once if anything was reaped. Safe from a pure read/refresh context
   that isn't deciding an admission itself:
-  ``app/webapp/routers/jobs.py::_decorate_job`` (every ``/api/jobs`` poll)
-  and ``src.board.jobs_attention``. Mirrors
+  ``app/webapp/routers/jobs.py::_decorate_job`` (every ``/api/jobs`` poll).
+  Mirrors
   :func:`src.app_runtime.prune_dead`'s lazy-on-read pattern rather than a
   background sweep loop.
 """

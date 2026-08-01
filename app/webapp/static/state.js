@@ -74,7 +74,7 @@ export const state = {
   sessions: [],
   // Board tab (issue #300 / #164): the /api/board payload, null until the
   // tab's first fetch. The 5 s poll self-gates on the tab being visible;
-  // GitHub data inside it comes from the server-side gh cache and is only
+  // GitLab data inside it comes from the server-side glab cache and is only
   // refreshed on demand (the ↻ button / first activation), never per poll.
   board: null,
   // Which board column the phone carousel has in view.
@@ -122,9 +122,8 @@ export const els = {
   boardStatus: document.getElementById('boardStatus'),
   boardRefresh: document.getElementById('boardRefresh'),
   boardColBacklog: document.getElementById('boardColBacklog'),
-  boardColClaude: document.getElementById('boardColClaude'),
+  boardColBot: document.getElementById('boardColBot'),
   boardColYours: document.getElementById('boardColYours'),
-  boardColOther: document.getElementById('boardColOther'),
   boardColDone: document.getElementById('boardColDone'),
   boardDispatchGoal: document.getElementById('boardDispatchGoal'),
   boardDispatchRepo: document.getElementById('boardDispatchRepo'),
@@ -257,6 +256,8 @@ export const els = {
   projectsDir: document.getElementById('projectsDir'),
   projectsIgnore: document.getElementById('projectsIgnore'),
   appsScanRoot: document.getElementById('appsScanRoot'),
+  gitlabGroup: document.getElementById('gitlabGroup'),
+  gitlabHost: document.getElementById('gitlabHost'),
   terminalHistoryLines: document.getElementById('terminalHistoryLines'),
   bootAutostartToggle: document.getElementById('bootAutostartToggle'),
   saveSettings: document.getElementById('saveSettings'),

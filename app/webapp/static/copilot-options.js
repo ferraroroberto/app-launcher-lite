@@ -19,6 +19,8 @@ export async function fetchConfig() {
   els.projectsIgnore.value = (body.projects_ignore || []).join('\n');
   els.appsScanRoot.value = body.apps_scan_root || '';
   if (els.teamOsDir) els.teamOsDir.value = body.team_os_dir || '';
+  if (els.gitlabGroup) els.gitlabGroup.value = body.gitlab_group || '';
+  if (els.gitlabHost) els.gitlabHost.value = body.gitlab_host || '';
   if (els.terminalHistoryLines) {
     if (body.terminal_history_lines_min != null) {
       els.terminalHistoryLines.min = body.terminal_history_lines_min;

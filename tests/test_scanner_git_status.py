@@ -1,6 +1,6 @@
 """src.scanner.git_status — branch + clean/dirty flags (issue #115).
 
-Unlike github_repo_url (a plain .git/config read), git_status shells out
+Unlike repo_web_url (a plain .git/config read), git_status shells out
 to real git, so these build real repos in tmp_path and skip cleanly where
 git isn't on PATH.
 """

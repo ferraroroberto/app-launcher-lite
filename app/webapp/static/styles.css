@@ -477,7 +477,7 @@ summary + .opt-group { border-top: 0; }
 }
 /* Repeated list rows render flat (issue #365, generalizing the Board
    backlog's #337/#339 pattern app-wide): no per-row box — a hairline
-   separator between rows is the row boundary, GitHub-issue-list style.
+   separator between rows is the row boundary, issue-tracker-list style.
    The outer collapsible section containers (the vendored disclosure
    component) keep their card look; only the rows inside them changed. */
 .app-item {
@@ -2304,7 +2304,7 @@ body.terminal-open {
    instead of stranding at the left edge. */
 .board-dispatch-row .compose-send { margin-left: auto; }
 
-/* Column switcher strip: four count buttons + the gh refresh. Doubles as
+/* Column switcher strip: four count buttons + the glab refresh. Doubles as
    the column header on the phone, where the carousel shows one column. */
 .board-strip {
   display: flex;
@@ -2396,7 +2396,7 @@ body.terminal-open {
   align-items: stretch;
 }
 /* Flat separator row (issue #365 — the backlog's #337/#339 look extended
-   to Claude's/Yours/Done): no per-card box; the status accents below keep
+   to Bot's/Yours/Done): no per-card box; the status accents below keep
    signalling on the row's left edge. */
 .board-card {
   display: flex;
@@ -2443,15 +2443,13 @@ body.terminal-open {
 .board-item.is-awaiting-input .board-card { border-left: 3px solid var(--attention); }
 .board-item.is-stalled .board-card { border-left: 3px solid var(--danger); }
 .board-item.is-working .board-card { border-left: 3px solid var(--accent); }
-.board-item.is-failed .board-card,
-.board-item.is-stuck .board-card { border-left: 3px solid var(--danger); }
 .board-item.is-idle .board-card,
 .board-item.is-idle-finished .board-card { opacity: 0.7; }
 .board-empty { margin: 4px 0 12px; }
 
 /* Backlog issue tiles (#337, restyled #339): a flat separator row — no card
    background/border/radius, just a bottom-border divider between rows
-   (GitHub-issue-list style) — with repo/# and the title on their own lines
+   (issue-tracker-list style) — with repo/# and the title on their own lines
    and the ▶/⚡ actions vertically centered against the full row height.
    .app-item is already a row flexbox by default; .board-item overrides that
    to a column for the stacked layout the other card kinds use, so this
@@ -2664,7 +2662,7 @@ body.terminal-open {
   }
   .board-columns {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 20px;
     overflow-x: visible;
     scroll-snap-type: none;
@@ -2680,7 +2678,7 @@ body.terminal-open {
   .board-col-count { font-weight: 400; }
   /* #495: the phone tab-switcher strip duplicates the grid's own aligned
      .board-col-title headers, with no shared width/gap math between the two
-     rows. Hide just the switcher buttons — .board-strip also hosts the gh
+     rows. Hide just the switcher buttons — .board-strip also hosts the glab
      refresh button, which still needs a home on desktop. */
   .board-strip-btn { display: none; }
   .board-strip { justify-content: flex-end; }

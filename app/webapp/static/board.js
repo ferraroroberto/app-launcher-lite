@@ -1,18 +1,17 @@
 /* Board tab (issues #300 / #301 / #302 / #164 / #399 / #608): the fleet
  * kanban.
  *
- * Five computed columns from GET /api/board, each single-purpose — Backlog
- * (open issues), Claude's turn (sessions working/unknown/idle/idle-finished),
+ * Four computed columns from GET /api/board, each single-purpose — Backlog
+ * (open issues), Bot's turn (sessions working/unknown/idle/idle-finished),
  * Your turn (stalled/awaiting-decision/awaiting-input sessions only — #608's
- * split of the old undifferentiated needs-you), Other (open PRs +
- * failed/stuck jobs), Done (closed issues today). Phone-first: the columns
- * container is a scroll-snap carousel (one column per swipe) and the strip
- * above it doubles as column switcher + counts.
+ * split of the old undifferentiated needs-you), Done (closed issues today).
+ * Phone-first: the columns container is a scroll-snap carousel (one column
+ * per swipe) and the strip above it doubles as column switcher + counts.
  *
  * Cost discipline: fetchBoard() self-gates on the Board tab being visible
- * (pattern: fetchJobs / fetchRunningApps); the server's gh cache is only
+ * (pattern: fetchJobs / fetchRunningApps); the server's glab cache is only
  * refreshed via the ↻ button or on tab activation when the cache is older
- * than GH_STALE_MS — never on the 5 s poll, never while just looking at it.
+ * than GL_STALE_MS — never on the 5 s poll, never while just looking at it.
  *
  * Act-from-the-card loop (#301): tapping a live session card opens an
  * inline drawer with the last user↔assistant exchange (passkey-gated — it
@@ -20,8 +19,8 @@
  * backlog cards of repos present in the projects folder carry ▶ Start /
  * ⚡ YOLO one-tap `/issue-*` launches; `?board=<sid>` deep-links onto a
  * card with its drawer open. While a drawer is open the poll pauses, so a
- * re-render can never wipe a reply being typed. Issue/PR/done cards open
- * GitHub, job cards (Other column) jump to the Jobs tab.
+ * re-render can never wipe a reply being typed. Issue/done cards open
+ * GitLab.
  *
  * Split off a single-file module (issue #691, `/codebase-audit`), the way
  * `jobs.js` and `terminal.js` already were: the dispatch bar above the
@@ -47,14 +46,13 @@ import {
 } from './board-dispatch.js';
 
 const COLUMNS = [
-  { key: 'backlog', btn: 'boardColBacklog', empty: 'No open issues cached — tap ↻ to fetch from GitHub.' },
-  { key: 'claude_turn', btn: 'boardColClaude', empty: 'No sessions on Claude’s side.' },
+  { key: 'backlog', btn: 'boardColBacklog', empty: 'No open issues cached — tap ↻ to fetch from GitLab.' },
+  { key: 'bot_turn', btn: 'boardColBot', empty: 'No sessions on the bot’s side.' },
   { key: 'your_turn', btn: 'boardColYours', empty: 'Nothing needs you right now.' },
-  { key: 'other', btn: 'boardColOther', empty: 'No open PRs or stuck jobs.' },
   { key: 'done', btn: 'boardColDone', empty: 'Nothing closed today yet.' },
 ];
 
-const GH_STALE_MS = 2 * 60 * 1000;
+const GL_STALE_MS = 2 * 60 * 1000;
 
 let refreshInFlight = false;
 
@@ -295,13 +293,13 @@ async function loadExchange(card, el) {
 }
 
 // Optimistic move for sendReply() (#461): relocate a card from Your turn into
-// Claude's turn client-side, ahead of the poll that will confirm it. A reply
+// Bot's turn client-side, ahead of the poll that will confirm it. A reply
 // just went into a live PTY sitting at its prompt, so there is no value in
 // making the Board visibly wait out the hook -> state-file -> poll round trip
 // for something already known. Only touches state.board.columns — the next
 // fetchBoard() replaces state.board wholesale as usual, so this is a
 // display-only shortcut, never a second source of truth.
-function moveCardToClaudeTurn(sessionId) {
+function moveCardToBotTurn(sessionId) {
   const columns = state.board && state.board.columns;
   if (!columns) return;
   const yourTurn = columns.your_turn || [];
@@ -309,7 +307,7 @@ function moveCardToClaudeTurn(sessionId) {
   if (idx === -1) return;
   const card = yourTurn.splice(idx, 1)[0];
   card.status = 'working';
-  columns.claude_turn = [card].concat(columns.claude_turn || []);
+  columns.bot_turn = [card].concat(columns.bot_turn || []);
 }
 
 async function sendReply(card, input, btn) {
@@ -328,7 +326,7 @@ async function sendReply(card, input, btn) {
     );
     toast('Sent to ' + (card.project || 'session'), 'good', { icon: 'send-horizontal' });
     input.value = '';
-    // Close the drawer and optimistically flip the card to Claude's turn
+    // Close the drawer and optimistically flip the card to Bot's turn
     // right away. Deliberately no immediate fetchBoard() here (#461): the
     // hook that actually flips the server's status hasn't had time to run
     // yet, so an immediate re-poll almost always still sees the pre-reply
@@ -336,7 +334,7 @@ async function sendReply(card, input, btn) {
     // original lag. The regular 5 s poll (already running) reconciles with
     // ground truth as always.
     state.boardExpanded = null;
-    moveCardToClaudeTurn(card.session_id);
+    moveCardToBotTurn(card.session_id);
     renderBoard();
   } catch (exc) {
     apiFailToast('Reply failed', exc);
@@ -410,7 +408,7 @@ async function startIssue(card, mode, btn) {
 
 // Backlog issue tiles (#337 follow-up, restyled #339): a flat separator
 // row — no card background/border, just a bottom-border divider between
-// rows (GitHub-issue-list style) — with repo/# on one line and the title on
+// rows (issue-tracker-list style) — with repo/# on one line and the title on
 // the line below, each independently truncated, and icon-only ▶/⚡ actions
 // vertically centered against the whole row. Doesn't use cardShell() (that's
 // the bordered-box layout the other card kinds keep); the <li> itself is the
@@ -481,29 +479,9 @@ function renderIssueCard(card) {
   return li;
 }
 
-function renderPrCard(card) {
-  const draft = card.is_draft ? ' · draft' : '';
-  const shell = cardShell('git-pull-request', ' ' + [card.repo, 'PR #' + card.number].join(' ') + draft,
-    card.title || '', '');
-  if (card.url) {
-    shell.btn.addEventListener('click', function () {
-      window.open(card.url, '_blank', 'noopener');
-    });
-  }
-  return shell.li;
-}
-
-function renderJobCard(card) {
-  const iconName = card.state === 'stuck' ? 'triangle-alert' : 'x';
-  const top = ' job · ' + card.state + (card.age_seconds != null ? ' · ' + fmtAge(card.age_seconds) : '');
-  const shell = cardShell(iconName, top, card.job_name || card.job_id || 'job', 'is-' + card.state);
-  shell.btn.addEventListener('click', function () { setTab('jobs'); });
-  return shell.li;
-}
-
 function renderDoneCard(card) {
-  // Done holds closed issues only (#399) — a merged PR that closed one is
-  // already reflected here by the issue itself, so there's no PR/pairing
+  // Done holds closed issues only (#399) — a merged MR that closed one is
+  // already reflected here by the issue itself, so there's no MR/pairing
   // branch to render.
   const shell = cardShell(
     'square-check',
@@ -520,8 +498,6 @@ function renderDoneCard(card) {
 function renderCard(colKey, card) {
   if (card.kind === 'issue' && colKey === 'backlog') return renderIssueCard(card);
   if (colKey === 'done') return renderDoneCard(card);
-  if (card.kind === 'pr') return renderPrCard(card);
-  if (card.kind === 'job') return renderJobCard(card);
   return renderSessionCard(card);
 }
 
@@ -529,10 +505,10 @@ function renderCard(colKey, card) {
 
 function renderStatusLine(body) {
   const parts = [];
-  if (body.github && body.github.error) {
-    parts.push(icon('triangle-alert') + ' GitHub: ' + escapeHtml(body.github.error));
-  } else if (body.github && !body.github.fetched_at) {
-    parts.push('GitHub not fetched yet — tap ↻');
+  if (body.gitlab && body.gitlab.error) {
+    parts.push(icon('triangle-alert') + ' GitLab: ' + escapeHtml(body.gitlab.error));
+  } else if (body.gitlab && !body.gitlab.fetched_at) {
+    parts.push('GitLab not fetched yet — tap ↻');
   }
   if (body.sessions_state && !body.sessions_state.available) {
     parts.push('session state unavailable (hooks not writing yet)');
@@ -644,23 +620,23 @@ export async function openBoardCard(sid) {
   requestAnimationFrame(function () { showColumn(colKey, false); });
 }
 
-// Stale = never fetched, or older than GH_STALE_MS. An errored cache is
-// never auto-retried — that would hammer a broken gh; ↻ stays manual.
-function ghStale(body) {
-  if (!body || !body.github || body.github.error) return false;
-  const t = Date.parse(body.github.fetched_at || '');
-  return isNaN(t) || Date.now() - t > GH_STALE_MS;
+// Stale = never fetched, or older than GL_STALE_MS. An errored cache is
+// never auto-retried — that would hammer a broken glab; ↻ stays manual.
+function glStale(body) {
+  if (!body || !body.gitlab || body.gitlab.error) return false;
+  const t = Date.parse(body.gitlab.fetched_at || '');
+  return isNaN(t) || Date.now() - t > GL_STALE_MS;
 }
 
-async function refreshGithub() {
+async function refreshGitlab() {
   if (refreshInFlight) return;
   refreshInFlight = true;
   els.boardRefresh.disabled = true;
   els.boardRefresh.textContent = '…';
   try {
-    const github = await jsonApi('/api/board/github/refresh', { method: 'POST' });
-    if (github && github.error) {
-      toast('GitHub refresh failed: ' + github.error, 'error');
+    const gitlab = await jsonApi('/api/board/gitlab/refresh', { method: 'POST' });
+    if (gitlab && gitlab.error) {
+      toast('GitLab refresh failed: ' + gitlab.error, 'error');
     }
     await fetchBoard();
   } finally {
@@ -720,9 +696,9 @@ export function wireBoard() {
   els.tabBoard.addEventListener('click', function () {
     syncDispatchBar();
     fetchBoard().then(function () {
-      // Opening the tab with a stale (or never-filled) gh cache refreshes
+      // Opening the tab with a stale (or never-filled) glab cache refreshes
       // it once; while the tab just sits open only the free poll runs.
-      if (ghStale(state.board)) refreshGithub().catch(function () {});
+      if (glStale(state.board)) refreshGitlab().catch(function () {});
     }).catch(function () {});
     // The pane was hidden until this click — position the carousel on the
     // remembered column now that it has layout (no animation on arrival).
@@ -730,8 +706,8 @@ export function wireBoard() {
   });
   wireDispatch();
   els.boardRefresh.addEventListener('click', function () {
-    refreshGithub().catch(function (exc) {
-      apiFailToast('GitHub refresh failed', exc);
+    refreshGitlab().catch(function (exc) {
+      apiFailToast('GitLab refresh failed', exc);
     });
   });
   COLUMNS.forEach(function (col) {

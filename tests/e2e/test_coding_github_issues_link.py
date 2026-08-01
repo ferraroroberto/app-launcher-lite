@@ -1,10 +1,11 @@
-"""Regression pin for issue #297 (Coding tab GitHub icon → open-issues link).
+"""Regression pin for issue #297 (Coding tab repo icon → issues-page link).
 
-The feature: the Coding tab's GitHub icon used to open the bare repo root
-(`a.repo_url`). It now opens that repo's open-issues list sorted by last
-updated instead, since that's the page actually worth a tap from the
-launcher. Issue #341 added `-label:audit-meta` to the query so codebase-audit
-ledger/metadata issues (not actionable work) don't head the list.
+The feature: the Coding tab's repo icon opens the repo's issues page in a
+new tab. Since Phase 5 the URL is precomputed server-side
+(``repo_issues_url`` — GitHub keeps ``/issues``, any other host gets
+GitLab's ``/-/issues``; the host check lives in ``src/registry.py`` /
+``src/scanner.py``) and the client uses it verbatim — no URL synthesis in
+apps.js.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from playwright.sync_api import Page, expect
 pytestmark = pytest.mark.smoke
 
 
-def _row(slug: str, repo_url: str | None) -> dict:
+def _row(slug: str, repo_url: str | None, repo_issues_url: str | None) -> dict:
     return {
         "id": slug,
         "name": slug,
@@ -26,16 +27,22 @@ def _row(slug: str, repo_url: str | None) -> dict:
         "added_at": "",
         "is_favorite": False,
         "repo_url": repo_url,
+        "repo_issues_url": repo_issues_url,
     }
 
 
-def _install_routes(page: Page, repo_url: str | None) -> None:
+def _install_routes(
+    page: Page, repo_url: str | None, repo_issues_url: str | None
+) -> None:
     def _apps(route):
         route.fulfill(
             status=200,
             content_type="application/json",
             body=json.dumps(
-                {"scan_root": "E:/automation", "apps": [_row("alpha", repo_url)]}
+                {
+                    "scan_root": "E:/automation",
+                    "apps": [_row("alpha", repo_url, repo_issues_url)],
+                }
             ),
         )
 
@@ -48,11 +55,18 @@ def _open_projects(page: Page) -> None:
     page.locator("details.projects-card").evaluate("el => { el.open = true; }")
 
 
-def test_github_icon_opens_open_issues_sorted_by_updated(
+def _repo_btn(page: Page):
+    return page.locator('.coding-item[data-id="alpha"] .agent-btn').filter(
+        has=page.locator('img[alt="GitHub"]')
+    )
+
+
+def test_repo_icon_opens_server_computed_issues_url(
     authed_page: Page, base_url: str
 ) -> None:
-    repo_url = "https://github.com/ferraroroberto/app-launcher"
-    _install_routes(authed_page, repo_url)
+    repo_url = "https://gitlab.com/testgroup/app-launcher"
+    issues_url = "https://gitlab.com/testgroup/app-launcher/-/issues"
+    _install_routes(authed_page, repo_url, issues_url)
     # Capture window.open before the SPA loads — don't actually navigate.
     authed_page.add_init_script(
         "window.__opened = [];"
@@ -62,27 +76,24 @@ def test_github_icon_opens_open_issues_sorted_by_updated(
     _open_projects(authed_page)
 
     expect(authed_page.locator("#codingList .coding-item")).to_have_count(1)
-    gh_btn = authed_page.locator('.coding-item[data-id="alpha"] .agent-btn').filter(
-        has=authed_page.locator('img[alt="GitHub"]')
-    )
-    expect(gh_btn).to_be_enabled(timeout=5_000)
-    gh_btn.click()
+    btn = _repo_btn(authed_page)
+    expect(btn).to_be_enabled(timeout=5_000)
+    expect(btn).to_have_attribute("aria-label", "Repository issues")
+    btn.click()
 
     opened = authed_page.evaluate("window.__opened")
-    expected = (
-        repo_url
-        + "/issues?q=is%3Aissue%20state%3Aopen%20sort%3Aupdated-desc%20-label%3Aaudit-meta"
+    # Verbatim — the client must not append query/synthesize anything.
+    assert opened == [issues_url], (
+        f"window.open called with {opened!r}, expected [{issues_url!r}]"
     )
-    assert opened == [expected], f"window.open called with {opened!r}, expected [{expected!r}]"
 
 
-def test_github_icon_disabled_without_repo_url(authed_page: Page, base_url: str) -> None:
-    _install_routes(authed_page, None)
+def test_repo_icon_disabled_without_issues_url(
+    authed_page: Page, base_url: str
+) -> None:
+    _install_routes(authed_page, None, None)
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     _open_projects(authed_page)
 
     expect(authed_page.locator("#codingList .coding-item")).to_have_count(1)
-    gh_btn = authed_page.locator('.coding-item[data-id="alpha"] .agent-btn').filter(
-        has=authed_page.locator('img[alt="GitHub"]')
-    )
-    expect(gh_btn).to_be_disabled()
+    expect(_repo_btn(authed_page)).to_be_disabled()

@@ -44,6 +44,10 @@ async def get_config(request: Request) -> Dict[str, Any]:
         "coding_hidden_agents": cfg.coding_hidden_agents,
         "apps_scan_root": cfg.apps_scan_root,
         "team_os_dir": cfg.team_os_dir,
+        # Board tab GitLab source (Phase 5) — group is required for data,
+        # host only for a self-hosted instance ("" = glab's default).
+        "gitlab_group": cfg.gitlab_group,
+        "gitlab_host": cfg.gitlab_host,
         "terminal_history_lines": cfg.terminal_history_lines,
         "terminal_history_lines_min": MIN_TERMINAL_HISTORY_LINES,
         "terminal_history_lines_max": MAX_TERMINAL_HISTORY_LINES,
@@ -65,6 +69,8 @@ async def patch_config(request: Request) -> Dict[str, Any]:
         "coding_hidden_agents",
         "apps_scan_root",
         "team_os_dir",
+        "gitlab_group",
+        "gitlab_host",
         "terminal_history_lines",
         # copilot_models is deliberately absent: read-only from the UI,
         # edited in webapp_config.json directly (tenant-gated ids).

@@ -5,11 +5,10 @@ Covers the three sources and their degradation contract:
   * ``board.read_active_issues`` — absent / corrupt / fresh / expired markers.
   * ``board.merge_sessions`` — agent-aware state claims (exact launcher id,
     normalized-cwd fallback), external-card freshness, unknown fallback.
-  * ``board.jobs_attention`` — failed-today and stuck runs from run.json trees.
-  * ``src.github_client`` — canned ``gh`` JSON via a monkeypatched
-    ``subprocess.run``; missing binary → error surfaced, old data kept.
-  * ``GET /api/board`` + ``POST /api/board/github/refresh`` via the standard
-    ``webapp_client`` fixture (session-host mocked, config in tmp).
+  * ``GET /api/board`` + ``POST /api/board/gitlab/refresh`` via the standard
+    ``webapp_client`` fixture (session-host mocked, config in tmp; ``glab``
+    canned via a monkeypatched ``subprocess.run`` — the client's own unit
+    coverage lives in tests/test_gitlab_client.py).
 """
 
 from __future__ import annotations
@@ -22,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from src import board, github_client
+from src import board, gitlab_client
 
 
 def _iso(moment: datetime) -> str:
@@ -33,11 +32,11 @@ NOW = datetime(2026, 7, 2, 12, 0, 0, tzinfo=timezone.utc)
 
 
 @pytest.fixture(autouse=True)
-def _pristine_gh_cache():
-    """The gh cache is module-global — every test starts and ends empty."""
-    github_client.reset_cache()
+def _pristine_glab_cache():
+    """The glab cache is module-global — every test starts and ends empty."""
+    gitlab_client.reset_cache()
     yield
-    github_client.reset_cache()
+    gitlab_client.reset_cache()
 
 
 # ------------------------------------------------------ read_sessions_state
@@ -1471,13 +1470,13 @@ def test_stalled_status_stays_stalled_for_idle_hook_status(tmp_path: Path):
 # ---------------------------------------------- build_board routing (#608)
 
 
-def test_build_board_idle_finished_routes_to_claude_turn():
-    """idle-finished isn't an alert — it belongs in Claude's turn alongside
+def test_build_board_idle_finished_routes_to_bot_turn():
+    """idle-finished isn't an alert — it belongs in Bot's turn alongside
     working/idle/unknown, not Your turn."""
     cards = [{"session_id": "s1", "status": "idle-finished", "label": ""}]
-    columns = board.build_board(cards, {}, [])
+    columns = board.build_board(cards, {})
     assert columns["your_turn"] == []
-    assert [c["session_id"] for c in columns["claude_turn"]] == ["s1"]
+    assert [c["session_id"] for c in columns["bot_turn"]] == ["s1"]
 
 
 def test_build_board_needs_you_family_routes_to_your_turn():
@@ -1488,247 +1487,70 @@ def test_build_board_needs_you_family_routes_to_your_turn():
         {"session_id": "s-decision", "status": "awaiting-decision", "label": ""},
         {"session_id": "s-input", "status": "awaiting-input", "label": ""},
     ]
-    columns = board.build_board(cards, {}, [])
+    columns = board.build_board(cards, {})
     assert {c["session_id"] for c in columns["your_turn"]} == {
         "s-stalled", "s-decision", "s-input",
     }
-    assert columns["claude_turn"] == []
+    assert columns["bot_turn"] == []
 
 
-# ------------------------------------------------------------ jobs_attention
-
-
-def _seed_job(overrides: dict, job_id: str, run: dict) -> None:
-    jobs_path = overrides["tmp_jobs_path"]
-    existing = json.loads(jobs_path.read_text(encoding="utf-8")) if jobs_path.exists() else {"jobs": []}
-    existing["jobs"].append({
-        "id": job_id,
-        "name": job_id.replace("_", " "),
-        "script_path": "C:/nowhere/script.py",
-    })
-    jobs_path.write_text(json.dumps(existing), encoding="utf-8")
-
-    run_id = run.get("run_id", "20260702T090000")
-    run_dir = overrides["tmp_jobs_runs_dir"] / job_id / run_id
-    run_dir.mkdir(parents=True)
-    (run_dir / "run.json").write_text(
-        json.dumps({"run_id": run_id, "job_id": job_id, **run}), encoding="utf-8"
-    )
-
-
-def test_jobs_attention_failed_today(webapp_client):
-    _client, _app, overrides = webapp_client
-    # run_job_cmd writes naive local ISO timestamps — mirror that exactly.
-    # Anchored at local midday rather than the bare datetime.now() (#323): the
-    # 1h/50min offsets below must never straddle a local-midnight calendar-day
-    # boundary, which a bare `now()` does whenever the test happens to run in
-    # the ~50 minutes after midnight. `now=local_now` is also passed explicitly
-    # to jobs_attention() so the assertion is fully clock-independent, matching
-    # how the rest of this file injects `now` into board functions.
-    local_now = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0)
-    _seed_job(overrides, "pipeline", {
-        "status": "failed",
-        "started_at": (local_now - timedelta(hours=1)).isoformat(timespec="seconds"),
-        "finished_at": (local_now - timedelta(minutes=50)).isoformat(timespec="seconds"),
-        "exit_code": 1,
-    })
-    cards = board.jobs_attention(now=local_now)
-    assert [(c["job_id"], c["state"]) for c in cards] == [("pipeline", "failed")]
-
-
-def test_jobs_attention_ignores_yesterdays_failure(webapp_client):
-    _client, _app, overrides = webapp_client
-    local_now = datetime.now()
-    _seed_job(overrides, "old_fail", {
-        "status": "failed",
-        "finished_at": (local_now - timedelta(days=2)).isoformat(timespec="seconds"),
-        "exit_code": 1,
-    })
-    assert board.jobs_attention() == []
-
-
-def test_jobs_attention_stuck_run(webapp_client):
-    _client, _app, overrides = webapp_client
-    local_now = datetime.now()
-    # One lone running run, 30 min old: no p95 history, so the stuck floor
-    # (300 s) applies and it counts as stuck.
-    _seed_job(overrides, "wedged", {
-        "status": "running",
-        "started_at": (local_now - timedelta(minutes=30)).isoformat(timespec="seconds"),
-    })
-    cards = board.jobs_attention()
-    assert [(c["job_id"], c["state"]) for c in cards] == [("wedged", "stuck")]
-
-
-# ------------------------------------------------------------- github_client
-
-
-_CANNED_ISSUE = {
-    "repository": {"nameWithOwner": "ferraroroberto/app-launcher"},
-    "number": 164, "title": "Board tab", "url": "https://github.com/x/164",
-    "updatedAt": "2026-07-01T10:00:00Z",
-    "labels": [{"name": "enhancement"}],
-}
-_CANNED_PR = {
-    "repository": {"nameWithOwner": "ferraroroberto/photo-ocr"},
-    "number": 67, "title": "fix chunk merge", "url": "https://github.com/x/67",
-    "updatedAt": "2026-07-02T08:00:00Z", "isDraft": False,
-}
-
-
-class _FakeGh:
-    """subprocess.run stand-in keyed on the gh subcommand + filters."""
-
-    def __init__(self):
-        self.calls = []
-
-    def __call__(self, argv, **kwargs):
-        self.calls.append(argv)
-        rows = []
-        if "prs" in argv and "--merged" in argv:
-            rows = []                      # nothing merged today
-        elif "prs" in argv:
-            rows = [_CANNED_PR]
-        elif "issues" in argv and "closed" in argv:
-            rows = []                      # nothing closed today
-        elif "issues" in argv:
-            rows = [_CANNED_ISSUE]
-        completed = subprocess.CompletedProcess(argv, 0, stdout=json.dumps(rows), stderr="")
-        return completed
-
-
-def test_github_refresh_and_snapshot(monkeypatch):
-    fake = _FakeGh()
-    monkeypatch.setattr(github_client.subprocess, "run", fake)
-    snap = github_client.refresh("ferraroroberto")
-    assert snap["error"] is None
-    assert snap["fetched_at"]
-    assert [i["number"] for i in snap["issues"]] == [164]
-    assert snap["issues"][0]["repo"] == "app-launcher"
-    assert snap["issues"][0]["labels"] == ["enhancement"]
-    assert [p["number"] for p in snap["prs"]] == [67]
-    assert snap["done"] == []
-    # snapshot() is the memory read the poll uses — no new subprocess calls.
-    calls_before = len(fake.calls)
-    assert github_client.snapshot()["issues"] == snap["issues"]
-    assert len(fake.calls) == calls_before
-
-
-def test_search_open_issues_filters_audit_meta_label(monkeypatch):
-    """Ledger/metadata issues from ``/codebase-audit`` (label ``audit-meta``)
-    are bookkeeping, not dispatchable work — the Board hides them."""
-    actionable = {
-        "repository": {"nameWithOwner": "ferraroroberto/voice-transcriber"},
-        "number": 95, "title": "Usage analytics", "url": "u95",
-        "updatedAt": "2026-07-02T10:00:00Z",
-        "labels": [{"name": "enhancement"}],
-    }
-    ledger = {
-        "repository": {"nameWithOwner": "ferraroroberto/voice-transcriber"},
-        "number": 37, "title": "codebase-audit ledger", "url": "u37",
-        "updatedAt": "2026-07-01T10:00:00Z",
-        "labels": [{"name": "audit-meta"}],
-    }
-
-    def fake_run(argv, **kwargs):
-        return subprocess.CompletedProcess(
-            argv, 0, stdout=json.dumps([actionable, ledger]), stderr=""
-        )
-
-    monkeypatch.setattr(github_client.subprocess, "run", fake_run)
-    issues = github_client.search_open_issues("ferraroroberto")
-    assert [i["number"] for i in issues] == [95]
-
-
-def test_search_open_prs_filters_audit_meta_label(monkeypatch):
-    actionable = {
-        "repository": {"nameWithOwner": "ferraroroberto/app-launcher"},
-        "number": 158, "title": "keyboard-aware overlay", "url": "u158",
-        "updatedAt": "2026-07-02T09:00:00Z", "isDraft": False,
-        "labels": [{"name": "bug"}],
-    }
-    ledger_pr = {
-        "repository": {"nameWithOwner": "ferraroroberto/app-launcher"},
-        "number": 200, "title": "audit ledger housekeeping", "url": "u200",
-        "updatedAt": "2026-07-02T09:00:00Z", "isDraft": False,
-        "labels": [{"name": "audit-meta"}],
-    }
-
-    def fake_run(argv, **kwargs):
-        return subprocess.CompletedProcess(
-            argv, 0, stdout=json.dumps([actionable, ledger_pr]), stderr=""
-        )
-
-    monkeypatch.setattr(github_client.subprocess, "run", fake_run)
-    prs = github_client.search_open_prs("ferraroroberto")
-    assert [p["number"] for p in prs] == [158]
-
-
-def test_done_today_filters_audit_meta_issue(monkeypatch):
-    closed_ledger_issue = {
-        "repository": {"nameWithOwner": "ferraroroberto/app-launcher"},
-        "number": 37, "title": "codebase-audit ledger", "url": "u37",
-        "updatedAt": "2026-07-02T14:00:00Z",
-        "labels": [{"name": "audit-meta"}],
-    }
-    closed_real_issue = {
-        "repository": {"nameWithOwner": "ferraroroberto/app-launcher"},
-        "number": 9, "title": "closed by hand", "url": "u9",
-        "updatedAt": "2026-07-02T14:30:00Z",
-        "labels": [{"name": "bug"}],
-    }
-
-    def fake_run(argv, **kwargs):
-        assert "prs" not in argv  # Done never fetches PRs (#399)
-        rows = [closed_ledger_issue, closed_real_issue]
-        return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(rows), stderr="")
-
-    monkeypatch.setattr(github_client.subprocess, "run", fake_run)
-    done = github_client.search_done_today("ferraroroberto")
-    cards = {(d["kind"], d["repo"], d["number"]) for d in done}
-    assert cards == {("issue", "app-launcher", 9)}
-
-
-def test_done_today_is_closed_issues_only(monkeypatch):
-    """Done holds closed issues only (#399) — no merged-PR fetch or pairing;
-    a PR that closed an issue is already reflected by the issue's own card."""
-    closed_issue = {
-        "repository": {"nameWithOwner": "ferraroroberto/app-launcher"},
-        "number": 305, "title": "status sticks", "url": "u305",
-        "updatedAt": "2026-07-02T15:00:01Z",
-    }
-
-    def fake_run(argv, **kwargs):
-        assert "prs" not in argv
-        return subprocess.CompletedProcess(argv, 0, stdout=json.dumps([closed_issue]), stderr="")
-
-    monkeypatch.setattr(github_client.subprocess, "run", fake_run)
-    done = github_client.search_done_today("ferraroroberto")
-    assert [(d["kind"], d["repo"], d["number"]) for d in done] == [("issue", "app-launcher", 305)]
-
-
-def test_github_refresh_failure_keeps_old_data(monkeypatch):
-    fake = _FakeGh()
-    monkeypatch.setattr(github_client.subprocess, "run", fake)
-    github_client.refresh("ferraroroberto")
-
-    def _boom(argv, **kwargs):
-        raise FileNotFoundError("gh not on PATH")
-
-    monkeypatch.setattr(github_client.subprocess, "run", _boom)
-    snap = github_client.refresh("ferraroroberto")
-    assert "gh" in (snap["error"] or "")
-    assert [i["number"] for i in snap["issues"]] == [164]  # previous data survives
+def test_build_board_has_exactly_four_columns():
+    """Phase 5: the "Other" column (open MRs + job cards) is gone — the
+    Board is Backlog / Bot's turn / Your turn / Done, nothing else."""
+    columns = board.build_board([], {"issues": [], "done": []})
+    assert set(columns) == {"backlog", "bot_turn", "your_turn", "done"}
 
 
 # ---------------------------------------------------------------- API shape
 
 
+def _gl_issue(repo: str, iid: int, title: str, *, closed: bool = False,
+              closed_at: str | None = None, labels: list | None = None,
+              updated_at: str = "2026-07-01T10:00:00.000Z") -> dict:
+    """A GitLab group-issues row, in the real API shape (see
+    tests/test_gitlab_client.py for the client's own fixture coverage)."""
+    return {
+        "iid": iid, "project_id": 1, "title": title,
+        "state": "closed" if closed else "opened",
+        "updated_at": updated_at, "closed_at": closed_at,
+        "web_url": f"https://gitlab.com/testgroup/{repo}/-/work_items/{iid}",
+        "labels": labels or [],
+        "references": {
+            "short": f"#{iid}", "relative": f"#{iid}",
+            "full": f"testgroup/{repo}#{iid}",
+        },
+    }
+
+
+class _FakeGlab:
+    """subprocess.run stand-in keyed on the glab api path."""
+
+    def __init__(self, closed_rows: list | None = None):
+        self.calls = []
+        self.closed_rows = closed_rows or []
+
+    def __call__(self, argv, **kwargs):
+        self.calls.append(argv)
+        path = argv[-1]
+        rows: list = []
+        if "merge_requests" in path:
+            rows = []
+        elif "state=closed" in path:
+            rows = self.closed_rows
+        elif "/issues?state=opened" in path:
+            rows = [_gl_issue(
+                "app-launcher", 164, "Board tab", labels=["enhancement"],
+            )]
+        return subprocess.CompletedProcess(
+            argv, 0, stdout=json.dumps(rows), stderr=""
+        )
+
+
 def test_api_board_shape_with_everything_absent(webapp_client):
     client, _app, _overrides = webapp_client
     body = client.get("/api/board").json()
-    assert set(body["columns"]) == {"backlog", "claude_turn", "your_turn", "other", "done"}
-    assert body["github"] == {"fetched_at": None, "error": None}
+    assert set(body["columns"]) == {"backlog", "bot_turn", "your_turn", "done"}
+    assert body["gitlab"] == {"fetched_at": None, "error": None}
     assert body["sessions_state"]["available"] is False
     assert body["active_issues"]["available"] is False
     assert body["columns"]["backlog"] == []
@@ -1739,9 +1561,9 @@ def test_api_board_marks_active_backlog_issue(
     webapp_client, monkeypatch
 ):
     client, app, _overrides = webapp_client
-    fake = _FakeGh()
-    monkeypatch.setattr(github_client.subprocess, "run", fake)
-    github_client.refresh("ferraroroberto")
+    fake = _FakeGlab()
+    monkeypatch.setattr(gitlab_client.subprocess, "run", fake)
+    gitlab_client.refresh("testgroup")
 
     active_file = Path(app.state.webapp_config.sessions_state_file).with_name(
         "active-issues.json"
@@ -1778,7 +1600,7 @@ def test_api_board_merges_live_sessions_and_state(webapp_client):
     # #608: no transcript to check, so the needs-you split lands on the
     # safe generic value — still routed to Your turn either way.
     assert your_turn[0]["status"] == "awaiting-input"
-    assert body["columns"]["claude_turn"] == []
+    assert body["columns"]["bot_turn"] == []
 
 
 def test_api_board_survives_session_host_down(webapp_client):
@@ -1786,21 +1608,38 @@ def test_api_board_survives_session_host_down(webapp_client):
     from src.session_client import SessionHostError
     overrides["session"].list_sessions.side_effect = SessionHostError("down")
     body = client.get("/api/board").json()
-    assert body["columns"]["claude_turn"] == []
+    assert body["columns"]["bot_turn"] == []
 
 
 def test_api_refresh_endpoint_fills_cache(webapp_client, monkeypatch):
     client, _app, _overrides = webapp_client
-    fake = _FakeGh()
-    monkeypatch.setattr(github_client.subprocess, "run", fake)
+    fake = _FakeGlab()
+    monkeypatch.setattr(gitlab_client.subprocess, "run", fake)
 
-    github = client.post("/api/board/github/refresh").json()
-    assert github["error"] is None
-    assert github["fetched_at"]
-    # The owner from config reaches the gh command line.
-    assert any("testowner" in " ".join(argv) for argv in fake.calls)
+    gitlab = client.post("/api/board/gitlab/refresh").json()
+    assert gitlab["error"] is None
+    assert gitlab["fetched_at"]
+    # The group from config reaches the glab api path.
+    assert any("testgroup" in " ".join(argv) for argv in fake.calls)
+    # The 4-column Board consumes issues + done only — no MR fetch.
+    assert not any("merge_requests" in " ".join(argv) for argv in fake.calls)
 
     body = client.get("/api/board").json()
     assert [c["number"] for c in body["columns"]["backlog"]] == [164]
     assert body["columns"]["your_turn"] == []
-    assert [c["kind"] for c in body["columns"]["other"]] == ["pr"]
+    assert body["columns"]["done"] == []
+
+
+def test_api_refresh_endpoint_hints_when_group_unset(webapp_client, monkeypatch):
+    """Empty gitlab_group: no subprocess at all, and the snapshot's error
+    tells the UI to point at Settings instead of crashing the panel."""
+    client, app, _overrides = webapp_client
+    app.state.webapp_config.gitlab_group = ""
+
+    def _boom(argv, **kwargs):
+        raise AssertionError("glab must not run with no group configured")
+
+    monkeypatch.setattr(gitlab_client.subprocess, "run", _boom)
+    gitlab = client.post("/api/board/gitlab/refresh").json()
+    assert "gitlab_group" in (gitlab["error"] or "")
+    assert gitlab["fetched_at"] is None

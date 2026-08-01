@@ -67,8 +67,8 @@ def _mock_board(page: Page) -> None:
             body=_json.dumps({
                 "generated_at": "2026-07-08T12:00:00Z",
                 "columns": {
-                    "backlog": [], "your_turn": [], "other": [], "done": [],
-                    "claude_turn": [{
+                    "backlog": [], "your_turn": [], "done": [],
+                    "bot_turn": [{
                         "session_id": _BOARD_SID,
                         "kind": "pty",
                         "agent": "copilot",
@@ -84,7 +84,7 @@ def _mock_board(page: Page) -> None:
                         "age_seconds": 60,
                     }],
                 },
-                "github": {"fetched_at": "2026-07-08T11:00:00Z", "error": None},
+                "gitlab": {"fetched_at": "2026-07-08T11:00:00Z", "error": None},
                 "sessions_state": {
                     "available": True, "stale": False,
                     "updated_at": "2026-07-08T11:58:00Z",
@@ -156,7 +156,7 @@ def test_board_drawer_rename_patches_card_in_place(
     expect(authed_page.locator("#paneBoard")).to_be_visible()
 
     card = authed_page.locator(
-        '.board-list[data-col="claude_turn"] li.board-item'
+        '.board-list[data-col="bot_turn"] li.board-item'
     ).first.locator("button.board-card")
     expect(card.locator(".board-card-title")).to_have_text(
         "boardrenameproj", timeout=10_000
@@ -254,7 +254,7 @@ def test_board_drawer_rename_btn_clickable_at_narrow_desktop_widths(
     expect(authed_page.locator("#paneBoard")).to_be_visible()
 
     card = authed_page.locator(
-        '.board-list[data-col="claude_turn"] li.board-item'
+        '.board-list[data-col="bot_turn"] li.board-item'
     ).first.locator("button.board-card")
     expect(card.locator(".board-card-title")).to_have_text(
         "boardrenameproj", timeout=10_000

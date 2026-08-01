@@ -46,7 +46,7 @@ _FAKE_BOARD = {
     "generated_at": "2026-07-08T12:00:00Z",
     "columns": {
         "backlog": [],
-        "claude_turn": [
+        "bot_turn": [
             {
                 "session_id": _SID,
                 "kind": "pty",
@@ -65,10 +65,9 @@ _FAKE_BOARD = {
             },
         ],
         "your_turn": [],
-        "other": [],
         "done": [],
     },
-    "github": {"fetched_at": "2026-07-08T11:00:00Z", "error": None},
+    "gitlab": {"fetched_at": "2026-07-08T11:00:00Z", "error": None},
     "sessions_state": {"available": True, "stale": False,
                        "updated_at": "2026-07-08T11:58:00Z"},
 }
@@ -93,7 +92,7 @@ def _mock_board(page: Page) -> None:
         ),
     )
     page.route(
-        re.compile(r".*/api/board/github/refresh$"),
+        re.compile(r".*/api/board/gitlab/refresh$"),
         lambda route: route.fulfill(
             status=200, content_type="application/json",
             body=_json.dumps({"fetched_at": "2026-07-08T12:00:00Z", "error": None}),
@@ -128,11 +127,11 @@ def test_board_and_coding_tab_show_identical_shared_title(
     authed_page.locator("#tabBoard").click()
     expect(authed_page.locator("#paneBoard")).to_be_visible()
     board_card = authed_page.locator(
-        '.board-list[data-col="claude_turn"] .board-card-title'
+        '.board-list[data-col="bot_turn"] .board-card-title'
     ).first
     expect(board_card).to_have_text(_SHARED_NAME, timeout=10_000)
     expect(
         authed_page.locator(
-            '.board-list[data-col="claude_turn"] .board-agent-icon'
+            '.board-list[data-col="bot_turn"] .board-agent-icon'
         ).first
     ).to_have_attribute("alt", "GitHub Copilot CLI")

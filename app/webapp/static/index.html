@@ -756,17 +756,15 @@
       <div class="board-strip" role="tablist" aria-label="Board columns">
         <button id="boardColBacklog" type="button" class="board-strip-btn" data-col="backlog"
                 role="tab" aria-selected="false">git <span class="board-count">0</span></button>
-        <button id="boardColClaude" type="button" class="board-strip-btn" data-col="claude_turn"
+        <button id="boardColBot" type="button" class="board-strip-btn" data-col="bot_turn"
                 role="tab" aria-selected="false">bot <span class="board-count">0</span></button>
         <button id="boardColYours" type="button" class="board-strip-btn active" data-col="your_turn"
                 role="tab" aria-selected="true">you <span class="board-count">0</span></button>
-        <button id="boardColOther" type="button" class="board-strip-btn" data-col="other"
-                role="tab" aria-selected="false">Other <span class="board-count">0</span></button>
         <button id="boardColDone" type="button" class="board-strip-btn" data-col="done"
                 role="tab" aria-selected="false">Done <span class="board-count">0</span></button>
         <button id="boardRefresh" type="button" class="icon-btn board-refresh"
-                title="Refresh GitHub issues / PRs / done-today (runs gh)"
-                aria-label="Refresh GitHub data">↻</button>
+                title="Refresh GitLab issues / done-today (runs glab)"
+                aria-label="Refresh GitLab data">↻</button>
       </div>
       <div id="boardStatus" class="board-status" hidden></div>
       <div id="boardColumns" class="board-columns">
@@ -775,23 +773,18 @@
           <ul class="card-list board-list" data-col="backlog"></ul>
           <div class="empty board-empty" data-col="backlog" hidden></div>
         </section>
-        <section class="board-col" data-col="claude_turn" aria-label="Claude's turn">
-          <h3 class="board-col-title">Claude's turn <span class="board-col-count" data-col="claude_turn">(0)</span></h3>
-          <ul class="card-list board-list" data-col="claude_turn"></ul>
-          <div class="empty board-empty" data-col="claude_turn" hidden></div>
+        <section class="board-col" data-col="bot_turn" aria-label="Bot's turn">
+          <h3 class="board-col-title">Bot's turn <span class="board-col-count" data-col="bot_turn">(0)</span></h3>
+          <ul class="card-list board-list" data-col="bot_turn"></ul>
+          <div class="empty board-empty" data-col="bot_turn" hidden></div>
         </section>
         <section class="board-col" data-col="your_turn" aria-label="Your turn">
           <h3 class="board-col-title">Your turn <span class="board-col-count" data-col="your_turn">(0)</span></h3>
           <ul class="card-list board-list" data-col="your_turn"></ul>
           <div class="empty board-empty" data-col="your_turn" hidden></div>
         </section>
-        <section class="board-col" data-col="other" aria-label="Other">
-          <h3 class="board-col-title">Other <span class="board-col-count" data-col="other">(0)</span></h3>
-          <ul class="card-list board-list" data-col="other"></ul>
-          <div class="empty board-empty" data-col="other" hidden></div>
-        </section>
-        <section class="board-col" data-col="done" aria-label="Done today">
-          <h3 class="board-col-title">Done today <span class="board-col-count" data-col="done">(0)</span></h3>
+        <section class="board-col" data-col="done" aria-label="Done">
+          <h3 class="board-col-title">Done <span class="board-col-count" data-col="done">(0)</span></h3>
           <ul class="card-list board-list" data-col="done"></ul>
           <div class="empty board-empty" data-col="done" hidden></div>
         </section>
@@ -826,6 +819,14 @@
         <label class="stacked">
           <span>Team OS dir (team-os checkout)</span>
           <input id="teamOsDir" type="text" class="input-native">
+        </label>
+        <label class="stacked">
+          <span>GitLab group (Board issues; subgroups included)</span>
+          <input id="gitlabGroup" type="text" class="input-native" placeholder="my-group or my-group/sub">
+        </label>
+        <label class="stacked">
+          <span>GitLab host (optional — self-hosted instance; empty = glab default)</span>
+          <input id="gitlabHost" type="text" class="input-native" placeholder="gitlab.example.com">
         </label>
         <label class="stacked">
           <span>Terminal scrollback (lines) — how much history a full-screen agent keeps for a reconnect</span>

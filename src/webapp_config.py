@@ -146,9 +146,15 @@ class WebappConfig:
     # hook. The board reads it defensively — absent/corrupt/stale degrades
     # to unknown session status, never an error.
     sessions_state_file: str = field(default_factory=_default_sessions_state_file)
-    # GitHub owner whose repos the Board's gh searches span (backlog / PRs /
-    # done-today). One owner covers the whole fleet.
-    github_owner: str = "ferraroroberto"
+    # GitLab group whose projects the Board's glab queries span (backlog /
+    # done-today). Subgroups are included by the group endpoint. Empty is
+    # valid — the Board's GitLab panel just shows a "set gitlab_group in
+    # Settings" hint instead of running any subprocess.
+    gitlab_group: str = ""
+    # Self-hosted GitLab instance for the queries (rides glab's GITLAB_HOST
+    # env var). Empty = glab's own default context (gitlab.com or whatever
+    # `glab auth login` configured).
+    gitlab_host: str = ""
     # GitHub Copilot CLI launch settings (issue #48; config-driven since the
     # lite fork's Phase 3). `copilot_models` is the UI/select list of model
     # ids offered — read-only from the UI, edited in the JSON file directly
@@ -331,7 +337,8 @@ def load_webapp_config(
         sessions_state_file=str(
             raw.get("sessions_state_file") or _default_sessions_state_file()
         ),
-        github_owner=str(raw.get("github_owner", "ferraroroberto")),
+        gitlab_group=str(raw.get("gitlab_group", "") or ""),
+        gitlab_host=str(raw.get("gitlab_host", "") or ""),
         copilot_skip_permissions=bool(
             raw.get("copilot_skip_permissions", False)
         ),
@@ -401,7 +408,8 @@ def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
         "apps_scan_root": cfg.apps_scan_root,
         "team_os_dir": cfg.team_os_dir,
         "sessions_state_file": cfg.sessions_state_file,
-        "github_owner": cfg.github_owner,
+        "gitlab_group": cfg.gitlab_group,
+        "gitlab_host": cfg.gitlab_host,
         "copilot_skip_permissions": cfg.copilot_skip_permissions,
         "copilot_models": cfg.copilot_models,
         "copilot_model": cfg.copilot_model,
@@ -465,6 +473,11 @@ def append_auth_token(url: str, token: Optional[str]) -> str:
 
 
 def _validate(cfg: WebappConfig) -> None:
+    # GitLab knobs are plain strings; normalize rather than raise — stray
+    # whitespace (or a non-string from a hand-edited file) must never brick
+    # config loading. Empty gitlab_group is valid (Board shows a hint).
+    cfg.gitlab_group = str(cfg.gitlab_group or "").strip()
+    cfg.gitlab_host = str(cfg.gitlab_host or "").strip()
     if not (1 <= cfg.port <= 65535):
         raise ValueError(f"port out of range: {cfg.port}")
     if not (1 <= cfg.session_host_port <= 65535):

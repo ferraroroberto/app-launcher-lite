@@ -89,8 +89,8 @@ flowchart TB
     JOBSPREFLIGHT["jobs_preflight.py"]
     JOBSARGV["jobs_argv.py"]
     JOBSTRIGGER["jobs_trigger.py\n--trigger vocabulary (scheduled/manual/webhook/chain:)"]
-    BOARD["board.py\npure assembly: sessions + jobs + GitHub"]
-    GHCLIENT["github_client.py\ngh CLI reads, cached snapshot"]
+    BOARD["board.py\npure assembly: sessions + GitLab"]
+    GLCLIENT["gitlab_client.py\nglab CLI reads, cached snapshot"]
     NOTIFY["notifications.py\nPushover on job failure"]
     WEBAPPCFG["webapp_config.py\nconfig/webapp_config.json"]
     LAUNCHFLAGS["launch_flags.py\nper-agent CLI flag builders"]
@@ -132,8 +132,7 @@ flowchart TB
   R_BOARD --> BOARD
   R_BOARD -->|"dispatch spawn-then-type"| SESSCLIENT
   BOARD --> SESSCLIENT
-  BOARD --> JOBSFACADE
-  BOARD --> GHCLIENT
+  BOARD --> GLCLIENT
   BOARD -->|reads| SESSSTATE["~/.copilot/hooks/state/sessions-state.json\n(session_state hook)"]
   BOARD -->|reads| ACTIVEISSUES["~/.copilot/hooks/state/active-issues.json\n(issue workflows)"]
   R_CONFIG --> WEBAPPCFG
@@ -152,13 +151,13 @@ flowchart TB
 
   subgraph external["External dependencies"]
     SCHTASKS["Windows Task Scheduler\n(\\AppLauncher\\ folder)"]
-    GH["gh CLI / GitHub"]
+    GL["glab CLI / GitLab"]
     TEAMOSREPO["team-os repo (sibling)\nskills invoked via copilot session"]
     CLOUDFLARE["Cloudflare named tunnel"]
     TAILSCALE["Tailscale"]
   end
   JOBSSCHTASKS --> SCHTASKS
-  GHCLIENT --> GH
+  GLCLIENT --> GL
   R_TEAMOS --> TEAMOSREPO
   TUNNEL --> CLOUDFLARE
   TRAY -->|Copy Tailscale URL| TAILSCALE

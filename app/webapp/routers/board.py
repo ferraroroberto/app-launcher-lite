@@ -1,7 +1,7 @@
 """Board tab — the fleet kanban's data plane (issues #300, #301, #302 / #164 / #399).
 
-    GET  /api/board                       → the five computed columns (token-gated)
-    POST /api/board/github/refresh        → run the gh searches now (token-gated)
+    GET  /api/board                       → the four computed columns (token-gated)
+    POST /api/board/gitlab/refresh        → run the glab queries now (token-gated)
     GET  /api/board/sessions/{sid}/exchange → last user↔assistant exchange
                                             (Tailscale + passkey — transcript text)
     POST /api/board/issues/start          → spawn /issue-start|yolo <N> in the
@@ -16,11 +16,11 @@ Split off a single-file god-router (issue #691, `/codebase-audit`), the way
 :mod:`app.webapp.routers.board_spawn`.
 
 ``GET /api/board`` is the 5s poll target, so it does only cheap work: the live
-session list from the session-host, one state-file read, one jobs-runs walk
-(all in worker threads, gathered concurrently) and a pure memory read of the
-GitHub cache. The ``gh`` subprocesses run **only** inside the explicit refresh
-endpoint — the exact on-demand contract of the Coding tab's ⎇ git-status
-button. Column assembly is pure logic in :mod:`src.board`.
+session list from the session-host plus two state-file reads (in worker
+threads, gathered concurrently) and a pure memory read of the GitLab cache.
+The ``glab`` subprocesses run **only** inside the explicit refresh endpoint —
+the exact on-demand contract of the Coding tab's ⎇ git-status button. Column
+assembly is pure logic in :mod:`src.board`.
 
 The board + refresh routes are read-only repo/session metadata — the same gate
 class as ``GET /api/coding/sessions`` (bearer token, no passkey). The
@@ -57,7 +57,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Request
 
-from src import agents, audit, board, github_client, session_client
+from src import agents, audit, board, gitlab_client, session_client
 from src.board_exchange import resolve_exchange, unavailable
 from src.launch_flags import build_copilot_flags
 from src.launcher import open_local_terminal_window, spawn_agent_session
@@ -79,7 +79,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _github_section(snap: Dict[str, Any]) -> Dict[str, Any]:
+def _gitlab_section(snap: Dict[str, Any]) -> Dict[str, Any]:
     return {"fetched_at": snap.get("fetched_at"), "error": snap.get("error")}
 
 
@@ -97,23 +97,22 @@ def _mark_active_backlog(
 
 @router.get("/api/board")
 async def get_board(request: Request) -> Dict[str, Any]:
-    """The five columns + source health, cheap enough for the 5s poll."""
+    """The four columns + source health, cheap enough for the 5s poll."""
     cfg: WebappConfig = request.app.state.webapp_config
 
     active_issues_file = Path(cfg.sessions_state_file).with_name("active-issues.json")
-    live, state, active_issues, job_cards = await asyncio.gather(
+    live, state, active_issues = await asyncio.gather(
         asyncio.to_thread(_safe_list_sessions, cfg.session_host_port),
         asyncio.to_thread(board.read_sessions_state, Path(cfg.sessions_state_file)),
         asyncio.to_thread(board.read_active_issues, active_issues_file),
-        asyncio.to_thread(board.jobs_attention),
     )
-    github = github_client.snapshot()
+    gitlab = gitlab_client.snapshot()
 
     session_cards = board.merge_sessions(
         live, state["rows"],
         active_issue_repos=board.active_issue_repos(active_issues["rows"]),
     )
-    columns = board.build_board(session_cards, github, job_cards)
+    columns = board.build_board(session_cards, gitlab)
     _mark_active_backlog(columns, active_issues["rows"])
 
     return {
@@ -121,7 +120,7 @@ async def get_board(request: Request) -> Dict[str, Any]:
         .isoformat(timespec="seconds")
         .replace("+00:00", "Z"),
         "columns": columns,
-        "github": _github_section(github),
+        "gitlab": _gitlab_section(gitlab),
         "sessions_state": {
             "available": state["available"],
             "stale": state["stale"],
@@ -135,12 +134,19 @@ async def get_board(request: Request) -> Dict[str, Any]:
     }
 
 
-@router.post("/api/board/github/refresh")
-async def refresh_github(request: Request) -> Dict[str, Any]:
-    """Run the fleet-wide gh searches now (subprocess-heavy, on demand only)."""
+@router.post("/api/board/gitlab/refresh")
+async def refresh_gitlab(request: Request) -> Dict[str, Any]:
+    """Run the group-wide glab queries now (subprocess-heavy, on demand only).
+
+    An empty ``gitlab_group`` never reaches a subprocess —
+    :func:`src.gitlab_client.refresh` short-circuits into an empty snapshot
+    whose ``error`` tells the UI to point at Settings.
+    """
     cfg: WebappConfig = request.app.state.webapp_config
-    snap = await asyncio.to_thread(github_client.refresh, cfg.github_owner)
-    return _github_section(snap)
+    snap = await asyncio.to_thread(
+        gitlab_client.refresh, cfg.gitlab_group, cfg.gitlab_host
+    )
+    return _gitlab_section(snap)
 
 
 @router.get("/api/board/sessions/{sid}/exchange")

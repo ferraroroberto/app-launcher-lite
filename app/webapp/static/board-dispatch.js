@@ -207,7 +207,7 @@ async function dispatchGoal() {
     });
     toast((body.launched || dispatchMode) + ' → ' + (body.repo || repo), 'good', { icon: 'rocket' });
     // The goal stays in the bar for rapid multi-dispatch ("create more");
-    // ✕ clears it. The new card lands in Claude's turn on the next poll.
+    // ✕ clears it. The new card lands in Bot's turn on the next poll.
     fetchBoard().catch(function () {});
   } catch (exc) {
     apiFailToast('Dispatch failed', exc);

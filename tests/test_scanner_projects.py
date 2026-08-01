@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.scanner import dir_ignored, github_repo_url, scan_project_dirs
+from src.scanner import (
+    dir_ignored,
+    repo_issues_url,
+    repo_web_url,
+    scan_project_dirs,
+)
 
 
 def _make_git_repo(project_dir: Path, origin_url: str | None) -> None:
@@ -70,33 +75,45 @@ class TestScanProjectDirs:
         assert found[0].name == "weird_folder-Name"
 
 
-class TestGithubRepoUrl:
+class TestRepoWebUrl:
     def test_https_remote_strips_dot_git(self, tmp_path: Path):
         _make_git_repo(tmp_path, "https://github.com/owner/repo.git")
-        assert github_repo_url(tmp_path) == "https://github.com/owner/repo"
+        assert repo_web_url(tmp_path) == "https://github.com/owner/repo"
 
     def test_https_remote_without_dot_git(self, tmp_path: Path):
         _make_git_repo(tmp_path, "https://github.com/owner/repo")
-        assert github_repo_url(tmp_path) == "https://github.com/owner/repo"
+        assert repo_web_url(tmp_path) == "https://github.com/owner/repo"
 
     def test_scp_ssh_remote(self, tmp_path: Path):
         _make_git_repo(tmp_path, "git@github.com:owner/repo.git")
-        assert github_repo_url(tmp_path) == "https://github.com/owner/repo"
+        assert repo_web_url(tmp_path) == "https://github.com/owner/repo"
 
     def test_ssh_protocol_remote(self, tmp_path: Path):
         _make_git_repo(tmp_path, "ssh://git@github.com/owner/repo.git")
-        assert github_repo_url(tmp_path) == "https://github.com/owner/repo"
+        assert repo_web_url(tmp_path) == "https://github.com/owner/repo"
 
-    def test_non_github_host_returns_none(self, tmp_path: Path):
+    def test_gitlab_scp_remote(self, tmp_path: Path):
+        """Host-agnostic since Phase 5 — a GitLab remote resolves too."""
         _make_git_repo(tmp_path, "git@gitlab.com:owner/repo.git")
-        assert github_repo_url(tmp_path) is None
+        assert repo_web_url(tmp_path) == "https://gitlab.com/owner/repo"
+
+    def test_self_hosted_gitlab_subgroup_https_remote(self, tmp_path: Path):
+        _make_git_repo(
+            tmp_path, "https://gitlab.example.com/grp/sub/repo.git"
+        )
+        assert repo_web_url(tmp_path) == "https://gitlab.example.com/grp/sub/repo"
 
     def test_no_origin_remote_returns_none(self, tmp_path: Path):
         _make_git_repo(tmp_path, None)
-        assert github_repo_url(tmp_path) is None
+        assert repo_web_url(tmp_path) is None
 
     def test_no_git_dir_returns_none(self, tmp_path: Path):
-        assert github_repo_url(tmp_path) is None
+        assert repo_web_url(tmp_path) is None
+
+    def test_local_path_remote_returns_none(self, tmp_path: Path):
+        """A filesystem remote has no browsable web page."""
+        _make_git_repo(tmp_path, "E:/backups/repo.git")
+        assert repo_web_url(tmp_path) is None
 
     def test_tolerates_duplicate_keys(self, tmp_path: Path):
         """Git config allows a key to repeat within a section (multivar);
@@ -112,4 +129,27 @@ class TestGithubRepoUrl:
             "\turl = https://github.com/owner/repo.git\n",
             encoding="utf-8",
         )
-        assert github_repo_url(tmp_path) == "https://github.com/owner/repo"
+        assert repo_web_url(tmp_path) == "https://github.com/owner/repo"
+
+
+class TestRepoIssuesUrl:
+    def test_github_host_keeps_plain_issues_path(self):
+        assert (
+            repo_issues_url("https://github.com/owner/repo")
+            == "https://github.com/owner/repo/issues"
+        )
+
+    def test_gitlab_host_gets_dash_namespace_path(self):
+        assert (
+            repo_issues_url("https://gitlab.com/grp/sub/repo")
+            == "https://gitlab.com/grp/sub/repo/-/issues"
+        )
+
+    def test_self_hosted_host_treated_as_gitlab(self):
+        assert (
+            repo_issues_url("https://gitlab.example.com/grp/repo")
+            == "https://gitlab.example.com/grp/repo/-/issues"
+        )
+
+    def test_none_passthrough(self):
+        assert repo_issues_url(None) is None

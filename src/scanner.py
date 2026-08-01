@@ -30,6 +30,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from urllib.parse import urlparse
 
 import yaml
 
@@ -282,45 +283,46 @@ def scan_skills(team_os_dir: Path) -> List[Skill]:
     return results
 
 
-# ----------------------------------------------------------- github repo
+# -------------------------------------------------------------- repo link
 
 
-def _normalise_github_url(url: str) -> Optional[str]:
-    """Turn a git remote URL into a browsable GitHub repo URL, or ``None``.
+def _normalise_remote_url(url: str) -> Optional[str]:
+    """Turn a git remote URL into a browsable https web URL, or ``None``.
 
-    Handles the three common remote forms — SCP-style SSH
-    (``git@github.com:owner/repo.git``), HTTPS
-    (``https://github.com/owner/repo.git``), and the explicit
-    ``ssh://git@github.com/owner/repo`` form. Any non-GitHub host yields
-    ``None``. A trailing ``.git`` and surrounding slashes are stripped.
+    Host-agnostic (Phase 5 — the fork's Board reads GitLab, projects may sit
+    on github.com, gitlab.com, or a self-hosted GitLab): handles the three
+    common remote forms — SCP-style SSH (``git@host:path.git``), HTTPS
+    (``https://host/path.git``), and the explicit ``ssh://git@host/path``
+    form — as ``https://<host>/<path>``. A trailing ``.git`` and
+    surrounding slashes are stripped.
     """
-    scp = re.match(r"git@github\.com:(.+)", url, re.IGNORECASE)
+    scp = re.match(r"[^@/]+@([^:/\s]+):(.+)", url)
     if scp:
-        path = scp.group(1)
+        host, path = scp.group(1), scp.group(2)
     else:
         proto = re.match(
-            r"(?:https?|ssh|git)://(?:[^@/]+@)?github\.com/(.+)",
+            r"(?:https?|ssh|git)://(?:[^@/]+@)?([^:/\s]+)(?::\d+)?/(.+)",
             url,
             re.IGNORECASE,
         )
         if not proto:
             return None
-        path = proto.group(1)
+        host, path = proto.group(1), proto.group(2)
 
     path = path.strip("/")
     if path.lower().endswith(".git"):
         path = path[:-4]
     path = path.strip("/")
-    return f"https://github.com/{path}" if path else None
+    return f"https://{host}/{path}" if host and path else None
 
 
-def github_repo_url(project_dir: Path) -> Optional[str]:
-    """Resolve the GitHub repo URL for a project from its ``origin`` remote.
+def repo_web_url(project_dir: Path) -> Optional[str]:
+    """Resolve the browsable repo URL for a project from its ``origin`` remote.
 
     Reads ``<project_dir>/.git/config`` directly — no ``git`` subprocess
     — and normalises the ``origin`` remote URL via
-    :func:`_normalise_github_url`. Returns ``None`` when the folder has
-    no ``.git/config``, no ``origin`` remote, or a non-GitHub remote.
+    :func:`_normalise_remote_url`. Returns ``None`` when the folder has
+    no ``.git/config``, no ``origin`` remote, or an unparseable remote.
     """
     config_path = project_dir / ".git" / "config"
     if not config_path.is_file():
@@ -340,7 +342,22 @@ def github_repo_url(project_dir: Path) -> Optional[str]:
     raw = parser.get('remote "origin"', "url", fallback=None)
     if not raw:
         return None
-    return _normalise_github_url(raw.strip())
+    return _normalise_remote_url(raw.strip())
+
+
+def repo_issues_url(web_url: Optional[str]) -> Optional[str]:
+    """The repo's issues page for a :func:`repo_web_url` result.
+
+    Server-side host check (Phase 5): GitHub keeps the plain ``/issues``
+    path; every other host is assumed GitLab-shaped and gets the
+    ``/-/issues`` dash-namespace path. The client uses the result verbatim.
+    """
+    if not web_url:
+        return None
+    host = urlparse(web_url).hostname or ""
+    if host.lower() == "github.com":
+        return f"{web_url}/issues"
+    return f"{web_url}/-/issues"
 
 
 # ------------------------------------------------------------- git status
@@ -433,7 +450,7 @@ def _default_branch(project_dir: Path) -> Optional[str]:
 def git_status(project_dir: Path) -> GitStatus:
     """Branch + clean/dirty for one project directory.
 
-    Unlike :func:`github_repo_url` (a plain ``.git/config`` read), this
+    Unlike :func:`repo_web_url` (a plain ``.git/config`` read), this
     shells out to ``git`` — ``status --porcelain=v2 --branch`` for the
     current branch and dirty flag in one call, then a default-branch
     resolve. That subprocess cost is why the Coding tab runs this only

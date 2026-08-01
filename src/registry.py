@@ -35,8 +35,9 @@ from .scanner import (
     KIND_STREAMLIT,
     VALID_KINDS,
     app_id_from_path,
-    github_repo_url,
     pretty_folder_name,
+    repo_issues_url,
+    repo_web_url,
     scan_app_bats,
     scan_project_dirs,
     tunnel_url_for,
@@ -56,6 +57,10 @@ class AppEntry:
     bat_path: Optional[str] = None
     project_dir: Optional[str] = None
     repo_url: Optional[str] = None
+    # Precomputed issues-page URL for coding rows (Phase 5): the server owns
+    # the host check (GitHub `/issues` vs GitLab `/-/issues`), the client
+    # uses it verbatim. Never persisted — coding rows are computed live.
+    repo_issues_url: Optional[str] = None
     added_at: str = ""
     # Registered Trays panel (issue #456 part 2/2) — whether the tray boots
     # this ``kind == "tray"`` row automatically. Meaningless on every other
@@ -77,6 +82,8 @@ class AppEntry:
             payload["project_dir"] = self.project_dir
         if self.repo_url is not None:
             payload["repo_url"] = self.repo_url
+        if self.repo_issues_url is not None:
+            payload["repo_issues_url"] = self.repo_issues_url
         return payload
 
 
@@ -142,7 +149,8 @@ def decorate_for_api(entry: AppEntry) -> Dict:
     For ``tunnel`` rows, attaches the current public URL read from
     ``<bat.parent>/webapp/last_tunnel_url.txt``. Returns the API shape:
 
-        {id, name, kind, bat_path?, project_dir?, repo_url?, added_at, tunnel_url?}
+        {id, name, kind, bat_path?, project_dir?, repo_url?,
+         repo_issues_url?, added_at, tunnel_url?}
     """
     payload = entry.to_dict()
     if entry.kind == "tunnel" and entry.bat_path:
@@ -162,16 +170,20 @@ def live_coding_entries(
     ``projects_dir`` that survives the ignore list (see
     :func:`src.scanner.scan_project_dirs`) becomes a launchable row.
     """
-    return [
-        AppEntry(
-            id=project.id,
-            name=project.name,
-            kind=KIND_CODING,
-            project_dir=str(project.project_dir),
-            repo_url=github_repo_url(project.project_dir),
+    entries: List[AppEntry] = []
+    for project in scan_project_dirs(projects_dir, ignore):
+        web_url = repo_web_url(project.project_dir)
+        entries.append(
+            AppEntry(
+                id=project.id,
+                name=project.name,
+                kind=KIND_CODING,
+                project_dir=str(project.project_dir),
+                repo_url=web_url,
+                repo_issues_url=repo_issues_url(web_url),
+            )
         )
-        for project in scan_project_dirs(projects_dir, ignore)
-    ]
+    return entries
 
 
 # ----------------------------------------------------------- scan + diff

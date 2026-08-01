@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 def _safe_list_sessions(port: int) -> List[Dict[str, Any]]:
     """Live sessions, or [] when the session-host is down — the board must
-    keep rendering GitHub + jobs cards regardless (#164 degradation)."""
+    keep rendering the GitLab cards regardless (#164 degradation)."""
     try:
         return session_client.list_sessions(port)
     except session_client.SessionHostError as exc:

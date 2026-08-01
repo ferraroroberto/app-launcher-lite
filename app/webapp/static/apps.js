@@ -42,9 +42,11 @@ export function renderApps() {
 // up by default and needs no config migration.
 //
 // `github` is a pseudo-agent id: the repo-issues button is hideable the same
-// way, without inventing a second config key for one button.
+// way, without inventing a second config key for one button. The id (and the
+// icon asset it names) predates the GitLab move — kept as-is for config
+// compatibility; the visible label/tooltip say "Repository issues".
 const GITHUB_BUTTON_ID = 'github';
-const GITHUB_BUTTON_LABEL = 'GitHub issues';
+const GITHUB_BUTTON_LABEL = 'Repository issues';
 
 function hiddenButtons() {
   const cfg = state.config || {};
@@ -189,10 +191,11 @@ function renderCodingList(host, items) {
       actions.appendChild(btn);
     });
 
-    // GitHub repo icon — opens the repo's open-issues list (sorted by last
-    // updated, excluding audit-meta ledger/metadata issues — #341) in a new
-    // browser tab. Spawns no process and creates no session. Disabled with a
-    // hover hint when the project has no GitHub remote (a.repo_url is unset).
+    // Repo icon — opens the repo's issues page in a new browser tab. The
+    // URL is precomputed server-side (a.repo_issues_url — GitHub `/issues`
+    // vs GitLab `/-/issues`, registry.py owns the host check) and used
+    // verbatim here. Spawns no process and creates no session. Disabled
+    // with a hover hint when the project has no parseable git remote.
     // Hideable under the same pseudo-id as the agents (issue #666).
     if (!hidden.has(GITHUB_BUTTON_ID)) {
       const ghBtn = document.createElement('button');
@@ -203,17 +206,16 @@ function renderCodingList(host, items) {
       ghIcon.src = iconUrl('github');
       ghIcon.alt = 'GitHub';
       ghBtn.appendChild(ghIcon);
-      if (a.repo_url) {
-        ghBtn.title = 'Open GitHub issues';
-        ghBtn.setAttribute('aria-label', 'Open GitHub issues');
+      if (a.repo_issues_url) {
+        ghBtn.title = 'Repository issues';
+        ghBtn.setAttribute('aria-label', 'Repository issues');
         ghBtn.addEventListener('click', function () {
-          const issuesUrl = a.repo_url + '/issues?q=is%3Aissue%20state%3Aopen%20sort%3Aupdated-desc%20-label%3Aaudit-meta';
-          window.open(issuesUrl, '_blank', 'noopener,noreferrer');
+          window.open(a.repo_issues_url, '_blank', 'noopener,noreferrer');
         });
       } else {
         ghBtn.disabled = true;
-        ghBtn.title = 'No GitHub remote';
-        ghBtn.setAttribute('aria-label', 'No GitHub remote');
+        ghBtn.title = 'No git remote';
+        ghBtn.setAttribute('aria-label', 'No git remote');
       }
       actions.appendChild(ghBtn);
     }

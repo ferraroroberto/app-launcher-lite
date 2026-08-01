@@ -80,6 +80,10 @@ function wireSettings() {
       apps_scan_root: els.appsScanRoot.value.trim(),
       team_os_dir: els.teamOsDir.value.trim(),
     };
+    // Board GitLab source (Phase 5) — patch only when the fields exist, so
+    // a markup regression can never silently wipe a stored value with ''.
+    if (els.gitlabGroup) patch.gitlab_group = els.gitlabGroup.value.trim();
+    if (els.gitlabHost) patch.gitlab_host = els.gitlabHost.value.trim();
     if (els.terminalHistoryLines && els.terminalHistoryLines.value !== '') {
       const lines = parseInt(els.terminalHistoryLines.value, 10);
       if (Number.isFinite(lines)) patch.terminal_history_lines = lines;
