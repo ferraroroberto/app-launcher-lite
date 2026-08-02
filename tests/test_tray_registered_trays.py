@@ -29,8 +29,8 @@ class TestFleetTomlPort:
         assert _fleet_toml_port(tmp_path) == 8447
 
     def test_leading_colon_string_port(self, tmp_path: Path):
-        _write_fleet_toml(tmp_path, 'port = ":8445"')
-        assert _fleet_toml_port(tmp_path) == 8445
+        _write_fleet_toml(tmp_path, 'port = ":8455"')
+        assert _fleet_toml_port(tmp_path) == 8455
 
     def test_missing_file_returns_none(self, tmp_path: Path):
         assert _fleet_toml_port(tmp_path) is None

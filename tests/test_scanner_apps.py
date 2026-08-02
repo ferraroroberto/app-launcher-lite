@@ -24,7 +24,7 @@ class TestClassifyBat:
     def test_tray(self, tmp_path: Path):
         bat = _write_bat(
             tmp_path / "tray.bat",
-            'set "TRAY_PS=%USERPROFILE%/.claude/tray/tray_lifecycle.ps1"',
+            'set "TRAY_PS=%~dp0scripts\\tray_lifecycle.ps1"',
         )
         assert classify_bat(bat) == KIND_TRAY
 

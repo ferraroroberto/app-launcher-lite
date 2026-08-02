@@ -22,8 +22,8 @@ a timestamped breadcrumb, redirects ``tray.bat``'s own output, and logs
 its exit code to ``webapp\\startup.log`` (gitignored via ``*.log``) on
 every login attempt, so a future failure is diagnosable from that log
 alone. It also checks the one hard precondition that makes ``tray.bat``
-``exit /b 1`` — the shared ``tray_lifecycle.ps1`` helper being absent
-(a machine-config gap, not something a retry could fix) — and records it.
+``exit /b 1`` — the repo-local ``scripts\\tray_lifecycle.ps1`` helper being
+absent (a broken checkout, not something a retry could fix) — and records it.
 No network/Tailscale dependency exists on this path: the Startup wrapper
 calls ``tray.bat`` *without* ``--restart``, and the lifecycle helper's
 plain-``launch`` action only detects local processes and starts a local
@@ -89,21 +89,21 @@ def _wrapper_bat_content(tray_bat: Path) -> str:
     launch) is safe. The breadcrumb + redirected ``tray.bat`` output + logged
     exit code exist because a login-time failure was otherwise silent (issue
     #582). The precondition check mirrors the one hard-fail in ``tray.bat``
-    (missing shared ``tray_lifecycle.ps1`` → ``exit /b 1``) so that
-    machine-config gap is named in the log rather than showing up as a bare
-    non-zero exit code.
+    (missing repo-local ``scripts\\tray_lifecycle.ps1`` → ``exit /b 1``) so
+    that broken-checkout gap is named in the log rather than showing up as a
+    bare non-zero exit code.
     """
     repo_root = tray_bat.parent
     log = _startup_log_path(repo_root)
-    helper = r"%USERPROFILE%\.claude\tray\tray_lifecycle.ps1"
+    helper = str(repo_root / "scripts" / "tray_lifecycle.ps1")
     return (
         "@echo off\r\n"
         f'cd /d "{repo_root}"\r\n'
         f'>>"{log}" echo [%date% %time%] autostart wrapper fired (cwd "%CD%")\r\n'
         f'if not exist "{helper}" '
         f'>>"{log}" echo [%date% %time%] WARNING precondition missing: '
-        f'shared tray helper "{helper}" not found - tray.bat will exit 1 '
-        f"(install fleet-config and run its install.ps1)\r\n"
+        f'tray helper "{helper}" not found - tray.bat will exit 1 '
+        f"(restore scripts\\tray_lifecycle.ps1 from this repo's git history)\r\n"
         f'call "{tray_bat}" >>"{log}" 2>&1\r\n'
         f'>>"{log}" echo [%date% %time%] tray.bat returned errorlevel %ERRORLEVEL%\r\n'
     )

@@ -186,7 +186,7 @@ def terminal_reachability(request: Request) -> Dict[str, Any]:
             "reason": (
                 "The live terminal is Tailscale-only — it is blocked on the "
                 "public Cloudflare tunnel by design. Open the launcher over "
-                "your Tailscale URL (https://<pc>.<tailnet>.ts.net:8445) to "
+                "your Tailscale URL (https://<pc>.<tailnet>.ts.net:8455) to "
                 "use it."
             ),
         }

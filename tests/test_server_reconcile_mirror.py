@@ -6,7 +6,7 @@ mirror windows no live session backs. The sweep is **machine-global**
 e2e / verify-before-ship gate's autoboot instance, pointed at an *empty*
 disposable session-host — would compute an empty live list and ``WM_CLOSE``
 every real ``app-launcher-mirror-*`` window on the desktop, killing the user's
-live session mirrors while the sessions survive headless on the real ``:8446``.
+live session mirrors while the sessions survive headless on the real ``:8456``.
 
 The fix: a disposable instance is identified by the
 ``LAUNCHER_SESSION_HOST_PORT`` override (set *only* by autoboot, never in
@@ -24,7 +24,7 @@ from app.webapp import server
 from src.webapp_config import SESSION_HOST_PORT_ENV
 
 
-def _app(session_host_port: int = 8446) -> SimpleNamespace:
+def _app(session_host_port: int = 8456) -> SimpleNamespace:
     return SimpleNamespace(
         state=SimpleNamespace(
             webapp_config=SimpleNamespace(session_host_port=session_host_port)
@@ -60,7 +60,7 @@ async def test_disposable_instance_skips_global_sweep(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_canonical_instance_reconciles_against_live_sids(monkeypatch):
-    """Without the override (the real :8445 webapp), the sweep still runs and is
+    """Without the override (the real :8455 webapp), the sweep still runs and is
     handed exactly the live session ids — the legitimate #199 cleanup."""
     monkeypatch.delenv(SESSION_HOST_PORT_ENV, raising=False)
 

@@ -22,9 +22,8 @@ REM  sister-app trays (PhotoOCR, VoiceTranscriber, local-llm-hub, ...) and any
 REM  other unrelated python processes are untouched.
 REM
 REM  The full detect -> kill -> reclaim -> start -> verify lifecycle lives in
-REM  the ONE shared, machine-local tray_lifecycle.ps1 owned by fleet-config
-REM  (project-scaffolding#153) -- exposed at %USERPROFILE%\.claude\tray\ by
-REM  fleet-config's install.ps1 junction, shelled to with -File, NOT in
+REM  the repo-local vendored scripts\tray_lifecycle.ps1 (lite fork: zero
+REM  external dependencies), shelled to with -File, NOT in
 REM  cmd-side `for /f` output capture or inline `powershell -Command "..."`.
 REM  Both cmd shapes have failed under non-interactive nested callers (Git Bash
 REM  -> `cmd /c "tray.bat --restart"`, or a finisher skill's Bash tool): detect
@@ -47,11 +46,11 @@ REM
 REM  Mutex-shared ports (a port another app may legitimately own) must NOT go in
 REM  the OWNED_PORTS reclaim list -- reclaiming one would kill the sibling.
 REM
-REM  IMPORTANT: the :8446 session-host is linked-but-independent -- it hosts the
+REM  IMPORTANT: the :8456 session-host is linked-but-independent -- it hosts the
 REM  user's live Coding / PTY sessions, is spawned DETACHED so a `taskkill /T`
 REM  subtree kill cannot reach it, and is re-adopted by the fresh tray on start.
 REM  It is deliberately NOT in OWNED_PORTS below (reclaiming it would kill those
-REM  sessions). Only the webapp port :8445, which this tray definitively owns
+REM  sessions). Only the webapp port :8455, which this tray definitively owns
 REM  and cycles, is reclaimed.
 REM ============================================================================
 
@@ -83,19 +82,17 @@ REM === ADAPT (3/4): in the -TrayMatch below, replace with a regex matching
 REM     THIS app's tray invocation, e.g. launcher\.py\s+tray  or  -m\s+tray
 set "PS=C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 set "TRAY_VENV=%SCRIPT_DIR%.venv"
-REM  ONE shared, machine-local copy owned by fleet-config (project-scaffolding#153)
-REM  -- junctioned by fleet-config's install.ps1, never vendored per-app.
-set "TRAY_PS=%USERPROFILE%/.claude/tray/tray_lifecycle.ps1"
+REM  Repo-local vendored copy (lite fork) -- see its provenance header.
+set "TRAY_PS=%~dp0scripts\tray_lifecycle.ps1"
 if not exist "%TRAY_PS%" (
-    echo ERROR: missing shared tray helper "%TRAY_PS%"
-    echo        Fix: install fleet-config and run its install.ps1, then retry.
-    echo        See ferraroroberto/fleet-config's README for details.
+    echo ERROR: missing tray helper "%TRAY_PS%"
+    echo        Fix: restore scripts\tray_lifecycle.ps1 from this repo's git history.
     exit /b 1
 )
 
 REM === ADAPT (4/4): this tray's exclusively-owned ports as a comma list.
-REM     Exclude any mutex-shared port -- see the :8446 note above. ===
-set "OWNED_PORTS=8445"
+REM     Exclude any mutex-shared port -- see the :8456 note above. ===
+set "OWNED_PORTS=8455"
 REM Optional override. Leave blank to verify http://127.0.0.1:<first-owned-port>/api/version.
 set "VERSION_URL="
 

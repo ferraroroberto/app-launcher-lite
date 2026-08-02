@@ -26,7 +26,7 @@ The ES-module graph contains a cycle (`sessions.js ↔ terminal.js`), so per-fil
 The day-to-day loop, for anyone editing static files later:
 
 1. Edit any `.js` / `.css` under `app/webapp/static/` (not `vendor/`).
-2. Restart the `:8445` webapp. The fleet hash is computed **once at startup** — not per request — so an unrestarted process keeps serving the old hash even though the files on disk changed.
+2. Restart the `:8455` webapp. The fleet hash is computed **once at startup** — not per request — so an unrestarted process keeps serving the old hash even though the files on disk changed.
 3. The phone re-fetches `index.html` (it is served `no-cache, must-revalidate`, so it is never stale). The server stamps the new `?v=<hash>` onto every asset URL **at request time** — the query string is not written to the file on disk.
 4. Every asset URL the phone resolves is one it has never cached, so it downloads the new bytes. Unchanged files keep their previous URL and stay served from the phone's cache.
 5. Confirm the build that is actually live with `GET /api/version` — `asset_hash` should have changed; `git_sha` should match `HEAD`.

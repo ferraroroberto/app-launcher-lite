@@ -53,7 +53,7 @@ from src.session_host import _EOF, SessionManager
 logger = logging.getLogger(__name__)
 
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8446
+DEFAULT_PORT = 8456
 
 # Background repaint-nudge tasks, kept referenced so the event loop doesn't
 # GC them before they run (issue #128).

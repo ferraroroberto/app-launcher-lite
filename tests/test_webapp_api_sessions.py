@@ -130,7 +130,7 @@ class TestStopSession:
         # Exact arg shape — session-host port from default config + sid +
         # mode — mirrors session_client.stop signature (issue #253 dropped
         # the close_window axis; every stop now closes).
-        sess.stop.assert_called_once_with(8446, "abc-123", "kill")
+        sess.stop.assert_called_once_with(8456, "abc-123", "kill")
 
     def test_quit_mode_forwarded_to_session_client(self, webapp_client):
         client, _, overrides = webapp_client
@@ -141,7 +141,7 @@ class TestStopSession:
             json={"mode": "quit"},
         )
         assert resp.status_code == 200
-        sess.stop.assert_called_once_with(8446, "abc-123", "quit")
+        sess.stop.assert_called_once_with(8456, "abc-123", "quit")
 
     def test_default_mode_is_quit(self, webapp_client):
         """Empty body → mode falls back to quit per the endpoint contract."""
@@ -152,7 +152,7 @@ class TestStopSession:
             "/api/coding/sessions/abc-123/stop", json={}
         )
         assert resp.status_code == 200
-        sess.stop.assert_called_once_with(8446, "abc-123", "quit")
+        sess.stop.assert_called_once_with(8456, "abc-123", "quit")
 
     def test_session_host_error_maps_to_http_status(self, webapp_client):
         client, _, overrides = webapp_client
@@ -201,7 +201,7 @@ class TestStopSessionMirrorClose:
         assert resp.status_code == 200
         # Even a plain graceful quit closes the mirror window now (#253).
         mock_close.assert_called_once_with("abc-123")
-        sess.stop.assert_called_once_with(8446, "abc-123", "quit")
+        sess.stop.assert_called_once_with(8456, "abc-123", "quit")
 
     def test_mirror_close_no_stashed_hwnd_still_forwards(
         self, webapp_client, monkeypatch
@@ -227,7 +227,7 @@ class TestStopSessionMirrorClose:
 
         assert resp.status_code == 200
         mock_close.assert_called_once_with("abc-123")
-        sess.stop.assert_called_once_with(8446, "abc-123", "kill")
+        sess.stop.assert_called_once_with(8456, "abc-123", "kill")
 
     def test_mirror_close_failure_does_not_break_stop(
         self, webapp_client, monkeypatch
@@ -249,7 +249,7 @@ class TestStopSessionMirrorClose:
         )
 
         assert resp.status_code == 200
-        sess.stop.assert_called_once_with(8446, "abc-123", "kill")
+        sess.stop.assert_called_once_with(8456, "abc-123", "kill")
 
 
 class TestRenameSession:
@@ -267,7 +267,7 @@ class TestRenameSession:
         )
         assert resp.status_code == 200
         assert resp.json() == {"session_id": "abc-123", "manual_title": "custom"}
-        sess.rename.assert_called_once_with(8446, "abc-123", "custom")
+        sess.rename.assert_called_once_with(8456, "abc-123", "custom")
 
     def test_empty_title_clears_override(self, webapp_client):
         client, _, overrides = webapp_client
@@ -278,7 +278,7 @@ class TestRenameSession:
             json={"title": ""},
         )
         assert resp.status_code == 200
-        sess.rename.assert_called_once_with(8446, "abc-123", "")
+        sess.rename.assert_called_once_with(8456, "abc-123", "")
 
     def test_missing_body_defaults_to_empty_title(self, webapp_client):
         client, _, overrides = webapp_client
@@ -286,7 +286,7 @@ class TestRenameSession:
         sess.rename.return_value = {"session_id": "abc-123", "manual_title": ""}
         resp = client.post("/api/coding/sessions/abc-123/rename", json={})
         assert resp.status_code == 200
-        sess.rename.assert_called_once_with(8446, "abc-123", "")
+        sess.rename.assert_called_once_with(8456, "abc-123", "")
 
     def test_session_host_error_maps_to_http_status(self, webapp_client):
         client, _, overrides = webapp_client

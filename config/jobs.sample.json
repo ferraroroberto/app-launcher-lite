@@ -78,7 +78,7 @@
       "name": "Launcher health check (sample, http-check kind)",
       "kind": "http-check",
       "kind_config": {
-        "url": "https://127.0.0.1:8445/api/version",
+        "url": "https://127.0.0.1:8455/api/version",
         "method": "GET",
         "expect_status": 200,
         "timeout": 10

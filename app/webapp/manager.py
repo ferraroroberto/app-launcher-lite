@@ -42,7 +42,7 @@ class WebappManagerConfig:
 
     enabled: bool = True
     host: str = "0.0.0.0"
-    port: int = 8445
+    port: int = 8455
     startup_timeout_seconds: float = 15.0
     request_timeout_seconds: float = 1.0
     poll_interval_seconds: float = 0.4
@@ -63,7 +63,7 @@ def load_config(raw: Optional[Dict[str, Any]] = None) -> WebappManagerConfig:
     return WebappManagerConfig(
         enabled=bool(raw.get("enabled", True)),
         host=str(raw.get("host", "0.0.0.0")),
-        port=int(raw.get("port", 8445)),
+        port=int(raw.get("port", 8455)),
         startup_timeout_seconds=float(raw.get("startup_timeout_seconds", 15.0)),
         request_timeout_seconds=float(raw.get("request_timeout_seconds", 1.0)),
         poll_interval_seconds=float(raw.get("poll_interval_seconds", 0.4)),

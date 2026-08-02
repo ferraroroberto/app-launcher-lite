@@ -38,7 +38,7 @@ session-host) — not a DOM-assertion-only test run.
 
 If you want to see a change against your actual running instance instead of
 a disposable one: `tray.bat --restart` (see the repo CLAUDE.md's restart
-contract), then hit `https://127.0.0.1:8445` directly — loopback bypasses
+contract), then hit `https://127.0.0.1:8455` directly — loopback bypasses
 the bearer-token gate. Terminal-grade surfaces (Board drawer reply/dispatch,
 live PTY) additionally need a WebAuthn passkey unless `webauthn_rp_id` is
 unset in `config/webapp_config.json`, so the e2e-fixture path above (which

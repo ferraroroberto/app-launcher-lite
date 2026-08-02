@@ -53,10 +53,10 @@ def test_wrapper_bat_has_breadcrumb_and_output_redirection(tmp_path: Path):
     assert f'call "{tray_bat}" >>"{log}" 2>&1' in content
     # The exit code is recorded so a silent death becomes a logged non-zero.
     assert "tray.bat returned errorlevel %ERRORLEVEL%" in content
-    # The one hard precondition (missing shared helper) is named, not left as
-    # a bare non-zero exit.
+    # The one hard precondition (missing repo-local helper) is named, not left
+    # as a bare non-zero exit.
     assert "precondition missing" in content
-    assert r"%USERPROFILE%\.claude\tray\tray_lifecycle.ps1" in content
+    assert str(tray_bat.parent / "scripts" / "tray_lifecycle.ps1") in content
 
 
 def test_enable_verifies_write_landed(tmp_path: Path, monkeypatch):

@@ -143,7 +143,7 @@ class TestVersion:
         self, webapp_client, monkeypatch
     ):
         """#635: sha differs but the diff only touched paths outside the
-        session-host's declaration — stale for the repo, not for :8446."""
+        session-host's declaration — stale for the repo, not for :8456."""
         client, app, overrides = webapp_client
         from app.webapp.routers import misc as misc_router
         # #655: pin resolve_deployed_sha instead of relying on the ambient

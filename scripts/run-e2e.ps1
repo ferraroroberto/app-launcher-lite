@@ -1,4 +1,4 @@
-# Run the Playwright smoke suite against a live tray on https://127.0.0.1:8445.
+# Run the Playwright smoke suite against a live tray on https://127.0.0.1:8455.
 # Tray must be started separately (tray.bat); this script does not boot it.
 #
 # Usage:

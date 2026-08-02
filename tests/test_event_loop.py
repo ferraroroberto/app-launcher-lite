@@ -50,7 +50,7 @@ def test_selector_loop_factory_is_zero_arg_and_returns_an_instance():
 
 
 def test_manager_build_command_passes_loop_factory():
-    mgr = WebappManager(WebappManagerConfig(port=18445))
+    mgr = WebappManager(WebappManagerConfig(port=18455))
     cmd = mgr._build_command()
     assert "--loop" in cmd
     assert cmd[cmd.index("--loop") + 1] == LOOP_FACTORY
@@ -72,7 +72,7 @@ def test_webapp_cmd_passes_loop_factory(monkeypatch):
     )
     monkeypatch.setattr(
         "src.webapp_config.load_webapp_config",
-        lambda: type("Cfg", (), {"host": "127.0.0.1", "port": 18445})(),
+        lambda: type("Cfg", (), {"host": "127.0.0.1", "port": 18455})(),
     )
 
     WebappCommand(config=None).execute(argparse.Namespace(host=None, port=None))
