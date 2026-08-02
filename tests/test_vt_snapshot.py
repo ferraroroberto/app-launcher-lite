@@ -202,3 +202,84 @@ def test_render_is_thread_safe_lock_scoped():
     vt.feed("partial")
     # Render must not raise or hang even though pyte's screen is mid-line.
     assert isinstance(vt.render(), str)
+
+
+# --- Private-CSI resilience (issue #2) -------------------------------------
+# Copilot CLI 1.0.77 opens a session with a burst of private CSI sequences,
+# captured verbatim from a real ConPTY spawn. `ESC[?996n` is a private DSR
+# (light/dark colour-scheme query). pyte dispatches every private CSI as
+# `handler(*params, private=True)`, but its own `report_device_status` takes
+# no such keyword — so that one byte sequence raised TypeError straight out
+# of `Stream.feed`, killed the session-host's reader thread on the first
+# chunk, and left every Coding session connected, accepting input, and
+# permanently blank.
+_COPILOT_STARTUP_PRIVATE_CSI = (
+    "\x1b[?1049h\x1b[?1004h\x1b[?2004h\x1b[?1003h\x1b[?1006h"
+    "\x1b[?9001h\x1b[?25l\x1b[?996n\x1b[?u"
+)
+
+
+def test_feed_survives_private_dsr_and_still_renders():
+    """The exact Copilot 1.0.77 startup burst must not raise, and text on
+    either side of it must still reach the mirror."""
+    vt = VtSnapshot(10, 40)
+    vt.feed("before" + _COPILOT_STARTUP_PRIVATE_CSI + "after")
+    rendered = vt.render()
+    assert "before" in rendered
+    assert "after" in rendered, (
+        "text after the private DSR never reached the mirror — the parser "
+        "aborted the rest of the chunk instead of handling ESC[?996n"
+    )
+    assert vt.feed_errors == 0, (
+        "ESC[?996n should be handled outright by _MirrorScreen, not merely "
+        "swallowed by feed()'s catch-all guard"
+    )
+
+
+def test_private_dsr_alone_does_not_raise():
+    """Narrowest pin on the root cause: the single offending sequence."""
+    vt = VtSnapshot(5, 10)
+    vt.feed("\x1b[?996n")  # must not raise
+    assert vt.feed_errors == 0
+
+
+def test_feed_never_propagates_a_parser_failure():
+    """Structural guarantee: whatever pyte raises, the reader thread lives.
+
+    Simulates a future unknown sequence pyte chokes on by making the parser
+    itself raise, and pins that feed() swallows it, counts it, and keeps
+    accepting subsequent chunks.
+    """
+    vt = VtSnapshot(5, 20)
+
+    class _Boom:
+        def __init__(self):
+            self.calls = 0
+
+        def feed(self, chunk):
+            self.calls += 1
+            if self.calls == 1:
+                raise TypeError("simulated pyte handler failure")
+
+    vt._stream = _Boom()
+    vt.feed("doomed chunk")  # must not raise
+    assert vt.feed_errors == 1
+    vt.feed("later chunk")
+    assert vt.feed_errors == 1, "a healthy chunk must not be counted as failed"
+
+
+def test_only_the_private_dsr_form_is_swallowed(monkeypatch):
+    """A plain DSR keeps pyte's own behaviour rather than being blanket-ignored
+    — the override narrows exactly one case and delegates everything else."""
+    from src.vt_snapshot import _MirrorScreen
+
+    delegated = []
+    monkeypatch.setattr(
+        pyte.Screen, "report_device_status", lambda self, mode: delegated.append(mode)
+    )
+    screen = _MirrorScreen(10, 5, history=100)
+    screen.report_device_status(6)
+    screen.report_device_status(996, private=True)
+    assert delegated == [6], (
+        "standard DSR must delegate to pyte and the private one must not"
+    )
