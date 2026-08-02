@@ -109,7 +109,7 @@ export function estimateTermSize() {
 }
 
 // Desktop-vs-phone launch-size contract, shared by every PTY-launch call
-// site (Coding tab, Board issue-start/dispatch, Team OS recap/skill launch,
+// site (Coding tab, Board issue-start, Team OS recap/skill launch,
 // issue #374): a desktop browser gets the dedicated PC mirror window sized
 // to its own default, a phone carries its real terminal size so the PTY's
 // first frame is painted at the right width. Mutates `payload` in place —

@@ -1,17 +1,14 @@
-"""Board tab e2e (issues #300 / #301 / #302 / #164 / #399; 4 columns since Phase 5).
+"""Board tab e2e (issues #300 / #301 / #164 / #399; 4 columns since Phase 5).
 
 Browser-side coverage: the fifth tab renders the four single-purpose kanban
 columns from a route-mocked ``/api/board`` payload, the strip shows
 per-column counts (with the Your-turn attention highlight), the ↻ button
 POSTs the glab refresh, and the phone projection lays the columns out as a
 one-column-per-viewport carousel while desktop gets the four-column grid.
-The #302 dispatch bar POSTs {repo, goal, mode} and keeps its goal for rapid
-multi-dispatch. Hermetic — the
-board API is route-mocked like the Jobs / Team OS e2e tests.
+Hermetic — the board API is route-mocked like the Jobs / Team OS e2e tests.
 
-Server-side logic (cwd join, glab cache/degradation, the spawn-then-type
-dispatch endpoint) is covered by the in-process suite in
-tests/test_board.py + tests/test_board_dispatch.py.
+Server-side logic (cwd join, glab cache/degradation, issue-start) is covered
+by the in-process suite in tests/test_board.py + tests/test_board_drilldown.py.
 """
 
 from __future__ import annotations
@@ -483,11 +480,6 @@ def test_backlog_start_button_posts_issue_start(
 
     _open_board(authed_page, base_url)
     _switch_to_backlog(authed_page)
-    # The dispatch bar's model selector governs one-tap starts too (#505) —
-    # pick a non-default value so the POST provably carries the selection.
-    # Options are populated at wire time from the config-driven
-    # copilot_models list (the disposable webapp's defaults).
-    authed_page.locator("#boardDispatchModel").select_option("gpt-5.6-sol")
     start_btn = authed_page.locator(
         '.board-list[data-col="backlog"] .board-issue-btn'
     ).first
@@ -503,7 +495,9 @@ def test_backlog_start_button_posts_issue_start(
     assert body.get("repo") == "app-launcher"
     assert body.get("number") == 301
     assert body.get("mode") == "start"
-    assert body.get("model") == "gpt-5.6-sol"
+    # The board model select is gone (Phase 6): the client never sends a
+    # model — the server always launches with the persisted Coding model.
+    assert "model" not in body
 
 
 def test_backlog_issue_tile_is_flat_separator_row_with_icon_only_actions(
@@ -686,8 +680,8 @@ def test_board_deep_link_resolves_via_state_sid(authed_page: Page, base_url: str
 
 
 def _mock_apps_with_app_launcher(page: Page) -> None:
-    """state.apps with one coding entry, so the dispatch repo combobox
-    (and the #301 ▶/⚡ buttons) have a launchable repo."""
+    """state.apps with one coding entry, so the #301 ▶/⚡ buttons have a
+    launchable repo."""
     page.route(
         re.compile(r".*/api/apps$"),
         lambda route: route.fulfill(
@@ -699,144 +693,6 @@ def _mock_apps_with_app_launcher(page: Page) -> None:
             }]}),
         ),
     )
-
-
-def test_dispatch_bar_posts_repo_mode_goal_and_keeps_text(
-    authed_page: Page, base_url: str
-) -> None:
-    """#302: goal + repo + mode ride POST /api/board/dispatch; the goal text
-    survives the send (populated-but-clearable for rapid multi-dispatch)."""
-    _mock_apps_with_app_launcher(authed_page)
-    _mock_board(authed_page)
-
-    captured: dict = {}
-
-    def _capture_dispatch(route):
-        captured["method"] = route.request.method
-        captured["body"] = route.request.post_data_json
-        route.fulfill(
-            status=200, content_type="application/json",
-            body=_json.dumps({
-                "launched": "/issue-yolo ship the goal bar",
-                "repo": "app-launcher",
-                "session": {"session_id": "sD", "kind": "pty",
-                            "name": "app-launcher"},
-            }),
-        )
-
-    authed_page.route(re.compile(r".*/api/board/dispatch$"), _capture_dispatch)
-
-    _open_board(authed_page, base_url)
-    # The repo dropdown fills once boot's /api/apps fetch lands; the board
-    # render re-syncs it, so a full poll cycle is the worst case. It defaults
-    # to "All projects" (empty target), so the send needs an explicit pick.
-    expect(authed_page.locator("#boardDispatchRepoBtn")).to_be_visible(timeout=15_000)
-    authed_page.locator("#boardDispatchRepoBtn").click()
-    authed_page.locator('#boardDispatchRepoList li[data-repo="app-launcher"]').click()
-    expect(
-        authed_page.locator('#boardDispatchRepo')
-    ).to_have_value("app-launcher")
-    expect(authed_page.locator("#boardDispatchRepoBtn")).to_have_text("app-launcher")
-
-    authed_page.locator("#boardDispatchGoal").fill("ship the goal bar")
-    authed_page.locator("#boardDispatchMode").select_option("yolo")
-    # Model selector (#500): defaults to Default ('' — Copilot auto); pick a
-    # non-default value so the POST provably carries the selection, not a
-    # hardcoded default. Options come from the config-driven copilot_models.
-    expect(authed_page.locator("#boardDispatchModel")).to_have_value("")
-    authed_page.locator("#boardDispatchModel").select_option("gpt-5.6-terra")
-    authed_page.locator("#boardDispatchSend").click()
-    authed_page.wait_for_timeout(500)
-
-    assert captured.get("method") == "POST"
-    body = captured.get("body") or {}
-    assert body.get("repo") == "app-launcher"
-    assert body.get("goal") == "ship the goal bar"
-    assert body.get("mode") == "yolo"
-    assert body.get("model") == "gpt-5.6-terra"
-    # #374: a phone (non-desktop) dispatch carries the PTY spawn size so a
-    # streaming agent's first output is authored at the width the overlay
-    # will fit() to; a desktop client sends the mirror flag instead.
-    if body.get("desktop"):
-        assert "rows" not in body and "cols" not in body
-    else:
-        assert body.get("rows", 0) >= 10 and body.get("cols", 0) >= 20
-    # Populated-but-clearable: the goal stays after a successful send.
-    expect(authed_page.locator("#boardDispatchGoal")).to_have_value(
-        "ship the goal bar"
-    )
-    authed_page.locator("#boardDispatchClear").click()
-    expect(authed_page.locator("#boardDispatchGoal")).to_have_value("")
-
-
-def test_dispatch_repo_dropdown_is_tap_only_and_filters_board_columns(
-    authed_page: Page, base_url: str
-) -> None:
-    """#337: the project selector is a tap-to-select dropdown (no typing —
-    a <button> trigger, not a text field), defaults to "All projects" (every
-    card visible), and picking a specific project filters every kanban
-    column down to that project's cards."""
-    authed_page.route(
-        re.compile(r".*/api/apps$"),
-        lambda route: route.fulfill(
-            status=200, content_type="application/json",
-            body=_json.dumps({"scan_root": "", "apps": [
-                {"id": "cc-app-launcher", "kind": "coding",
-                 "name": "app-launcher", "project_dir": "E:/automation/app-launcher"},
-                {"id": "cc-voice", "kind": "coding",
-                 "name": "voice-transcriber", "project_dir": "E:/automation/voice-transcriber"},
-                {"id": "cc-team-os", "kind": "coding",
-                 "name": "team-os", "project_dir": "E:/automation/team-os"},
-                {"id": "cc-photo", "kind": "coding",
-                 "name": "photo-ocr", "project_dir": "E:/automation/photo-ocr"},
-            ]}),
-        ),
-    )
-    _mock_board(authed_page)
-    _open_board(authed_page, base_url)
-
-    repo_btn = authed_page.locator("#boardDispatchRepoBtn")
-    combo_list = authed_page.locator("#boardDispatchRepoList")
-
-    # No editable text field exists at all — it's a real <button>.
-    expect(authed_page.locator("#boardDispatchRepoInput")).to_have_count(0)
-    assert repo_btn.evaluate("el => el.tagName") == "BUTTON"
-
-    # Default: "All projects" — every _FAKE_BOARD card visible, unfiltered.
-    expect(repo_btn).to_have_text("All projects", timeout=15_000)
-    expect(authed_page.locator("#boardDispatchRepo")).to_have_value("")
-    expect(authed_page.locator("#boardColBacklog .board-count")).to_have_text("1")
-    expect(authed_page.locator("#boardColBot .board-count")).to_have_text("1")
-    expect(authed_page.locator("#boardColYours .board-count")).to_have_text("1")
-    expect(authed_page.locator("#boardColDone .board-count")).to_have_text("1")
-
-    repo_btn.click()
-    expect(combo_list).to_be_visible()
-    # Same /api/apps-population race noted elsewhere in this file: the list
-    # is rendered fresh on open from whatever _repoNames holds at that
-    # instant, and the board's 5 s poll is what re-renders it once apps
-    # land if that lagged the click — give it a full poll-cycle budget.
-    expect(combo_list.locator("li[data-repo]")).to_have_count(5, timeout=15_000)  # "All" + 4 projects
-
-    combo_list.locator('li[data-repo="app-launcher"]').click()
-    expect(combo_list).to_be_hidden()
-    expect(repo_btn).to_have_text("app-launcher")
-    expect(authed_page.locator("#boardDispatchRepo")).to_have_value("app-launcher")
-
-    # Filtered to app-launcher: backlog issue (repo=app-launcher) stays;
-    # Bot's turn (team-os session) and Done (voice-transcriber issue) empty
-    # out; Your turn drops the photo-ocr session (no match).
-    expect(authed_page.locator("#boardColBacklog .board-count")).to_have_text("1")
-    expect(authed_page.locator("#boardColBot .board-count")).to_have_text("0")
-    expect(authed_page.locator("#boardColYours .board-count")).to_have_text("0")
-    expect(authed_page.locator("#boardColDone .board-count")).to_have_text("0")
-
-    # Picking "All projects" again restores every column.
-    repo_btn.click()
-    combo_list.locator('li[data-repo=""]').click()
-    expect(repo_btn).to_have_text("All projects")
-    expect(authed_page.locator("#boardColYours .board-count")).to_have_text("1")
-    expect(authed_page.locator("#boardColDone .board-count")).to_have_text("1")
 
 
 def test_board_drawer_rename_first_icon_only_and_stop_kills_session(
@@ -1020,41 +876,6 @@ def test_board_drawer_survives_git_status_poll_mid_interaction(
 
     expect(drawer).to_be_visible()
     expect(rename).to_have_attribute("data-e2e-tag", "pre-poll")
-
-
-def test_dispatch_model_select_matches_sibling_button_shape_on_phone(
-    authed_page: Page, base_url: str
-) -> None:
-    """#496 (on-device photo feedback): on the phone the model <select> must
-    present exactly the sibling buttons' geometry — same height as the ✕
-    clear button and the shared 12px control radius — instead of iOS's own
-    native pill chrome. Phone projection only; desktop keeps the native
-    select."""
-    viewport = authed_page.viewport_size or {"width": 0}
-    if viewport["width"] >= 700:
-        pytest.skip("flattened select is coarse-pointer-only; desktop keeps native chrome")
-
-    _mock_board(authed_page)
-    _open_board(authed_page, base_url)
-
-    select = authed_page.locator("#boardDispatchModel")
-    clear = authed_page.locator("#boardDispatchClear")
-    expect(select).to_be_visible()
-    box_select = select.bounding_box()
-    box_clear = clear.bounding_box()
-    assert box_select and box_clear, "dispatch row not laid out"
-    assert abs(box_select["height"] - box_clear["height"]) <= 1, (
-        f"model select height {box_select['height']} != sibling button "
-        f"height {box_clear['height']}"
-    )
-    radius = select.evaluate("el => getComputedStyle(el).borderRadius")
-    assert radius == "12px", f"model select radius {radius!r} != 12px"
-    appearance = select.evaluate(
-        "el => getComputedStyle(el).webkitAppearance || getComputedStyle(el).appearance"
-    )
-    assert appearance == "none", (
-        f"native select chrome still painting on the phone: {appearance!r}"
-    )
 
 
 def test_board_columns_layout_matches_projection(

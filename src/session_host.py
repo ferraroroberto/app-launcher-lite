@@ -852,9 +852,9 @@ class PtySession:
 
     def to_api(self) -> Dict[str, object]:
         # output_chars: cumulative-ish output signal (the scrollback ring's
-        # length, so it saturates at _RING_MAX_CHARS). The board's dispatch
-        # readiness probe (#302) only needs "has the agent painted anything
-        # yet" — a monotonic counter would be overkill.
+        # length, so it saturates at _RING_MAX_CHARS). Callers only need
+        # "has the agent painted anything yet" — a monotonic counter would
+        # be overkill.
         with self._ring_lock:
             output_chars = len(self._ring)
         return {

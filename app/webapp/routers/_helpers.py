@@ -219,7 +219,7 @@ async def spawn_session_or_400(
     The shared *head* of every session-launch route, the counterpart to
     :func:`audit_session_start_and_maybe_mirror`'s tail: call sites
     across three routers — ``apps.py``'s Coding-tab remote + PTY launches,
-    ``board.py``'s issue-start and dispatch, ``team_os.py``'s
+    ``board.py``'s issue-start, ``team_os.py``'s
     skill launch — repeated this identical two-arm mapping verbatim, with
     only the spawn arguments differing.
 
@@ -257,7 +257,7 @@ async def audit_session_start_and_maybe_mirror(
 ) -> None:
     """Audit a freshly spawned PTY session, then mirror it to a PC terminal
     window if appropriate (issue #241) — the shared tail every PTY-launch
-    call site (Coding tab ``apps.py``, Board issue-start/dispatch
+    call site (Coding tab ``apps.py``, Board issue-start
     ``board.py``) needs right after ``spawn_agent_session`` (issue #334).
 
     Team OS (``routers/team_os.py``) already has its own

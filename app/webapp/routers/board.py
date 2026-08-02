@@ -1,4 +1,4 @@
-"""Board tab — the fleet kanban's data plane (issues #300, #301, #302 / #164 / #399).
+"""Board tab — the fleet kanban's data plane (issues #300, #301 / #164 / #399).
 
     GET  /api/board                       → the four computed columns (token-gated)
     POST /api/board/gitlab/refresh        → run the glab queries now (token-gated)
@@ -6,14 +6,11 @@
                                             (Tailscale + passkey — transcript text)
     POST /api/board/issues/start          → spawn /issue-start|yolo <N> in the
                                             issue's repo (Tailscale + passkey)
-    POST /api/board/dispatch              → speak/type a goal into a fresh
-                                            /issue-add|yolo session (Tailscale
-                                            + passkey)
 
 Split off a single-file god-router (issue #691, `/codebase-audit`), the way
-``jobs.py`` and ``sessions.py`` already were: the spawn-then-type mechanics
-(readiness, quiescence, framing, the per-launch model selector) live in
-:mod:`app.webapp.routers.board_spawn`.
+``jobs.py`` and ``sessions.py`` already were: the shared launch helpers
+(repo resolution, the Copilot install guard, the degradation-safe session
+list) live in :mod:`app.webapp.routers.board_spawn`.
 
 ``GET /api/board`` is the 5s poll target, so it does only cheap work: the live
 session list from the session-host plus two state-file reads (in worker
@@ -32,19 +29,6 @@ Issue-start is injection-safe by construction: the positional prompt is built
 **server-side** as ``/issue-<mode> <N>`` with ``mode`` allowlisted and ``N``
 int-validated, so the string that reaches the session-host's unquoted
 ``cmd /c`` line can never contain a metacharacter.
-
-Dispatch (#302) carries free text — the goal — so it can't use a positional
-prompt at all. Instead it **spawns-then-types**: the session starts with only
-the shared flags (no prompt), the endpoint polls until the agent has painted
-its first output (``output_chars`` in the session dict) and its boot output
-has gone quiet (the shared PTY-quiescence wait, #245/#549 — first paint alone
-is not "input ready" and typing into a still-booting agent can swallow the
-submitting CR, leaving the goal typed but never sent), then writes
-``/issue-<mode> <goal>`` through the PTY input path inside bracketed-paste
-framing with the submitting CR as its own second write (the #64/#166 framing
-the reply proxy uses). The goal therefore never touches the unquoted
-``cmd /c`` string. PTY-only: a remote session has no input path, and handing
-free text to its command line is the exact injection this design avoids.
 """
 
 from __future__ import annotations
@@ -59,7 +43,6 @@ from fastapi import APIRouter, HTTPException, Request
 
 from src import agents, audit, board, gitlab_client, session_client
 from src.board_exchange import resolve_exchange, unavailable
-from src.launch_flags import build_copilot_flags
 from src.launcher import open_local_terminal_window, spawn_agent_session
 from src.webapp_config import WebappConfig
 
@@ -69,10 +52,9 @@ from app.webapp.routers._helpers import (
     spawn_session_or_400,
 )
 from app.webapp.routers.board_spawn import (
-    _agent_and_flags,
+    _copilot_agent_and_flags,
     _resolve_repo_entry,
     _safe_list_sessions,
-    _type_into_session,
 )
 
 logger = logging.getLogger(__name__)
@@ -197,18 +179,14 @@ async def start_issue(request: Request) -> Dict[str, Any]:
     """One-tap ▶ Start / ⚡ YOLO on a backlog card (Tailscale + passkey, #301).
 
     Body: ``{"repo": str, "number": int, "mode": "start"|"yolo",
-    "model": str, "rows": int, "cols": int, "title": str}``. The repo must
+    "rows": int, "cols": int, "title": str}``. The repo must
     resolve to a directory in the projects folder (the same live listing the
     Coding tab launches from); the prompt is built here as
     ``/issue-<mode> <number>`` — client text never reaches the command line.
     Spawns a streamed PTY session exactly like a Coding-tab launch (PC
     mirror rules included); the `/issue-*` skills themselves handle branch +
-    worktree claiming inside the session.
-
-    ``model`` (#505) is the dispatch bar's selector applied to one-tap
-    starts: a value from the configured ``copilot_models`` list overrides
-    the persisted ``copilot_model`` for this launch. Absent → the persisted
-    Coding model, exactly as before.
+    worktree claiming inside the session. Always launches with the persisted
+    Coding model — there is no per-launch model override.
 
     The optional ``title`` (the Board card's issue title) auto-names the
     session after the issue (#467) via the #458 manual-override path, so it is
@@ -230,11 +208,7 @@ async def start_issue(request: Request) -> Dict[str, Any]:
     rows = int(body.get("rows") or 40)
     cols = int(body.get("cols") or 120)
     title = str(body.get("title") or "").strip()
-    model = str(body.get("model") or "").strip().lower()
-    if model:
-        agent, base_flags = _agent_and_flags(cfg, model)
-    else:
-        agent, base_flags = agents.DEFAULT_AGENT, build_copilot_flags(cfg)
+    agent, base_flags = _copilot_agent_and_flags(cfg)
 
     entry = _resolve_repo_entry(cfg, repo)
 
@@ -283,68 +257,3 @@ async def start_issue(request: Request) -> Dict[str, Any]:
                 sid[:8], exc,
             )
     return {"launched": prompt, "repo": entry.name, "session": session}
-
-
-_DISPATCH_COMMANDS = {
-    "add": "/issue-add",
-    "build": "/issue-add now",
-    "yolo": "/issue-yolo",
-}
-
-
-@router.post("/api/board/dispatch")
-async def dispatch_goal(request: Request) -> Dict[str, Any]:
-    """Free-text goal → a fresh ``/issue-*`` session (Tailscale + passkey, #302).
-
-    Body: ``{"repo": str, "goal": str, "mode": "add"|"build"|"yolo",
-    "model": str (one of ``copilot_models``, or ""/"default" for auto),
-    "rows": int, "cols": int}``.
-    Spawn-then-type per the module docstring: the goal rides the PTY input
-    path, never the command line. The half-spawned session is killed on any
-    failure past the spawn, so a timeout can't strand an orphan the user
-    never asked for.
-    """
-    cfg: WebappConfig = request.app.state.webapp_config
-    body = await maybe_json(request)
-    repo = str(body.get("repo") or "").strip()
-    mode = str(body.get("mode") or "add").strip().lower()
-    if mode not in _DISPATCH_COMMANDS:
-        raise HTTPException(status_code=400, detail=f"unknown mode: {mode}")
-    goal = body.get("goal")
-    if not isinstance(goal, str) or not goal.strip():
-        raise HTTPException(
-            status_code=400, detail="goal must be a non-empty string"
-        )
-    goal = goal.strip()
-    # Per-launch model (#500) — absent/empty means the Copilot auto model.
-    # No positional prompt — see the module docstring.
-    model = str(body.get("model") or "").strip().lower()
-    agent, flags = _agent_and_flags(cfg, model)
-    rows = int(body.get("rows") or 40)
-    cols = int(body.get("cols") or 120)
-
-    entry = _resolve_repo_entry(cfg, repo)
-
-    session = await spawn_session_or_400(
-        spawn_agent_session,
-        Path(entry.project_dir),
-        entry.name,
-        flags,
-        cfg.session_host_port,
-        "pty",
-        agent,
-        rows,
-        cols,
-        history_lines=cfg.terminal_history_lines,
-    )
-
-    sid = str(session.get("session_id") or "")
-    command = f"{_DISPATCH_COMMANDS[mode]} {goal}"
-    await _type_into_session(cfg.session_host_port, sid, command)
-
-    await audit_session_start_and_maybe_mirror(
-        cfg, request, body,
-        sid=sid, agent=agent, name=entry.name, project=entry.project_dir,
-        skill=command, audit_mod=audit, mirror_fn=open_local_terminal_window,
-    )
-    return {"launched": command, "repo": entry.name, "session": session}

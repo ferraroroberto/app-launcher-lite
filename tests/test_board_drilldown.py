@@ -388,9 +388,9 @@ class TestIssueStart:
             return {"session_id": "spawned-1", "kind": "pty", "name": name}
 
         monkeypatch.setattr(board_router, "spawn_agent_session", fake_spawn)
-        # The per-launch model path routes through the copilot install
-        # guard — pretend the CLI is on PATH so tests don't depend on the
-        # host machine. The not-installed test re-patches to False.
+        # Every issue-start routes through the copilot install guard —
+        # pretend the CLI is on PATH so tests don't depend on the host
+        # machine. The not-installed test re-patches to False.
         from app.webapp.routers import board_spawn
         monkeypatch.setattr(
             board_spawn.agents, "is_installed", lambda agent_id: True
@@ -433,30 +433,13 @@ class TestIssueStart:
             "/api/board/issues/start", json={**base, "number": -3}
         ).status_code == 400
 
-    @pytest.mark.parametrize(
-        "model", ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
-    )
-    def test_model_overrides_persisted_coding_model(
-        self, webapp_client, _bypass_gate, _spawn, model
-    ):
-        """#505: the dispatch bar's selector governs one-tap starts too."""
-        client, _, overrides = webapp_client
-        (overrides["tmp_projects_dir"] / "myrepo").mkdir()
-        client.post(
-            "/api/board/issues/start",
-            json={"repo": "myrepo", "number": 9, "mode": "start",
-                  "model": model},
-        )
-        assert f"--model {model}" in _spawn["flags"]
-        assert _spawn["flags"].endswith(' "/issue-start 9"')
-        assert _spawn["agent"] == "copilot"
-
-    def test_absent_model_keeps_persisted_coding_model(
+    def test_always_launches_with_persisted_coding_model(
         self, webapp_client, _bypass_gate, _spawn
     ):
-        """No ``model`` (stale-cache client) → legacy behaviour: the
-        persisted Coding model (gpt-5.6-luna in the default config),
-        unchanged."""
+        """The board model select is gone (Phase 6): every one-tap start
+        launches with the persisted Coding model (gpt-5.6-luna in the
+        default config); a stray ``model`` field from a stale-cache client
+        is ignored, never applied."""
         client, _, overrides = webapp_client
         (overrides["tmp_projects_dir"] / "myrepo").mkdir()
         client.post(
@@ -465,6 +448,13 @@ class TestIssueStart:
         )
         assert "--model gpt-5.6-luna" in _spawn["flags"]
         assert _spawn["agent"] == "copilot"
+        client.post(
+            "/api/board/issues/start",
+            json={"repo": "myrepo", "number": 9, "mode": "start",
+                  "model": "gpt-5.6-sol"},
+        )
+        assert "--model gpt-5.6-luna" in _spawn["flags"]
+        assert "gpt-5.6-sol" not in _spawn["flags"]
 
     def test_copilot_not_installed_400s(
         self, webapp_client, _bypass_gate, _spawn, monkeypatch
@@ -477,23 +467,10 @@ class TestIssueStart:
         (overrides["tmp_projects_dir"] / "myrepo").mkdir()
         resp = client.post(
             "/api/board/issues/start",
-            json={"repo": "myrepo", "number": 7, "mode": "start",
-                  "model": "gpt-5.6-luna"},
+            json={"repo": "myrepo", "number": 7, "mode": "start"},
         )
         assert resp.status_code == 400
         assert "not installed" in resp.json()["detail"]
-        assert not _spawn
-
-    def test_unknown_model_400s(self, webapp_client, _bypass_gate, _spawn):
-        client, _, overrides = webapp_client
-        (overrides["tmp_projects_dir"] / "myrepo").mkdir()
-        resp = client.post(
-            "/api/board/issues/start",
-            json={"repo": "myrepo", "number": 7, "mode": "start",
-                  "model": "haiku"},
-        )
-        assert resp.status_code == 400
-        assert "unknown model" in resp.json()["detail"]
         assert not _spawn
 
     def test_unknown_repo_is_404(self, webapp_client, _bypass_gate, _spawn):

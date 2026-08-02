@@ -708,51 +708,6 @@
     </section>
 
     <section id="paneBoard" class="pane" role="tabpanel" aria-labelledby="tabBoard" hidden>
-      <div id="boardDispatch" class="board-dispatch">
-        <textarea
-          id="boardDispatchGoal"
-          class="compose-input board-dispatch-goal"
-          rows="2"
-          placeholder="Type a goal — send dispatches an /issue-* session."
-          enterkeyhint="enter"></textarea>
-        <div class="board-repo-combo">
-          <button type="button" id="boardDispatchRepoBtn" class="board-repo-input"
-                  aria-haspopup="listbox" aria-expanded="false"
-                  aria-controls="boardDispatchRepoList" aria-label="Project filter / dispatch target">All projects</button>
-          <input type="hidden" id="boardDispatchRepo">
-          <ul id="boardDispatchRepoList" class="board-repo-list" role="listbox" hidden></ul>
-        </div>
-        <div class="board-dispatch-row">
-          <!-- Wrapper spans carry the ▾ affordance on the phone, where each
-               select is flattened to the row's shared button recipe (#496) —
-               same pattern as .board-repo-combo's ::after chevron. Mode was
-               a 4-segment radiogroup until #547 collapsed it into a select
-               matching the model dropdown beside it — the segments no
-               longer fit an iPhone-width row. -->
-          <span class="board-model-combo">
-            <select id="boardDispatchMode" class="select-native" aria-label="Dispatch mode"
-                    title="add — file the issue only / build — file and build straight away / yolo — file, build, and ship">
-              <option value="add" selected>Add</option>
-              <option value="build">Build</option>
-              <option value="yolo">Yolo</option>
-            </select>
-          </span>
-          <span class="board-model-combo">
-            <!-- Options are populated at wire time from the config-driven
-                 copilot_models list (board-dispatch.js::syncDispatchModels);
-                 the static Default option ('' = Copilot auto) is the
-                 fallback until /api/config lands. -->
-            <select id="boardDispatchModel" class="select-native" aria-label="Dispatch model"
-                    title="model for dispatches and one-tap start/YOLO — Default lets Copilot pick">
-              <option value="" selected>Default</option>
-            </select>
-          </span>
-          <button id="boardDispatchClear" type="button" class="compose-record"
-                  title="Clear the goal"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
-          <button id="boardDispatchSend" type="button" class="compose-send"
-                  title="Dispatch the goal"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-send-horizontal"></use></svg></button>
-        </div>
-      </div>
       <div class="board-strip" role="tablist" aria-label="Board columns">
         <button id="boardColBacklog" type="button" class="board-strip-btn" data-col="backlog"
                 role="tab" aria-selected="false">git <span class="board-count">0</span></button>

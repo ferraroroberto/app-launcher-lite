@@ -21,7 +21,7 @@ import { toggleAriaChecked, wireModelCombo } from './dom-utils.js';
 
 // The Skills-summary launch-model dropdown controller ({setValue, getValue}),
 // created in the tab's wiring once the DOM exists (#540). Read at launch time;
-// no server round-trip — it's per-launch, like the Board dispatch combo.
+// no server round-trip — it's per-launch.
 // '' is the Default option: let Copilot pick its own (auto) model.
 let teamOsModelCombo = null;
 function teamOsModel() {

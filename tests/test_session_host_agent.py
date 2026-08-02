@@ -377,7 +377,7 @@ def test_create_threads_label_to_api(tmp_path, monkeypatch):
 
 
 def test_pty_session_to_api_reports_output_chars():
-    """The board's dispatch readiness probe (#302) reads ``output_chars`` —
+    """``output_chars`` is the "has the agent painted anything yet" signal —
     0 before the agent paints anything, the scrollback ring's length after."""
     session = PtySession(
         session_id="sid-test",

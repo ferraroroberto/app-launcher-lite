@@ -1,6 +1,6 @@
 # Board tab — reference
 
-The launcher's fifth surface (issue #164, shipped in four steps: **#300** read-only render, **#301** drill-down + reply + one-tap issue start, **#302** dispatch bar, **#399** split into single-purpose columns; reduced to **four columns** in the fork's Phase 5, which also swapped the data source from GitHub/`gh` to **GitLab/`glab`**). It is a **read-only fleet kanban** that answers one question — *"what needs me now, across everything"* — over four **computed** columns, each holding one kind of card. A card moves because reality changed; there is deliberately no drag-and-drop. It renders three independently-degrading live sources (the session-host's session list plus fleet-config's sessions-state and active-issues files) plus a cached GitLab view (`glab`-fetched issues).
+The launcher's fifth surface (issue #164, shipped in steps: **#300** read-only render, **#301** drill-down + reply + one-tap issue start, **#399** split into single-purpose columns; reduced to **four columns** in the fork's Phase 5, which also swapped the data source from GitHub/`gh` to **GitLab/`glab`**; the free-text dispatch bar was removed entirely in Phase 6 — the Board launches work only via the Backlog cards' ▶/⚡ one-tap buttons). It is a **read-only fleet kanban** that answers one question — *"what needs me now, across everything"* — over four **computed** columns, each holding one kind of card. A card moves because reality changed; there is deliberately no drag-and-drop. It renders three independently-degrading live sources (the session-host's session list plus fleet-config's sessions-state and active-issues files) plus a cached GitLab view (`glab`-fetched issues).
 
 On the phone the four columns are a swipeable one-column-per-screen carousel with a count strip on top; desktop shows all four side by side, each column header carrying its own `(N)` item count (#603). The **Your turn** count is the number that matters — its strip button highlights when nonzero.
 
@@ -25,14 +25,13 @@ The GitLab queries (`src/gitlab_client.py`) go through `glab api`: `groups/<grou
 
 ## Data endpoints
 
-All Board routes live in `app/webapp/routers/board.py` (the spawn-then-type mechanics sit in `app/webapp/routers/board_spawn.py`, split off in #691).
+All Board routes live in `app/webapp/routers/board.py` (the shared launch helpers sit in `app/webapp/routers/board_spawn.py`, split off in #691).
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
 | `GET /api/board` | bearer-token | The four columns — the **5 s poll target**. Cheap only: runs the live session list and two small state-file reads concurrently, plus a pure in-memory read of the GitLab cache. **No `glab` subprocess ever runs on this path.** |
 | `POST /api/board/gitlab/refresh` | bearer-token | Runs the two `glab` queries (open issues, closed-today issues) and replaces the cache. The **only** place `glab` is invoked. With an empty `gitlab_group` it never touches a subprocess — the snapshot just carries a "set gitlab_group in Settings" hint as its `error`. |
 | `GET /api/board/sessions/{sid}/exchange` | Tailscale + passkey | The last user↔assistant exchange from the agent-aware conversation-source hierarchy (drill-down drawer). |
-| `POST /api/board/dispatch` | Tailscale + passkey | Spawn a new session and type an `/issue-*` goal into it (dispatch bar). |
 | `POST /api/board/issues/start` | Tailscale + passkey | One-tap `/issue-start` / `/issue-yolo <N>` on a Backlog card. |
 
 The `GET /api/board` response is `{ generated_at, columns, gitlab: {fetched_at, error}, sessions_state: {available, stale, updated_at}, active_issues: {available, updated_at, count} }`. Each session card carries its raw session fields plus `project`, `status`, and `age_seconds`; each Backlog issue carries a boolean `in_progress`.
@@ -125,30 +124,6 @@ The undifferentiated `needs-you` conflated four operationally distinct situation
 
 **Scoped to `needs-you` only.** `idle` never goes through this split — it's a distinct, largely-unused raw status (see above), not part of the four meanings #608 targets.
 
-## The dispatch bar — injection-safe spawn-then-type (#302)
-
-Pinned above the columns, the **dispatch bar** speaks a new goal into existence: a goal box, a repo `<select>` (the same live coding listing the Coding tab launches from), an **add / build / yolo** mode pill, a **model** `<select>` (#500, Copilot-only in the lite fork: options come from the config-driven `copilot_models` list plus a Default option — '' launches without `--model` so Copilot picks; a listed id overrides the persisted `copilot_model` for that launch; 400 if the Copilot CLI isn't installed), a 🎤, and a ➤. Endpoint: `POST /api/board/dispatch`, body `{repo, goal, mode, model, rows, cols, desktop}`.
-
-The modes map to `/issue-*` commands:
-
-| Mode | Command |
-| --- | --- |
-| `add` | `/issue-add` |
-| `build` | `/issue-add now` |
-| `yolo` | `/issue-yolo` |
-
-**Why spawn-then-type.** The free-text goal must never touch the unquoted `cmd /c {exe} {flags}` string the session-host spawns with — that would be cmd-metacharacter injection. So dispatch spawns the session with **only the selected agent's shared flags and no positional prompt**, then delivers the goal over the PTY input path. (Contrast the sibling `/api/board/issues/start`, which *can* use a positional prompt because `/issue-<mode> <N>` is built server-side from an int-validated number — injection-safe by construction.)
-
-**The readiness wait** (`_await_dispatch_ready()`): poll the session-host every 0.25 s, up to a 15 s cap. Ready = the session reports `output_chars > 0` (the session-host's first-paint signal); then wait a 2 s settle so the agent's TUI has its input box up. A session-host predating #302 exposes no `output_chars` key — the wait degrades to a fixed 5 s legacy grace with a warning log rather than refusing. If the session ever reports **not alive** during startup, the request raises 504 — typing into a dead PTY is the one forbidden outcome.
-
-**The type** is one call to `session_client.send_input(..., "/issue-<mode> <goal>", submit=True)`, forwarded to the session-host's `PtySession.submit_input()` (#611), which owns the whole write sequence: bracketed-paste framing (`\x1b[200~ … \x1b[201~`) only when the PTY's own output has announced DECSET 2004 (bracketed-paste mode) is on — always true by this point, since typing happens after both the readiness and quiescence waits, well past the agent's own paste-mode announcement during boot — keeps the goal one atomic paste (no per-keystroke TUI interpretation) and routes it through the first-prompt title capture (#266); the submitting `\r` is always its **own separate write**, so the paste-end marker cannot swallow it (the #64/#166 CR-as-own-write rule). For a payload at or above the bulk threshold, the CR is additionally held back until the session's output stream shows the paste was echoed and has gone quiet (#499's floor/quiet/cap protocol) instead of racing a fixed delay.
-
-**Failure kills, never strands.** Any error past the spawn triggers a `stop(kill)` on the half-spawned session before re-raising, so a readiness timeout cannot leave an orphan the user never asked for.
-
-**PTY-only.** Dispatch always spawns a full-control (`pty`) session — a detached console has no input path, and handing free text to its command line is exactly the injection this design avoids.
-
-The bar is static markup the 5 s poll never re-renders, so a re-render cannot wipe a goal being typed. After a send the goal **stays in the bar** for rapid multi-dispatch (✕ clears it), and the new card lands in *Bot's turn* on the next poll. Voice dictation — the compose bar's exact streamed-partials pipeline, extracted to a shared `voice.js` — mounts on the dispatch goal box (and on every drawer reply box), so "speak a goal" is one mic tap; the transcript always lands in the box for review, never straight into a dispatch.
-
 ## The drill-down drawer and its PTY-write path (#301)
 
 Tapping a live session card opens an **inline drill-down drawer** on the card (`board.js::buildDrawer`). It shows the last user↔assistant exchange plus a reply box, and while any drawer is open the **5 s poll pauses** (`fetchBoard()` self-gates on `state.boardExpanded`) so a re-render can never wipe a half-typed reply.
@@ -164,7 +139,7 @@ All reads happen only when the drawer opens — `GET /api/board`'s 5-second poll
 
 **Delivery honesty (#607/#611).** `{"ok": true}` means the write (and, if requested, the submit) actually reached a live session — a dead/exited session reports 409 instead of a false 200 (#607), and the settle-then-submit sequence (#611) means `submit: true` in the response reflects that the CR was actually sent after the paste's ingest was given a chance to settle, not just that bytes were written. Bracketed-paste framing is applied only when the PTY's own output has announced DECSET 2004 is on (tracked off the raw output stream, never stripped from it) — a literal `\x1b[200~` sent blind to an agent that never asked for it is garbage, not a paste.
 
-**One-tap issue start.** A Backlog card whose repo is in the projects folder carries **▶ Start / ⚡ YOLO** → `POST /api/board/issues/start`, body `{repo, number, mode, model, rows, cols}`. Both controls are disabled while the card's active-issue marker is fresh (#528), preventing a redundant conflicting session. Otherwise the route is injection-safe by construction: `prompt = "/issue-<mode> <number>"` with mode allowlisted and number int-validated. The dispatch bar's **model** selector governs these launches too (#505), overriding the shared Coding model per launch — same #500 semantics as dispatch (a `copilot_models` id → `--model` per launch; absent model → the persisted Coding model). It resolves the repo to a project dir (404 if not present locally) and spawns a streamed PTY session — the `/issue-*` skills inherit worktree isolation for free, claiming the repo and building in a sibling worktree when the primary checkout is busy. It opens the PC-mirror window by default — a desktop client, the phone, and a headless loopback API caller all get one (#609); only a genuine in-page loopback browser explicitly opts out (`in_page: true`, the SPA's own signal) and stays on the in-page terminal.
+**One-tap issue start.** A Backlog card whose repo is in the projects folder carries **▶ Start / ⚡ YOLO** → `POST /api/board/issues/start`, body `{repo, number, mode, rows, cols}`. Both controls are disabled while the card's active-issue marker is fresh (#528), preventing a redundant conflicting session. Otherwise the route is injection-safe by construction: `prompt = "/issue-<mode> <number>"` with mode allowlisted and number int-validated. Every launch uses the persisted Coding model (Phase 6 removed the per-launch model selector; 400 if the Copilot CLI isn't installed). It resolves the repo to a project dir (404 if not present locally) and spawns a streamed PTY session — the `/issue-*` skills inherit worktree isolation for free, claiming the repo and building in a sibling worktree when the primary checkout is busy. It opens the PC-mirror window by default — a desktop client, the phone, and a headless loopback API caller all get one (#609); only a genuine in-page loopback browser explicitly opts out (`in_page: true`, the SPA's own signal) and stays on the in-page terminal.
 
 **`?board=<sid>` deep-link** (`board.js::openBoardCard`): activates the Board tab, fetches the board, finds the column holding that `session_id`, opens its drawer, and scrolls the carousel to it — the landing page a `notify_on_idle` Slack ping links to. If the session is already gone, it toasts and leaves the board browsable rather than pausing the poll forever on a non-existent card.
 
@@ -181,8 +156,8 @@ It is **never** refreshed on the 5 s poll (which only reads the snapshot), and a
 
 ## Security boundary
 
-The Board splits along the launcher's usual line. The **read-only board** (`GET /api/board`, the GitLab refresh) is bearer-token gated and reachable over the Cloudflare tunnel — it exposes only issue / session metadata. The **terminal-grade surfaces** — the drill-down exchange (transcript text), the drawer reply (`/input`), the dispatch bar, and one-tap issue start — are **Tailscale-only + passkey-gated**: refused over the public tunnel entirely, and on the tailnet they additionally require a valid WebAuthn terminal token, exactly like the live terminal. The client obtains the token via the shared `ensureTerminalToken()` path.
+The Board splits along the launcher's usual line. The **read-only board** (`GET /api/board`, the GitLab refresh) is bearer-token gated and reachable over the Cloudflare tunnel — it exposes only issue / session metadata. The **terminal-grade surfaces** — the drill-down exchange (transcript text), the drawer reply (`/input`), and one-tap issue start — are **Tailscale-only + passkey-gated**: refused over the public tunnel entirely, and on the tailnet they additionally require a valid WebAuthn terminal token, exactly like the live terminal. The client obtains the token via the shared `ensureTerminalToken()` path.
 
 ## Verification
 
-The pre-ship gate (`pwsh -File scripts/verify-before-ship.ps1`) covers the Board via `tests/test_board.py` (column assembly, the cwd-join, the transcript overlay, the API shape), `tests/test_gitlab_client.py` (the `glab` client — real GitLab API shapes in fixtures, cache semantics, error mapping), `tests/test_board_dispatch.py` (the spawn-then-type contract), `tests/test_board_drilldown.py` (the exchange read + reply path), and `tests/e2e/test_board_tab.py` (the read-only kanban, drill-down + reply + one-tap start, and dispatch bar in a real browser). All `glab` and session-host calls are mocked at their client seams so the unit suite never shells out — `glab` need not even be installed.
+The pre-ship gate (`pwsh -File scripts/verify-before-ship.ps1`) covers the Board via `tests/test_board.py` (column assembly, the cwd-join, the transcript overlay, the API shape), `tests/test_gitlab_client.py` (the `glab` client — real GitLab API shapes in fixtures, cache semantics, error mapping), `tests/test_board_drilldown.py` (the exchange read + reply path + one-tap issue start), and `tests/e2e/test_board_tab.py` (the read-only kanban, drill-down + reply + one-tap start in a real browser). All `glab` and session-host calls are mocked at their client seams so the unit suite never shells out — `glab` need not even be installed.

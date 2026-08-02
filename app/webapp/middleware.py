@@ -108,11 +108,6 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         "Board drill-down (#301): issue-start spawns a coding session.",
     ),
     (
-        lambda p: p == "/api/board/dispatch",
-        "passkey",
-        "Board dispatch (#302): spawn + type — both terminal-grade.",
-    ),
-    (
         lambda p: p == "/api/team-os/file" or p.startswith("/api/team-os/file/"),
         "passkey",
         "Team OS private-content browser (#102): file read/delete/rename surfaces "

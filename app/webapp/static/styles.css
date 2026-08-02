@@ -1944,8 +1944,8 @@ body.terminal-open {
   flex-shrink: 0;
 }
 /* Override the base .compose-record/.compose-send padding (which differ
-   from each other, and are reused/re-sized by the board dispatch row) so
-   all four buttons in the terminal compose grid are identical squares. */
+   from each other) so all four buttons in the terminal compose grid are
+   identical squares. */
 .compose-tools .compose-record,
 .compose-tools .compose-send {
   width: 44px;
@@ -2106,131 +2106,14 @@ body.terminal-open {
 }
 
 /* ---------- Board tab (issue #300 / #164) ---------- */
-/* Dispatch bar (#302): speak/type a goal → a fresh /issue-* session.
-   Static markup above the column strip — renderBoard() never touches it,
-   so the poll can't wipe a goal being typed. */
-.board-dispatch {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0 0 10px;
-}
-/* The compose textarea look, but shorter — the bar is a launcher, not a
-   writing surface. */
-.board-dispatch-goal { min-height: 56px; }
-.board-dispatch-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-/* Repo/project dropdown (#337): tap-to-open/tap-to-select, not a typable
-   field — a <button> trigger, not a native <select> (which paints its own
-   OS chrome) or a text input (which would invite typing). Doubles as the
-   dispatch target AND a live filter over the board's kanban cards; "All
-   projects" (the default) shows everything. */
-.board-repo-combo { position: relative; }
-.board-repo-combo::after {
-  content: '▾';
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--muted);
-  font-size: var(--font-caption);
-  pointer-events: none;
-}
-.board-repo-input {
-  display: block;
-  width: 100%;
-  min-height: 40px;
-  background: var(--card-2);
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: 0 28px 0 10px;
-  font-size: var(--font-caption);
-  text-align: left;
-  appearance: none;
-  -webkit-appearance: none;
-  cursor: pointer;
-}
-.board-repo-list {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  max-height: 220px;
-  overflow-y: auto;
-  margin: 0;
-  padding: 4px;
-  list-style: none;
-  background: var(--card-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow);
-}
-.board-repo-list li {
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-caption);
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.board-repo-list li[data-repo]:hover,
-.board-repo-list li[aria-selected="true"] { background: var(--card); color: var(--accent); }
-/* Dispatch mode + model dropdowns (#500, mode collapsed from a 4-segment
-   radiogroup into a matching select in #547 — the segments no longer fit an
-   iPhone-width row once chat mode landed): native <select>s like the Copilot
-   model picker, shrunk to the row's shared control height + caption size so
-   they line up with the compose buttons. */
-.board-dispatch-row .select-native {
-  padding: 0 10px;
-  font-size: var(--font-caption);
-}
-/* Phone (#496, from on-device feedback): iOS paints a native <select> with
-   its own pill chrome — a different control family than the flat rounded
-   buttons beside it. Flatten it to the row's exact shared recipe (36px
-   control height, 12px radius, hairline border, --card-2 fill — the mic/✕
-   .compose-record recipe) and let the wrapping .board-model-combo span draw
-   the ▾ affordance, the same pattern as .board-repo-combo. Mobile only —
-   desktop keeps the native select. */
-.board-model-combo { display: inline-flex; position: relative; }
-@media (pointer: coarse) {
-  .board-dispatch-row .select-native {
-    appearance: none;
-    -webkit-appearance: none;
-    height: var(--control-h);
-    min-height: var(--control-h);
-    background: var(--card-2);
-    color: var(--fg);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    padding: 0 24px 0 10px;
-  }
-  .board-model-combo::after {
-    content: '▾';
-    position: absolute;
-    right: 9px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--muted);
-    font-size: var(--font-caption);
-    pointer-events: none;
-  }
-}
-
 /* Launch-model dropdown (#540) for the Coding + Team OS card summaries. A
    native <select> cannot live inside a <summary> — WebKit's HTML parser
    derails on it (closes the <details> early, cascading into a broken tree
    that even zeroes custom-property inheritance on ancestors). So this is
    built from phrasing-only content — a <button> trigger + a
    <span role="listbox"> of <button role="option"> — which is valid in a
-   summary, styled to match the flattened .board-dispatch-row select (36px
-   control height, 12px radius, --card-2 fill, ▾ affordance). */
+   summary, styled to the shared flat control recipe (36px control height,
+   12px radius, --card-2 fill, ▾ affordance). */
 .model-combo { position: relative; display: inline-flex; }
 .model-combo-trigger {
   height: var(--control-h);
@@ -2289,21 +2172,6 @@ body.terminal-open {
   background: var(--card);
   color: var(--accent);
 }
-/* The compose-bar buttons (🎤 / ✕ / ➤) shrink to the shared 36px control
-   height so the dispatch row lines up. (The drawer reply mic is NOT in
-   this shrink set any more — #496 round 2: inside the drawer every button
-   keeps the canonical 44px footprint.) */
-.board-dispatch-row .compose-record,
-.board-dispatch-row .compose-send {
-  min-height: var(--control-h);
-  min-width: 36px;
-  padding: 0 10px;
-  font-size: var(--font-label);
-}
-/* When the row wraps on a narrow phone, ➤ right-aligns on its wrap line
-   instead of stranding at the left edge. */
-.board-dispatch-row .compose-send { margin-left: auto; }
-
 /* Column switcher strip: four count buttons + the glab refresh. Doubles as
    the column header on the phone, where the carousel shows one column. */
 .board-strip {
@@ -2342,10 +2210,9 @@ body.terminal-open {
    not decoration — the warn color marks pending human action. */
 .board-strip-btn.attention .board-count { background: var(--attention); color: var(--attention-fg); }
 /* Had no icon-button box at all before #547 (only flex: 0 0 auto — a bare
-   default browser button, visibly smaller/different than the dispatch bar's
-   ↻/send buttons above it). Same 36px --control-h square recipe as
-   .board-dispatch-row .compose-record and .model-combo-trigger, so every
-   icon-sized button in the Board tab now shares one footprint. */
+   default browser button). Same 36px --control-h square recipe as
+   .model-combo-trigger, so every icon-sized button in the Board tab
+   shares one footprint. */
 .board-refresh {
   flex: 0 0 auto;
   height: var(--control-h);

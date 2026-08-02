@@ -1,4 +1,4 @@
-/* Board tab (issues #300 / #301 / #302 / #164 / #399 / #608): the fleet
+/* Board tab (issues #300 / #301 / #164 / #399 / #608): the fleet
  * kanban.
  *
  * Four computed columns from GET /api/board, each single-purpose — Backlog
@@ -21,13 +21,6 @@
  * card with its drawer open. While a drawer is open the poll pauses, so a
  * re-render can never wipe a reply being typed. Issue/done cards open
  * GitLab.
- *
- * Split off a single-file module (issue #691, `/codebase-audit`), the way
- * `jobs.js` and `terminal.js` already were: the dispatch bar above the
- * columns — free-text dispatch (#302) and the repo/project combo that
- * doubles as the card filter (#337) — lives in `board-dispatch.js`. This
- * module keeps card rendering, the drill-down drawer, one-tap issue-start
- * and the column carousel, and calls into that one for the bar.
  */
 
 import { els, state } from './state.js';
@@ -38,12 +31,6 @@ import { applyLaunchSizePayload, openTerminal } from './terminal.js';
 import { icon } from './_vendored/icons/icons.js';
 import { ensureTerminalToken } from './webauthn.js';
 import { iconUrl } from './dom-utils.js';
-import {
-  boardRepoFilter,
-  matchesRepoFilter,
-  syncDispatchBar,
-  wireDispatch,
-} from './board-dispatch.js';
 
 const COLUMNS = [
   { key: 'backlog', btn: 'boardColBacklog', empty: 'No open issues cached — tap ↻ to fetch from GitLab.' },
@@ -373,12 +360,10 @@ async function startIssue(card, mode, btn) {
     const tt = await ensureTerminalToken();
     // Carry the issue title so the server can auto-name the spawned session
     // after it (#467) — display data, never reaches the command line.
+    // The server always launches with the persisted Coding model.
     const payload = {
       repo: card.repo, number: card.number, mode: mode,
       title: card.title || '',
-      // The dispatch bar's model selector governs one-tap starts too
-      // (#505), overriding the shared Coding model per launch.
-      model: (els.boardDispatchModel && els.boardDispatchModel.value) || 'sonnet',
     };
     // Desktop browsers get the PC mirror window, like every launch (#241).
     // Phone launches carry the real terminal size so the PTY's early
@@ -523,12 +508,9 @@ export function renderBoard() {
   const body = state.board;
   if (!body || !els.boardColumns) return;
   const columns = body.columns || {};
-  const repoFilter = boardRepoFilter();
 
   COLUMNS.forEach(function (col) {
-    const cards = (columns[col.key] || []).filter(function (card) {
-      return matchesRepoFilter(card, repoFilter);
-    });
+    const cards = columns[col.key] || [];
     const btn = els[col.btn];
     if (btn) {
       const count = btn.querySelector('.board-count');
@@ -551,9 +533,6 @@ export function renderBoard() {
   });
 
   renderStatusLine(body);
-  // Keep the dispatch bar's repo list in step with state
-  // that may land after the first render (/api/apps, /api/status).
-  syncDispatchBar();
   syncStripActive();
 }
 
@@ -694,7 +673,6 @@ function syncStripActive() {
 export function wireBoard() {
   if (!els.tabBoard) return;
   els.tabBoard.addEventListener('click', function () {
-    syncDispatchBar();
     fetchBoard().then(function () {
       // Opening the tab with a stale (or never-filled) glab cache refreshes
       // it once; while the tab just sits open only the free poll runs.
@@ -704,7 +682,6 @@ export function wireBoard() {
     // remembered column now that it has layout (no animation on arrival).
     requestAnimationFrame(function () { showColumn(state.boardCol, false); });
   });
-  wireDispatch();
   els.boardRefresh.addEventListener('click', function () {
     refreshGitlab().catch(function (exc) {
       apiFailToast('GitLab refresh failed', exc);
