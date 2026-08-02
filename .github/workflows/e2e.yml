@@ -42,7 +42,7 @@ jobs:
           .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
       - name: Install Playwright browsers
-        run: .\.venv\Scripts\python.exe -m playwright install chromium webkit
+        run: .\.venv\Scripts\python.exe -m playwright install chromium
 
       - name: Seed config files from committed samples
         # config.json / webapp_config.json / apps.json are gitignored — only the
@@ -59,7 +59,7 @@ jobs:
         # Give the input-delivery polls headroom on the slow hosted runner
         # (issue #184): 20 s on CI vs the 5 s local default in conftest.py.
         # Likewise widen the stop/kill overlay-hide budget (#286) so the
-        # graceful-then-force stop window doesn't time the WebKit test out.
+        # graceful-then-force stop window doesn't time the phone-projection test out.
         # And widen the real-agent echo budget (#678) for the reconnect-replay
         # test's real-agent cold boot (currently skipped pending a probe on a
         # deployment machine -- see tests/e2e/test_terminal_reconnect.py).

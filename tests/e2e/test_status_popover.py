@@ -10,7 +10,7 @@ Approach mirrors test_git_status_flags.py: real per-project git state
 isn't deterministic, so we intercept /api/coding/git-status with a
 canned payload keyed to the first real coding tile, then assert the
 popover DOM. Runs in both projections — the wiring is browser-agnostic
-but the iPhone projection confirms the phone surface too.
+but the phone (Android) projection confirms the phone surface too.
 """
 
 from __future__ import annotations

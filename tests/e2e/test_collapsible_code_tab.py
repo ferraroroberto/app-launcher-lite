@@ -9,8 +9,8 @@ refresh buttons live in the sessions summary, so a tap there must drive
 the button only, never toggle the panel (the same stopPropagation guard
 Coding options uses for its Detached/Resume toggles).
 
-Runs in both projections — the wiring is browser-agnostic but the iPhone
-projection confirms the phone surface too.
+Runs in both projections — the wiring is browser-agnostic but the phone
+(Android) projection confirms the phone surface too.
 """
 
 from __future__ import annotations

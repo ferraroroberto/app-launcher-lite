@@ -17,7 +17,7 @@ The four invariants pinned here mirror the four pillars of issue #30:
 
 Non-browser: uses ``requests`` against the live tray. Parametrising over
 both Playwright projections would just hit the same loopback URLs twice
-from different headless engines — no extra signal — so the test runs
+from the same headless engine — no extra signal — so the test runs
 once and skips on the duplicate projection.
 """
 
@@ -40,12 +40,12 @@ _INDEX_HREF_RE = re.compile(
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _run_once(browser_name: str) -> None:
-    # The four checks below depend on server behaviour, not browser. Skip
-    # the second projection so we don't double-count this file in the
+def _run_once(phone_projection: bool) -> None:
+    # The four checks below depend on server behaviour, not browser/viewport.
+    # Skip the second projection so we don't double-count this file in the
     # suite total.
-    if browser_name != "chromium":
-        pytest.skip("server-side check; runs once on the chromium projection")
+    if phone_projection:
+        pytest.skip("server-side check; runs once on the desktop projection")
 
 
 def test_index_is_revalidated(base_url: str) -> None:

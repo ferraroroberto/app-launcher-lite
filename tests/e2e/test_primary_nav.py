@@ -1,8 +1,9 @@
 """Regression pin for issue #263 — responsive primary navigation.
 
 The launcher keeps one DOM nav: top segmented control on desktop/fine-pointer
-screens, floating bottom tab bar on the iPhone projection. The same test also
-pins the tab ARIA state and the terminal-overlay hide rule for the mobile bar.
+screens, floating bottom tab bar on the phone (Android) projection. The same
+test also pins the tab ARIA state and the terminal-overlay hide rule for the
+mobile bar.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ TAB_ORDER = [
 
 
 def test_primary_nav_is_responsive_and_accessible(
-    authed_page: Page, base_url: str, browser_name: str
+    authed_page: Page, base_url: str, phone_projection: bool
 ) -> None:
     authed_page.goto(base_url, wait_until="domcontentloaded")
     expect(authed_page.locator("#buildReadout")).to_contain_text(
@@ -75,7 +76,7 @@ def test_primary_nav_is_responsive_and_accessible(
         }"""
     )
 
-    if browser_name == "webkit":
+    if phone_projection:
         assert metrics["position"] == "fixed"
         assert metrics["display"] == "grid"
         assert metrics["iconDisplay"] == "block"

@@ -277,7 +277,7 @@ def test_compose_send_and_attach_stay_put_during_autogrow(
     dictation transcript landing. `.compose-bar` used to be
     `align-items: stretch`, so a taller textarea stretched every sibling
     button to match — measured 46px of top-edge drift on a realistic
-    transcript on the WebKit/iPhone projection, a moving-target race
+    transcript on the phone (Android) projection, a moving-target race
     against a tap aimed at the pre-grow position (a second tap could land
     on a shifted-away button, or on whatever the growing textarea now
     covers, reading as "Send did nothing" or "the tap became a newline").

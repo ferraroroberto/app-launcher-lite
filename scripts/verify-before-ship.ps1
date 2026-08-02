@@ -2,8 +2,8 @@
 #
 # Runs the full validation pipeline locally before a change is declared
 # "done": byte-compile, the non-e2e pytest suite, then the Playwright e2e
-# suite (Chromium + WebKit/iPhone projections) against a disposable webapp
-# the script boots itself on a free port.
+# suite (Chromium — this app is Android-only, issue #6) against a disposable
+# webapp the script boots itself on a free port.
 #
 # Usage:
 #   pwsh -File scripts/verify-before-ship.ps1
@@ -67,13 +67,13 @@ try {
     # Diff-proportionate e2e routing (issue #568). Classify the branch's
     # changed files vs main and run an e2e slice proportionate to the diff:
     # static assets -> Chromium smoke only, real UI/behaviour -> the full
-    # dual-projection suite, backend/docs-only -> no browser suite. Fail-safe:
-    # any mixed/ambiguous/unrecognized diff runs the full suite. The path->tier
+    # suite, backend/docs-only -> no browser suite. Fail-safe: any
+    # mixed/ambiguous/unrecognized diff runs the full suite. The path->tier
     # rules live in scripts/classify_e2e.py (one reviewable place). On CI the
     # full suite always runs -- the local gate is where routing is proven first.
     $tier = "full"; $e2eTarget = "tests/e2e"; $e2eBrowsers = ""; $routeReason = ""
     if ($env:CI -eq "true") {
-        $routeReason = "CI always runs the full dual-projection suite"
+        $routeReason = "CI always runs the full e2e suite"
     } else {
         $classifyOut = & $python (Join-Path $repoRoot "scripts\classify_e2e.py")
         $kv = @{}
@@ -98,12 +98,12 @@ try {
         Phase "e2e routing: $tier ($routeReason)"
         Log-Progress "e2e routing: tier=$tier target=$e2eTarget browsers=$e2eBrowsers reason=$routeReason"
 
-        # Serialize full-tier (dual-projection) e2e legs across concurrent
-        # primary/worktree gate runs on this machine (issue #685). Two
-        # overlapping full-tier runs -- a normal outcome of the fleet's own
-        # claim-or-worktree concurrency model -- each spinning up ~400x2
-        # browser contexts is the ephemeral-port burst fleet-config#498 traced
-        # to this suite (Tcpip 4231, TIME_WAIT 206->979). A kernel-managed
+        # Serialize full-tier e2e legs across concurrent primary/worktree gate
+        # runs on this machine (issue #685). Two overlapping full-tier runs --
+        # a normal outcome of the fleet's own claim-or-worktree concurrency
+        # model -- each spinning up ~400 browser contexts is the
+        # ephemeral-port burst fleet-config#498 traced to this suite (Tcpip
+        # 4231, TIME_WAIT 206->979). A kernel-managed
         # named mutex, not a lockfile: auto-released if a holder crashes, no
         # stale-file cleanup path. Scoped to only this e2e leg -- byte-compile
         # and the non-e2e pytest phase above never wait on it -- and only to
@@ -140,7 +140,7 @@ try {
             foreach ($b in ($e2eBrowsers -split ',' | Where-Object { $_ })) {
                 $e2eArgs += @("--browser", $b)
             }
-            $projLabel = if ($e2eBrowsers) { $e2eBrowsers } else { "Chromium + WebKit/iPhone" }
+            $projLabel = if ($e2eBrowsers) { $e2eBrowsers } else { "Chromium" }
             Phase "pytest e2e ($e2eTarget, $projLabel, auto-booted)..."
             try {
                 & $python -m pytest @e2eArgs

@@ -1,6 +1,6 @@
 """Regression pin for #253 — unified stop button + kill from terminal view.
 
-Two iPhone bites in one issue:
+Two phone bites in one issue:
 
 1. Each running-sessions row has exactly **one** 🛑 Stop-and-kill button
    (the old ⏹ "leave window open" + ⏏ "stop & close" pair collapsed to one).
@@ -14,7 +14,7 @@ the terminal-view kill end to end.
 Both tests open the terminal by tapping the session row, which is an *in-page*
 terminal only on a touch (phone) client now — a desktop browser opens a
 dedicated PC Edge mirror window instead (issue #282). So they run on the
-iPhone (WebKit) projection, where the in-page terminal view they exercise is
+phone (Android) projection, where the in-page terminal view they exercise is
 the real behaviour; the desktop row-tap is covered by
 ``test_desktop_session_mirror.py``.
 """
@@ -33,17 +33,18 @@ pytestmark = pytest.mark.smoke
 # graceful quit's grace window (``_STOP_GRACE_SECONDS`` = 5 s) then the
 # force-fallback before responding; only then does the client hide the overlay.
 # So the hide budget is network + up to 5 s grace + force + shutdown signal +
-# network — a fixed 12 s could be exceeded on a loaded WebKit/iPhone projection,
+# network — a fixed 12 s could be exceeded on a loaded phone projection,
 # the same timing-flake class as the PTY-input-delivery tests (#58/#184). Env-
 # tunable like ``E2E_LOG_POLL_DEADLINE_MS`` so the slow hosted runner gets
 # headroom (e2e.yml widens it on CI) without slowing the local pass.
 _STOP_OVERLAY_HIDE_MS = int(os.environ.get("E2E_STOP_OVERLAY_HIDE_MS", "20000"))
 
 
-def _skip_unless_phone(browser_name: str) -> None:
-    # conftest projects WebKit onto an iPhone (coarse pointer → in-page
-    # terminal); the Chromium desktop projection mirrors the row-tap (#282).
-    if browser_name != "webkit":
+def _skip_unless_phone(phone_projection: bool) -> None:
+    # conftest projects the phone leg onto an Android device (coarse pointer
+    # → in-page terminal); the Chromium desktop projection mirrors the
+    # row-tap (#282).
+    if not phone_projection:
         pytest.skip(
             "in-page terminal view via row-tap is phone-only since #282; the "
             "desktop row-tap opens a mirror window"
@@ -51,9 +52,9 @@ def _skip_unless_phone(browser_name: str) -> None:
 
 
 def test_terminal_view_has_back_arrow_and_kill_button(
-    authed_page: Page, base_url: str, launched_pty_session: str, browser_name: str
+    authed_page: Page, base_url: str, launched_pty_session: str, phone_projection: bool
 ) -> None:
-    _skip_unless_phone(browser_name)
+    _skip_unless_phone(phone_projection)
     authed_page.goto(base_url, wait_until="domcontentloaded")
     expect(authed_page.locator("#buildReadout")).to_contain_text(
         "Build:", timeout=10_000
@@ -82,9 +83,9 @@ def test_terminal_view_has_back_arrow_and_kill_button(
 
 
 def test_kill_from_terminal_view_stops_and_returns_to_list(
-    authed_page: Page, base_url: str, launched_pty_session: str, browser_name: str
+    authed_page: Page, base_url: str, launched_pty_session: str, phone_projection: bool
 ) -> None:
-    _skip_unless_phone(browser_name)
+    _skip_unless_phone(phone_projection)
     authed_page.goto(base_url, wait_until="domcontentloaded")
     expect(authed_page.locator("#buildReadout")).to_contain_text(
         "Build:", timeout=10_000

@@ -162,7 +162,7 @@ All keys optional — missing keys fall back to `src/webapp_config.py` defaults.
 
 ## Verifying changes
 
-- **Pre-ship gate** — `pwsh -File scripts/verify-before-ship.ps1`. Byte-compiles `app src tests`, runs the non-e2e pytest suite (~1270 tests), then a **diff-proportionate** browser slice routed by `scripts/classify_e2e.py` against `main`: static-asset-only diff → Chromium smoke; backend/docs-only → no browser suite; any real UI/session-host/e2e change (or ambiguity) → the full Chromium + WebKit/iPhone dual-projection suite. It boots its own disposable webapp + session-host — no tray needed, and it never touches live sessions. Progress streams to `webapp/verify-progress.log`.
+- **Pre-ship gate** — `pwsh -File scripts/verify-before-ship.ps1`. Byte-compiles `app src tests`, runs the non-e2e pytest suite (~1270 tests), then a **diff-proportionate** browser slice routed by `scripts/classify_e2e.py` against `main`: static-asset-only diff → Chromium smoke; backend/docs-only → no browser suite; any real UI/session-host/e2e change (or ambiguity) → the full suite, Chromium driving both a desktop and a phone (Android device-emulated) projection (Android-only fork, no WebKit/iPhone engine). It boots its own disposable webapp + session-host — no tray needed, and it never touches live sessions. Progress streams to `webapp/verify-progress.log`.
 - **Dev-loop smoke against the live tray** — `.\scripts\run-e2e.ps1` (sets `LAUNCHER_E2E_LIVE=1`; a bare `pytest tests/e2e` without the opt-in env vars exits with a guard message so ad-hoc runs can't hit the webapp the phone is using).
 - **Non-browser suite alone** — `.\.venv\Scripts\python.exe -m pytest tests -m "not smoke"`.
 - **CI** — `.github/workflows/e2e.yml` runs the same gate on `windows-2025` for every PR and push to `main`. **Advisory, not required** — the local gate is the contract. See [docs/ci-github-actions.md](docs/ci-github-actions.md).
@@ -207,7 +207,6 @@ The upstream [app-launcher](https://github.com/ferraroroberto/app-launcher) keep
 | [docs/launcher-owned-pty.md](docs/launcher-owned-pty.md) | The ConPTY terminal architecture, security model, and gotchas. |
 | [docs/detached-stop-decision.md](docs/detached-stop-decision.md) | Why detached sessions get a single kill-style Stop. |
 | [docs/cache-hygiene-asset-hashing.md](docs/cache-hygiene-asset-hashing.md) | Content-hash asset stamping + `/api/version` build identity. |
-| [docs/iphone-debugging.md](docs/iphone-debugging.md) | DevTools against a real iPhone from the Windows PC. |
 | [docs/ci-github-actions.md](docs/ci-github-actions.md) | What the CI workflow runs and why it stays advisory. |
 | [docs/architecture.mmd](docs/architecture.mmd) | Hand-authored Mermaid diagram of this repo's internal structure. |
 

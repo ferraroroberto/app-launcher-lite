@@ -11,8 +11,8 @@ Approach: the real per-project git state isn't deterministic across
 environments, so we intercept the endpoint BEFORE first navigation with an
 echo-and-override handler (real project ids, canned flags), then assert
 the DOM annotations appear with no button interaction. Runs in both
-projections — the wiring is browser-agnostic but the iPhone projection
-confirms the phone surface too.
+projections — the wiring is browser-agnostic but the phone (Android)
+projection confirms the phone surface too.
 """
 
 from __future__ import annotations

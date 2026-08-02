@@ -1,7 +1,7 @@
 """Regression pin for issue #267 — floating bottom tab bar polish.
 
 Follow-up to the #263 bar (see test_primary_nav.py). Pins two fixes on the
-iPhone (WebKit) projection:
+phone (Android) projection:
 
 1. **No scroll drift.** The bar is promoted to its own compositing layer and
    the vendored nav-tabs.css/_vendored/nav/nav-tabs.js (issue #355) keep it
@@ -20,7 +20,7 @@ own prior #267 tuning (a reduced safe-area fraction + 2px gap) — the
 convergence trade-off of adopting the fleet-standard geometry verbatim.
 
 Desktop / fine-pointer projections keep the static top control unchanged, so
-the assertions are WebKit-only (matching test_primary_nav.py).
+the assertions are phone-only (matching test_primary_nav.py).
 """
 
 from __future__ import annotations
@@ -37,9 +37,9 @@ TAB_IDS = [
 
 
 def test_bottom_tab_bar_is_stable_and_low(
-    authed_page: Page, base_url: str, browser_name: str
+    authed_page: Page, base_url: str, phone_projection: bool
 ) -> None:
-    if browser_name != "webkit":
+    if not phone_projection:
         pytest.skip("bottom tab bar only renders on the phone projection")
 
     authed_page.goto(base_url, wait_until="domcontentloaded")

@@ -18,12 +18,18 @@ Two run modes:
   never a skip: the whole point of the gate is that a missing server can't
   silently pass. See issue #33.
 
-`pytest_sessionfinish` runs the vendor-verbatim leaked-browser-helper sweep
-(`tests/e2e/_browser_sweep.py`, project-scaffolding #203/#204) once the whole
-session — fixtures included — has torn down, so a run that orphaned a WebKit
-helper reclaims it *while it is still killable*, instead of leaving one
-pinning this checkout's directory (which is what makes a later `git worktree
-remove` fail as "busy"). See issue #709.
+This app is Android-only, so the suite drives Chromium exclusively — no
+WebKit engine, ever (issue #6). The suite still runs two *projections* per
+test: desktop (default viewport) and phone (`phone_projection` fixture below,
+merging in `playwright.devices["Pixel 8 Pro"]` — touch, mobile viewport, an
+actual Android device rather than the old WebKit+iPhone stand-in; picked over
+the narrower Pixel 7 so the width headroom already tuned against the old
+430px iPhone viewport carries over unchanged). Tests that special-cased
+`browser_name == "webkit"` for phone-only behaviour now key off
+`phone_projection` instead. `tests/e2e/_browser_sweep.py` stays vendored from
+project-scaffolding (`.fleet.toml`) but this conftest no longer calls it: its
+sweep targets WebKit-family helper processes only, which this suite never
+spawns.
 """
 
 from __future__ import annotations
@@ -44,8 +50,6 @@ from typing import Callable, IO, Iterator, List, Optional
 import pytest
 import requests
 from playwright.sync_api import BrowserContext, Page
-
-from tests.e2e._browser_sweep import sweep_browser_helpers
 
 logger = logging.getLogger(__name__)
 
@@ -511,49 +515,31 @@ def _require_live_tray(request: pytest.FixtureRequest, base_url: str) -> None:
         )
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    # Default the e2e suite to dual projections (Chromium-desktop + WebKit-iPhone)
-    # when --browser wasn't passed, so WebKit coverage is impossible to forget
-    # (issue #31). Users can still pin a single engine with `--browser chromium`
-    # for a faster dev loop; pytest-playwright treats --browser as append-style.
-    selected = config.option.browser
-    if not selected:
-        selected.extend(["chromium", "webkit"])
+@pytest.fixture(scope="session", params=[False, True], ids=["desktop", "phone"])
+def phone_projection(request: pytest.FixtureRequest) -> bool:
+    """True on the Android/phone projection leg, False on desktop.
 
-
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Sweep browser helpers this run orphaned inside *this* checkout (#709).
-
-    A session hook, not a fixture finalizer: it must run after *every* fixture
-    — including pytest-playwright's own session-scoped `browser` — has already
-    torn down, or the sweep would be looking at a browser that is still
-    legitimately running. The scope path is the only call-site argument, so
-    `_browser_sweep.py` stays byte-identical to project-scaffolding's copy.
-
-    Advisory by design: it reports and never touches `exitstatus`, because an
-    already-exited handle-held zombie is unkillable and is not a test failure
-    (see `_browser_sweep`'s module docstring for why those exist, and why
-    nothing is ever killed by image name alone — Chromium is deliberately out
-    of the sweep set, which matters on a box where the user's own Chrome is
-    always up).
+    Parametrized here (not via `--browser`, which only selects the engine —
+    always Chromium now) so every e2e test that depends on it, directly or
+    transitively through `context`/`page`, still runs once per projection —
+    the same doubling `browser_name in [chromium, webkit]` used to give for
+    free, minus the WebKit engine (issue #6).
     """
-    result = sweep_browser_helpers(_REPO_ROOT)
-    print(f"\n{result.summary()}")
-    for entry in result.killed:
-        print(f"  reclaimed leaked helper: {entry}")
+    return bool(request.param)
 
 
 @pytest.fixture(scope="session")
 def browser_context_args(
-    browser_context_args: dict, browser_name: str, playwright
+    browser_context_args: dict, phone_projection: bool, playwright
 ) -> dict:
     # Self-signed cert on 8465 — the SPA + service-worker won't load otherwise.
     args = {**browser_context_args, "ignore_https_errors": True}
-    if browser_name == "webkit":
-        # Project the WebKit engine onto an iPhone 15 Pro Max — viewport,
-        # user_agent, has_touch, is_mobile, device_scale_factor — so the suite
-        # exercises an iPhone-shaped target on Windows (issue #31).
-        args = {**args, **playwright.devices["iPhone 15 Pro Max"]}
+    if phone_projection:
+        # A real Android device profile — touch, mobile viewport, device
+        # scale factor — so the phone-only assertions across the suite
+        # exercise an actual Android-shaped target, not the WebKit+iPhone
+        # stand-in this used to be (issue #6).
+        args = {**args, **playwright.devices["Pixel 8 Pro"]}
     return args
 
 

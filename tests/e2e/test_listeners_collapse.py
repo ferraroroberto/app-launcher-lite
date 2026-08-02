@@ -12,7 +12,7 @@ Approach: the real listener set isn't deterministic across environments,
 so we intercept ``/api/ports/probe`` with a canned payload — one parent
 with two helper children plus one standalone listener — then assert the
 DOM. Runs in both projections — the wiring is browser-agnostic but the
-iPhone projection confirms the phone surface too.
+phone (Android) projection confirms the phone surface too.
 """
 
 from __future__ import annotations

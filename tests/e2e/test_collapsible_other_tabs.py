@@ -13,8 +13,8 @@ Covered panels:
   collapse.
 - Team: 📚 Skills.
 
-Runs in both projections — the wiring is browser-agnostic but the iPhone
-projection confirms the phone surface too.
+Runs in both projections — the wiring is browser-agnostic but the phone
+(Android) projection confirms the phone surface too.
 """
 
 from __future__ import annotations

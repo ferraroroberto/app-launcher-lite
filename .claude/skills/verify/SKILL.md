@@ -50,5 +50,7 @@ route-mocks past all of that) is usually less friction for a UI-only check.
   invocation outside `scripts/run-e2e.ps1` — a bare run without it (and
   without `LAUNCHER_E2E_LIVE=1`) exits with a guard message rather than
   hitting the live phone-facing webapp by accident.
-- `--browser webkit` is the iPhone-shaped projection; `chromium` is faster
-  for a quick visual pass. Run both when the diff touches layout/CSS.
+- This app is Android-only — the suite drives `chromium` exclusively, no
+  WebKit engine. A test still runs twice — desktop viewport and a phone
+  (`playwright.devices["Pixel 8 Pro"]`) projection, via the `phone_projection`
+  fixture, not `--browser`. Target one leg with `-k desktop` or `-k phone`.

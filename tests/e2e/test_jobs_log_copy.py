@@ -7,7 +7,7 @@ handler lives in ``jobs.js`` (``copyOutputTail`` wired in
 
 Hermetic: route-mock ``/api/jobs`` + the run-list and run-detail endpoints
 so the expand → select → output flow runs through the production code path,
-and mock ``navigator.clipboard.writeText`` via init script (headless WebKit
+and mock ``navigator.clipboard.writeText`` via init script (headless
 clipboard perms are not reliable, same reason as the #29 paste test). The
 check runs in both projections.
 """
@@ -25,8 +25,8 @@ pytestmark = pytest.mark.smoke
 _LOG_TEXT = "Traceback (most recent call last):\n  ValueError: boom-{97}\n"
 
 # Capture writeText payloads on window.__copied. defineProperty mirrors the
-# #29 paste mock — navigator.clipboard is non-writable in some WebKit
-# contexts, so direct assignment fails.
+# #29 paste mock — navigator.clipboard is non-writable in some contexts,
+# so direct assignment fails.
 _CLIPBOARD_MOCK = """
 (() => {
   window.__copied = [];

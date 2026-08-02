@@ -1,9 +1,9 @@
-"""Sanity-check that the WebKit projection actually applies the iPhone descriptor.
+"""Sanity-check that the phone projection actually applies the Android descriptor.
 
 Confirms `browser_context_args` in conftest.py merged in
-`playwright.devices["iPhone 15 Pro Max"]` — without this, the WebKit run
+`playwright.devices["Pixel 8 Pro"]` — without this, the phone-projection run
 would silently use a desktop viewport and test_smoke.py wouldn't actually
-be exercising an iPhone-shaped target (issue #31).
+be exercising an Android-shaped target (issue #6).
 """
 
 from __future__ import annotations
@@ -13,18 +13,18 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.smoke
 
-# Matches playwright.devices["iPhone 15 Pro Max"]["viewport"]["width"].
-_IPHONE_15_PRO_MAX_WIDTH = 430
+# Matches playwright.devices["Pixel 8 Pro"]["viewport"]["width"].
+_PIXEL_8_PRO_WIDTH = 448
 
 
-def test_iphone_viewport_active_on_webkit(
-    authed_page: Page, base_url: str, browser_name: str
+def test_android_viewport_active_on_phone_projection(
+    authed_page: Page, base_url: str, phone_projection: bool
 ) -> None:
-    if browser_name != "webkit":
-        pytest.skip("iPhone projection only applies to the WebKit browser")
+    if not phone_projection:
+        pytest.skip("Android projection only applies to the phone leg")
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     width = authed_page.evaluate("window.innerWidth")
-    assert width == _IPHONE_15_PRO_MAX_WIDTH, (
-        f"expected iPhone 15 Pro Max width {_IPHONE_15_PRO_MAX_WIDTH}, got {width} — "
+    assert width == _PIXEL_8_PRO_WIDTH, (
+        f"expected Pixel 8 Pro width {_PIXEL_8_PRO_WIDTH}, got {width} — "
         "the device descriptor merge in conftest.py didn't take effect"
     )
