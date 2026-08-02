@@ -29,9 +29,9 @@ _EPHEMERAL_THRESHOLD = 49152
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _run_once(browser_name: str) -> None:
-    if browser_name != "chromium":
-        pytest.skip("server-side check; runs once on the chromium projection")
+def _run_once(phone_projection: bool) -> None:
+    if phone_projection:
+        pytest.skip("server-side check; runs once on the desktop projection")
 
 
 def test_probe_hides_pywinpty_ephemerals(

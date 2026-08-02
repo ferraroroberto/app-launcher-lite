@@ -16,7 +16,7 @@ This project already had a **local pre-ship gate**: `scripts/verify-before-ship.
 
 1. Byte-compile every Python file (`app`, `src`, `tests`).
 2. The non-browser test suite (`pytest`, ~1270 tests).
-3. The Playwright end-to-end suite — a real browser (Chromium *and* a WebKit engine projected onto an iPhone viewport) driving the webapp, against a disposable server the script boots itself.
+3. The Playwright end-to-end suite — a real browser (Chromium, driving both a desktop and a phone/Android-device-emulated projection; this app is Android-only, so there's no separate WebKit/iPhone engine) driving the webapp, against a disposable server the script boots itself.
 
 That gate is the **contract**: `CLAUDE.md` says it must pass before any change to the webapp/launcher/session-host is declared done.
 
@@ -34,7 +34,7 @@ Nothing about the gate itself changed. CI just runs it for you, somewhere else, 
 | `runs-on: windows-2025` | `pywinpty` is Windows-only and the e2e suite spawns real PTYs — a Linux runner physically cannot run this project. |
 | Checkout + set up Python 3.12 | A fresh machine starts with *nothing* — not even the code. |
 | Create `.venv`, install `requirements.txt` | `verify-before-ship.ps1` hard-requires `.venv\Scripts\python.exe`. We build the venv so the script runs unmodified — the script stays the contract. |
-| `playwright install chromium webkit` | The browser engines the e2e suite drives. They are large binaries, not Python packages, so they need a separate install. |
+| `playwright install chromium` | The browser engine the e2e suite drives. It is a large binary, not a Python package, so it needs a separate install. |
 | **Seed config files from samples** | `config/{config,webapp_config,apps}.json` are gitignored — only the `*.sample.json` templates are committed. A fresh runner has only the samples. (See §4 — this step was the bug fix.) |
 | Run `verify-before-ship.ps1` | The actual gate. |
 

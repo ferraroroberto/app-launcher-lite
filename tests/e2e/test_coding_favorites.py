@@ -11,8 +11,8 @@ deterministic across environments, so we intercept /api/apps with a canned,
 *mutable* payload and intercept the favorites POST to flip it — exercising the
 real client-side partition, the star-click → re-fetch → reorder loop, and the
 filter toggle without touching the user's actual config. Runs in both
-projections (the wiring is browser-agnostic, but the iPhone projection
-confirms the phone surface too).
+projections (the wiring is browser-agnostic, but the phone (Android)
+projection confirms the phone surface too).
 """
 
 from __future__ import annotations

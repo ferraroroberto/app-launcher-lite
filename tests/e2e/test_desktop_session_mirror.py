@@ -14,7 +14,7 @@ The disposable autoboot harness is identified by ``LAUNCHER_SESSION_HOST_PORT``
 rule the orphan-mirror sweep follows (issue #278). That makes this assertion
 deterministic and side-effect-free.
 
-The phone/WebKit counterpart (row-tap → in-page terminal) is pinned by
+The phone counterpart (row-tap → in-page terminal) is pinned by
 ``test_inpage_terminal_not_mirror.py`` and ``test_stop_unify_and_terminal_kill.py``.
 """
 
@@ -27,14 +27,15 @@ pytestmark = pytest.mark.smoke
 
 
 def test_desktop_row_tap_mirrors_and_keeps_inpage_terminal_closed(
-    authed_page: Page, base_url: str, launched_pty_session: str, browser_name: str
+    authed_page: Page, base_url: str, launched_pty_session: str, phone_projection: bool
 ) -> None:
-    # Desktop (pointer: fine) behaviour. The conftest maps WebKit onto an
-    # iPhone (coarse pointer), which opens the terminal in-page instead, so
-    # this runs on the Chromium desktop projection only (#282).
-    if browser_name != "chromium":
+    # Desktop (pointer: fine) behaviour. The conftest maps the phone
+    # projection onto an Android device (coarse pointer), which opens the
+    # terminal in-page instead, so this runs on the desktop projection only
+    # (#282).
+    if phone_projection:
         pytest.skip(
-            "desktop (pointer: fine) behaviour; the iPhone/WebKit projection "
+            "desktop (pointer: fine) behaviour; the phone (Android) projection "
             "opens the terminal in-page — see test_inpage_terminal_not_mirror.py"
         )
     sid = launched_pty_session

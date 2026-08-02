@@ -20,9 +20,9 @@ The fix has two halves:
   the full eight-button row (420px) genuinely fits a 430px phone viewport at
   once — no scrolling needed on the default projection.
 
-The narrow-viewport test uses 320px (iPhone SE 1st-gen width) because that is
+The narrow-viewport test uses 320px (a small-phone width) because that is
 where the scroller safety net actually engages; the fits-at-once test runs on
-the suite's default iPhone 15 Pro Max (430px) projection where the whole row
+the suite's default Pixel 8 Pro (448px) phone projection where the whole row
 must be visible without scrolling.
 """
 
@@ -37,10 +37,10 @@ _NARROW_VIEWPORT = {"width": 320, "height": 640}
 
 
 def test_terminal_bar_buttons_stay_within_viewport(
-    authed_page: Page, base_url: str, browser_name: str, launched_pty_session: str
+    authed_page: Page, base_url: str, phone_projection: bool, launched_pty_session: str
 ) -> None:
-    if browser_name != "webkit":
-        pytest.skip("phone-width overflow only reproduces under the iPhone projection")
+    if not phone_projection:
+        pytest.skip("phone-width overflow only reproduces under the phone projection")
 
     authed_page.set_viewport_size(_NARROW_VIEWPORT)
     sid = launched_pty_session
@@ -82,17 +82,17 @@ def test_terminal_bar_buttons_stay_within_viewport(
 
 
 def test_terminal_bar_fits_at_once_on_default_phone(
-    authed_page: Page, base_url: str, browser_name: str, launched_pty_session: str
+    authed_page: Page, base_url: str, phone_projection: bool, launched_pty_session: str
 ) -> None:
-    """All seven bar buttons fit the default iPhone projection without scrolling.
+    """All seven bar buttons fit the default phone projection without scrolling.
 
     The second half of #514: with the Back button back at the uniform 44px and
     uniform 6px gaps, the full row must be fully visible at once on the
-    suite's default iPhone 15 Pro Max (430px) viewport, with no internal
+    suite's default Pixel 8 Pro (448px) viewport, with no internal
     scrolling and no clipped button.
     """
-    if browser_name != "webkit":
-        pytest.skip("phone-width row-fit only meaningful under the iPhone projection")
+    if not phone_projection:
+        pytest.skip("phone-width row-fit only meaningful under the phone projection")
 
     # Open via the session-list row tap — the phone path. The ?terminal= deep
     # link would classify this loopback open as a PC mirror window (#241) and

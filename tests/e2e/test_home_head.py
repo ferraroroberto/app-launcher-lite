@@ -10,8 +10,8 @@ Item 2: the launch-time Detached/Resume toggles moved onto the launcher
 surface (the Projects card's summary), and the per-agent options card
 dropped to the very bottom of the tab.
 
-Runs in both projections — layout is CSS-driven and the iPhone projection
-confirms the phone surface.
+Runs in both projections — layout is CSS-driven and the phone (Android)
+projection confirms the phone surface.
 """
 
 from __future__ import annotations

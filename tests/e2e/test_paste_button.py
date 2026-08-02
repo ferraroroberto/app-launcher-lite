@@ -4,12 +4,12 @@ The bug: tapping ``#terminalPaste`` did nothing in iOS Safari PWA — the
 JS reached ``navigator.clipboard.readText()`` but no input arrived at
 the session-host. The handler is at ``terminal.js:468-479``.
 
-Approach: mock ``navigator.clipboard.readText`` via init script (Playwright
-WebKit headless clipboard perms are not reliable), seed a payload that
+Approach: mock ``navigator.clipboard.readText`` via init script (headless
+Chromium clipboard perms are not reliable either), seed a payload that
 exercises the #13 regression class (curly braces + newline), click the
-button, then assert the bytes arrived in the per-session log. The check
-runs in both projections — the iOS bug only repros on WebKit but
-Chromium's pass confirms the click handler itself didn't regress.
+button, then assert the bytes arrived in the per-session log. Runs in both
+projections — cheap, and confirms the click handler works at both viewport
+shapes.
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ pytestmark = pytest.mark.smoke
 _PASTE_PAYLOAD = "p4s7e-{regress}\n"
 
 # Override navigator.clipboard before the SPA loads. defineProperty is
-# the most portable path — direct assignment fails in WebKit because
-# navigator.clipboard is non-writable in some contexts.
+# the most portable path — direct assignment fails because navigator.clipboard
+# is non-writable in some contexts.
 _CLIPBOARD_MOCK = """
 ((payload) => {
   Object.defineProperty(navigator, 'clipboard', {

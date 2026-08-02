@@ -1,10 +1,9 @@
 """Diff-proportionate e2e routing for the pre-ship gate (issue #568).
 
-`scripts/verify-before-ship.ps1` used to run the *full* dual-projection
-Playwright suite (Chromium + WebKit/iPhone, ~60 files / 370+ nodes, ~10 min)
-unconditionally, regardless of what the diff touched. A static-asset-only
-change (e.g. #565: a vendored SVG sprite + one pure-Python unit test) paid that
-full cost for zero plausible browser exposure.
+`scripts/verify-before-ship.ps1` used to run the *full* Playwright suite
+(~60 files / 370+ nodes, ~10 min) unconditionally, regardless of what the diff
+touched. A static-asset-only change (e.g. #565: a vendored SVG sprite + one
+pure-Python unit test) paid that full cost for zero plausible browser exposure.
 
 This module maps the changed-file set of the current branch to a **coverage
 tier** so the gate runs an e2e slice *proportionate* to the diff — never
@@ -25,13 +24,14 @@ always run and already cover backend Python):
                 HTML sprite fragments) -> smoke suite, **Chromium only**.
   * ``full``    anything on the real browser surface (JS, CSS, app pages,
                 webapp/session-host/launcher Python, e2e tests), any *mixed*
-                diff, and anything unrecognized -> **full dual-projection**
-                suite (unchanged behaviour). This is the fail-safe default.
+                diff, and anything unrecognized -> **full e2e suite**,
+                Chromium (unchanged behaviour otherwise). This is the
+                fail-safe default. This app is Android-only (issue #6) — the
+                suite drives Chromium exclusively, no WebKit/iPhone projection.
 
 CSS deliberately routes to ``full`` rather than a curated "layout subset":
-`styles.css` is global and the WebKit projection is exactly where layout
-regressions surface, so a hand-maintained subset would be both drift-prone and
-an under-testing risk — and under-testing must never be the outcome of
+`styles.css` is global, so a hand-maintained subset would be both drift-prone
+and an under-testing risk — and under-testing must never be the outcome of
 uncertainty (issue #568's first constraint).
 
 CLI: prints ``E2E_*=`` key/value lines (parsed by the gate) plus a human
@@ -188,7 +188,7 @@ def classify(paths: Sequence[str]) -> Routing:
         return Routing("full", [], "tests/e2e", ["empty-diff: no changed files"])
 
     if top == Category.FULL:
-        return Routing("full", [], "tests/e2e", reasons_for(Category.FULL))
+        return Routing("full", ["chromium"], "tests/e2e", reasons_for(Category.FULL))
     if top == Category.STATIC:
         return Routing(
             "static", ["chromium"], "tests/e2e/test_smoke.py",

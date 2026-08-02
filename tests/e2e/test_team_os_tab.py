@@ -371,9 +371,9 @@ def test_team_os_tile_keeps_name_and_buttons_on_one_row(
     """Regression for #124: a Life tile carries only two actions (📖 + 🚀),
     so the name and both buttons stay on a single inline row even on a
     narrow phone — they must NOT inherit the Coding tab's stack-on-narrow
-    rule (#120) via the shared ``.coding-item`` class. On the WebKit
-    projection this runs at the iPhone width (430px < the 520px breakpoint),
-    so it exercises the media query directly.
+    rule (#120) via the shared ``.coding-item`` class. On the phone
+    projection this runs at the Pixel 8 Pro width (448px < the 520px
+    breakpoint), so it exercises the media query directly.
 
     Asserted via geometry: when inline, the name and the action strip both
     span the tile's full height and so overlap vertically; when wrongly

@@ -32,7 +32,7 @@ pytestmark = pytest.mark.smoke
 # is not comparable to (#186's 15s default action timeout), this one has to
 # cover a real agent's cold boot — on a box already running several other
 # live agent PTYs plus the dual-projection browser suite, that boot can run
-# long, especially on the slower WebKit/iPhone projection. Env-tunable like
+# long, especially on the slower phone projection. Env-tunable like
 # ``E2E_LOG_POLL_DEADLINE_MS`` (#184) and ``E2E_STOP_OVERLAY_HIDE_MS`` (#286)
 # so a loaded host gets headroom without slowing the common-case local pass.
 # 60s is roughly two cold boots' worth of headroom and still fails fast
@@ -215,7 +215,7 @@ def test_reconnect_replay_does_not_duplicate_scrollback(
     authed_page.evaluate(_BUF_COUNT_SETUP)
 
     # Echo a marker into the agent's composer (no \n — never submitted, so
-    # the agent doesn't act on it; short enough not to wrap on the iPhone
+    # the agent doesn't act on it; short enough not to wrap on the phone
     # projection's narrow cols).
     marker = "dup-pin-444"
     authed_page.evaluate(

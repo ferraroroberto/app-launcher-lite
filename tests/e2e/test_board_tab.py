@@ -525,7 +525,7 @@ def test_backlog_issue_tile_is_flat_separator_row_with_icon_only_actions(
     # a prior build regressed exactly this way.
     # to_have_css (not a raw getComputedStyle read) because it re-resolves the
     # locator on every retry: the 5 s board poll rebuilds this <li>, and a raw
-    # read landing mid-rebuild returns '' on WebKit (#680).
+    # read landing mid-rebuild can return '' (#680).
     zero_radius = re.compile(r"^0(px)?$")
     expect(tile).to_have_css("border-radius", zero_radius)
     expect(tile).to_have_css("border-top-style", "none")
@@ -881,7 +881,7 @@ def test_board_drawer_survives_git_status_poll_mid_interaction(
 def test_board_columns_layout_matches_projection(
     authed_page: Page, base_url: str
 ) -> None:
-    """Phone (WebKit / iPhone projection): the carousel shows one column per
+    """Phone (Android projection): the carousel shows one column per
     viewport — a column spans ~the full container width. Desktop (Chromium,
     fine pointer ≥700px): the grid shows all four columns — each column is
     well under half the container. Same DOM, projection-dependent CSS."""

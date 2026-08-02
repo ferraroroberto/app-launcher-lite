@@ -79,7 +79,7 @@ def test_static_only_routes_to_chromium_smoke() -> None:
 def test_js_change_routes_to_full() -> None:
     r = classify(["app/webapp/static/apps.js"])
     assert r.tier == "full"
-    assert r.browsers == []          # suite default = both projections
+    assert r.browsers == ["chromium"]
     assert r.pytest_target == "tests/e2e"
 
 
