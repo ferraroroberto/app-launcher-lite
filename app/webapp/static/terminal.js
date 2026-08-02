@@ -260,9 +260,10 @@ export async function openTerminal(session) {
   const sid = session.session_id;
   if (!sid) return;
 
-  // The live terminal is Tailscale-only. If this connection can't reach
-  // it (public Cloudflare tunnel, off-tailnet Wi-Fi), explain that up
-  // front instead of opening a terminal that only says "Disconnected".
+  // The live terminal is private-network-only. If this connection can't
+  // reach it (public Cloudflare tunnel, an untrusted network), explain
+  // that up front instead of opening a terminal that only says
+  // "Disconnected".
   if (state.status && state.status.terminal &&
       state.status.terminal.reachable === false) {
     stashActiveTerminal();
@@ -272,7 +273,7 @@ export async function openTerminal(session) {
     setTerminalTitleText(session);
     setTerminalStatus(
       state.status.terminal.reason ||
-        'The live terminal is Tailscale-only.',
+        'The live terminal is private-network-only.',
       { icon: 'lock' }
     );
     return;

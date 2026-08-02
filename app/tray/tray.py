@@ -7,7 +7,9 @@ Windows login without keeping a console window open.
 Menu:
     Open launcher              — open the local URL in the default browser
     Copy local URL             — clipboard the local URL
-    Copy Tailscale URL         — clipboard https://<tailscale-host>:8465?token=…
+    Copy remote URL            — clipboard https://<host>:8465?token=… (the
+                                 Tailscale hostname when available, else the
+                                 configured tailnet_host — any VPN/LAN name)
     Copy Cloudflare URL        — clipboard the public URL with ?token=…
     Restart webapp             — stop + start so a new pull is picked up
     Status                     — popup with webapp state
@@ -382,8 +384,13 @@ class TrayApp:
         else:
             _notify("Local URL", url)
 
-    def copy_tailscale(self, icon, item) -> None:  # noqa: ARG002
+    def copy_remote(self, icon, item) -> None:  # noqa: ARG002
+        # Tailscale first; without it (e.g. a machine that reaches the
+        # phone over a plain VPN) fall back to the configured tailnet_host,
+        # which is any hostname/IP the phone can reach.
         host = tailscale.resolve_hostname(_ts_debug)
+        if not host:
+            host = (self.app_config.tailnet_host or "").strip()
         if not host:
             reason = ""
             try:
@@ -394,9 +401,10 @@ class TrayApp:
             except OSError:
                 pass
             _notify(
-                "Tailscale not available",
+                "No remote URL available",
                 reason
-                or "Couldn't resolve a tailnet address — see webapp/tailscale_debug.log.",
+                or "No tailnet address and no tailnet_host configured — "
+                "see webapp/tailscale_debug.log.",
             )
             return
         scheme = "https" if cert_paths() else "http"
@@ -404,9 +412,9 @@ class TrayApp:
         webapp_cfg = load_webapp_config()
         url = append_auth_token(url, webapp_cfg.auth_token)
         if _clipboard_copy(url):
-            _notify("Copied Tailscale URL", url)
+            _notify("Copied remote URL", url)
         else:
-            _notify("Tailscale URL", url)
+            _notify("Remote URL", url)
 
     def copy_tunnel(self, icon, item) -> None:  # noqa: ARG002
         if not TUNNEL_URL_FILE.exists():
@@ -511,7 +519,7 @@ class TrayApp:
         menu = Menu(
             MenuItem("🚀 Open launcher", self.on_left_click, default=True),
             MenuItem("📋 Copy local URL", self.copy_local),
-            MenuItem("📋 Copy Tailscale URL", self.copy_tailscale),
+            MenuItem("📋 Copy remote URL", self.copy_remote),
             MenuItem("📋 Copy Cloudflare URL", self.copy_tunnel),
             Menu.SEPARATOR,
             MenuItem("🔄 Restart webapp", self.restart_webapp),

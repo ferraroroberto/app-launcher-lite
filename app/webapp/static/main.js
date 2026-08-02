@@ -135,10 +135,10 @@ async function fetchStatus() {
     // (Settings tab cleanup): needless exposure of the tunnel hostname in
     // the UI, and not information the user needs day to day. The
     // reachability warning stays; it's actionable (fix by switching to
-    // the Tailscale URL), not just informational.
+    // the Tailscale/VPN URL), not just informational.
     const parts = [];
     if (body.terminal && body.terminal.reachable === false) {
-      appendStatusChunk(parts, 'triangle-alert', 'terminal needs the Tailscale URL');
+      appendStatusChunk(parts, 'triangle-alert', 'terminal needs the private (Tailscale/VPN) URL');
     }
     els.statusReadout.innerHTML = '';
     parts.forEach(function (p) { els.statusReadout.appendChild(p); });

@@ -644,7 +644,7 @@ export async function fetchAgents() {
 
 // -------------------------------------------------- running apps panel
 // Apps spawned from the launcher (bats). Mirrors the Coding tab's
-// Running sessions panel: list, tap-to-open over Tailscale, per-app stop.
+// Running sessions panel: list, tap-to-open over the remote host, per-app stop.
 export function renderRunningApps() {
   const host = els.runningAppsList;
   host.innerHTML = '';

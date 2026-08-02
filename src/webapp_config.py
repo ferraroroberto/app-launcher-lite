@@ -184,11 +184,13 @@ class WebappConfig:
     # Loopback port the PTY session-host binds (never network-reachable).
     session_host_port: int = DEFAULT_SESSION_HOST_PORT
     # Extra IPs / CIDRs allowed to reach the terminal endpoints on top of
-    # loopback + the Tailscale CGNAT range (100.64.0.0/10). Empty by default.
+    # loopback + the Tailscale CGNAT range (100.64.0.0/10). Empty by
+    # default. This is also how a non-Tailscale VPN enables the terminal:
+    # add its client subnet (the tailnet_ name is historical).
     tailnet_allowlist: list = field(default_factory=list)
     # When true, launching a session from the phone also opens an
     # interactive terminal window for it on the PC (over loopback, so it
-    # bypasses the Tailscale + passkey gate). Input works from both sides.
+    # bypasses the private-network + passkey gate). Input works from both sides.
     show_local_window: bool = True
     # Bounded scrollback (issue #435 follow-up): how many lines of a
     # full-screen agent's history the session-host retains and replays on

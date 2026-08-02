@@ -1,6 +1,6 @@
 """WebAuthn passkey gate for the interactive terminal.
 
-The terminal endpoints are Tailscale-only *and*, when a relying party is
+The terminal endpoints are private-network-only *and*, when a relying party is
 configured, gated behind a **platform passkey** (Face ID on the enrolled
 iPhone). This module owns:
 

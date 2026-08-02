@@ -33,7 +33,8 @@ set "LOOP_ARG=app.webapp.event_loop:selector_loop_factory"
 
 if not exist "%CERT%" (
     echo [INFO] No HTTPS cert found, running HTTP-only on :8465.
-    echo        Run scripts\gen_tailscale_cert.py to enable HTTPS.
+    echo        Run scripts\gen_tailscale_cert.py, or drop any cert.pem + key.pem
+    echo        pair into webapp\certificates\, to enable HTTPS.
     "%VENV_PY%" -m uvicorn app.webapp.server:app --host 0.0.0.0 --port 8465 --loop "%LOOP_ARG%"
 ) else (
     echo [INFO] HTTPS via %CERT%

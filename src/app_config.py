@@ -21,9 +21,11 @@ VALID_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 @dataclass
 class AppConfig:
     log_level: str = "INFO"
-    # Tailscale (MagicDNS) hostname of this PC, e.g.
-    # "pc.example-tailnet.ts.net". Used to build each running app's remote
-    # URL (https://<tailnet_host>:<port>/) for the Apps tab's Open button.
+    # Hostname or IP the phone can reach this PC on: a Tailscale MagicDNS
+    # name ("pc.example-tailnet.ts.net"), a VPN/corporate DNS name, or a
+    # static VPN/LAN IP. Used to build each running app's remote URL
+    # (https://<tailnet_host>:<port>/) for the Apps tab's Open button and
+    # as the tray's Copy-remote-URL fallback when Tailscale is absent.
     # Empty string disables the feature (Open button hidden / disabled).
     tailnet_host: str = ""
     # Optional webapp section — when missing, the tray spawns the webapp

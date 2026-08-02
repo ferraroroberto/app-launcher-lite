@@ -3,9 +3,9 @@
     GET  /api/board                       → the four computed columns (token-gated)
     POST /api/board/gitlab/refresh        → run the glab queries now (token-gated)
     GET  /api/board/sessions/{sid}/exchange → last user↔assistant exchange
-                                            (Tailscale + passkey — transcript text)
+                                            (private network + passkey — transcript text)
     POST /api/board/issues/start          → spawn /issue-start|yolo <N> in the
-                                            issue's repo (Tailscale + passkey)
+                                            issue's repo (private network + passkey)
 
 Split off a single-file god-router (issue #691, `/codebase-audit`), the way
 ``jobs.py`` and ``sessions.py`` already were: the shared launch helpers
@@ -133,7 +133,7 @@ async def refresh_gitlab(request: Request) -> Dict[str, Any]:
 
 @router.get("/api/board/sessions/{sid}/exchange")
 async def session_exchange(sid: str, request: Request) -> Dict[str, Any]:
-    """Last user↔assistant exchange for a live session (Tailscale + passkey).
+    """Last user↔assistant exchange for a live session (private network + passkey).
 
     Structured native history wins when it correlates safely. A missing
     hook JSONL or unsupported agent falls back to the launcher's exact-id PTY
@@ -176,7 +176,7 @@ async def session_exchange(sid: str, request: Request) -> Dict[str, Any]:
 
 @router.post("/api/board/issues/start")
 async def start_issue(request: Request) -> Dict[str, Any]:
-    """One-tap ▶ Start / ⚡ YOLO on a backlog card (Tailscale + passkey, #301).
+    """One-tap ▶ Start / ⚡ YOLO on a backlog card (private network + passkey, #301).
 
     Body: ``{"repo": str, "number": int, "mode": "start"|"yolo",
     "rows": int, "cols": int, "title": str}``. The repo must

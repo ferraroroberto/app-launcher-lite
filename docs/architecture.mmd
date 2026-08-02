@@ -152,13 +152,13 @@ flowchart TB
     GL["glab CLI / GitLab"]
     TEAMOSREPO["team-os repo (sibling)\nskills invoked via copilot session"]
     CLOUDFLARE["Cloudflare named tunnel"]
-    TAILSCALE["Tailscale"]
+    TAILSCALE["Tailscale (optional —\nany VPN via tailnet_allowlist)"]
   end
   JOBSSCHTASKS --> SCHTASKS
   GLCLIENT --> GL
   R_TEAMOS --> TEAMOSREPO
   TUNNEL --> CLOUDFLARE
-  TRAY -->|Copy Tailscale URL| TAILSCALE
+  TRAY -->|Copy remote URL| TAILSCALE
 
   subgraph config["config/ (gitignored, .sample.json committed)"]
     CFGFILES["apps.json · config.json ·\njobs.json · webapp_config.json"]

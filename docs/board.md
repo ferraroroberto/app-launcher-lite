@@ -31,8 +31,8 @@ All Board routes live in `app/webapp/routers/board.py` (the shared launch helper
 | --- | --- | --- |
 | `GET /api/board` | bearer-token | The four columns — the **5 s poll target**. Cheap only: runs the live session list and two small state-file reads concurrently, plus a pure in-memory read of the GitLab cache. **No `glab` subprocess ever runs on this path.** |
 | `POST /api/board/gitlab/refresh` | bearer-token | Runs the two `glab` queries (open issues, closed-today issues) and replaces the cache. The **only** place `glab` is invoked. With an empty `gitlab_group` it never touches a subprocess — the snapshot just carries a "set gitlab_group in Settings" hint as its `error`. |
-| `GET /api/board/sessions/{sid}/exchange` | Tailscale + passkey | The last user↔assistant exchange from the agent-aware conversation-source hierarchy (drill-down drawer). |
-| `POST /api/board/issues/start` | Tailscale + passkey | One-tap `/issue-start` / `/issue-yolo <N>` on a Backlog card. |
+| `GET /api/board/sessions/{sid}/exchange` | private network + passkey | The last user↔assistant exchange from the agent-aware conversation-source hierarchy (drill-down drawer). |
+| `POST /api/board/issues/start` | private network + passkey | One-tap `/issue-start` / `/issue-yolo <N>` on a Backlog card. |
 
 The `GET /api/board` response is `{ generated_at, columns, gitlab: {fetched_at, error}, sessions_state: {available, stale, updated_at}, active_issues: {available, updated_at, count} }`. Each session card carries its raw session fields plus `project`, `status`, and `age_seconds`; each Backlog issue carries a boolean `in_progress`.
 
@@ -156,7 +156,7 @@ It is **never** refreshed on the 5 s poll (which only reads the snapshot), and a
 
 ## Security boundary
 
-The Board splits along the launcher's usual line. The **read-only board** (`GET /api/board`, the GitLab refresh) is bearer-token gated and reachable over the Cloudflare tunnel — it exposes only issue / session metadata. The **terminal-grade surfaces** — the drill-down exchange (transcript text), the drawer reply (`/input`), and one-tap issue start — are **Tailscale-only + passkey-gated**: refused over the public tunnel entirely, and on the tailnet they additionally require a valid WebAuthn terminal token, exactly like the live terminal. The client obtains the token via the shared `ensureTerminalToken()` path.
+The Board splits along the launcher's usual line. The **read-only board** (`GET /api/board`, the GitLab refresh) is bearer-token gated and reachable over the Cloudflare tunnel — it exposes only issue / session metadata. The **terminal-grade surfaces** — the drill-down exchange (transcript text), the drawer reply (`/input`), and one-tap issue start — are **private-network-only + passkey-gated** (the tailnet CGNAT range or an allowlisted VPN subnet — see the README's "Remote access" section): refused over the public tunnel entirely, and on the trusted network they additionally require a valid WebAuthn terminal token, exactly like the live terminal. The client obtains the token via the shared `ensureTerminalToken()` path.
 
 ## Verification
 

@@ -262,8 +262,8 @@ export function connectTerminalWs(terminal) {
     const reason = event && event.reason ? event.reason : '';
     if (event.code === 4000) { setTerminalStatus('Session ended.'); return; }
     if (event.code === 4403) {
-      setTerminalStatus((reason || 'Terminal is Tailscale-only') +
-        ' — open the launcher over your Tailscale URL.', { icon: 'lock' });
+      setTerminalStatus((reason || 'Terminal is private-network-only') +
+        ' — open the launcher over your Tailscale or VPN URL.', { icon: 'lock' });
       return;
     }
     if (event.code === 4404) {

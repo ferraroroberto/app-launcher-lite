@@ -8,7 +8,7 @@
  * the Coding-options Detached toggle). The 📖 Browse button opens an
  * overlay that reads each skill's files — public SKILL.md/description.md
  * plus the private context/memory/examples/conversations + shared
- * identity. Those content endpoints are Tailscale + passkey gated
+ * identity. Those content endpoints are private-network + passkey gated
  * server-side, so a fetch may 403; we surface the reason rather than a
  * blank pane.
  */
@@ -230,12 +230,12 @@ async function loadFileList() {
     b.files = body.files || [];
     renderFileList(b.files);
   } catch (exc) {
-    // The content endpoints are Tailscale + passkey gated — a 403 here
-    // means this connection can't reach them. Say so plainly, in the
+    // The content endpoints are private-network + passkey gated — a 403
+    // here means this connection can't reach them. Say so plainly, in the
     // (full-screen) list area.
     const msg = (exc && exc.status === 403)
-      ? 'The content browser is Tailscale-only (and passkey-gated). Open the ' +
-        'launcher over your Tailscale URL on an enrolled device.'
+      ? 'The content browser is private-network-only (and passkey-gated). ' +
+        'Open the launcher over your Tailscale/VPN URL on an enrolled device.'
       : 'Could not load files: ' + (exc.message || exc);
     els.teamOsFileList.innerHTML = '';
     const li = document.createElement('li');

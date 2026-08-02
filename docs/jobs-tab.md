@@ -770,7 +770,7 @@ Jobs sit on the **Apps tab side** of the launcher's security model — not the i
 
 - `POST /api/jobs/<id>/run` is bearer-token gated and reachable over the Cloudflare tunnel. That is the whole point — a Stream Deck button hits the same HTTPS endpoint the phone uses. Both the legacy `auth_token` and a minted job-scoped token (see "Scoped API tokens" above) pass the gate; the scoped kind passes *only* here.
 - `POST /api/jobs/<id>/hook` (issue #73) is the one exception — it is exempt from the bearer gate entirely and authenticates itself via the job's own provider signature instead. See "Webhook-target jobs" above.
-- The per-run WebSocket is an output-only tail, not an interactive terminal. It carries the same bearer-token boundary as the Jobs HTTP APIs and remains Cloudflare-reachable; the Tailscale-only + passkey terminal gate does not apply.
+- The per-run WebSocket is an output-only tail, not an interactive terminal. It carries the same bearer-token boundary as the Jobs HTTP APIs and remains Cloudflare-reachable; the private-network + passkey terminal gate does not apply.
 - The `id` is checked against the registry on every call — the launcher cannot be coerced into running an arbitrary script path. Mutating `config/jobs.json` is the only way to register a new target.
 
 ## Stream Deck recipe

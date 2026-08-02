@@ -2,8 +2,9 @@
 
 The bearer-token middleware is the single auth choke point for the HTTP
 surface. Loopback callers (PC itself) bypass the token; non-loopback
-callers must present it, and terminal endpoints additionally require
-Tailscale (+ a passkey terminal token for interactive ones).
+callers must present it, and terminal endpoints additionally require a
+private network — the tailnet CGNAT range or an allowlisted VPN/LAN
+subnet — plus a passkey terminal token for interactive ones.
 
 WebSocket auth is re-applied inline in the session router because Starlette
 middleware doesn't see WebSocket handshakes.
@@ -85,7 +86,7 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
     (
         lambda p: p.startswith("/api/webauthn/"),
         "tailnet",
-        "WebAuthn ceremony endpoints — Tailscale-only; no passkey check (that's what they issue).",
+        "WebAuthn ceremony endpoints — private-network-only; no passkey check (that's what they issue).",
     ),
     (
         lambda p: p.startswith("/api/coding/sessions/") and p.endswith("/image"),
@@ -124,8 +125,8 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
 def _terminal_guard_level(path: str) -> Optional[str]:
     """Classify a request path's terminal-gating requirement.
 
-    ``"passkey"`` — Tailscale-only **and** a valid passkey terminal token.
-    ``"tailnet"`` — Tailscale-only (the WebAuthn ceremony endpoints).
+    ``"passkey"`` — private-network-only **and** a valid passkey terminal token.
+    ``"tailnet"`` — private-network-only (the WebAuthn ceremony endpoints).
     ``None``      — not a terminal endpoint; normal bearer-token rules apply.
 
     Driven by :data:`_TERMINAL_GUARD_RULES` (issue #408).
@@ -137,7 +138,7 @@ def _terminal_guard_level(path: str) -> Optional[str]:
 
 
 def terminal_http_gate(request: Request) -> Optional[JSONResponse]:
-    """Enforce Tailscale-only (+ passkey) access on terminal HTTP endpoints.
+    """Enforce private-network-only (+ passkey) access on terminal HTTP endpoints.
 
     Returns an error response to short-circuit with, or ``None`` to allow.
     Loopback callers are handled by the middleware before this runs.
@@ -155,7 +156,12 @@ def terminal_http_gate(request: Request) -> Optional[JSONResponse]:
     if not client_in_tailnet(client_host, getattr(cfg, "tailnet_allowlist", [])):
         return JSONResponse(
             status_code=403,
-            content={"detail": "terminal endpoints are Tailscale-only"},
+            content={
+                "detail": (
+                    "terminal endpoints are private-network-only "
+                    "(tailnet or allowlisted VPN/LAN)"
+                )
+            },
         )
     if level == "passkey" and WebAuthnGate.configured(cfg):
         gate: WebAuthnGate = request.app.state.webauthn_gate
@@ -173,7 +179,7 @@ def terminal_http_gate(request: Request) -> Optional[JSONResponse]:
 def terminal_reachability(request: Request) -> Dict[str, Any]:
     """Can the *current* connection reach the live terminal at all?
 
-    The terminal is Tailscale-only by design — so the SPA can ask up front
+    The terminal is private-network-only by design — so the SPA can ask up front
     and explain it, rather than letting the user open a terminal that will
     only ever say "Disconnected". Used by ``/api/status``.
     """
@@ -184,10 +190,10 @@ def terminal_reachability(request: Request) -> Dict[str, Any]:
         return {
             "reachable": False,
             "reason": (
-                "The live terminal is Tailscale-only — it is blocked on the "
-                "public Cloudflare tunnel by design. Open the launcher over "
-                "your Tailscale URL (https://<pc>.<tailnet>.ts.net:8465) to "
-                "use it."
+                "The live terminal is private-network-only — it is blocked "
+                "on the public Cloudflare tunnel by design. Open the "
+                "launcher over your Tailscale or VPN URL "
+                "(https://<host>:8465) to use it."
             ),
         }
     cfg = request.app.state.webapp_config
@@ -195,9 +201,10 @@ def terminal_reachability(request: Request) -> Dict[str, Any]:
         return {
             "reachable": False,
             "reason": (
-                f"This connection ({client_host}) is not on your tailnet. "
-                "Open the launcher over your Tailscale URL, or add this "
-                "network to tailnet_allowlist in config/webapp_config.json."
+                f"This connection ({client_host}) is not on a trusted "
+                "network. Open the launcher over your Tailscale/VPN URL, or "
+                "add your VPN's client subnet to tailnet_allowlist in "
+                "config/webapp_config.json."
             ),
         }
     return {"reachable": True, "reason": "tailnet"}
@@ -223,7 +230,7 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
         is_loopback = client_host in LOOPBACK_HOSTS
         path = request.url.path
 
-        # Terminal endpoints are Tailscale-only (+ passkey for the
+        # Terminal endpoints are private-network-only (+ passkey for the
         # interactive ones). Enforced even when no bearer token is
         # configured. The PC itself (loopback) is trusted and skips it.
         if not is_loopback:

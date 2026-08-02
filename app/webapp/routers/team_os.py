@@ -7,8 +7,8 @@ specialised to the skills in the sibling ``team-os`` repo:
     POST /api/team-os/skills/{id}/launch      → spawn a GitHub Copilot CLI
                                                  session that auto-invokes
                                                  /<skill> (public)
-    GET  /api/team-os/skills/{id}/files        → file tree   (Tailscale + passkey)
-    GET  /api/team-os/file?path=…              → file content (Tailscale + passkey)
+    GET  /api/team-os/skills/{id}/files        → file tree   (private network + passkey)
+    GET  /api/team-os/file?path=…              → file content (private network + passkey)
 
 Launch reuses the Coding tab's session-host / ConPTY machinery wholesale
 (:func:`src.launcher.spawn_agent_session`, agent ``copilot`` — Copilot
@@ -23,7 +23,7 @@ reports ready.
 The two content endpoints surface private, gitignored knowledge
 (``context/`` ``memory/`` ``examples/`` ``conversations/`` + the shared
 ``identity/``). They are gated like the live terminal — refused over the
-Cloudflare tunnel, Tailscale-only, passkey-required (see
+Cloudflare tunnel, private-network-only, passkey-required (see
 ``app/webapp/middleware.py``) — and the file-content endpoint is
 **path-jailed** to ``team_os_dir`` (the jail is the whole security story
 for an endpoint that reads arbitrary files under a root).
@@ -454,7 +454,7 @@ async def launch_skill(skill_id: str, request: Request) -> Dict[str, Any]:
 
 @router.get("/api/team-os/skills/{skill_id}/files")
 async def list_skill_files(skill_id: str, request: Request) -> Dict[str, Any]:
-    """File tree for a skill's content (Tailscale + passkey, gated upstream).
+    """File tree for a skill's content (private network + passkey, gated upstream).
 
     Returns the skill's own files (public ``SKILL.md`` / ``description.md``
     / ``maintenance.md`` and the private ``context`` / ``memory`` /
@@ -483,7 +483,7 @@ async def list_skill_files(skill_id: str, request: Request) -> Dict[str, Any]:
 
 @router.get("/api/team-os/file")
 async def get_file(request: Request) -> Dict[str, Any]:
-    """Return a single file's text content (Tailscale + passkey, path-jailed).
+    """Return a single file's text content (private network + passkey, path-jailed).
 
     ``path`` is relative to ``team_os_dir``; anything escaping that root
     (absolute paths, ``..`` traversal) is rejected — the jail is the whole
@@ -513,7 +513,7 @@ async def get_file(request: Request) -> Dict[str, Any]:
 
 @router.delete("/api/team-os/file")
 async def delete_file(request: Request) -> Dict[str, Any]:
-    """Delete a single **conversation log** (Tailscale + passkey, path-jailed).
+    """Delete a single **conversation log** (private network + passkey, path-jailed).
 
     Deliberately narrow: only files under a skill's ``conversations/``
     directory can be deleted — never source files (``SKILL.md``,
@@ -580,7 +580,7 @@ def _rel_to_root(team_os_dir: Path, path: Path) -> str:
 async def rename_file(request: Request) -> Dict[str, Any]:
     """Rename a single **conversation log**, keeping its date prefix.
 
-    Body: ``{"path": <rel>, "slug": <new words>}`` (Tailscale + passkey,
+    Body: ``{"path": <rel>, "slug": <new words>}`` (private network + passkey,
     path-jailed). Same narrow guard as delete — only files under a skill's
     ``conversations/`` (never source files or the ``.gitkeep`` placeholder).
     The new name keeps the existing ``YYYY-MM-DD-HHMM-`` prefix and

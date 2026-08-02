@@ -21,7 +21,7 @@ First-run configuration, in order:
 4. **fleet-config-lite** — clone it and run its `install.ps1` to install the Copilot hooks (they write `~/.copilot/hooks/state/sessions-state.json` for the Board) and the lite issue skills the Board's ▶/⚡ buttons invoke.
 5. Optional: `config/config.json` (from `config.sample.json`) for `tailnet_host` (Apps-tab remote URLs) and the webapp embed section; `config/apps.json` (from `apps.sample.json`) for the Apps tab registry.
 
-**Phone access & auth.** The auth model is unchanged from upstream: loopback always passes; non-loopback callers need a bearer token (`scripts/gen_token.py`, stored as `auth_token`); an optional login password (`scripts/set_password.py`) lets a fresh device swap the password for the token. Terminal-grade routes (live PTY, transcripts, team-os private files) are additionally **Tailscale-only + passkey-gated**: they are refused over a public tunnel, and on the tailnet they require a WebAuthn platform passkey enrolled via the tray menu's **Enroll device (5 min)**. HTTPS comes from `scripts/gen_tailscale_cert.py` (Tailscale cert; checked on boot). An optional Cloudflare named tunnel (`webapp_tunnel_named.bat`) exposes only the non-terminal surfaces.
+**Phone access & auth.** The auth model is unchanged from upstream: loopback always passes; non-loopback callers need a bearer token (`scripts/gen_token.py`, stored as `auth_token`); an optional login password (`scripts/set_password.py`) lets a fresh device swap the password for the token. Terminal-grade routes (live PTY, transcripts, team-os private files) are additionally **private-network-only + passkey-gated**: they are refused over a public tunnel, and on a trusted network (Tailscale's CGNAT range or an allowlisted VPN subnet — see [Remote access](#remote-access--tailscale-or-any-vpn)) they require a WebAuthn platform passkey enrolled via the tray menu's **Enroll device (5 min)**. HTTPS comes from any `cert.pem`/`key.pem` pair in `webapp/certificates/` — `scripts/gen_tailscale_cert.py` is the Tailscale provisioner, checked on boot. An optional Cloudflare named tunnel (`webapp_tunnel_named.bat`) exposes only the non-terminal surfaces.
 
 ## The tabs
 
@@ -41,7 +41,7 @@ Remote-fireable scripts backed by `config/jobs.json` (empty by default; sample c
 
 ### Team OS
 
-Surfaces the skills of a sibling `team-os` checkout (`team_os_dir`; skills live under `<team_os_dir>/.claude/skills`). One tap spawns a Copilot session cwd'd in the team-os repo that auto-invokes `/<skill>` — with the same PTY/detached/resume options as the Coding tab and a per-launch model combo. A **weekly recap** tile shows the recap's freshness and launches `/weekly-recap` review. The private-content browser (context/memory/examples/conversations) is Tailscale + passkey gated and path-jailed to `team_os_dir`.
+Surfaces the skills of a sibling `team-os` checkout (`team_os_dir`; skills live under `<team_os_dir>/.claude/skills`). One tap spawns a Copilot session cwd'd in the team-os repo that auto-invokes `/<skill>` — with the same PTY/detached/resume options as the Coding tab and a per-launch model combo. A **weekly recap** tile shows the recap's freshness and launches `/weekly-recap` review. The private-content browser (context/memory/examples/conversations) is private-network + passkey gated and path-jailed to `team_os_dir`.
 
 ### Board
 
@@ -60,7 +60,7 @@ There is no `.env`. Committed samples live next to each gitignored real file in 
 | Key | Default | Effect |
 | --- | --- | --- |
 | `log_level` | `INFO` | Root logging level. |
-| `tailnet_host` | `""` | This PC's Tailscale MagicDNS hostname — builds the Apps tab's remote Open URLs. Empty disables. |
+| `tailnet_host` | `""` | Any hostname/IP the phone reaches this PC on (Tailscale MagicDNS name, VPN DNS name, or static VPN/LAN IP) — builds the Apps tab's remote Open URLs and the tray's Copy-remote-URL fallback. Empty disables. |
 | `webapp` | `{}` | Embed section for the tray-spawned webapp: `enabled` (default true), `host`, `port`. |
 
 ### `config/webapp_config.json` (UI prefs + secrets, written by "Save")
@@ -110,10 +110,10 @@ All keys optional — missing keys fall back to `src/webapp_config.py` defaults.
 | --- | --- | --- |
 | `auth_token` | `""` | Bearer token required from non-loopback callers. Empty = gate off. Generate with `scripts/gen_token.py`. |
 | `auth_password` | `""` | Optional login-overlay password that hands the token to a fresh device (`scripts/set_password.py`). |
-| `tailnet_allowlist` | `[]` | Extra IPs/CIDRs allowed on terminal routes beyond loopback + the Tailscale CGNAT range. |
+| `tailnet_allowlist` | `[]` | Extra IPs/CIDRs allowed on terminal routes beyond loopback + the Tailscale CGNAT range — how a non-Tailscale VPN enables the terminal (add its client subnet). |
 | `show_local_window` | `true` | Phone-launched sessions also open a PC mirror terminal window. |
 | `terminal_history_lines` | `10000` | Session-host scrollback replayed on (re)connect (bounds 200–50000). |
-| `webauthn_rp_id` / `webauthn_origin` | `""` | Passkey relying party (bare tailnet hostname / full https origin). Both empty = passkey gate off. |
+| `webauthn_rp_id` / `webauthn_origin` | `""` | Passkey relying party (the bare hostname the phone browses to / full https origin — Tailscale or any VPN DNS name). Both empty = passkey gate off. |
 | `webauthn_rp_name` | `App Launcher Lite` | Display name in the passkey prompt. |
 
 **Jobs notifications & coverage**
@@ -152,12 +152,12 @@ All keys optional — missing keys fall back to `src/webapp_config.py` defaults.
 
 | Port | Process | Owner |
 | --- | --- | --- |
-| `:8465` | FastAPI webapp (HTTPS when Tailscale certs exist) | Tray — killed and reclaimed by `tray.bat --restart`. |
+| `:8465` | FastAPI webapp (HTTPS when a cert pair exists in `webapp/certificates/`) | Tray — killed and reclaimed by `tray.bat --restart`. |
 | `:8466` | PTY session-host (loopback-only, never network-reachable) | Spawned **detached** from the tray subtree; **excluded** from the restart reclaim sweep; re-adopted by the fresh tray. |
 
 - **`tray.bat --restart`** is the canonical restart: orphan-proof reclaim-then-start via the vendored `scripts/tray_lifecycle.ps1` (no external repo dependency). It **preserves live Coding/PTY sessions** — the `:8466` session-host is deliberately not touched.
 - Consequence: a change under `src/session_host.py` or `app/session_host/` is **not live** until `:8466` itself restarts. `GET /api/version` reports a `session_host` block whose `stale_relevant` field scopes staleness to session-host-relevant paths — `true` means such a diff is merged but not yet running. The one supported restart is `pwsh -File scripts/restart-session-host.ps1 -Confirm` — deliberate and operator-only, because it kills every live PTY on the machine (bare, without `-Confirm`, it prints the warning and exits 1).
-- The tray menu offers open/copy-URL (local, Tailscale, Cloudflare), webapp restart, passkey enrollment, status, and quit.
+- The tray menu offers open/copy-URL (local, remote, Cloudflare), webapp restart, passkey enrollment, status, and quit. **Copy remote URL** uses the Tailscale hostname when the CLI resolves one, else the configured `tailnet_host`.
 - Boot autostart (Settings toggle) drops a self-logging `AppLauncherLite.bat` wrapper into the user's Startup folder; each login attempt leaves breadcrumbs in `webapp/startup.log`.
 
 ## Verifying changes
@@ -166,6 +166,21 @@ All keys optional — missing keys fall back to `src/webapp_config.py` defaults.
 - **Dev-loop smoke against the live tray** — `.\scripts\run-e2e.ps1` (sets `LAUNCHER_E2E_LIVE=1`; a bare `pytest tests/e2e` without the opt-in env vars exits with a guard message so ad-hoc runs can't hit the webapp the phone is using).
 - **Non-browser suite alone** — `.\.venv\Scripts\python.exe -m pytest tests -m "not smoke"`.
 - **CI** — `.github/workflows/e2e.yml` runs the same gate on `windows-2025` for every PR and push to `main`. **Advisory, not required** — the local gate is the contract. See [docs/ci-github-actions.md](docs/ci-github-actions.md).
+
+## Remote access — Tailscale or any VPN
+
+Nothing in the launcher *requires* Tailscale — it is just the zero-config default. The terminal gate is plain IP-based (`app/webapp/middleware.py::client_in_tailnet`): terminal-grade routes accept loopback, the Tailscale CGNAT range `100.64.0.0/10`, and every entry in `tailnet_allowlist`. The `tailnet_*` config names are historical; the values are generic.
+
+**With Tailscale** everything works out of the box: the CGNAT range passes the gate with no config, and `scripts/gen_tailscale_cert.py` provisions a browser-trusted HTTPS cert for the MagicDNS name.
+
+**Without it — any VPN or LAN:**
+
+1. **`tailnet_allowlist`** (`webapp_config.json`) — add the VPN's client subnet (e.g. `"10.8.0.0/24"`) or individual client IPs. This alone unlocks the terminal-grade routes.
+2. **`tailnet_host`** (`config.json`) — the hostname or IP the phone reaches this PC on (VPN DNS name or a static VPN IP). Feeds the Apps tab's Open URLs and the tray's **Copy remote URL** fallback.
+3. **HTTPS** — drop any `cert.pem` + `key.pem` pair into `webapp/certificates/` (corporate CA, `mkcert`, or a self-signed cert the phone trusts). `gen_tailscale_cert.py` is only the Tailscale provisioner; its boot-time renewal check is issuer-keyed and no-ops on other certs.
+4. **Passkeys** — set `webauthn_rp_id` (bare hostname from step 2) and `webauthn_origin` (full https origin). WebAuthn requires HTTPS on that exact hostname, hence step 3.
+
+Either way, the public Cloudflare tunnel stays terminal-refused — the live terminal never rides a public edge.
 
 ## Deploying to a new machine
 
@@ -176,7 +191,7 @@ This fork was built and verified on its original dev machine, with the GitLab/Co
 3. **Copilot login + model gate** — log the `copilot` CLI in, then check which of `gpt-5.6-luna` / `gpt-5.6-terra` / `gpt-5.6-sol` the tenant actually offers; trim `copilot_models` in `webapp_config.json` to the real set (an unavailable id fails visibly at launch). If none are available, set `copilot_model` to `""` (auto).
 4. **Team OS repo** — point `team_os_dir` at the checkout whose `.claude/skills` the Team OS tab should list. **Skills can live in any repo**: Copilot discovers whatever sits in `~/.copilot/skills/` regardless of where it came from, so a separate team skills repo works exactly like fleet-config-lite's own — junction its skill folders in (or `copilot skill add <dir>`), no code change here. The Team OS *tab* lists only `team_os_dir`'s skills; the `~/.copilot/skills/` junctions are what every Copilot session (including Board ▶/⚡ launches) can invoke.
 5. **Verify the hooks** — confirm `~/.copilot/hooks/state/sessions-state.json` appears after a `copilot -p "hi" --allow-all-tools` run. **Known CLI limitation (1.0.70):** the hooks fire reliably in `-p` runs but NOT in interactive TUI sessions — upstream bugs [copilot-cli#991](https://github.com/github/copilot-cli/issues/991) / [#2201](https://github.com/github/copilot-cli/issues/2201). Until a CLI update fixes that, Board sessions show status "unknown" (presence still works); re-test with the deployed CLI version and after each `copilot update`.
-6. **Auth + boot** — `scripts/gen_token.py` (bearer token, required before terminals connect), optionally `scripts/set_password.py` + a passkey; flip the boot-autostart toggle in Settings and verify `webapp/startup.log` gets a breadcrumb on the next login.
+6. **Auth + boot** — `scripts/gen_token.py` (bearer token, required before terminals connect), optionally `scripts/set_password.py` + a passkey; flip the boot-autostart toggle in Settings and verify `webapp/startup.log` gets a breadcrumb on the next login. **No Tailscale on the machine?** Follow [Remote access — Tailscale or any VPN](#remote-access--tailscale-or-any-vpn): allowlist the VPN subnet, set `tailnet_host`, provide a cert pair, point the WebAuthn fields at that hostname.
 7. **Un-skip the real-agent echo probe** — `tests/e2e/test_terminal_reconnect.py`'s reconnect-replay test is `@pytest.mark.skip`-ped pending a machine where a real `copilot` boot echoes end-to-end; re-enable it there and tune `E2E_REAL_AGENT_ECHO_MS` if needed.
 
 ## Porting features from upstream

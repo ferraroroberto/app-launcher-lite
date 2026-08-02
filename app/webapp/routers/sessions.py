@@ -175,7 +175,7 @@ async def mirror_coding_session(sid: str, request: Request) -> Dict[str, Any]:
 async def session_image(
     sid: str, request: Request, file: UploadFile = File(...)
 ) -> Dict[str, Any]:
-    """Upload an image into a session (Tailscale-only + passkey).
+    """Upload an image into a session (private-network-only + passkey).
 
     ``?inline=1`` (compose bar open) tells the session-host to skip the
     paste-into-PTY step and just return the stored path so the browser
@@ -205,7 +205,7 @@ async def session_image(
 
 @router.post("/api/coding/sessions/{sid}/input")
 async def session_input(sid: str, request: Request) -> Dict[str, Any]:
-    """Write composed text into a session's PTY (Tailscale-only + passkey, #301).
+    """Write composed text into a session's PTY (private-network-only + passkey, #301).
 
     The Board drawer's reply path for steering a running
     worker. Body: ``{"data": str, "submit": bool}``. One call to the
@@ -254,7 +254,7 @@ async def session_input(sid: str, request: Request) -> Dict[str, Any]:
 
 @router.websocket("/api/coding/sessions/{sid}/ws")
 async def proxy_session_ws(websocket: WebSocket, sid: str) -> None:
-    """Tailscale-only + passkey-gated WebSocket proxy to the session-host.
+    """Private-network-only + passkey-gated WebSocket proxy to the session-host.
 
     Browser ⇄ webapp ⇄ session-host. The webapp is the single auth
     choke point — WebSockets bypass the HTTP middleware, so the same
@@ -273,14 +273,15 @@ async def proxy_session_ws(websocket: WebSocket, sid: str) -> None:
         if via_cloudflare(websocket.headers):
             await websocket.close(
                 code=4403,
-                reason="terminal is Tailscale-only — blocked on the public tunnel",
+                reason="terminal is private-network-only — blocked on the public tunnel",
             )
             return
         if not client_in_tailnet(
             client_host, getattr(cfg, "tailnet_allowlist", [])
         ):
             await websocket.close(
-                code=4403, reason="terminal is Tailscale-only"
+                code=4403,
+                reason="terminal is private-network-only (tailnet or allowlisted VPN)",
             )
             return
         token = (cfg.auth_token or "").strip()
