@@ -1,6 +1,6 @@
 # .fleet.toml — this repo's architecture-map card.
-# Lite fork: GitHub Copilot CLI + GitLab (glab) edition of app-launcher for a
-# work environment. Keep current: update in the same PR as any material change
+# Lite fork: GitHub Copilot CLI + GitLab (glab) edition of app-launcher.
+# Keep current: update in the same PR as any material change
 # (layer, port, role, one-line description, exposed services).
 layer        = "enabling"
 icon         = "🚀"

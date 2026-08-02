@@ -175,12 +175,12 @@ def _stable_marker_count(page: Page, marker: str) -> int:
 
 
 @pytest.mark.skip(
-    reason="work-machine handoff (Phase 4): a real `copilot` boot does not "
-    "reliably echo a raw typed marker through its composer on this machine "
-    "— the TUI paints (transcript shows the Copilot start screen) but the "
-    "marker never lands in the xterm buffer within E2E_REAL_AGENT_ECHO_MS. "
-    "Needs an on-work-machine probe of Copilot's composer echo semantics "
-    "(and whether the config's tenant-gated --model id is accepted) before "
+    reason="deployment-machine probe pending (Phase 4): a real `copilot` boot "
+    "does not reliably echo a raw typed marker through its composer on this "
+    "machine — the TUI paints (transcript shows the Copilot start screen) but "
+    "the marker never lands in the xterm buffer within E2E_REAL_AGENT_ECHO_MS. "
+    "Probe Copilot's composer echo semantics on the target machine (and "
+    "whether the config's tenant-gated --model id is accepted) before "
     "re-enabling the #444 dup-scrollback pin against the real agent."
 )
 def test_reconnect_replay_does_not_duplicate_scrollback(
