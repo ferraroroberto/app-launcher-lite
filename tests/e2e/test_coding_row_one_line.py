@@ -1,18 +1,24 @@
-"""Regression pin for issue #8 (one line per Coding project row).
+"""Regression pin for issue #8 (compact Coding project rows).
 
 Project rows used to stack into two lines under the 520px breakpoint —
-folder name on one, the icon strip wrapped onto another — doubling the
-scroll for a list of projects. Now a row is a single line at every width:
-name + branch pill on the left, three gapped buttons on the right, with the
-branch pill ellipsis-truncating rather than wrapping the row.
+folder name on one, the *icon strip* wrapped onto another — doubling the
+scroll for a list of projects. Now:
+
+* a project on its default branch is a flat single ~44px line;
+* a project parked off its default branch puts the branch pill on its own
+  line *beneath* the name (a deliberate, accepted extra ~13px), so the pill
+  gets the tile's full text width instead of collapsing to an unreadable
+  "fea…" stub beside the name;
+* the action strip is never what wraps — three 44px targets, gapped, on one
+  line, at every width.
 
 The viewport is pinned to 390px here (narrower than the Pixel 8 Pro
 projection's 448px) so the assertions bind at the tightest realistic phone
 width on both projection legs, not just the phone one.
 
-/api/apps and /api/coding/git-status are mocked so both the no-branch and
-the pathological-long-branch cases are deterministic — the real scan would
-give whatever happens to be on the developer's disk.
+/api/apps and /api/coding/git-status are mocked so the default-branch,
+realistic-branch and pathological-branch cases are all deterministic — the
+real scan would give whatever happens to be on the developer's disk.
 """
 
 from __future__ import annotations
@@ -30,53 +36,52 @@ pytestmark = pytest.mark.smoke
 PHONE_W = 390
 PHONE_H = 844
 
-# Long enough that it cannot possibly fit beside the name at 390px.
+# A real branch name from this fleet's own naming convention. The whole point
+# of moving the pill onto its own line is that this fits UNCUT at 390px.
+REAL_BRANCH = "fix/28-terminal-reconnect"
+# Long enough that not even a full-width pill can hold it.
 LONG_BRANCH = "feat/1234-a-deliberately-overlong-branch-slug-for-truncation"
+
+
+def _app(app_id: str, name: str) -> dict:
+    return {
+        "id": app_id,
+        "name": name,
+        "kind": "coding",
+        "project_dir": f"E:/automation/{name}",
+        "added_at": "",
+        "is_favorite": False,
+        "repo_url": f"https://github.com/ferraroroberto/{name}",
+        "repo_issues_url": f"https://github.com/ferraroroberto/{name}/issues",
+    }
+
 
 APPS = {
     "scan_root": "E:/automation",
     "apps": [
-        {
-            "id": "onmain",
-            "name": "on-main-project",
-            "kind": "coding",
-            "project_dir": "E:/automation/on-main-project",
-            "added_at": "",
-            "is_favorite": False,
-            "repo_url": "https://github.com/ferraroroberto/on-main-project",
-            "repo_issues_url": "https://github.com/ferraroroberto/on-main-project/issues",
-        },
-        {
-            "id": "offmain",
-            "name": "off-main-project",
-            "kind": "coding",
-            "project_dir": "E:/automation/off-main-project",
-            "added_at": "",
-            "is_favorite": False,
-            "repo_url": "https://github.com/ferraroroberto/off-main-project",
-            "repo_issues_url": "https://github.com/ferraroroberto/off-main-project/issues",
-        },
+        _app("onmain", "on-main-project"),
+        _app("realbranch", "app-launcher-lite"),
+        _app("offmain", "off-main-project"),
     ],
 }
 
+
+def _status(app_id: str, branch: str, on_default: bool) -> dict:
+    return {
+        "id": app_id,
+        "is_git": True,
+        "branch": branch,
+        "default_branch": "main",
+        "on_default_branch": on_default,
+        "dirty": False,
+    }
+
+
 GIT_STATUS = {
     "projects": [
-        {
-            "id": "onmain",
-            "is_git": True,
-            "branch": "main",
-            "default_branch": "main",
-            "on_default_branch": True,
-            "dirty": False,
-        },
-        {
-            "id": "offmain",
-            "is_git": True,
-            "branch": LONG_BRANCH,
-            "default_branch": "main",
-            "on_default_branch": False,
-            "dirty": False,
-        },
+        _status("onmain", "main", True),
+        _status("realbranch", REAL_BRANCH, False),
+        _status("offmain", LONG_BRANCH, False),
     ]
 }
 
@@ -110,7 +115,7 @@ def _install_routes(page: Page) -> None:
 
 @pytest.fixture()
 def rows(authed_page: Page, base_url: str) -> Page:
-    """A 390px-wide page with the Projects card open and both rows painted."""
+    """A 390px-wide page with the Projects card open and all rows painted."""
     authed_page.set_viewport_size({"width": PHONE_W, "height": PHONE_H})
     _install_routes(authed_page)
     # Every button visible — the row must hold all three, and a machine with a
@@ -123,12 +128,12 @@ def rows(authed_page: Page, base_url: str) -> Page:
     expect(authed_page.locator('.coding-item[data-id="offmain"]')).to_be_visible(
         timeout=5_000
     )
-    # Gate on the *pill*, not just the row: git-status is a separate async
+    # Gate on the *pills*, not just the rows: git-status is a separate async
     # boot fetch, so a row measured before it lands has no branch tag at all
-    # and would prove nothing about the long-branch case.
-    expect(
-        authed_page.locator('.coding-item[data-id="offmain"] .git-branch-tag')
-    ).to_be_visible(timeout=10_000)
+    # and would prove nothing about either off-main case.
+    expect(authed_page.locator("#codingList .git-branch-tag")).to_have_count(
+        2, timeout=10_000
+    )
     return authed_page
 
 
@@ -138,37 +143,87 @@ def _box(page: Page, selector: str) -> dict:
     return box
 
 
-@pytest.mark.parametrize("row_id", ["onmain", "offmain"])
-def test_project_row_is_one_line(rows: Page, row_id: str) -> None:
-    """Name and action strip share a line — on the default branch and off it.
+def _button_boxes(page: Page, row_id: str) -> list[dict]:
+    buttons = page.locator(f'.coding-item[data-id="{row_id}"] .icon-btn')
+    expect(buttons).to_have_count(3)   # Copilot, GitHub, star
+    boxes = []
+    for i in range(3):
+        box = stable_read(lambda i=i: buttons.nth(i).bounding_box())
+        assert box, f"{row_id}: button {i} never laid out"
+        boxes.append(box)
+    return boxes
 
-    Proven by vertical overlap (stacked would put them in disjoint bands),
-    plus a row height under two stacked 44px targets. `offmain` carries the
-    pathological branch name, so this is also the "long branch does not wrap
-    the row" case.
-    """
-    row = _box(rows, f'.coding-item[data-id="{row_id}"]')
-    name = _box(rows, f'.coding-item[data-id="{row_id}"] .coding-name')
-    actions = _box(rows, f'.coding-item[data-id="{row_id}"] .row-actions.agent-actions')
 
-    assert name["y"] < actions["y"] + actions["height"], (
-        f"{row_id}: name sits below the action strip — row is stacked"
-    )
-    assert actions["y"] < name["y"] + name["height"], (
-        f"{row_id}: action strip sits below the name — row is stacked"
-    )
+def test_default_branch_row_is_a_single_line(rows: Page) -> None:
+    """No pill → name and action strip share one flat ~44px line."""
+    row = _box(rows, '.coding-item[data-id="onmain"]')
+    name = _box(rows, '.coding-item[data-id="onmain"] .coding-name')
+    actions = _box(rows, '.coding-item[data-id="onmain"] .row-actions.agent-actions')
+
+    expect(rows.locator('.coding-item[data-id="onmain"] .git-branch-tag')).to_have_count(0)
+    assert name["y"] < actions["y"] + actions["height"], "name below the strip — stacked"
+    assert actions["y"] < name["y"] + name["height"], "strip below the name — stacked"
     # Two stacked 44px targets would be >= 88; one line is ~44.
     assert row["height"] < 70, (
-        f"{row_id}: row is {row['height']}px tall — expected a single ~44px line"
+        f"default-branch row is {row['height']}px tall — expected a single ~44px line"
     )
 
 
-def test_long_branch_pill_truncates_and_buttons_stay_visible(rows: Page) -> None:
-    """The pill is cut with an ellipsis; nothing is pushed off the row."""
-    sel = '.coding-item[data-id="offmain"] .git-branch-tag'
-    expect(rows.locator(sel)).to_be_visible()
+@pytest.mark.parametrize("row_id", ["realbranch", "offmain"])
+def test_off_main_row_puts_the_pill_under_the_name(rows: Page, row_id: str) -> None:
+    """The pill stacks beneath the name — never beside it, never wrapping.
 
-    # Full branch name preserved in the DOM + tooltip even though it's cut.
+    The action strip still shares the row (it is not what wraps), and the row
+    stays bounded: taller than a bare line, nowhere near two stacked targets.
+    """
+    row = _box(rows, f'.coding-item[data-id="{row_id}"]')
+    name = _box(rows, f'.coding-item[data-id="{row_id}"] .coding-name-text')
+    pill = _box(rows, f'.coding-item[data-id="{row_id}"] .git-branch-tag')
+    actions = _box(rows, f'.coding-item[data-id="{row_id}"] .row-actions.agent-actions')
+
+    assert pill["y"] >= name["y"] + name["height"] - 1, (
+        f"{row_id}: pill at y={pill['y']} is not below the name "
+        f"(name ends at {name['y'] + name['height']}) — still sharing the line"
+    )
+    # The strip stays on the row, vertically alongside the two text lines.
+    assert actions["y"] < row["y"] + row["height"], f"{row_id}: strip fell out of the row"
+    assert 44 < row["height"] < 85, (
+        f"{row_id}: row is {row['height']}px — expected a two-line-text row "
+        "(one accepted extra line, not a stacked action strip)"
+    )
+
+
+# Visible pill width the stacked layout must buy back at 390px. Measured at
+# 133px (~20 chars: "fix/28-terminal-rec…"); the pre-#8 inline pill collapsed
+# to a 3.5em / 44px stub (~4 chars, "fea…"), which is what made it useless.
+# A ~25-char branch is still just cut at 390px and fits whole from ~448px —
+# that is the width budget, not a defect.
+MIN_PILL_PX = 120
+
+
+def test_stacked_pill_is_wide_enough_to_read(rows: Page) -> None:
+    """The reason the pill moved onto its own line: it must be readable.
+
+    Pinned as a width floor rather than "nothing is ever cut" — at 390px the
+    tile's text column is 133px, so a long branch still ellipsizes. What must
+    not regress is the pill collapsing back to a few-character stub.
+    """
+    sel = '.coding-item[data-id="realbranch"] .git-branch-tag'
+    expect(rows.locator(sel)).to_have_text(REAL_BRANCH)
+
+    visible = stable_read(
+        lambda: rows.locator(sel).evaluate("el => el.clientWidth")
+    )
+    assert isinstance(visible, int) and visible >= MIN_PILL_PX, (
+        f"branch pill shows only {visible}px at {PHONE_W}px — expected "
+        f">= {MIN_PILL_PX}px. It is sharing the line with the name again, or "
+        "something re-capped its width."
+    )
+
+
+def test_pathological_branch_truncates_and_keeps_the_full_name(rows: Page) -> None:
+    """Longer than the tile → ellipsis, with the full name still in `title`."""
+    sel = '.coding-item[data-id="offmain"] .git-branch-tag'
     expect(rows.locator(sel)).to_have_text(LONG_BRANCH)
     assert LONG_BRANCH in (rows.locator(sel).get_attribute("title") or "")
 
@@ -182,35 +237,53 @@ def test_long_branch_pill_truncates_and_buttons_stay_visible(rows: Page) -> None
         "exercises the overflow case; lengthen LONG_BRANCH"
     )
 
-    row = _box(rows, '.coding-item[data-id="offmain"]')
-    buttons = rows.locator('.coding-item[data-id="offmain"] .icon-btn')
-    expect(buttons).to_have_count(3)   # Copilot, GitHub, star
-    for i in range(3):
-        box = stable_read(lambda i=i: buttons.nth(i).bounding_box())
-        assert box, f"button {i} never laid out"
-        assert box["x"] >= row["x"] - 0.5, f"button {i} clipped off the left edge"
-        assert box["x"] + box["width"] <= row["x"] + row["width"] + 0.5, (
-            f"button {i} clipped off the right edge at {PHONE_W}px"
-        )
 
-
-def test_row_buttons_meet_the_44px_target_and_do_not_overlap(rows: Page) -> None:
+@pytest.mark.parametrize("row_id", ["onmain", "offmain"])
+def test_row_buttons_meet_the_44px_target_and_do_not_overlap(
+    rows: Page, row_id: str
+) -> None:
     """Real geometry, not a ::before expansion — so targets never overlap."""
-    buttons = rows.locator('.coding-item[data-id="offmain"] .icon-btn')
-    expect(buttons).to_have_count(3)
-
-    boxes = []
-    for i in range(3):
-        box = stable_read(lambda i=i: buttons.nth(i).bounding_box())
-        assert box, f"button {i} never laid out"
-        boxes.append(box)
+    row = _box(rows, f'.coding-item[data-id="{row_id}"]')
+    boxes = _button_boxes(rows, row_id)
 
     for i, box in enumerate(boxes):
-        assert box["width"] >= 44, f"button {i} is {box['width']}px wide (< 44px)"
-        assert box["height"] >= 44, f"button {i} is {box['height']}px tall (< 44px)"
+        assert box["width"] >= 44, f"{row_id}: button {i} is {box['width']}px wide"
+        assert box["height"] >= 44, f"{row_id}: button {i} is {box['height']}px tall"
+        assert box["x"] >= row["x"] - 0.5, f"{row_id}: button {i} clipped on the left"
+        assert box["x"] + box["width"] <= row["x"] + row["width"] + 0.5, (
+            f"{row_id}: button {i} clipped off the right edge at {PHONE_W}px"
+        )
 
     for i in range(len(boxes) - 1):
         left, right = boxes[i], boxes[i + 1]
         assert left["x"] + left["width"] <= right["x"] + 0.5, (
-            f"buttons {i} and {i + 1} overlap horizontally"
+            f"{row_id}: buttons {i} and {i + 1} overlap horizontally"
         )
+
+
+def test_all_three_glyphs_render_on_the_same_grid(rows: Page) -> None:
+    """The star is an inline SVG, its neighbours are <img> — same box anyway.
+
+    Regression for the "haphazard" look: the star used to render 20px and
+    chip-less beside two 24px chipped brand logos.
+    """
+    glyphs = rows.locator(
+        '.coding-item[data-id="onmain"] .icon-btn .agent-icon, '
+        '.coding-item[data-id="onmain"] .icon-btn .icon'
+    )
+    expect(glyphs).to_have_count(3)
+
+    boxes = []
+    for i in range(3):
+        box = stable_read(lambda i=i: glyphs.nth(i).bounding_box())
+        assert box, f"glyph {i} never laid out"
+        boxes.append(box)
+
+    widths = {round(b["width"], 1) for b in boxes}
+    heights = {round(b["height"], 1) for b in boxes}
+    assert widths == {24.0}, f"glyphs are not all 24px wide: {sorted(widths)}"
+    assert heights == {24.0}, f"glyphs are not all 24px tall: {sorted(heights)}"
+
+    # Same vertical centre line — "perfectly aligned", not just same-sized.
+    centres = {round(b["y"] + b["height"] / 2, 1) for b in boxes}
+    assert len(centres) == 1, f"glyphs sit on different centre lines: {sorted(centres)}"

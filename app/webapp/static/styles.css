@@ -702,18 +702,21 @@ summary + .opt-group { border-top: 0; }
   font-size: var(--font-body);
   font-weight: 600;
   color: var(--fg);
-  /* One line per project (issue #8): the name and the branch pill share a
-     single baseline-aligned row and truncate rather than wrap. Both are
-     spans so each gets its own ellipsis box; `gap` owns the space between
-     them (the pill's old margin-left is zeroed in the scoped rule below). */
+  /* One line per project (issue #8) — the name never wraps, it truncates.
+     The branch pill stacks UNDERNEATH rather than beside: sharing the line
+     left it ~44px on a 390px phone, i.e. "fea…", which reads as noise. A
+     project parked off its default branch is the minority case and worth
+     the extra ~13px of row height; on-default rows have no pill and stay a
+     flat single line. Both labels are spans so each gets its own ellipsis
+     box (the pill's old margin-left is zeroed in the scoped rule below). */
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   min-width: 0;
 }
 .coding-name-text {
-  min-width: 0;
-  flex: 0 1 auto;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;   /* raw on-disk name — shown verbatim, cut if long */
@@ -775,16 +778,16 @@ summary + .opt-group { border-top: 0; }
   vertical-align: middle;
   word-break: break-all;
 }
-/* Inside a Coding/Team OS tile the pill is a flex item on a one-line row
-   (issue #8), so it truncates instead of wrapping. The shrink factor is
-   deliberately enormous: the pill collapses to its readable min-width stub
-   before the folder name gives up a single pixel. The full branch name stays
-   in the pill's `title` (set by annotateGitStatus). Scoped to .coding-name so
-   the off-main summary popover's copy of the pill is untouched. */
+/* Inside a Coding tile the pill sits on its own line beneath the folder name
+   (issue #8), so it gets the tile's full text width instead of fighting the
+   name for it — a realistic `fix/28-terminal-reconnect` fits uncut at 390px.
+   It still truncates rather than wrapping when a branch name is genuinely
+   longer than the tile; the full name stays in the pill's `title` (set by
+   annotateGitStatus). Scoped to .coding-name so the off-main summary
+   popover's copy of the pill is untouched. */
 .coding-name .git-branch-tag {
   margin-left: 0;
-  flex: 0 999 auto;
-  min-width: 3.5em;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -856,9 +859,22 @@ summary + .opt-group { border-top: 0; }
    Lucide `star` glyph. Outline + muted colour when unstarred (like the
    other idle icons); the `.is-fav` rule below fills it gold when starred —
    the sprite has one star symbol, not a filled/outline pair (#563). */
-.app-item .row-actions.agent-actions .icon-btn.star-btn {
-  font-size: 20px;
-  line-height: 1;
+/* The star is an inline SVG while its neighbours are <img> brand logos, so
+   it needs the .agent-icon box restated to sit on the same grid (issue #8 —
+   it used to render 20px and chip-less beside two 24px chips, which read as
+   haphazard). Same 24px box, same chip, same border-radius; the inner
+   padding shrinks the drawn glyph to 16px so its visual weight matches the
+   brand SVGs, which carry that clearance inside their own viewBox (github.svg
+   draws at 62% of its box, copilot.svg at ~72%; 16/24 sits between them). */
+.app-item .row-actions.agent-actions .icon-btn.star-btn .icon {
+  display: block;
+  box-sizing: border-box;
+  width: var(--icon-feature);
+  height: var(--icon-feature);
+  padding: 4px;
+  background: var(--card-2);
+  border-radius: 22%;
+  vertical-align: baseline;
 }
 .app-item .row-actions.agent-actions .icon-btn.star-btn.is-fav,
 .app-item .row-actions.agent-actions .icon-btn.star-btn.is-fav:active {
