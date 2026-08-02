@@ -194,11 +194,14 @@ def test_off_main_row_puts_the_pill_under_the_name(rows: Page, row_id: str) -> N
 
 
 # Visible pill width the stacked layout must buy back at 390px. Measured at
-# 133px (~20 chars: "fix/28-terminal-rec…"); the pre-#8 inline pill collapsed
-# to a 3.5em / 44px stub (~4 chars, "fea…"), which is what made it useless.
-# A ~25-char branch is still just cut at 390px and fits whole from ~448px —
-# that is the width budget, not a defect.
-MIN_PILL_PX = 120
+# 115px (~17 chars: "fix/28-terminal-…"); the pre-#8 inline pill collapsed to
+# a 3.5em / 44px stub (~4 chars, "fea…"), which is what made it useless.
+# 115 rather than the 133 the first cut managed: aligning the row buttons
+# with the summary's controls reserves an 18px chevron column, and that comes
+# out of the text column. Alignment was the explicitly preferred trade.
+# A ~25-char branch is therefore still cut at 390px and fits whole from
+# ~470px — that is the width budget, not a defect.
+MIN_PILL_PX = 110
 
 
 def test_stacked_pill_is_wide_enough_to_read(rows: Page) -> None:
@@ -259,6 +262,35 @@ def test_row_buttons_meet_the_44px_target_and_do_not_overlap(
         assert left["x"] + left["width"] <= right["x"] + 0.5, (
             f"{row_id}: buttons {i} and {i + 1} overlap horizontally"
         )
+
+
+def test_row_buttons_align_with_the_summary_controls(rows: Page) -> None:
+    """The three row buttons sit directly under the summary's three controls.
+
+    Cloud / rotate / star in the Projects summary head, Copilot / GitHub /
+    star in every row — three straight vertical lines. They only line up
+    because both clusters reserve the same trailing column for the
+    disclosure chevron (--action-cluster-trail) and step at the same pitch;
+    a change to either side alone shows up here.
+
+    Phone-width only, by design: above 520px the Favorites filter regains
+    its text label and is deliberately wider than a row button.
+    """
+    header_ids = ["#codingDetached", "#codingResume", "#favFilterBtn"]
+    header = []
+    for sel in header_ids:
+        box = stable_read(lambda sel=sel: rows.locator(sel).bounding_box())
+        assert box, f"{sel} never laid out"
+        header.append(round(box["x"] + box["width"] / 2, 1))
+
+    row_centres = [
+        round(b["x"] + b["width"] / 2, 1) for b in _button_boxes(rows, "onmain")
+    ]
+
+    assert header == row_centres, (
+        f"summary controls are centred at {header} but the row buttons at "
+        f"{row_centres} — the two clusters have drifted out of alignment"
+    )
 
 
 def test_all_three_glyphs_render_on_the_same_grid(rows: Page) -> None:

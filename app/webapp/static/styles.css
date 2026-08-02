@@ -89,6 +89,16 @@
   --row-sm: 44px;
   --row-md: 52px;
   --row-lg: 60px;
+  /* Action-cluster alignment (issue #8). A collapsible card's summary ends
+     with the disclosure chevron, so its controls stop short of the content
+     edge that the rows below run to. Reserving the same trailing column on
+     both — chevron width plus the 6px .summary-actions gap — is what puts a
+     row's buttons on the same vertical centre lines as the summary's. Both
+     sides then step at --row-sm + 6px. Change these together or not at all;
+     tests/e2e/test_coding_row_one_line.py pins the result. */
+  --collapse-chevron-w: 20px;
+  --action-cluster-gap: 6px;
+  --action-cluster-trail: calc(var(--collapse-chevron-w) + var(--action-cluster-gap));
   /* canonical icon-size steps — emoji glyph buttons size via font-size */
   --icon-inline: 16px;
   --icon-title: 18px;
@@ -824,8 +834,10 @@ summary + .opt-group { border-top: 0; }
 .row-actions.agent-actions {
   flex-direction: row;
   align-items: center;
-  gap: 6px;
-  padding-right: 8px;   /* glyph clears the card edge like the name's 18px */
+  gap: var(--action-cluster-gap);
+  /* Reserve the summary's chevron column so these buttons land on the same
+     centre lines as the Projects summary's controls — see the token block. */
+  padding-right: var(--action-cluster-trail);
 }
 .app-item .row-actions.agent-actions .icon-btn {
   flex: 0 0 auto;
@@ -893,6 +905,27 @@ summary + .opt-group { border-top: 0; }
    row (same compaction precedent as the Registered-jobs summary). */
 @media (max-width: 520px) {
   .fav-filter-btn .fav-filter-label { display: none; }
+  /* ...which is also what makes the summary's three controls alignable with
+     the project rows' three buttons (issue #8): icon-only, they can take the
+     rows' exact --row-sm box and 6px pitch. Above this width the filter
+     carries its label and is deliberately wider, so no alignment is claimed
+     there. The chevron column is fixed-width at every size (below) so the
+     reserve the rows leave for it is deterministic, not glyph-metric. */
+  .projects-card .coding-toggles .detached-toggle,
+  .projects-card .fav-filter-btn {
+    width: var(--row-sm);
+    min-width: var(--row-sm);
+    min-height: var(--row-sm);
+    padding: 0;
+  }
+}
+/* Fixed chevron column — the trailing reserve --action-cluster-trail assumes
+   this width. Scoped to the Projects card: it is the only summary whose
+   controls have rows beneath them to line up with. */
+.projects-card > .collapse-summary .collapse-chevron {
+  display: inline-block;
+  width: var(--collapse-chevron-w);
+  text-align: center;
 }
 /* Shown in place of the list when the filter is on but nothing is starred. */
 .coding-fav-empty {
