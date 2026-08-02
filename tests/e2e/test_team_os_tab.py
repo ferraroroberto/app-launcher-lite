@@ -368,12 +368,14 @@ def test_team_os_detached_resume_posts_remote_console(
 def test_team_os_tile_keeps_name_and_buttons_on_one_row(
     authed_page: Page, base_url: str
 ) -> None:
-    """Regression for #124: a Life tile carries only two actions (📖 + 🚀),
-    so the name and both buttons stay on a single inline row even on a
-    narrow phone — they must NOT inherit the Coding tab's stack-on-narrow
-    rule (#120) via the shared ``.coding-item`` class. On the phone
-    projection this runs at the Pixel 8 Pro width (448px < the 520px
-    breakpoint), so it exercises the media query directly.
+    """Regression for #124: a Life tile keeps its name and both buttons
+    (📖 + 🚀) on a single inline row even on a narrow phone. Originally this
+    guarded the ``.coding-item.teamos-item`` opt-out from the Coding tab's
+    stack-on-narrow rule (#120); #8 deleted that rule outright — every
+    ``.coding-item`` is one row at every width now — so the opt-out went with
+    it and this assertion is what keeps the shared behaviour honest. On the
+    phone projection it runs at the Pixel 8 Pro width (448px), i.e. below the
+    old 520px breakpoint, so a reintroduced stack would still be caught.
 
     Asserted via geometry: when inline, the name and the action strip both
     span the tile's full height and so overlap vertically; when wrongly

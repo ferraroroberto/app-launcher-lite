@@ -155,7 +155,15 @@ function renderCodingList(host, items) {
     main.className = 'app-main';
     const name = document.createElement('div');
     name.className = 'coding-name';
-    name.textContent = a.name;   // raw folder name, exactly as on disk
+    // The folder name rides its own span, not a bare text node, so it can
+    // ellipsis-truncate independently of the branch pill beside it (issue
+    // #8 — one line per project). `title` keeps the full name reachable
+    // when it is cut, mirroring the pill's own tooltip.
+    const nameText = document.createElement('span');
+    nameText.className = 'coding-name-text';
+    nameText.textContent = a.name;   // raw folder name, exactly as on disk
+    nameText.title = a.name;
+    name.appendChild(nameText);
     annotateGitStatus(name, a.id);
     main.appendChild(name);
     li.appendChild(main);
@@ -168,29 +176,10 @@ function renderCodingList(host, items) {
     // a hidden button.
     const hidden = hiddenButtons();
 
-    state.agents.forEach(function (agent) {
-      if (hidden.has(agent.id)) return;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'icon-btn agent-btn';
-      btn.dataset.agent = agent.id;
-      const icon = document.createElement('img');
-      icon.className = 'agent-icon';
-      icon.src = iconUrl(agent.id);
-      icon.alt = agent.label;
-      btn.appendChild(icon);
-      if (agent.available) {
-        btn.title = 'Launch ' + agent.label;
-        btn.setAttribute('aria-label', 'Launch ' + agent.label);
-        btn.addEventListener('click', function () { launchApp(a, agent.id); });
-      } else {
-        btn.disabled = true;
-        btn.title = agent.label + ' is not installed';
-        btn.setAttribute('aria-label', agent.label + ' is not installed');
-      }
-      actions.appendChild(btn);
-    });
-
+    // Order is Repository · Star · agents (issue #8). The agent launch is the
+    // row's primary action, so it sits rightmost — the far side of the strip
+    // is the easiest thumb reach on a phone, and it cannot go any further
+    // right than this: the strip already ends at the list's content edge.
     // Repo icon — opens the repo's issues page in a new browser tab. The
     // URL is precomputed server-side (a.repo_issues_url — GitHub `/issues`
     // vs GitLab `/-/issues`, registry.py owns the host check) and used
@@ -220,9 +209,9 @@ function renderCodingList(host, items) {
       actions.appendChild(ghBtn);
     }
 
-    // Favorite star — rightmost in the action strip, a toggle distinct from
-    // the agent-launch buttons. Filled when starred, outline otherwise
-    // (see the .star-btn.is-fav CSS fill treatment).
+    // Favorite star — a toggle, kept between the repo link and the agent
+    // launch so the two "opens something" buttons don't sit side by side.
+    // Filled when starred, outline otherwise (see .star-btn.is-fav).
     const starBtn = document.createElement('button');
     starBtn.type = 'button';
     starBtn.className = 'icon-btn agent-btn star-btn' + (a.is_favorite ? ' is-fav' : '');
@@ -232,6 +221,30 @@ function renderCodingList(host, items) {
     starBtn.setAttribute('aria-pressed', a.is_favorite ? 'true' : 'false');
     starBtn.addEventListener('click', function () { toggleFavorite(a); });
     actions.appendChild(starBtn);
+
+    // Agent launch buttons last — see the ordering note above.
+    state.agents.forEach(function (agent) {
+      if (hidden.has(agent.id)) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'icon-btn agent-btn';
+      btn.dataset.agent = agent.id;
+      const icon = document.createElement('img');
+      icon.className = 'agent-icon';
+      icon.src = iconUrl(agent.id);
+      icon.alt = agent.label;
+      btn.appendChild(icon);
+      if (agent.available) {
+        btn.title = 'Launch ' + agent.label;
+        btn.setAttribute('aria-label', 'Launch ' + agent.label);
+        btn.addEventListener('click', function () { launchApp(a, agent.id); });
+      } else {
+        btn.disabled = true;
+        btn.title = agent.label + ' is not installed';
+        btn.setAttribute('aria-label', agent.label + ' is not installed');
+      }
+      actions.appendChild(btn);
+    });
 
     li.appendChild(actions);
     host.appendChild(li);

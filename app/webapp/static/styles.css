@@ -89,6 +89,16 @@
   --row-sm: 44px;
   --row-md: 52px;
   --row-lg: 60px;
+  /* Action-cluster alignment (issue #8). A collapsible card's summary ends
+     with the disclosure chevron, so its controls stop short of the content
+     edge that the rows below run to. Reserving the same trailing column on
+     both — chevron width plus the 6px .summary-actions gap — is what puts a
+     row's buttons on the same vertical centre lines as the summary's. Both
+     sides then step at --row-sm + 6px. Change these together or not at all;
+     tests/e2e/test_coding_row_one_line.py pins the result. */
+  --collapse-chevron-w: 20px;
+  --action-cluster-gap: 6px;
+  --action-cluster-trail: calc(var(--collapse-chevron-w) + var(--action-cluster-gap));
   /* canonical icon-size steps — emoji glyph buttons size via font-size */
   --icon-inline: 16px;
   --icon-title: 18px;
@@ -702,7 +712,24 @@ summary + .opt-group { border-top: 0; }
   font-size: var(--font-body);
   font-weight: 600;
   color: var(--fg);
-  word-break: break-all;   /* raw on-disk name — shown verbatim */
+  /* One line per project (issue #8) — the name never wraps, it truncates.
+     The branch pill stacks UNDERNEATH rather than beside: sharing the line
+     left it ~44px on a 390px phone, i.e. "fea…", which reads as noise. A
+     project parked off its default branch is the minority case and worth
+     the extra ~13px of row height; on-default rows have no pill and stay a
+     flat single line. Both labels are spans so each gets its own ellipsis
+     box (the pill's old margin-left is zeroed in the scoped rule below). */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+.coding-name-text {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;   /* raw on-disk name — shown verbatim, cut if long */
 }
 /* ---------- Coding tab git-status flags (issue #115) ---------- */
 /* On-demand only: tap the header button to annotate tiles. Yellow name
@@ -761,6 +788,21 @@ summary + .opt-group { border-top: 0; }
   vertical-align: middle;
   word-break: break-all;
 }
+/* Inside a Coding tile the pill sits on its own line beneath the folder name
+   (issue #8), so it gets the tile's full text width instead of fighting the
+   name for it — a realistic `fix/28-terminal-reconnect` fits uncut at 390px.
+   It still truncates rather than wrapping when a branch name is genuinely
+   longer than the tile; the full name stays in the pill's `title` (set by
+   annotateGitStatus). Scoped to .coding-name so the off-main summary
+   popover's copy of the pill is untouched. */
+.coding-name .git-branch-tag {
+  margin-left: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+}
 .git-legend {
   display: flex;
   align-items: center;
@@ -779,49 +821,34 @@ summary + .opt-group { border-top: 0; }
 .git-swatch.off-main { background: var(--attention); }
 .git-swatch.dirty { background: var(--danger); }
 
-.row-actions.agent-actions { flex-direction: row; }
 /* The agent icon strip (one button per registry agent + GitHub + star)
-   shares the row with the folder name (issue #120). Buttons are tightened
-   to 52px — still a comfortable ≥44px tap target — so the set fits one
-   row on PC and wider phones. On narrow phones the tile stacks (see the
-   media query below) and the icon strip wraps as the final fallback. */
+   shares the row with the folder name (issue #120) — on every width now,
+   including the narrowest phone (issue #8: the tile used to stack into two
+   lines under 520px, doubling the scroll for a list of projects).
+   The buttons read as discrete controls separated by a real gap, the same
+   treatment as the Detached/Resume pair in the Projects summary
+   (.coding-toggles, also gap 6px), rather than a flush segmented rail with
+   1px dividers. Each is a full 44px (--row-sm) square of REAL geometry — an
+   adjacent cluster like this one must never fake its target with
+   .hit-target's ::before expansion, which would overlap its neighbours. */
+.row-actions.agent-actions {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--action-cluster-gap);
+  /* Reserve the summary's chevron column so these buttons land on the same
+     centre lines as the Projects summary's controls — see the token block. */
+  padding-right: var(--action-cluster-trail);
+}
 .app-item .row-actions.agent-actions .icon-btn {
-  width: 52px;
-  /* Shorter than the two-line row to fit more tiles per screen (issue
-     #212); --row-sm keeps the iOS 44px tap minimum around the 24px glyph
-     (unified scale, issue #365). */
+  flex: 0 0 auto;
+  width: var(--row-sm);
+  min-width: var(--row-sm);
   min-height: var(--row-sm);
   padding: 5px;
+  border-radius: var(--radius-md);   /* :active reads as a rounded chip */
 }
 .app-item .row-actions.agent-actions .icon-btn + .icon-btn {
   border-top: 0;
-  border-left: 1px solid var(--line);
-}
-@media (max-width: 520px) {
-  /* Stack: folder name on its own full-width line, agent icons on a
-     row beneath it. flex-wrap lets the icons spill to a second line on
-     the very narrowest phones rather than clipping. */
-  .coding-item { flex-direction: column; align-items: stretch; }
-  .coding-item .row-actions.agent-actions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
-  .coding-item .row-actions.agent-actions .icon-btn + .icon-btn {
-    border-left: 1px solid var(--line);
-  }
-  /* Team OS tiles share the .coding-item class but only ever carry two
-     actions (📖 + 🚀), which fit beside the name even on the narrowest
-     phone. Opt them back out of the stack-on-narrow rule above (issue
-     #124): the higher-specificity .coding-item.teamos-item selectors win
-     over the bare .coding-item ones, restoring the default inline row +
-     side border. The Code tab's agent-icon stack is untouched. */
-  .coding-item.teamos-item { flex-direction: row; align-items: stretch; }
-  .coding-item.teamos-item .row-actions.agent-actions {
-    border-left: 1px solid var(--line);
-    border-top: 0;
-  }
 }
 .agent-icon {
   width: 24px;                    /* icons.size feature step (issue #355) */
@@ -844,9 +871,22 @@ summary + .opt-group { border-top: 0; }
    Lucide `star` glyph. Outline + muted colour when unstarred (like the
    other idle icons); the `.is-fav` rule below fills it gold when starred —
    the sprite has one star symbol, not a filled/outline pair (#563). */
-.app-item .row-actions.agent-actions .icon-btn.star-btn {
-  font-size: 20px;
-  line-height: 1;
+/* The star is an inline SVG while its neighbours are <img> brand logos, so
+   it needs the .agent-icon box restated to sit on the same grid (issue #8 —
+   it used to render 20px and chip-less beside two 24px chips, which read as
+   haphazard). Same 24px box, same chip, same border-radius; the inner
+   padding shrinks the drawn glyph to 16px so its visual weight matches the
+   brand SVGs, which carry that clearance inside their own viewBox (github.svg
+   draws at 62% of its box, copilot.svg at ~72%; 16/24 sits between them). */
+.app-item .row-actions.agent-actions .icon-btn.star-btn .icon {
+  display: block;
+  box-sizing: border-box;
+  width: var(--icon-feature);
+  height: var(--icon-feature);
+  padding: 4px;
+  background: var(--card-2);
+  border-radius: 22%;
+  vertical-align: baseline;
 }
 .app-item .row-actions.agent-actions .icon-btn.star-btn.is-fav,
 .app-item .row-actions.agent-actions .icon-btn.star-btn.is-fav:active {
@@ -865,6 +905,27 @@ summary + .opt-group { border-top: 0; }
    row (same compaction precedent as the Registered-jobs summary). */
 @media (max-width: 520px) {
   .fav-filter-btn .fav-filter-label { display: none; }
+  /* ...which is also what makes the summary's three controls alignable with
+     the project rows' three buttons (issue #8): icon-only, they can take the
+     rows' exact --row-sm box and 6px pitch. Above this width the filter
+     carries its label and is deliberately wider, so no alignment is claimed
+     there. The chevron column is fixed-width at every size (below) so the
+     reserve the rows leave for it is deterministic, not glyph-metric. */
+  .projects-card .coding-toggles .detached-toggle,
+  .projects-card .fav-filter-btn {
+    width: var(--row-sm);
+    min-width: var(--row-sm);
+    min-height: var(--row-sm);
+    padding: 0;
+  }
+}
+/* Fixed chevron column — the trailing reserve --action-cluster-trail assumes
+   this width. Scoped to the Projects card: it is the only summary whose
+   controls have rows beneath them to line up with. */
+.projects-card > .collapse-summary .collapse-chevron {
+  display: inline-block;
+  width: var(--collapse-chevron-w);
+  text-align: center;
 }
 /* Shown in place of the list when the filter is on but nothing is starred. */
 .coding-fav-empty {
