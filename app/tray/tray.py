@@ -547,9 +547,11 @@ def run_tray(app_config: AppConfig) -> int:
     # pre-check can let two near-simultaneous launches through, so the guarantee
     # must live in the process. Held for the tray's lifetime; the OS frees the
     # named mutex on exit.
-    instance = SingleInstance(r"Global\app-launcher-tray")
+    # Lite-specific mutex name: the upstream app-launcher tray can run on the
+    # same machine, and sharing its mutex name would make this tray exit here.
+    instance = SingleInstance(r"Global\app-launcher-lite-tray")
     if not instance.acquired:
-        logger.info("ℹ️  Another app-launcher tray is already running; exiting.")
+        logger.info("ℹ️  Another App Launcher Lite tray is already running; exiting.")
         return 0
 
     return TrayApp(app_config, instance).run()

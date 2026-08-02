@@ -186,7 +186,7 @@ class WebappManager:
         # through _wait_until_ready so a serialized caller sees a bound port.
         # cross_process_lock fails open (Windows mutex glitch / non-Windows), so
         # it never blocks startup. Vendored byte-identical from the scaffold.
-        with cross_process_lock(rf"Global\app-launcher-webapp-start-{self.config.port}"):
+        with cross_process_lock(rf"Global\app-launcher-lite-webapp-start-{self.config.port}"):
             current = self.status()
             if current.running and current.ownership == OWNERSHIP_OURS:
                 logger.info(f"ℹ️  Webapp already {current.detail}")
