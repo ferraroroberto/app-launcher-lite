@@ -199,7 +199,7 @@ class WebappConfig:
     # bare tailnet hostname (e.g. "pc.tailnet.ts.net"); origin is the full
     # https origin the phone connects to. Empty disables the passkey gate.
     webauthn_rp_id: str = ""
-    webauthn_rp_name: str = "Launcher"
+    webauthn_rp_name: str = "App Launcher Lite"
     webauthn_origin: str = ""
     # --- Jobs-tab failure notifications (issue #66) ---------------------
     # Pushover credentials — both empty means no-op notifier (executor
@@ -366,7 +366,7 @@ def load_webapp_config(
             raw.get("terminal_history_lines", DEFAULT_TERMINAL_HISTORY_LINES)
         ),
         webauthn_rp_id=str(raw.get("webauthn_rp_id", "")),
-        webauthn_rp_name=str(raw.get("webauthn_rp_name", "Launcher")),
+        webauthn_rp_name=str(raw.get("webauthn_rp_name", "App Launcher Lite")),
         webauthn_origin=str(raw.get("webauthn_origin", "")),
         pushover_api_token=str(raw.get("pushover_api_token", "")),
         pushover_user_key=str(raw.get("pushover_user_key", "")),

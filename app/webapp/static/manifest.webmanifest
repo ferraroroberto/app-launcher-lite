@@ -1,6 +1,6 @@
 {
-  "name": "Launcher",
-  "short_name": "Launcher",
+  "name": "App Launcher Lite",
+  "short_name": "Launcher Lite",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0d1117",

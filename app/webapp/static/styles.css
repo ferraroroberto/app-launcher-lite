@@ -1232,9 +1232,9 @@ summary + .opt-group { border-top: 0; }
   max-width: calc(100vw - 32px);
   box-shadow: var(--shadow);
   /* Above the full-screen terminal overlay (z-index 300) — otherwise every
-     toast raised while the terminal is open (read-aloud feedback #190, the
-     🎤 dictation / 📷 OCR / paste results) renders behind it and is invisible
-     on the phone. A transient toast should sit above everything. */
+     toast raised while the terminal is open (paste/attach results, send
+     feedback) renders behind it and is invisible on the phone. A transient
+     toast should sit above everything. */
   z-index: 400;
 }
 .toast.error { border-color: var(--danger); }
@@ -1916,14 +1916,14 @@ body.terminal-open {
    shrinks and xterm re-fits on the visualViewport resize. */
 .compose-bar {
   display: flex;
-  /* flex-end, not stretch (issue #447): the textarea auto-grows on every
-     dictation partial, and its growth pushes the row's TOP edge up while
-     the bottom stays put. With align-items:stretch the mic/OCR/attach
-     column and the Send button stretched to match the taller row, moving
-     their buttons up with it — measured 46px of drift on a realistic
-     transcript, a moving-target race against a tap aimed at the pre-grow
-     position. flex-end keeps every button's own natural size, anchored to
-     the row's one stable edge (the bottom), so only the textarea grows. */
+  /* flex-end, not stretch (issue #447): the textarea auto-grows as long
+     text lands, and its growth pushes the row's TOP edge up while the
+     bottom stays put. With align-items:stretch the attach column and the
+     Send button stretched to match the taller row, moving their buttons up
+     with it — measured 46px of drift on a realistic long paste, a
+     moving-target race against a tap aimed at the pre-grow position.
+     flex-end keeps every button's own natural size, anchored to the row's
+     one stable edge (the bottom), so only the textarea grows. */
   align-items: flex-end;
   gap: 8px;
   padding: 8px 10px;
@@ -2511,7 +2511,7 @@ body.terminal-open {
   border-color: var(--danger);
 }
 
-/* Desktop / wide: all five columns side by side; titles come back.
+/* Desktop / wide: all four columns side by side; titles come back.
    Board (only) also breaks out of the phone-first `.app` 720px cap —
    full-bleed to the viewport, since `.app`'s horizontal centering makes
    the standard breakout offsets cancel out exactly (issue #325). Every

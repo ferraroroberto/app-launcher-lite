@@ -4,7 +4,7 @@ The architecture, security model, and hard-won gotchas behind the launcher-owned
 
 ## 1. What we set out to do
 
-Replace the fire-and-forget "detached CMD window the launcher can't see" model with **launcher-owned ConPTY sessions**, and put a **full interactive terminal on the phone** on top — live output, scrollback, typing, `Ctrl+C`, `/quit`, image paste. Non-negotiable: it had to be at least as safe as the existing cloud surface, ideally safer.
+Replace the fire-and-forget "detached CMD window the launcher can't see" model with **launcher-owned ConPTY sessions**, and put a **full interactive terminal on the phone** on top — live output, scrollback, typing, `Ctrl+C`, `/exit`, image paste. Non-negotiable: it had to be at least as safe as the existing cloud surface, ideally safer.
 
 ## 2. The architecture, and why each piece exists
 
@@ -14,7 +14,7 @@ Replace the fire-and-forget "detached CMD window the launcher can't see" model w
 
 ## 3. Security: the model and the reasoning
 
-The user's own framing was the key insight: *"the risk is the same risk I already have — anyone on my tailnet could already RDP in."* That's true, and it's why **Tailscale-only** is the foundation, not an afterthought. But "no worse than today" isn't the bar for a surface that runs `--dangerously-skip-permissions` — so we layered:
+The user's own framing was the key insight: *"the risk is the same risk I already have — anyone on my tailnet could already RDP in."* That's true, and it's why **Tailscale-only** is the foundation, not an afterthought. But "no worse than today" isn't the bar for a surface that can run the agent with permission prompts disabled (Copilot's `--allow-all`) — so we layered:
 
 1. **Tailscale-only** — reject the `Cf-Ray` / `Cf-Connecting-IP` headers (public Cloudflare tunnel) and require the client IP in the `100.64.0.0/10` CGNAT range, loopback, or an explicit allowlist.
 2. **Bearer token** — same as the rest of the app.

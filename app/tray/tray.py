@@ -151,7 +151,7 @@ def _notify(title: str, message: str) -> None:
     try:
         from winotify import Notification  # type: ignore
 
-        toast = Notification(app_id="Launcher", title=title, msg=message)
+        toast = Notification(app_id="App Launcher Lite", title=title, msg=message)
         toast.show()
     except Exception as exc:  # noqa: BLE001
         logger.debug(f"winotify failed: {exc}")
@@ -275,12 +275,12 @@ class TrayApp:
     def _start(self) -> None:
         try:
             self.manager.start(wait=True)
-            _notify("Launcher webapp ready", self.manager.base_url)
+            _notify("Launcher Lite webapp ready", self.manager.base_url)
             registered_trays.launch_all()
         except Exception as exc:  # noqa: BLE001
             self.starter_exc = exc
             logger.error(f"❌ webapp start failed: {exc}")
-            _notify("Launcher start failed", str(exc))
+            _notify("Launcher Lite start failed", str(exc))
 
     def _on_webapp_wedge(self, failures: int) -> None:
         msg = (
@@ -289,13 +289,13 @@ class TrayApp:
         )
         logger.error(f"❌ {msg}")
         _wd_log(f"WEDGE {msg}")
-        _notify("Launcher webapp unresponsive", msg)
+        _notify("Launcher Lite webapp unresponsive", msg)
 
     def _on_webapp_recover(self) -> None:
         msg = f"webapp on :{self.manager.config.port} answering /healthz again"
         logger.info(f"✅ {msg}")
         _wd_log(f"RECOVERED {msg}")
-        _notify("Launcher webapp recovered", msg)
+        _notify("Launcher Lite webapp recovered", msg)
 
     # -- Cloudflare tunnel lifecycle ------------------------------------------
 
@@ -431,9 +431,9 @@ class TrayApp:
     def restart_webapp(self, icon, item) -> None:  # noqa: ARG002
         def _do_restart():
             try:
-                _notify("Launcher", "Restarting webapp…")
+                _notify("Launcher Lite", "Restarting webapp…")
                 self.manager.restart(wait=True)
-                _notify("Launcher webapp restarted", self.manager.base_url)
+                _notify("Launcher Lite webapp restarted", self.manager.base_url)
             except Exception as exc:  # noqa: BLE001
                 logger.error(f"❌ webapp restart failed: {exc}")
                 _notify("Restart failed", str(exc))
@@ -476,7 +476,7 @@ class TrayApp:
 
     def show_status(self, icon, item) -> None:  # noqa: ARG002
         s = self.manager.status()
-        _notify("Launcher status", f"{s.detail} · {s.base_url}")
+        _notify("Launcher Lite status", f"{s.detail} · {s.base_url}")
 
     def quit_app(self, icon, item) -> None:  # noqa: ARG002
         logger.info("👋 Tray quit requested")
@@ -524,7 +524,7 @@ class TrayApp:
         icon = pystray.Icon(
             "launcher",
             icon=_build_icon(),
-            title="Launcher",
+            title="App Launcher Lite",
             menu=menu,
         )
         icon.run()

@@ -291,7 +291,7 @@ def create_app() -> FastAPI:
     ensure_slow_log_handler()
 
     app = FastAPI(
-        title="Launcher",
+        title="App Launcher Lite",
         version="0.1.0",
         lifespan=_lifespan,
     )

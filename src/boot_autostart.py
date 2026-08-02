@@ -41,7 +41,7 @@ from typing import Optional
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TRAY_BAT_PATH = PROJECT_ROOT / "tray.bat"
 
-STARTUP_BAT_NAME = "AppLauncher.bat"
+STARTUP_BAT_NAME = "AppLauncherLite.bat"
 
 # Env override for the resolved Startup directory. Set ONLY by the e2e
 # pre-ship gate's autoboot (tests/e2e/conftest.py) so the disposable webapp's
@@ -49,7 +49,7 @@ STARTUP_BAT_NAME = "AppLauncher.bat"
 # `enable()` / `disable()` with no explicit `startup_dir` — reads and writes a
 # temp directory instead of the real per-user Startup folder. Without this,
 # the e2e boot-autostart test could only pass on a host with no
-# AppLauncher.bat already installed there, which is false on any machine that
+# AppLauncherLite.bat already installed there, which is false on any machine that
 # actually boots the launcher at log on (issue #698). Matches the
 # SESSION_HOST_PORT_ENV / WEBAPP_CONFIG_PATH_ENV isolation pattern in
 # src/webapp_config.py. Not a user-facing knob; intentionally undocumented in

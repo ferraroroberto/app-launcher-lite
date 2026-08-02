@@ -6,9 +6,9 @@ however, and that is the common fallback for sessions whose declared JSONL is
 absent and for agents that publish no hook transcript at all.
 
 The capture is terminal output, not prose.  A bounded tail is replayed through
-``pyte`` and reply blocks are selected by the same leading-bullet colour
-contract as the browser's read-aloud extractor.  This keeps ANSI/full-screen
-repaint bytes out of the API response and avoids any cwd-based guessing.
+``pyte`` and reply blocks are selected by the terminal's leading-bullet colour
+contract.  This keeps ANSI/full-screen repaint bytes out of the API response
+and avoids any cwd-based guessing.
 """
 
 from __future__ import annotations

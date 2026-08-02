@@ -3,8 +3,8 @@
 #   python -m venv .venv
 #   .venv\Scripts\python.exe -m pip install -r requirements.txt
 #
-# Sister project to photo-ocr and voice-transcriber — same FastAPI + pystray
-# stack so the auth, tunnel, and cert plumbing is shared.
+# Lite fork of ferraroroberto/app-launcher — same FastAPI + pystray stack,
+# so the auth, tunnel, and cert plumbing matches upstream.
 
 # HTTP client (healthz polling) + YAML (cloudflared config)
 requests>=2.31
@@ -13,13 +13,10 @@ PyYAML>=6.0
 # Process introspection (port-owner lookup, smart kill)
 psutil>=5.9
 
-# Icon generation — dev-only: scripts/gen_icons.py calls project-scaffolding's
-# shared brand_gen.py, which rasterizes the vendored Lucide master SVGs with
-# resvg-py (prebuilt wheel, no system deps) and assembles the .ico/.png set
-# with Pillow. Generated assets are committed; the runtime webapp never
-# imports either.
+# Tray icon image loading (app/tray/tray.py). The PWA/tray icon assets are
+# committed — scripts/gen_icons.py is a stub in the lite fork (regeneration
+# needs project-scaffolding's brand_gen, see that file's docstring).
 Pillow>=10.0
-resvg-py>=0.3.0
 
 # Webapp
 fastapi>=0.110

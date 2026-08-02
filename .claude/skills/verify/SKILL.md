@@ -3,7 +3,7 @@ name: verify
 description: Boot this webapp and drive a real browser against it to visually confirm a change, instead of only running tests.
 ---
 
-# Verifying app-launcher's webapp in a real browser
+# Verifying App Launcher Lite's webapp in a real browser
 
 This repo has no standing `verify`/`run` skill before this one — cold-start
 recipe that worked, captured so the next session skips it.

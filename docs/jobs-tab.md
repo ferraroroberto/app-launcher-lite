@@ -32,7 +32,7 @@ Gitignored. Committed template at `config/jobs.sample.json`. Separate file from 
     {
       "id": "reporting-daily",
       "name": "Daily Reporting",
-      "script_path": "E:\\automation\\content-management\\launch_reporting.bat",
+      "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\launch_reporting.bat",
       "args": "auto",
       "schedule": { "type": "daily", "at": "06:00" },
       "added_at": "2026-05-23T07:00:00"
@@ -40,7 +40,7 @@ Gitignored. Committed template at `config/jobs.sample.json`. Separate file from 
     {
       "id": "linkedin-scrape",
       "name": "LinkedIn Scrape",
-      "script_path": "E:\\automation\\content-management\\engagement\\linkedin\\scrape_comments.py",
+      "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\scrape_comments.py",
       "args": "",
       "schedule": { "type": "daily_times", "at": ["06:00", "12:00", "18:00"] },
       "added_at": "2026-05-23T07:00:00"
@@ -133,9 +133,9 @@ A job can carry `"visible": true` (omitted / `false` is the default). It changes
 
 ```json
 {
-  "id": "codebase-audit-fleet",
-  "name": "Weekly Codebase Audit (fleet)",
-  "script_path": "E:\\automation\\fleet-config\\audit-fleet.bat",
+  "id": "weekly-audit",
+  "name": "Weekly Audit",
+  "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\weekly_audit.bat",
   "schedule": { "type": "weekly", "day": "THU", "at": "22:00" },
   "visible": true
 }
@@ -155,7 +155,7 @@ A job can carry `"elevated": true` (omitted / `false` is the default) for a scri
 {
   "id": "hwinfo-restart",
   "name": "HWiNFO restart",
-  "script_path": "E:\\automation\\automation\\system\\hwinfo_restart.py",
+  "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\hwinfo_restart.py",
   "schedule": { "type": "hourly", "every": 8 },
   "elevated": true
 }
@@ -164,7 +164,7 @@ A job can carry `"elevated": true` (omitted / `false` is the default) for a scri
 **The launcher never *creates* a Task Scheduler entry for an elevated job.** `/RL HIGHEST` — Task Scheduler's own silent elevation, needed so the scheduled fire runs elevated with no interactive UAC prompt — can only be set by an already-elevated *calling* process (empirically verified: an admin account running non-elevated gets `ERROR: Access is denied` on the `/Create` call; being in the Administrators group is not enough, the token itself must be elevated). The launcher's webapp always runs non-elevated, so `sync_schtasks()` never issues a `/Create` the moment `job.elevated` is true, on `POST /api/jobs`, `PUT /api/jobs/<id>` (any field edit), `pause`, or `resume`. It still *deletes* any stale `\AppLauncher\<id>*` entry first (issue #409) — otherwise a job that used to be non-elevated leaves its old un-elevated scheduled task behind, still firing on its old schedule indefinitely. An elevated job's real Task Scheduler entry is treated as **externally-managed**: everything else (registry row, run history, stats, the computed `next_run` sortable field) keeps working normally, but the entry itself must be registered and updated by hand, from an elevated shell:
 
 ```
-schtasks /Create /F /TN "\AppLauncher\hwinfo-restart" /TR '"E:\automation\app-launcher\.venv\Scripts\pythonw.exe" "E:\automation\app-launcher\launcher.py" run-job hwinfo-restart' /SC HOURLY /MO 8 /RL HIGHEST
+schtasks /Create /F /TN "\AppLauncher\hwinfo-restart" /TR '"C:\path\to\app-launcher-lite\.venv\Scripts\pythonw.exe" "C:\path\to\app-launcher-lite\launcher.py" run-job hwinfo-restart' /SC HOURLY /MO 8 /RL HIGHEST
 ```
 
 (Single-quote the `/TR` value in PowerShell — double-quoted strings there don't pass embedded `"` through literally.) The Jobs tab marks an elevated job with a `🔒 external schedule` pill next to its schedule chip so it's visually obvious which jobs the app isn't managing. The row remains tappable for run history, and edit mode still offers the side-effect-free dry-run check. Run-now and pause/resume are omitted and their API endpoints return `409`: the non-elevated launcher cannot honor those actions safely against an externally managed `/RL HIGHEST` task. `elevated` round-trips through `POST`/`PUT` like `visible` and is omitted from the stored row when false. There's no dedicated UI checkbox yet (same as `visible`) — set it directly in `config/jobs.json` or via the API.
@@ -177,7 +177,7 @@ A job can declare a per-job `cooldown_seconds`: a debounce window that prevents 
 {
   "id": "reporting-daily",
   "name": "Daily Reporting",
-  "script_path": "E:\\automation\\content-management\\launch_reporting.bat",
+  "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\launch_reporting.bat",
   "args": "auto",
   "schedule": { "type": "daily", "at": "06:00" },
   "cooldown_seconds": 120
@@ -271,7 +271,7 @@ A job can declare typed inputs collected at run-time. With no `params`, a tap on
 {
   "id": "linkedin-scrape",
   "name": "LinkedIn Scrape",
-  "script_path": "E:\\automation\\content-management\\engagement\\linkedin\\scrape_comments.py",
+  "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\scrape_comments.py",
   "args": "",
   "schedule": { "type": "none" },
   "params": [
@@ -351,7 +351,7 @@ itself is safe to hand to the external service in plaintext.
 {
   "id": "gh-push-deploy",
   "name": "Deploy on GitHub push",
-  "script_path": "E:\\automation\\automation\\deploy\\deploy.py",
+  "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\deploy.py",
   "params": [
     { "name": "repo", "kind": "string", "flag": "--repo" },
     { "name": "branch", "kind": "string", "flag": "--branch" }
@@ -683,8 +683,7 @@ Set the Pushover keys in `config/webapp_config.json` and flip `notify_on_failure
   "pushover_api_token": "azGDORePK8gMaC0QOYAMyEEuzJnyUi",
   "pushover_user_key":  "uQiRzpo4DXghDmr9QzzfQu27cmVRsG",
   "notify_on_failure":     true,
-  "notify_failure_streak": 3,
-  "notify_failure_summary": false
+  "notify_failure_streak": 3
 }
 ```
 
@@ -693,11 +692,10 @@ Set the Pushover keys in `config/webapp_config.json` and flip `notify_on_failure
 | `pushover_api_token` / `pushover_user_key` | `""` | Both must be set for any push to fire; otherwise the notifier short-circuits as a no-op |
 | `notify_on_failure` | `false` | Master switch — even with creds present, nothing is sent until this flips on |
 | `notify_failure_streak` | `0` | When > 0, also fires a separate "🔁 N consecutive failures" push when the streak ticks to exactly this count. Useful when individual-failure pushes are muted via Pushover quiet hours |
-| `notify_failure_summary` | `false` | When `true`, pipe the last ~500 chars of `output.log` through the local LLM hub (`http://127.0.0.1:8000`, `claude-haiku-4-5`) and prepend the model's one-line root-cause summary to the push body. Hub down → silently falls back to raw tail |
 
-The push body always includes: optional LLM summary, the raw output tail (last 500 chars), then a footer `— job=<id> run=<rid> exit=<code>`. Pushover caps individual messages at ~1024 chars; longer bodies are truncated server-side, so the tail is what the executor budgets toward.
+The push body always includes: the raw output tail (last 500 chars), then a footer `— job=<id> run=<rid> exit=<code>`. Pushover caps individual messages at ~1024 chars; longer bodies are truncated server-side, so the tail is what the executor budgets toward.
 
-The notifier path is wrapped in a single `try`/`except` — credentials misconfigured, Pushover 5xx, hub unreachable: none of those can block the executor's normal exit. Errors land in the launcher log at `WARNING`.
+The notifier path is wrapped in a single `try`/`except` — credentials misconfigured, Pushover 5xx: none of those can block the executor's normal exit. Errors land in the launcher log at `WARNING`.
 
 ### Per-job Telegram alerts (issue #597)
 
@@ -717,7 +715,7 @@ The channel is the fleet's vendored `src/notify/` Telegram primitive (byte-ident
 | `telegram_bot_token` / `telegram_chat_id` | `""` | Both must be set for any alert to fire; otherwise the notifier short-circuits as a no-op |
 | `Job.alert_on_failure` | `false` | Per-job opt-in — set from the editor's toggle, or `"alert_on_failure": true` in `config/jobs.json` |
 
-The message is short and job-scoped: `❌ <job name> failed` as the title, `<timestamp> — run=<rid> exit=<code>` as the body — no LLM summary, no streak logic (those are Pushover-specific enrichments on the global channel). Same swallow-on-error contract as Pushover: a misconfigured token or a Telegram-side failure is logged at `WARNING` and never blocks the executor's normal exit. A job with the toggle on shows a 🔔 bell icon next to its name in the Jobs tab list.
+The message is short and job-scoped: `❌ <job name> failed` as the title, `<timestamp> — run=<rid> exit=<code>` as the body — no streak logic (that is a Pushover-specific enrichment on the global channel). Same swallow-on-error contract as Pushover: a misconfigured token or a Telegram-side failure is logged at `WARNING` and never blocks the executor's normal exit. A job with the toggle on shows a 🔔 bell icon next to its name in the Jobs tab list.
 
 ## Missed-fire coverage (issue #697)
 
@@ -755,7 +753,7 @@ A job can declare an `env: {NAME: value}` overlay in `config/jobs.json` (or via 
 {
   "id": "linkedin-sync",
   "name": "LinkedIn sync",
-  "script_path": "E:\\automation\\social\\sync.py",
+  "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\sync.py",
   "env": {"LINKEDIN_API_KEY": "$secret:linkedin_api"}
 }
 ```

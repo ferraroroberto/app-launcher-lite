@@ -54,7 +54,7 @@ async function toggleBootAutostart() {
     });
     await fetchConfig();
     toast(
-      next ? 'App-launcher will start at log on.' : 'Boot autostart disabled.',
+      next ? 'App Launcher Lite will start at log on.' : 'Boot autostart disabled.',
       'good'
     );
   } catch (exc) {

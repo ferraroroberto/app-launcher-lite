@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 REM ============================================================================
-REM  AppLauncher TRAY - tray icon that owns a long-lived service lifecycle
+REM  AppLauncherLite TRAY - tray icon that owns a long-lived service lifecycle
 REM ----------------------------------------------------------------------------
 REM  Rebuilt from project-scaffolding's tray.bat.template (project-scaffolding#54
 REM  / #144, app-launcher#423). Everything below the four ADAPT values is the
@@ -12,14 +12,13 @@ REM
 REM  Launch this on login (Startup folder) for always-on phone-first launcher.
 REM
 REM  Idempotent:
-REM    tray.bat              -> no-op if an AppLauncher tray is already running
+REM    tray.bat              -> no-op if an AppLauncherLite tray is already running
 REM    tray.bat --restart    -> stop the running tray (and its service tree) and
 REM                             start a fresh one
 REM
 REM  Detection matches the tray process by command line + this project's .venv
 REM  path via CIM, then kills BY PID with /T. We never blanket-kill pythonw, so
-REM  sister-app trays (PhotoOCR, VoiceTranscriber, local-llm-hub, ...) and any
-REM  other unrelated python processes are untouched.
+REM  other apps' trays and any unrelated python processes are untouched.
 REM
 REM  The full detect -> kill -> reclaim -> start -> verify lifecycle lives in
 REM  the repo-local vendored scripts\tray_lifecycle.ps1 (lite fork: zero
@@ -69,7 +68,7 @@ set "SCRIPT_DIR_ARG=%SCRIPT_DIR:~0,-1%"
 cd /d "%SCRIPT_DIR%" || exit /b 1
 
 REM === ADAPT (1/4): short app name, used in messages + the start window title ===
-set "APP_NAME=AppLauncher"
+set "APP_NAME=AppLauncherLite"
 REM === ADAPT (2/4): the args python is started with to launch the tray,
 REM     e.g. "launcher.py tray"  or  "-m tray" ===
 set "TRAY_LAUNCH=launcher.py tray"

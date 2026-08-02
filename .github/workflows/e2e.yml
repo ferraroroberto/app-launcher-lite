@@ -60,9 +60,9 @@ jobs:
         # (issue #184): 20 s on CI vs the 5 s local default in conftest.py.
         # Likewise widen the stop/kill overlay-hide budget (#286) so the
         # graceful-then-force stop window doesn't time the WebKit test out.
-        # And widen the real-agent echo budget (#678) so a slow hosted-runner
-        # cold boot of the real Claude Code process doesn't time the
-        # reconnect-replay test out on the WebKit projection.
+        # And widen the real-agent echo budget (#678) for the reconnect-replay
+        # test's real-agent cold boot (currently skipped pending the
+        # work-machine handoff -- see tests/e2e/test_terminal_reconnect.py).
         env:
           E2E_LOG_POLL_DEADLINE_MS: '20000'
           E2E_STOP_OVERLAY_HIDE_MS: '30000'

@@ -1,11 +1,9 @@
-%% docs/architecture.mmd — app-launcher's own internal structure.
+%% docs/architecture.mmd — app-launcher-lite's own internal structure.
 %% Hand-authored, not generated — this repo's internal shape is semantic and
-%% can't be crawled the way the fleet-wide map is. Update this diagram in the
-%% same PR as any material structural change (a new tab/router, a process
-%% split like session-host, a script relocated) — same anti-staleness
-%% contract as this repo's own `.fleet.toml` `description` field. See
-%% fleet-config's `CLAUDE.md` "Every repo carries a `.fleet.toml`" section
-%% for the general convention (companion to `ferraroroberto/fleet-config#256`).
+%% can't be crawled. Update this diagram in the same PR as any material
+%% structural change (a new tab/router, a process split like session-host,
+%% a script relocated) — same anti-staleness contract as this repo's own
+%% `.fleet.toml` `description` field.
 
 flowchart TB
   ENTRY["launcher.py (root)\nputs repo root on sys.path"] --> CLIMAIN["app/cli/main.py"]
@@ -50,7 +48,7 @@ flowchart TB
       R_CC["coding.py — flags, git-status, favorites"]
       R_JOBS["jobs.py + jobs_run_store_routes.py\n/api/jobs/* (Jobs tab)"]
       R_TEAMOS["team_os.py — /api/team-os/* (Team OS tab)"]
-      R_BOARD["board.py — /api/board (Board tab) + dispatch\n+ board_spawn.py (shared spawn-then-type)"]
+      R_BOARD["board.py — /api/board, gitlab/refresh,\nexchange, one-tap issue start\n+ board_spawn.py (shared spawn helpers)"]
       R_WEBAUTHN["webauthn.py — passkey ceremonies"]
     end
   end
@@ -130,11 +128,11 @@ flowchart TB
   JOBSFACADE --> JOBSPREFLIGHT
   JOBSFACADE --> JOBSARGV
   R_BOARD --> BOARD
-  R_BOARD -->|"dispatch spawn-then-type"| SESSCLIENT
+  R_BOARD -->|"issue-start spawn-then-type"| SESSCLIENT
   BOARD --> SESSCLIENT
   BOARD --> GLCLIENT
-  BOARD -->|reads| SESSSTATE["~/.copilot/hooks/state/sessions-state.json\n(session_state hook)"]
-  BOARD -->|reads| ACTIVEISSUES["~/.copilot/hooks/state/active-issues.json\n(issue workflows)"]
+  BOARD -->|reads| SESSSTATE["~/.copilot/hooks/state/sessions-state.json\n(fleet-config-lite session_state hook)"]
+  BOARD -->|reads| ACTIVEISSUES["~/.copilot/hooks/state/active-issues.json\n(fleet-config-lite issue skills)"]
   R_CONFIG --> WEBAPPCFG
   R_CONFIG --> LAUNCHFLAGS
   R_APPS --> LAUNCHFLAGS
@@ -172,7 +170,7 @@ flowchart TB
 
   subgraph testing["tests/ + scripts/"]
     TESTS["pytest (unit) + tests/e2e (Playwright)\nscripts/verify-before-ship.ps1 gate"]
-    SCRIPTS["scripts/gen_icons.py ·\ngen_tailscale_cert.py (--check on boot) ·\ngen_token.py · run_named_tunnel.py · set_password.py"]
+    SCRIPTS["scripts/gen_tailscale_cert.py (--check on boot) ·\ngen_token.py · run_named_tunnel.py · set_password.py ·\nclassify_e2e.py · restart-session-host.ps1 ·\ntray_lifecycle.ps1 (vendored)"]
   end
   TESTS -.->|exercises| webapp
   TESTS -.->|exercises| sessionhost

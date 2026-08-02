@@ -1,26 +1,33 @@
 {
-  "_comment": "Apps-tab registry (bat-based launchers). Real file is config/apps.json (gitignored). 'kind' is one of: streamlit | webapp | tunnel | tray. coding projects are NOT listed here — the Coding tab discovers them live by scanning projects_dir (see webapp_config.json).",
+  "_comment": "Apps-tab registry (bat-based launchers). Real file is config/apps.json (gitignored). 'kind' is one of: streamlit | webapp | tunnel | tray. Rows with kind 'tray' are also auto-started sequentially at tray boot (Registered Trays panel in Settings). Coding projects are NOT listed here — the Coding tab discovers them live by scanning projects_dir (see webapp_config.json).",
   "scan_root": "C:\\path\\to\\your\\projects-root",
   "apps": [
     {
-      "id": "example-app-launch-app",
-      "name": "Example App",
+      "id": "app-launcher-lite-tray",
+      "name": "App Launcher Lite",
+      "kind": "tray",
+      "bat_path": "C:\\path\\to\\your\\projects-root\\app-launcher-lite\\tray.bat",
+      "added_at": "2026-01-01T00:00:00"
+    },
+    {
+      "id": "copilot-usage-tray",
+      "name": "Copilot Usage",
+      "kind": "tray",
+      "bat_path": "C:\\path\\to\\your\\projects-root\\copilot-usage\\tray.bat",
+      "added_at": "2026-01-01T00:00:00"
+    },
+    {
+      "id": "example-streamlit-app",
+      "name": "Example Streamlit App",
       "kind": "streamlit",
       "bat_path": "C:\\path\\to\\your\\projects-root\\example-app\\launch_app.bat",
       "added_at": "2026-01-01T00:00:00"
     },
     {
-      "id": "voice-transcriber-webapp",
-      "name": "Voice Transcriber",
+      "id": "example-webapp",
+      "name": "Example Webapp",
       "kind": "webapp",
-      "bat_path": "C:\\path\\to\\your\\projects-root\\voice-transcriber\\webapp.bat",
-      "added_at": "2026-01-01T00:00:00"
-    },
-    {
-      "id": "voice-transcriber-webapp-tunnel",
-      "name": "Voice Transcriber Tunnel",
-      "kind": "tunnel",
-      "bat_path": "C:\\path\\to\\your\\projects-root\\voice-transcriber\\webapp_tunnel.bat",
+      "bat_path": "C:\\path\\to\\your\\projects-root\\example-webapp\\webapp.bat",
       "added_at": "2026-01-01T00:00:00"
     }
   ]

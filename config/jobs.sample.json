@@ -1,110 +1,16 @@
 {
+  "_comment": "Jobs-tab registry. Real file is config/jobs.json (gitignored, empty by default). Each job fires a script one-shot from the phone and/or on a Task Scheduler schedule (entries land under \\AppLauncher\\ in Task Scheduler). Kinds: python (default), powershell, batch, inline-shell, shell-wsl, http-check. See docs/jobs-tab.md for params, webhooks, secrets, and alerting.",
   "jobs": [
     {
-      "id": "linkedin-scrape",
-      "name": "LinkedIn Scrape (sample)",
-      "script_path": "E:\\automation\\content-management\\engagement\\linkedin\\scrape_comments.py",
-      "args": "",
-      "schedule": { "type": "none" },
-      "params": [
-        { "name": "since", "kind": "date", "flag": "--since" },
-        {
-          "name": "tier",
-          "kind": "enum",
-          "options": ["smb", "mid", "enterprise"],
-          "default": "smb",
-          "flag": "--tier"
-        },
-        { "name": "verbose", "kind": "bool", "flag": "--verbose", "default": false }
-      ]
-    },
-    {
-      "id": "codebase-audit-fleet",
-      "name": "Weekly Codebase Audit (fleet)",
-      "script_path": "E:\\automation\\fleet-config\\skills\\audit-fleet\\run-weekly.bat",
-      "args": "",
-      "schedule": { "type": "weekly", "day": "THU", "at": "22:00" },
-      "visible": true,
-      "cooldown_seconds": 3600,
-      "mutex_group": "fleet-weekly"
-    },
-    {
-      "id": "design-sweep-fleet",
-      "name": "Weekly Design Sweep (fleet)",
-      "script_path": "E:\\automation\\fleet-config\\skills\\design-sweep\\run-weekly.bat",
-      "args": "",
-      "schedule": { "type": "weekly", "day": "SAT", "at": "22:00" },
-      "visible": true,
-      "cooldown_seconds": 3600,
-      "mutex_group": "fleet-weekly"
-    },
-    {
-      "id": "fleet-health-weekly",
-      "name": "Fleet Hardware Health Checkup",
-      "script_path": "E:\\automation\\fleet-config\\.claude\\skills\\fleet-health\\run-weekly.bat",
-      "args": "",
-      "schedule": { "type": "weekly", "day": "WED", "at": "23:30" }
-    },
-    {
-      "id": "weekly-recap-draft",
-      "name": "Weekly Recap (draft)",
-      "script_path": "E:\\automation\\team-os\\.claude\\skills\\_recap\\run-weekly.bat",
+      "id": "weekly-report",
+      "name": "Weekly Report (sample)",
+      "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\weekly_report.py",
       "args": "",
       "schedule": { "type": "weekly", "day": "SUN", "at": "21:00" },
-      "visible": true,
-      "cooldown_seconds": 3600
-    },
-    {
-      "id": "hwinfo-refresh",
-      "name": "HWiNFO refresh (sample, powershell kind)",
-      "script_path": "E:\\automation\\automation\\system\\hwinfo_refresh.ps1",
-      "kind": "powershell",
-      "args": "",
-      "schedule": { "type": "none" }
-    },
-    {
-      "id": "disk-cleanup-inline",
-      "name": "Disk cleanup (sample, inline-shell kind)",
-      "kind": "inline-shell",
-      "kind_config": {
-        "script_body": "Get-ChildItem -Path $env:TEMP -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue\n",
-        "ext": ".ps1"
-      },
-      "args": "",
-      "schedule": { "type": "weekly", "day": "SUN", "at": "03:00" }
-    },
-    {
-      "id": "launcher-health-check",
-      "name": "Launcher health check (sample, http-check kind)",
-      "kind": "http-check",
-      "kind_config": {
-        "url": "https://127.0.0.1:8455/api/version",
-        "method": "GET",
-        "expect_status": 200,
-        "timeout": 10
-      },
-      "args": "",
-      "schedule": { "type": "hourly", "every": 1 }
-    },
-    {
-      "id": "gh-push-deploy",
-      "name": "Deploy on GitHub push (sample, webhook-target)",
-      "script_path": "E:\\automation\\automation\\deploy\\deploy.py",
-      "args": "",
-      "schedule": { "type": "none" },
       "params": [
-        { "name": "repo", "kind": "string", "flag": "--repo" },
-        { "name": "branch", "kind": "string", "flag": "--branch" }
-      ],
-      "webhook": {
-        "provider": "github",
-        "secret": "$secret:gh_deploy",
-        "mapping": {
-          "repo": "$.repository.full_name",
-          "branch": "$.ref"
-        },
-        "events": ["push"]
-      }
+        { "name": "since", "kind": "date", "flag": "--since" },
+        { "name": "verbose", "kind": "bool", "flag": "--verbose", "default": false }
+      ]
     }
   ]
 }

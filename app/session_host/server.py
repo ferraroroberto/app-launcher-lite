@@ -121,7 +121,7 @@ async def _reap_loop() -> None:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Launcher session-host", version="0.1.0", lifespan=_lifespan)
+    app = FastAPI(title="App Launcher Lite session-host", version="0.1.0", lifespan=_lifespan)
 
     @app.get("/healthz")
     async def healthz() -> Dict[str, Any]:

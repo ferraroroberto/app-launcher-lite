@@ -159,7 +159,7 @@ class WebAuthnGate:
         ]
         options = generate_registration_options(
             rp_id=cfg.webauthn_rp_id,
-            rp_name=cfg.webauthn_rp_name or "Launcher",
+            rp_name=cfg.webauthn_rp_name or "App Launcher Lite",
             user_id=_USER_ID,
             user_name=_USER_NAME,
             user_display_name=label or "Launcher device",

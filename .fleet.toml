@@ -1,11 +1,12 @@
-# .fleet.toml — this repo's card on the fleet architecture map.
-# fleet-config's /system-map aggregates every repo's .fleet.toml. Keep current:
-# update in the same PR as any material change (layer, port, role, one-line
-# description, exposed services). Schema: fleet-config/architecture/README.md.
-layer       = "enabling"
-icon        = "🚀"
-port        = ":8455"
-description = "<b>Where I live</b> — the central hub. Coding · Apps · Jobs · Life OS · Board (fleet kanban) · Settings, all from the phone. Born from one goal: do <i>everything</i> on the PC from mobile. The entry point to it all."
+# .fleet.toml — this repo's architecture-map card.
+# Lite fork: GitHub Copilot CLI + GitLab (glab) edition of app-launcher for a
+# work environment. Keep current: update in the same PR as any material change
+# (layer, port, role, one-line description, exposed services).
+layer        = "enabling"
+icon         = "🚀"
+port         = ":8455"
+display_name = "App Launcher Lite"
+description  = "<b>App Launcher Lite</b> — phone-first launcher hub, Copilot + GitLab lite fork of app-launcher. Coding (Copilot CLI PTY sessions) · Apps · Jobs · Team OS · Board (GitLab kanban) · Settings, all from the phone."
 
 [vendored]
 switch = { src = "app/webapp/static/_vendored/switch", sha = "da39e1b175a5816e22fb664951084601e247ec1f", dest = "app/webapp/static/_vendored/switch" }
