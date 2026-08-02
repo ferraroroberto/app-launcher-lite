@@ -33,11 +33,14 @@ A single lock serializes all three against pyte's mutable screen state.
 
 from __future__ import annotations
 
+import logging
 import threading
-from typing import Optional
+from typing import Any, Optional
 
 import pyte
 from wcwidth import wcswidth
+
+logger = logging.getLogger(__name__)
 
 # Inverse of pyte's ANSI color tables (code -> name) so we can go the other
 # way: named color -> SGR code. Any fg/bg pyte hands back that isn't one of
@@ -72,17 +75,98 @@ _BG_CODE = {name: code for code, name in pyte.graphics.BG_ANSI.items() if name !
 _HISTORY_LINES = 10_000
 
 
+# How many consecutive parse failures get logged in full before the breadcrumb
+# throttles to every Nth. A malformed sequence the agent re-emits on every
+# frame must not turn the session-host log into a flood, but the *first* few
+# must always be loud enough to diagnose from (issue #2).
+_FEED_ERROR_LOG_FIRST = 3
+_FEED_ERROR_LOG_EVERY = 500
+# Characters of the offending chunk to quote in that breadcrumb.
+_FEED_ERROR_CONTEXT = 120
+
+
+class _MirrorScreen(pyte.HistoryScreen):
+    """A :class:`pyte.HistoryScreen` that never answers a terminal query.
+
+    :class:`VtSnapshot` is a **passive mirror with no reply channel**: it
+    parses the PTY's output stream but has no way to write back, and must
+    not try. Same principle as the session-host's OSC 10/11/12 colour-reply
+    stripping (``_strip_color_osc``, issue #270) — a query answered by the
+    wrong party corrupts the stream.
+
+    Concretely this fixes a crash (issue #2). pyte dispatches *any* private
+    CSI as ``handler(*params, private=True)`` (``pyte/streams.py``), but its
+    own ``Screen.report_device_status(self, mode)`` accepts no such keyword,
+    so a private DSR raises ``TypeError`` out of ``Stream.feed``. Copilot CLI
+    1.0.77 emits exactly one at startup — ``ESC[?996n``, querying the
+    terminal's light/dark colour scheme — which killed the session-host's
+    reader thread on the very first chunk and left every Coding session
+    connected, accepting input, and permanently blank. (The sibling
+    ``report_device_attributes`` already takes ``**kwargs``, which is why
+    DSR alone broke.)
+    """
+
+    def report_device_status(self, mode: int = 0, **kwargs: Any) -> None:
+        """Swallow a private DSR; defer to pyte for the standard form."""
+        if kwargs.get("private"):
+            return
+        super().report_device_status(mode)
+
+
 class VtSnapshot:
     """Thread-safe headless VT screen mirroring one PTY session's output."""
 
     def __init__(self, rows: int, cols: int, history: int = _HISTORY_LINES) -> None:
         self._lock = threading.Lock()
-        self._screen = pyte.HistoryScreen(cols, rows, history=history)
+        self._screen = _MirrorScreen(cols, rows, history=history)
         self._stream = pyte.Stream(self._screen)
+        self._feed_errors = 0
 
     def feed(self, chunk: str) -> None:
+        """Parse one PTY output chunk into the mirror. Never raises.
+
+        A parse failure must degrade to "this chunk did not fully reach the
+        mirror", never propagate: :meth:`feed` is called from
+        :class:`src.session_host.PtySession`'s reader thread, whose ``try``
+        wraps only the PTY read itself — so an exception escaping here kills
+        the pump mid-loop. That thread is what fills the scrollback ring, the
+        transcript, and every subscriber queue, and it dies *before* marking
+        the session exited or pushing EOF. The session therefore still reports
+        alive and still accepts input while showing nothing at all, which is
+        precisely the silent, unrecoverable blank terminal of issue #2.
+
+        Recovering is safe rather than merely tolerable: pyte reinitialises
+        its parser coroutine whenever a handler raises (``_send_to_parser``,
+        upstream PR #101), so the *next* chunk parses from a clean state. Only
+        the remainder of the offending chunk is lost.
+        """
         with self._lock:
-            self._stream.feed(chunk)
+            try:
+                self._stream.feed(chunk)
+            except Exception as exc:  # noqa: BLE001 — any handler may raise
+                self._feed_errors += 1
+                self._log_feed_error(exc, chunk)
+
+    def _log_feed_error(self, exc: Exception, chunk: str) -> None:
+        """Leave a throttled breadcrumb for a swallowed parse failure.
+
+        Loud for the first few, then every :data:`_FEED_ERROR_LOG_EVERY`, so a
+        sequence re-emitted on every frame can't flood the log while the
+        failure still stays diagnosable from it. Caller holds ``self._lock``.
+        """
+        count = self._feed_errors
+        if count > _FEED_ERROR_LOG_FIRST and count % _FEED_ERROR_LOG_EVERY:
+            return
+        logger.warning(
+            f"⚠️ VT mirror dropped a chunk ({type(exc).__name__}: {exc}); "
+            f"parse failure #{count}, terminal output continues. "
+            f"Chunk head: {chunk[:_FEED_ERROR_CONTEXT]!r}"
+        )
+
+    @property
+    def feed_errors(self) -> int:
+        """Count of chunks the parser rejected over this session's life."""
+        return self._feed_errors
 
     def resize(self, rows: int, cols: int) -> None:
         with self._lock:
