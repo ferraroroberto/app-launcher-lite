@@ -702,7 +702,21 @@ summary + .opt-group { border-top: 0; }
   font-size: var(--font-body);
   font-weight: 600;
   color: var(--fg);
-  word-break: break-all;   /* raw on-disk name — shown verbatim */
+  /* One line per project (issue #8): the name and the branch pill share a
+     single baseline-aligned row and truncate rather than wrap. Both are
+     spans so each gets its own ellipsis box; `gap` owns the space between
+     them (the pill's old margin-left is zeroed in the scoped rule below). */
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.coding-name-text {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;   /* raw on-disk name — shown verbatim, cut if long */
 }
 /* ---------- Coding tab git-status flags (issue #115) ---------- */
 /* On-demand only: tap the header button to annotate tiles. Yellow name
@@ -761,6 +775,21 @@ summary + .opt-group { border-top: 0; }
   vertical-align: middle;
   word-break: break-all;
 }
+/* Inside a Coding/Team OS tile the pill is a flex item on a one-line row
+   (issue #8), so it truncates instead of wrapping. The shrink factor is
+   deliberately enormous: the pill collapses to its readable min-width stub
+   before the folder name gives up a single pixel. The full branch name stays
+   in the pill's `title` (set by annotateGitStatus). Scoped to .coding-name so
+   the off-main summary popover's copy of the pill is untouched. */
+.coding-name .git-branch-tag {
+  margin-left: 0;
+  flex: 0 999 auto;
+  min-width: 3.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+}
 .git-legend {
   display: flex;
   align-items: center;
@@ -779,49 +808,32 @@ summary + .opt-group { border-top: 0; }
 .git-swatch.off-main { background: var(--attention); }
 .git-swatch.dirty { background: var(--danger); }
 
-.row-actions.agent-actions { flex-direction: row; }
 /* The agent icon strip (one button per registry agent + GitHub + star)
-   shares the row with the folder name (issue #120). Buttons are tightened
-   to 52px — still a comfortable ≥44px tap target — so the set fits one
-   row on PC and wider phones. On narrow phones the tile stacks (see the
-   media query below) and the icon strip wraps as the final fallback. */
+   shares the row with the folder name (issue #120) — on every width now,
+   including the narrowest phone (issue #8: the tile used to stack into two
+   lines under 520px, doubling the scroll for a list of projects).
+   The buttons read as discrete controls separated by a real gap, the same
+   treatment as the Detached/Resume pair in the Projects summary
+   (.coding-toggles, also gap 6px), rather than a flush segmented rail with
+   1px dividers. Each is a full 44px (--row-sm) square of REAL geometry — an
+   adjacent cluster like this one must never fake its target with
+   .hit-target's ::before expansion, which would overlap its neighbours. */
+.row-actions.agent-actions {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding-right: 8px;   /* glyph clears the card edge like the name's 18px */
+}
 .app-item .row-actions.agent-actions .icon-btn {
-  width: 52px;
-  /* Shorter than the two-line row to fit more tiles per screen (issue
-     #212); --row-sm keeps the iOS 44px tap minimum around the 24px glyph
-     (unified scale, issue #365). */
+  flex: 0 0 auto;
+  width: var(--row-sm);
+  min-width: var(--row-sm);
   min-height: var(--row-sm);
   padding: 5px;
+  border-radius: var(--radius-md);   /* :active reads as a rounded chip */
 }
 .app-item .row-actions.agent-actions .icon-btn + .icon-btn {
   border-top: 0;
-  border-left: 1px solid var(--line);
-}
-@media (max-width: 520px) {
-  /* Stack: folder name on its own full-width line, agent icons on a
-     row beneath it. flex-wrap lets the icons spill to a second line on
-     the very narrowest phones rather than clipping. */
-  .coding-item { flex-direction: column; align-items: stretch; }
-  .coding-item .row-actions.agent-actions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
-  .coding-item .row-actions.agent-actions .icon-btn + .icon-btn {
-    border-left: 1px solid var(--line);
-  }
-  /* Team OS tiles share the .coding-item class but only ever carry two
-     actions (📖 + 🚀), which fit beside the name even on the narrowest
-     phone. Opt them back out of the stack-on-narrow rule above (issue
-     #124): the higher-specificity .coding-item.teamos-item selectors win
-     over the bare .coding-item ones, restoring the default inline row +
-     side border. The Code tab's agent-icon stack is untouched. */
-  .coding-item.teamos-item { flex-direction: row; align-items: stretch; }
-  .coding-item.teamos-item .row-actions.agent-actions {
-    border-left: 1px solid var(--line);
-    border-top: 0;
-  }
 }
 .agent-icon {
   width: 24px;                    /* icons.size feature step (issue #355) */

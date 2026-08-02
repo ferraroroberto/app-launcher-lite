@@ -55,7 +55,13 @@ export function renderSkills() {
     main.className = 'app-main';
     const name = document.createElement('div');
     name.className = 'coding-name';
-    name.textContent = s.name;   // name only — one line per tile
+    // Same inner span as the Coding tab's tiles (issue #8): .coding-name is
+    // a flex row now, so the label needs its own box to truncate in.
+    const nameText = document.createElement('span');
+    nameText.className = 'coding-name-text';
+    nameText.textContent = s.name;   // name only — one line per tile
+    nameText.title = s.name;
+    name.appendChild(nameText);
     main.appendChild(name);
     li.appendChild(main);
 

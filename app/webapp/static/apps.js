@@ -155,7 +155,15 @@ function renderCodingList(host, items) {
     main.className = 'app-main';
     const name = document.createElement('div');
     name.className = 'coding-name';
-    name.textContent = a.name;   // raw folder name, exactly as on disk
+    // The folder name rides its own span, not a bare text node, so it can
+    // ellipsis-truncate independently of the branch pill beside it (issue
+    // #8 — one line per project). `title` keeps the full name reachable
+    // when it is cut, mirroring the pill's own tooltip.
+    const nameText = document.createElement('span');
+    nameText.className = 'coding-name-text';
+    nameText.textContent = a.name;   // raw folder name, exactly as on disk
+    nameText.title = a.name;
+    name.appendChild(nameText);
     annotateGitStatus(name, a.id);
     main.appendChild(name);
     li.appendChild(main);
