@@ -280,7 +280,7 @@ class TestInputProxy:
         assert resp.status_code == 200
         calls = overrides["session"].send_input.call_args_list
         assert len(calls) == 1
-        assert calls[0].args == (8456, "s1", "line one\nline two", True)
+        assert calls[0].args == (8466, "s1", "line one\nline two", True)
 
     def test_single_line_forwarded_raw(self, webapp_client, _bypass_gate):
         client, _, overrides = webapp_client
@@ -290,7 +290,7 @@ class TestInputProxy:
         )
         calls = overrides["session"].send_input.call_args_list
         assert len(calls) == 1
-        assert calls[0].args == (8456, "s1", "hello", True)
+        assert calls[0].args == (8466, "s1", "hello", True)
 
     def test_no_submit_forwards_submit_false(self, webapp_client, _bypass_gate):
         client, _, overrides = webapp_client
@@ -300,7 +300,7 @@ class TestInputProxy:
         )
         calls = overrides["session"].send_input.call_args_list
         assert len(calls) == 1
-        assert calls[0].args == (8456, "s1", "draft", False)
+        assert calls[0].args == (8466, "s1", "draft", False)
 
     def test_blank_data_without_submit_is_400(self, webapp_client, _bypass_gate):
         """Blank data with no submit is a genuine no-op request — nothing
@@ -331,7 +331,7 @@ class TestInputProxy:
         assert resp.status_code == 200
         calls = overrides["session"].send_input.call_args_list
         assert len(calls) == 1
-        assert calls[0].args == (8456, "s1", "", True)
+        assert calls[0].args == (8466, "s1", "", True)
 
     def test_whitespace_only_data_with_submit_is_bare_submit(
         self, webapp_client, _bypass_gate
@@ -345,7 +345,7 @@ class TestInputProxy:
         )
         assert resp.status_code == 200
         calls = overrides["session"].send_input.call_args_list
-        assert calls[0].args == (8456, "s1", "", True)
+        assert calls[0].args == (8466, "s1", "", True)
 
     def test_dead_session_surfaces_as_error_not_false_ok(
         self, webapp_client, _bypass_gate
@@ -499,7 +499,7 @@ class TestIssueStart:
         assert resp.status_code == 200
         assert '--name "Board tab: auto-name a started session"' in _spawn["flags"]
         overrides["session"].rename.assert_called_once_with(
-            8456, "spawned-1", "Board tab: auto-name a started session"
+            8466, "spawned-1", "Board tab: auto-name a started session"
         )
 
     def test_unsafe_title_remains_launcher_only(
@@ -515,7 +515,7 @@ class TestIssueStart:
         )
         assert resp.status_code == 200
         assert "--name" not in _spawn["flags"]
-        overrides["session"].rename.assert_called_once_with(8456, "spawned-1", title)
+        overrides["session"].rename.assert_called_once_with(8466, "spawned-1", title)
 
     def test_blank_title_skips_rename(
         self, webapp_client, _bypass_gate, _spawn

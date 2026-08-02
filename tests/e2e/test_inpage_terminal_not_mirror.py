@@ -3,7 +3,7 @@
 The bug: ``terminal.js`` decided "this is the launcher-spawned PC mirror
 window" purely from the connection origin (``state.status.terminal.reason
 === 'loopback'``). But a human's own desktop Chrome opened at
-``https://127.0.0.1:8455`` is *also* loopback, so it was mis-classified as
+``https://127.0.0.1:8465`` is *also* loopback, so it was mis-classified as
 the mirror — and on Stop & Close the cooperative ``{"type":"shutdown"}``
 frame routed to ``close-mirror`` and ``window.close()``'d the user's actual
 Chrome window.

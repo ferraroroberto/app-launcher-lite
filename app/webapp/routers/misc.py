@@ -59,7 +59,7 @@ async def index(request: Request) -> HTMLResponse:
 @router.get("/api/version")
 async def version(request: Request) -> Dict[str, Any]:
     """Build identity: this webapp process's own (stable, cached at module
-    load) plus a live staleness check of the session-host on ``:8456``
+    load) plus a live staleness check of the session-host on ``:8466``
     (#615).
 
     The session-host is deliberately excluded from ``tray.bat --restart``'s

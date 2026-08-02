@@ -1,7 +1,7 @@
 """Slow-request breadcrumbs for the webapp (issue #386).
 
 The webapp runs under ``--log-level warning`` and the tray spawns it with
-stdout/stderr DEVNULL'd, so when :8455 wedges there is zero evidence trail.
+stdout/stderr DEVNULL'd, so when :8465 wedges there is zero evidence trail.
 This middleware leaves one, in ``webapp/slow-requests.log``:
 
 * one line per request slower than ``LAUNCHER_SLOW_REQUEST_S`` (default 3 s):

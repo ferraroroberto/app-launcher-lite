@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 REM ============================================================================
-REM  WEBAPP - standalone FastAPI launcher (HTTPS on :8455 when cert present)
+REM  WEBAPP - standalone FastAPI launcher (HTTPS on :8465 when cert present)
 REM ----------------------------------------------------------------------------
 REM  Daily use: launch tray.bat instead — it adopt-or-spawns the webapp for
 REM  you. This bat is for headless boxes, dev iteration, or when you want
@@ -32,12 +32,12 @@ REM Keep in sync with app\webapp\event_loop.py:LOOP_FACTORY.
 set "LOOP_ARG=app.webapp.event_loop:selector_loop_factory"
 
 if not exist "%CERT%" (
-    echo [INFO] No HTTPS cert found, running HTTP-only on :8455.
+    echo [INFO] No HTTPS cert found, running HTTP-only on :8465.
     echo        Run scripts\gen_tailscale_cert.py to enable HTTPS.
-    "%VENV_PY%" -m uvicorn app.webapp.server:app --host 0.0.0.0 --port 8455 --loop "%LOOP_ARG%"
+    "%VENV_PY%" -m uvicorn app.webapp.server:app --host 0.0.0.0 --port 8465 --loop "%LOOP_ARG%"
 ) else (
     echo [INFO] HTTPS via %CERT%
-    "%VENV_PY%" -m uvicorn app.webapp.server:app --host 0.0.0.0 --port 8455 --ssl-keyfile "%KEY%" --ssl-certfile "%CERT%" --loop "%LOOP_ARG%"
+    "%VENV_PY%" -m uvicorn app.webapp.server:app --host 0.0.0.0 --port 8465 --ssl-keyfile "%KEY%" --ssl-certfile "%CERT%" --loop "%LOOP_ARG%"
 )
 
 exit /b %ERRORLEVEL%

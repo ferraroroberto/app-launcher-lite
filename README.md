@@ -2,7 +2,7 @@
 
 Phone-first launcher hub for a work PC — a lite fork of [ferraroroberto/app-launcher](https://github.com/ferraroroberto/app-launcher) rebuilt around **GitHub Copilot CLI** (the only coding agent) and **GitLab via `glab`** (the only forge). From the phone you can: open a live terminal into a Copilot session in any project folder, launch registered apps, fire one-shot or scheduled scripts, invoke team-os skills, and watch a four-column kanban of GitLab issues + live agent sessions. The companion repo [ferraroroberto/fleet-config-lite](https://github.com/ferraroroberto/fleet-config-lite) supplies the Copilot hooks (session-state for the Board) and the `glab`-based issue skills (`/issue-start`, `/issue-yolo`) plus their `install.ps1`.
 
-Stack: FastAPI + vanilla-JS PWA, Windows-only (ConPTY via pywinpty), Python 3.12+. Two processes behind a tray icon: the webapp on `:8455` and a detached PTY session-host on `:8456` that survives webapp restarts.
+Stack: FastAPI + vanilla-JS PWA, Windows-only (ConPTY via pywinpty), Python 3.12+. Two processes behind a tray icon: the webapp on `:8465` and a detached PTY session-host on `:8466` that survives webapp restarts.
 
 ## Quick start
 
@@ -10,7 +10,7 @@ Stack: FastAPI + vanilla-JS PWA, Windows-only (ConPTY via pywinpty), Python 3.12
 git clone https://github.com/ferraroroberto/app-launcher-lite
 cd app-launcher-lite
 setup.bat        REM creates .venv + installs requirements (icons are committed)
-tray.bat         REM tray icon -> webapp :8455 + session-host :8456
+tray.bat         REM tray icon -> webapp :8465 + session-host :8466
 ```
 
 First-run configuration, in order:
@@ -45,7 +45,7 @@ Surfaces the skills of a sibling `team-os` checkout (`team_os_dir`; skills live 
 
 ### Board
 
-A read-only fleet kanban over four computed columns — **Backlog** (open GitLab issues across `gitlab_group`), **Bot's turn** (live sessions working/idle), **Your turn** (sessions awaiting a decision, input, or stalled — the number that matters), **Done** (issues closed today). Session presence comes from the `:8456` session-host list; semantic status (working / awaiting-input / …) is joined from `sessions-state.json`, written by fleet-config-lite's Copilot hooks. GitLab data is fetched server-side via `glab` **on demand only** (the ↻ button or stale tab activation) — never on the 5 s poll. Tapping a session card opens a drill-down drawer (last exchange + reply straight into the live PTY); a Backlog card whose repo exists locally carries **▶ Start / ⚡ YOLO** buttons that spawn `/issue-start N` / `/issue-yolo N` (skills shipped by fleet-config-lite). Full reference: [docs/board.md](docs/board.md).
+A read-only fleet kanban over four computed columns — **Backlog** (open GitLab issues across `gitlab_group`), **Bot's turn** (live sessions working/idle), **Your turn** (sessions awaiting a decision, input, or stalled — the number that matters), **Done** (issues closed today). Session presence comes from the `:8466` session-host list; semantic status (working / awaiting-input / …) is joined from `sessions-state.json`, written by fleet-config-lite's Copilot hooks. GitLab data is fetched server-side via `glab` **on demand only** (the ↻ button or stale tab activation) — never on the 5 s poll. Tapping a session card opens a drill-down drawer (last exchange + reply straight into the live PTY); a Backlog card whose repo exists locally carries **▶ Start / ⚡ YOLO** buttons that spawn `/issue-start N` / `/issue-yolo N` (skills shipped by fleet-config-lite). Full reference: [docs/board.md](docs/board.md).
 
 ### Settings
 
@@ -71,8 +71,8 @@ All keys optional — missing keys fall back to `src/webapp_config.py` defaults.
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `host` / `port` | `0.0.0.0` / `8455` | Webapp bind. |
-| `session_host_port` | `8456` | Loopback-only PTY session-host port; must differ from `port`. |
+| `host` / `port` | `0.0.0.0` / `8465` | Webapp bind. |
+| `session_host_port` | `8466` | Loopback-only PTY session-host port; must differ from `port`. |
 
 **Coding / Apps / Team OS**
 
@@ -152,11 +152,11 @@ All keys optional — missing keys fall back to `src/webapp_config.py` defaults.
 
 | Port | Process | Owner |
 | --- | --- | --- |
-| `:8455` | FastAPI webapp (HTTPS when Tailscale certs exist) | Tray — killed and reclaimed by `tray.bat --restart`. |
-| `:8456` | PTY session-host (loopback-only, never network-reachable) | Spawned **detached** from the tray subtree; **excluded** from the restart reclaim sweep; re-adopted by the fresh tray. |
+| `:8465` | FastAPI webapp (HTTPS when Tailscale certs exist) | Tray — killed and reclaimed by `tray.bat --restart`. |
+| `:8466` | PTY session-host (loopback-only, never network-reachable) | Spawned **detached** from the tray subtree; **excluded** from the restart reclaim sweep; re-adopted by the fresh tray. |
 
-- **`tray.bat --restart`** is the canonical restart: orphan-proof reclaim-then-start via the vendored `scripts/tray_lifecycle.ps1` (no external repo dependency). It **preserves live Coding/PTY sessions** — the `:8456` session-host is deliberately not touched.
-- Consequence: a change under `src/session_host.py` or `app/session_host/` is **not live** until `:8456` itself restarts. `GET /api/version` reports a `session_host` block whose `stale_relevant` field scopes staleness to session-host-relevant paths — `true` means such a diff is merged but not yet running. The one supported restart is `pwsh -File scripts/restart-session-host.ps1 -Confirm` — deliberate and operator-only, because it kills every live PTY on the machine (bare, without `-Confirm`, it prints the warning and exits 1).
+- **`tray.bat --restart`** is the canonical restart: orphan-proof reclaim-then-start via the vendored `scripts/tray_lifecycle.ps1` (no external repo dependency). It **preserves live Coding/PTY sessions** — the `:8466` session-host is deliberately not touched.
+- Consequence: a change under `src/session_host.py` or `app/session_host/` is **not live** until `:8466` itself restarts. `GET /api/version` reports a `session_host` block whose `stale_relevant` field scopes staleness to session-host-relevant paths — `true` means such a diff is merged but not yet running. The one supported restart is `pwsh -File scripts/restart-session-host.ps1 -Confirm` — deliberate and operator-only, because it kills every live PTY on the machine (bare, without `-Confirm`, it prints the warning and exits 1).
 - The tray menu offers open/copy-URL (local, Tailscale, Cloudflare), webapp restart, passkey enrollment, status, and quit.
 - Boot autostart (Settings toggle) drops a self-logging `AppLauncherLite.bat` wrapper into the user's Startup folder; each login attempt leaves breadcrumbs in `webapp/startup.log`.
 

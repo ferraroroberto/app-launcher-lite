@@ -89,7 +89,7 @@ class TestPatchConfig:
     ):
         """The e2e pre-ship gate's disposable webapp sets
         LAUNCHER_SESSION_HOST_PORT to point at a disposable session-host
-        (issue #260) rather than the live :8456. A config PATCH against
+        (issue #260) rather than the live :8466. A config PATCH against
         that disposable webapp must never bake the override into the
         real, shared config/webapp_config.json on save — only load it
         for the running process's own in-memory use. Discovered live: a
@@ -99,7 +99,7 @@ class TestPatchConfig:
         hand-repaired (issue #435 follow-up)."""
         client, app, overrides = webapp_client
         cfg_path = overrides["tmp_webapp_cfg_path"]
-        assert json.loads(cfg_path.read_text())["session_host_port"] == 8456
+        assert json.loads(cfg_path.read_text())["session_host_port"] == 8466
 
         monkeypatch.setenv("LAUNCHER_SESSION_HOST_PORT", "59999")
         resp = client.post("/api/config", json={"copilot_effort": "low"})
@@ -110,7 +110,7 @@ class TestPatchConfig:
         assert app.state.webapp_config.session_host_port == 59999
         # But the shared on-disk file must be untouched.
         on_disk = json.loads(cfg_path.read_text())
-        assert on_disk["session_host_port"] == 8456
+        assert on_disk["session_host_port"] == 8466
 
     def test_projects_ignore_round_trips(self, webapp_client):
         """projects_ignore is a list field — the endpoint accepts it,

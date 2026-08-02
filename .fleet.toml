@@ -4,7 +4,7 @@
 # (layer, port, role, one-line description, exposed services).
 layer        = "enabling"
 icon         = "🚀"
-port         = ":8455"
+port         = ":8465"
 display_name = "App Launcher Lite"
 description  = "<b>App Launcher Lite</b> — phone-first launcher hub, Copilot + GitLab lite fork of app-launcher. Coding (Copilot CLI PTY sessions) · Apps · Jobs · Team OS · Board (GitLab kanban) · Settings, all from the phone."
 

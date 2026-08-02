@@ -4,7 +4,7 @@
       Source: ferraroroberto/fleet-config, tray/tray_lifecycle.ps1
       Copied: 2026-08-02, byte-for-byte except: two em-dashes in comments
       normalized to "--" per the ASCII-only rule below, and the example
-      ports in comments updated to this fork's 8455/8456. No code changes.
+      ports in comments updated to this fork's 8465/8466. No code changes.
       Vendored for the lite fork so the tray has zero external dependencies;
       this repo-local copy replaces the machine-shared
       %USERPROFILE%\.claude\tray\tray_lifecycle.ps1. Keep ASCII-only.
@@ -55,12 +55,12 @@
       reclaim -> kills the owning PID of each listed port whose CommandLine is
                  under this repo's .venv (orphan-proof), printing each reclaim:
         powershell.exe -NoProfile -NonInteractive -File tray_lifecycle.ps1 `
-          reclaim -VenvDir "<repo>\.venv" -Ports "8455,8456"
+          reclaim -VenvDir "<repo>\.venv" -Ports "8465,8466"
       launch  -> idempotent start, or restart with port reclaim and git_sha
                  verification:
         powershell.exe -NoProfile -NonInteractive -File tray_lifecycle.ps1 `
           launch -AppName "my-app" -ScriptDir "<repo>" -VenvDir "<repo>\.venv" `
-          -TrayMatch "launcher\.py\s+tray" -Ports "8455" `
+          -TrayMatch "launcher\.py\s+tray" -Ports "8465" `
           -TrayLaunch "launcher.py tray" -Restart
 #>
 [CmdletBinding()]
@@ -75,7 +75,7 @@ param(
     # detect: regex matching THIS app's tray invocation (e.g. 'launcher\.py\s+tray').
     [string] $TrayMatch,
 
-    # reclaim: comma-separated owned ports (e.g. '8455,8456'). Parsed here rather
+    # reclaim: comma-separated owned ports (e.g. '8465,8466'). Parsed here rather
     # than bound as [int[]] so a single cmd token survives -File arg parsing.
     [string] $Ports,
 

@@ -33,7 +33,7 @@ class TestDeclaredSessionHostPaths:
         md = tmp_path / "CLAUDE.md"
         md.write_text(
             "## session-host\n"
-            "- what/why: the `:8456` host (`src/session_host.py`) via `cmd /c start`\n"
+            "- what/why: the `:8466` host (`src/session_host.py`) via `cmd /c start`\n"
             "- liveness signal: `GET /api/version`'s `session_host.stale`\n",
             encoding="utf-8",
         )

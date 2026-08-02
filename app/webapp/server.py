@@ -166,7 +166,7 @@ async def _reconcile_orphan_mirror_windows(app: FastAPI) -> None:
     pointed at an empty disposable session-host — would see an empty live list
     and ``WM_CLOSE`` every real ``app-launcher-mirror-*`` window on the desktop,
     killing the user's live session mirrors while the sessions survive headless
-    on the real ``:8456`` (issue #278). ``#260`` isolated the session-host but
+    on the real ``:8466`` (issue #278). ``#260`` isolated the session-host but
     left this window sweep machine-wide. Only the canonical instance owns the
     desktop, so a disposable instance — identified by the
     ``LAUNCHER_SESSION_HOST_PORT`` override, which is set *only* by autoboot and

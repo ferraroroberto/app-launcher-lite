@@ -30,11 +30,11 @@ flowchart TB
   TRAY --> TRAYTS
   TRAY --> TRAYREGTRAYS
 
-  TRAY -->|spawns, owns subtree :T kill/T restart| WEBAPPPROC["webapp process :8455"]
-  TRAY -->|spawns DETACHED, re-adopts on start\nexcluded from tray reclaim sweep| HOSTPROC["session-host process :8456"]
+  TRAY -->|spawns, owns subtree :T kill/T restart| WEBAPPPROC["webapp process :8465"]
+  TRAY -->|spawns DETACHED, re-adopts on start\nexcluded from tray reclaim sweep| HOSTPROC["session-host process :8466"]
   TRAY -->|optional| TUNNEL["cloudflared tunnel"]
 
-  subgraph webapp["app/webapp/ — FastAPI, :8455"]
+  subgraph webapp["app/webapp/ — FastAPI, :8465"]
     WSERVER["server.py\nlifespan, static mount, asset hashing"]
     MW["middleware.py\nBearerTokenMiddleware"]
     MGR["manager.py\nWebappManager (start/stop/status)"]
@@ -63,7 +63,7 @@ flowchart TB
   end
   R_MISC --> STATICJS
 
-  subgraph sessionhost["app/session_host/ — loopback-only, :8456"]
+  subgraph sessionhost["app/session_host/ — loopback-only, :8466"]
     HOSTSERVER["server.py\nHTTP + WebSocket surface\nPOST/GET /sessions, WS /sessions/{sid}/ws"]
   end
   HOSTCMD --> HOSTSERVER

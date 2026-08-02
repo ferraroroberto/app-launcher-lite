@@ -39,7 +39,7 @@ from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP  # noqa: E402
 DEFAULT_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 SAMPLE_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.sample.yml"
 TUNNEL_URL_FILE = PROJECT_ROOT / "webapp" / "last_tunnel_url.txt"
-DEFAULT_PORT = 8455
+DEFAULT_PORT = 8465
 
 
 def _have_listener(port: int) -> bool:

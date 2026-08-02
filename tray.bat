@@ -45,11 +45,11 @@ REM
 REM  Mutex-shared ports (a port another app may legitimately own) must NOT go in
 REM  the OWNED_PORTS reclaim list -- reclaiming one would kill the sibling.
 REM
-REM  IMPORTANT: the :8456 session-host is linked-but-independent -- it hosts the
+REM  IMPORTANT: the :8466 session-host is linked-but-independent -- it hosts the
 REM  user's live Coding / PTY sessions, is spawned DETACHED so a `taskkill /T`
 REM  subtree kill cannot reach it, and is re-adopted by the fresh tray on start.
 REM  It is deliberately NOT in OWNED_PORTS below (reclaiming it would kill those
-REM  sessions). Only the webapp port :8455, which this tray definitively owns
+REM  sessions). Only the webapp port :8465, which this tray definitively owns
 REM  and cycles, is reclaimed.
 REM ============================================================================
 
@@ -90,8 +90,8 @@ if not exist "%TRAY_PS%" (
 )
 
 REM === ADAPT (4/4): this tray's exclusively-owned ports as a comma list.
-REM     Exclude any mutex-shared port -- see the :8456 note above. ===
-set "OWNED_PORTS=8455"
+REM     Exclude any mutex-shared port -- see the :8466 note above. ===
+set "OWNED_PORTS=8465"
 REM Optional override. Leave blank to verify http://127.0.0.1:<first-owned-port>/api/version.
 set "VERSION_URL="
 

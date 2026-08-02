@@ -4,7 +4,7 @@ Mirrors the pattern used by sister projects (voice-transcriber / photo-ocr):
 build a fresh FastAPI ``create_app()`` against an isolated temp config dir,
 with the expensive deps (session-host loopback client, audit log writer)
 swapped for mocks. Tests run in-process via ``TestClient`` — no live tray,
-no real session-host on :8456, no disk writes outside ``tmp_path``.
+no real session-host on :8466, no disk writes outside ``tmp_path``.
 
 The live-tray Playwright suite lives separately under ``tests/e2e/`` and is
 opt-in via ``pytest -m smoke``.
@@ -157,12 +157,12 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
         json.dumps(
             {
                 "host": "127.0.0.1",
-                "port": 8455,
+                "port": 8465,
                 "projects_dir": str(tmp_projects_dir),
                 "apps_scan_root": str(tmp_apps_root),
                 "auth_token": "",
                 "auth_password": "",
-                "session_host_port": 8456,
+                "session_host_port": 8466,
                 # Board tab (issue #300): point the sessions-state file at a
                 # temp path so a test can never read the real hook-written
                 # ~/.copilot/hooks/state/sessions-state.json.
@@ -214,7 +214,7 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     from app.webapp.routers import sessions as sessions_router
 
     # Mock the session-host loopback client. Every route that talks to
-    # :8456 goes through this module, so patch each router that holds a
+    # :8466 goes through this module, so patch each router that holds a
     # module-level `session_client` reference of its own. The launch
     # routers (apps.py, team_os.py) no longer do since #689 moved their
     # spawn + error-mapping head into _helpers.spawn_session_or_400 —

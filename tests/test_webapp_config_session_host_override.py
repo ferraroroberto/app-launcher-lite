@@ -1,7 +1,7 @@
 """Regression for #260 — the session-host port env override.
 
 The e2e pre-ship gate must be able to point its disposable webapp at a
-disposable, free-port session-host instead of adopting the live :8456 a
+disposable, free-port session-host instead of adopting the live :8466 a
 running tray owns (which holds the user's real PTY/Claude sessions — the
 gate used to kill them). That isolation hinges on
 ``LAUNCHER_SESSION_HOST_PORT`` being honoured by ``load_webapp_config``.
@@ -23,7 +23,7 @@ from src.webapp_config import (
 
 
 def _write_cfg(tmp_path: Path, **overrides) -> Path:
-    cfg = {"host": "127.0.0.1", "port": 8455, "session_host_port": 8456}
+    cfg = {"host": "127.0.0.1", "port": 8465, "session_host_port": 8466}
     cfg.update(overrides)
     target = tmp_path / "webapp_config.json"
     target.write_text(json.dumps(cfg), encoding="utf-8")
@@ -33,7 +33,7 @@ def _write_cfg(tmp_path: Path, **overrides) -> Path:
 def test_no_env_uses_configured_port(tmp_path, monkeypatch):
     monkeypatch.delenv(SESSION_HOST_PORT_ENV, raising=False)
     cfg = load_webapp_config(_write_cfg(tmp_path))
-    assert cfg.session_host_port == 8456
+    assert cfg.session_host_port == 8466
 
 
 def test_env_override_applied(tmp_path, monkeypatch):
@@ -52,17 +52,17 @@ def test_env_override_applies_to_defaults_when_file_missing(tmp_path, monkeypatc
 def test_invalid_env_ignored(tmp_path, monkeypatch, bad):
     monkeypatch.setenv(SESSION_HOST_PORT_ENV, bad)
     cfg = load_webapp_config(_write_cfg(tmp_path))
-    assert cfg.session_host_port == 8456
+    assert cfg.session_host_port == 8466
 
 
 def test_override_must_differ_from_webapp_port(tmp_path, monkeypatch):
     # _validate rejects session_host_port == webapp port; the override is
     # applied before validation, so a colliding value must still be caught.
-    monkeypatch.setenv(SESSION_HOST_PORT_ENV, "8455")
+    monkeypatch.setenv(SESSION_HOST_PORT_ENV, "8465")
     with pytest.raises(ValueError):
-        load_webapp_config(_write_cfg(tmp_path, port=8455))
+        load_webapp_config(_write_cfg(tmp_path, port=8465))
 
 
 def test_default_constant_unchanged():
-    # The live tray still defaults to :8456 — only the gate overrides it.
-    assert DEFAULT_SESSION_HOST_PORT == 8456
+    # The live tray still defaults to :8466 — only the gate overrides it.
+    assert DEFAULT_SESSION_HOST_PORT == 8466

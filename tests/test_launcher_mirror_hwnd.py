@@ -163,7 +163,7 @@ class TestHwndLookupAfterSpawn:
         # than in a thread) so the test doesn't have to sleep.
         monkeypatch.setattr(launcher, "_run_in_thread", lambda fn: fn())
 
-        launcher.open_local_terminal_window("http://127.0.0.1:8455/?terminal=" + sid, sid=sid)
+        launcher.open_local_terminal_window("http://127.0.0.1:8465/?terminal=" + sid, sid=sid)
 
         assert launcher._mirror_hwnds.get(sid) == 300
 
@@ -214,7 +214,7 @@ class TestHwndLookupAfterSpawn:
         thread_spawner = MagicMock()
         monkeypatch.setattr(launcher, "_run_in_thread", thread_spawner)
 
-        launcher.open_local_terminal_window("http://127.0.0.1:8455/")
+        launcher.open_local_terminal_window("http://127.0.0.1:8465/")
 
         thread_spawner.assert_not_called()
         fake_win32gui.EnumWindows.assert_not_called()
@@ -440,7 +440,7 @@ class TestOpenOrFocusMirrorWindow:
         spawn = MagicMock()
         monkeypatch.setattr(launcher, "open_local_terminal_window", spawn)
         sid = "feedface" + "1" * 24
-        url = "http://127.0.0.1:8455/?terminal=" + sid
+        url = "http://127.0.0.1:8465/?terminal=" + sid
 
         action = launcher.open_or_focus_mirror_window(url, sid)
 

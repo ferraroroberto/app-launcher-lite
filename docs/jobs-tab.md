@@ -96,7 +96,7 @@ Polls a URL and succeeds/fails on the response status — the "executor" is `src
   "id": "launcher-health-check",
   "name": "Launcher health check",
   "kind": "http-check",
-  "kind_config": { "url": "https://127.0.0.1:8455/api/version", "expect_status": 200 },
+  "kind_config": { "url": "https://127.0.0.1:8465/api/version", "expect_status": 200 },
   "schedule": { "type": "hourly", "every": 1 }
 }
 ```
@@ -782,7 +782,7 @@ URL:    https://launcher.<your-domain>/api/jobs/reporting-daily/run?token=<job-s
 Method: POST
 ```
 
-Mint the token in **Settings → API tokens**, scoped to exactly this job (issue #72) — the mint result shows the ready-to-paste run URL when the tunnel is up. Stream Deck stores button URLs in plaintext, so a scoped token caps what a leaked deck export can do: fire this one job, nothing else. Revoke + re-mint to rotate it without touching the SPA's own `auth_token` (which also still works in the URL if you accept the wider blast radius). Use a tunnel URL (Cloudflare named tunnel or `<host>.<tailnet>.ts.net:8455`) — not loopback. The Stream Deck shows ✓ / ✗ based on the HTTP status; the SPA shows the run in history on the next poll, with a 🎛 chip carrying the token's label.
+Mint the token in **Settings → API tokens**, scoped to exactly this job (issue #72) — the mint result shows the ready-to-paste run URL when the tunnel is up. Stream Deck stores button URLs in plaintext, so a scoped token caps what a leaked deck export can do: fire this one job, nothing else. Revoke + re-mint to rotate it without touching the SPA's own `auth_token` (which also still works in the URL if you accept the wider blast radius). Use a tunnel URL (Cloudflare named tunnel or `<host>.<tailnet>.ts.net:8465`) — not loopback. The Stream Deck shows ✓ / ✗ based on the HTTP status; the SPA shows the run in history on the next poll, with a 🎛 chip carrying the token's label.
 
 ## Why not …
 
@@ -795,14 +795,14 @@ Mint the token in **Settings → API tokens**, scoped to exactly this job (issue
 
 The pre-ship gate (`pwsh -File scripts/verify-before-ship.ps1`) runs the unit suite (`tests/test_jobs.py`, `tests/test_webapp_api_jobs.py`) plus the e2e Jobs-tab smoke check in `tests/e2e/test_smoke.py::test_tabs_switch`. All schtasks calls are mocked at the runner-callable seam (`src.jobs._run_schtasks`) so the unit suite never invokes real Task Scheduler.
 
-Live verification after restart of `:8455`:
+Live verification after restart of `:8465`:
 
 ```powershell
 # Confirm \AppLauncher\ tasks materialised correctly
 schtasks /Query /FO CSV /NH | findstr "AppLauncher"
 
 # Trigger a run from the CLI (same path the webapp uses)
-curl -k -X POST "https://127.0.0.1:8455/api/jobs/reporting-daily/run"
+curl -k -X POST "https://127.0.0.1:8465/api/jobs/reporting-daily/run"
 
 # Inspect the run record
 type webapp\jobs\reporting-daily\<latest>\run.json

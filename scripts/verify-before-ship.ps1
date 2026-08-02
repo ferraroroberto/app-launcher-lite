@@ -9,8 +9,8 @@
 #   pwsh -File scripts/verify-before-ship.ps1
 #   powershell -File scripts\verify-before-ship.ps1   # Windows PowerShell 5.1 works too
 #
-# A tray on :8455 may be running or not — autoboot picks a free port for its
-# own webapp and adopts the tray's session-host on :8456 if one is up. Exits
+# A tray on :8465 may be running or not — autoboot picks a free port for its
+# own webapp and adopts the tray's session-host on :8466 if one is up. Exits
 # non-zero on the first failure with the offending output left visible.
 
 $ErrorActionPreference = "Stop"
@@ -184,6 +184,6 @@ if ($routeReason -match "session-host") {
     Write-Host "    this change as shipped -- if true, report it as merged but not yet live." -ForegroundColor Yellow
     Write-Host "    (Raw session_host.stale is true after ANY merge, not just a session-host" -ForegroundColor Yellow
     Write-Host "    one -- #635; null in either field means unknown, never a confident false.)" -ForegroundColor Yellow
-    Write-Host "    See CLAUDE.md's restart section for the one supported way to restart :8456." -ForegroundColor Yellow
+    Write-Host "    See CLAUDE.md's restart section for the one supported way to restart :8466." -ForegroundColor Yellow
 }
 exit 0

@@ -19,7 +19,7 @@ Every call also shares one pooled, keep-alive :data:`SESSION` (issue #605) —
 a bare ``requests.get``/``requests.request`` opens a fresh TCP connection per
 call, and each closed connection parks its ephemeral port in ``TIME_WAIT`` for
 ~120 s on Windows. The Board and Coding tabs poll the session-host
-continuously, so that was measured holding 145 such sockets to ``:8456`` at a
+continuously, so that was measured holding 145 such sockets to ``:8466`` at a
 single sample. ``SESSION`` is built once at import and never reconfigured per
 call — ``requests.Session`` is not thread-safe for *configuration* mutation,
 but plain request dispatch on a shared ``HTTPAdapter`` pool is fine across the

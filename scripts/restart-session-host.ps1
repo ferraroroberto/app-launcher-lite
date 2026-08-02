@@ -1,6 +1,6 @@
-# Manually restart the app-launcher session-host on :8456 (issue #615).
+# Manually restart the app-launcher session-host on :8466 (issue #615).
 #
-# tray.bat --restart deliberately EXCLUDES :8456 to protect live PTY
+# tray.bat --restart deliberately EXCLUDES :8466 to protect live PTY
 # sessions (project-scaffolding#35) -- so a change under src/session_host.py
 # or app/session_host/ is not live until this process restarts, and nothing
 # else restarts it automatically. This script is the one supported,
@@ -27,7 +27,7 @@ $trayBat = Join-Path $repoRoot "tray.bat"
 $psExe = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
 if (-not $Confirm) {
-    Write-Host "This restarts the app-launcher session-host (:8456)." -ForegroundColor Yellow
+    Write-Host "This restarts the app-launcher session-host (:8466)." -ForegroundColor Yellow
     Write-Host "It KILLS EVERY LIVE PTY SESSION ON THIS MACHINE." -ForegroundColor Red
     Write-Host "There is no drain and no idle check. Only proceed at a clean boundary." -ForegroundColor Red
     Write-Host ""
@@ -45,9 +45,9 @@ if (-not (Test-Path $trayBat)) {
     exit 1
 }
 
-Write-Host "Reclaiming :8456 (this kills every live PTY now)..." -ForegroundColor Cyan
+Write-Host "Reclaiming :8466 (this kills every live PTY now)..." -ForegroundColor Cyan
 & $psExe -NoProfile -NonInteractive -File $trayPs reclaim `
-    -VenvDir (Join-Path $repoRoot ".venv") -Ports 8456
+    -VenvDir (Join-Path $repoRoot ".venv") -Ports 8466
 if ($LASTEXITCODE -ne 0) {
     Write-Host "tray_lifecycle.ps1 reclaim exited $LASTEXITCODE -- session-host may still be running." -ForegroundColor Red
     exit $LASTEXITCODE
@@ -62,7 +62,7 @@ $deadline = (Get-Date).AddSeconds(30)
 $reported = $false
 while ((Get-Date) -lt $deadline) {
     try {
-        $body = Invoke-RestMethod -Uri "https://127.0.0.1:8455/api/version" -SkipCertificateCheck -TimeoutSec 3
+        $body = Invoke-RestMethod -Uri "https://127.0.0.1:8465/api/version" -SkipCertificateCheck -TimeoutSec 3
         $host_ = $body.session_host
         if ($host_.reachable -eq $true) {
             $staleText = if ($host_.stale -eq $false) { "fresh" } elseif ($host_.stale -eq $true) { "STILL STALE" } else { "unknown" }

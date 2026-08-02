@@ -157,7 +157,7 @@ def test_tsnet_host_missing_cert_is_none(tmp_path) -> None:
 
 def _cfg(**over) -> SimpleNamespace:
     base = dict(
-        port=8455, auth_token="", webauthn_rp_id="", webauthn_rp_name="",
+        port=8465, auth_token="", webauthn_rp_id="", webauthn_rp_name="",
         webauthn_origin="",
     )
     base.update(over)
@@ -177,7 +177,7 @@ def test_mirror_url_loopback_on_self_signed(monkeypatch) -> None:
     monkeypatch.setattr(_helpers, "tsnet_host_from_cert", lambda: None)
     monkeypatch.setattr(_helpers, "cert_present", lambda: True)
     url = mirror_url(_request_with_gate(None), _cfg(auth_token="sekrit"), "abc")
-    assert url == "https://127.0.0.1:8455/?terminal=abc"
+    assert url == "https://127.0.0.1:8465/?terminal=abc"
 
 
 def test_mirror_url_tsnet_with_token(monkeypatch) -> None:
@@ -188,7 +188,7 @@ def test_mirror_url_tsnet_with_token(monkeypatch) -> None:
     parsed = urlparse(url)
     q = parse_qs(parsed.query)
     assert parsed.scheme == "https"
-    assert parsed.netloc == "tower.tail1121fd.ts.net:8455"
+    assert parsed.netloc == "tower.tail1121fd.ts.net:8465"
     assert q["terminal"] == ["abc"]
     assert q["token"] == ["sekrit"]
     assert "tt" not in q  # passkey gate unconfigured → no terminal token
@@ -204,7 +204,7 @@ def test_mirror_url_tsnet_mints_terminal_token_when_gate_configured(
     cfg = _cfg(
         auth_token="sekrit",
         webauthn_rp_id="tower.tail1121fd.ts.net",
-        webauthn_origin="https://tower.tail1121fd.ts.net:8455",
+        webauthn_origin="https://tower.tail1121fd.ts.net:8465",
     )
     url = mirror_url(_request_with_gate(gate), cfg, "abc")
     q = parse_qs(urlparse(url).query)

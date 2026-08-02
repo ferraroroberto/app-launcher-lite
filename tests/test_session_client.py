@@ -31,7 +31,7 @@ def test_create_session_includes_phone_dimensions(monkeypatch):
     monkeypatch.setattr(session_client._loopback_http.SESSION, "request", fake_request)
 
     session_client.create_session(
-        8456, r"C:\proj", "name", "", agent="copilot", rows=50, cols=42
+        8466, r"C:\proj", "name", "", agent="copilot", rows=50, cols=42
     )
 
     body = captured["json"]
@@ -51,7 +51,7 @@ def test_create_session_defaults_dimensions(monkeypatch):
 
     monkeypatch.setattr(session_client._loopback_http.SESSION, "request", fake_request)
 
-    session_client.create_session(8456, r"C:\proj", "name", "")
+    session_client.create_session(8466, r"C:\proj", "name", "")
 
     assert captured["json"]["rows"] == 40
     assert captured["json"]["cols"] == 120
@@ -69,7 +69,7 @@ def test_create_session_includes_history_lines_when_given(monkeypatch):
     monkeypatch.setattr(session_client._loopback_http.SESSION, "request", fake_request)
 
     session_client.create_session(
-        8456, r"C:\proj", "name", "", agent="copilot", history_lines=5000,
+        8466, r"C:\proj", "name", "", agent="copilot", history_lines=5000,
     )
 
     assert captured["json"]["history_lines"] == 5000
@@ -86,6 +86,6 @@ def test_create_session_omits_history_lines_when_not_given(monkeypatch):
 
     monkeypatch.setattr(session_client._loopback_http.SESSION, "request", fake_request)
 
-    session_client.create_session(8456, r"C:\proj", "name", "")
+    session_client.create_session(8466, r"C:\proj", "name", "")
 
     assert "history_lines" not in captured["json"]

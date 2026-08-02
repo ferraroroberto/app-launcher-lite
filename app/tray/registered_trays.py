@@ -51,7 +51,7 @@ def _fleet_toml_port(repo_dir: Path) -> Optional[int]:
     binds its port, so a PID-tree walk rooted there finds nothing.
 
     Accepts both shapes seen across the fleet: a bare int (``port =
-    8447``) or a leading-colon string (``port = ":8455"``). Returns
+    8447``) or a leading-colon string (``port = ":8465"``). Returns
     ``None`` on a missing file, missing field, or an unrecognised shape —
     the caller falls back to a fixed delay.
     """

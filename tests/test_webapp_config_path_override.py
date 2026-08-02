@@ -39,7 +39,7 @@ def _isolated_default(tmp_path: Path, monkeypatch) -> Path:
 
 
 def _write_cfg(target: Path, **overrides) -> Path:
-    cfg = {"host": "127.0.0.1", "port": 8455, "session_host_port": 8456}
+    cfg = {"host": "127.0.0.1", "port": 8465, "session_host_port": 8466}
     cfg.update(overrides)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(cfg), encoding="utf-8")

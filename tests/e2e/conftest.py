@@ -3,7 +3,7 @@
 Two run modes:
 
 * **Live (dev loop).** Runs against a live tray the user already has up on
-  https://127.0.0.1:8455 — but only with the explicit `LAUNCHER_E2E_LIVE=1`
+  https://127.0.0.1:8465 — but only with the explicit `LAUNCHER_E2E_LIVE=1`
   opt-in (`scripts/run-e2e.ps1` sets it). Without it the suite *exits* with a
   guard message instead of running: a bare `pytest tests/e2e` used to silently
   load-test the instance the phone was using (issue #386). The autouse
@@ -13,7 +13,7 @@ Two run modes:
 * **Autoboot (pre-ship gate).** Enabled with `--e2e-autoboot` or the
   `LAUNCHER_E2E_AUTOBOOT=1` env var. `_autoboot_server` spawns a disposable
   webapp on a free port (HTTPS, reusing webapp/certificates/) plus a
-  session-host on :8456 — adopting an already-listening one (a running tray)
+  session-host on :8466 — adopting an already-listening one (a running tray)
   or spawning its own. In this mode a failure to boot is a hard *failure*,
   never a skip: the whole point of the gate is that a missing server can't
   silently pass. See issue #33.
@@ -55,7 +55,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WEBAPP_CONFIG = _REPO_ROOT / "config" / "webapp_config.json"
 _SESSIONS_DIR = _REPO_ROOT / "webapp" / "sessions"
-_BASE_URL = "https://127.0.0.1:8455"
+_BASE_URL = "https://127.0.0.1:8465"
 _TOKEN_KEY = "launcher.token"  # must match TOKEN_KEY in app/webapp/static/state.js:21
 
 # The live tray's loopback PTY session-host port. Autoboot must NEVER adopt a
@@ -65,10 +65,10 @@ _TOKEN_KEY = "launcher.token"  # must match TOKEN_KEY in app/webapp/static/state
 # disposable session-host on a free port and points the disposable webapp at
 # it via LAUNCHER_SESSION_HOST_PORT. This constant is kept only so the
 # isolation guarantee can be asserted (never bound/adopted under autoboot).
-_LIVE_SESSION_HOST_PORT = 8456
+_LIVE_SESSION_HOST_PORT = 8466
 # Env var the webapp honours to override its session-host port (see
 # src/webapp_config.py:SESSION_HOST_PORT_ENV) — the injection that isolates
-# the gate from the live :8456.
+# the gate from the live :8466.
 _SESSION_HOST_PORT_ENV = "LAUNCHER_SESSION_HOST_PORT"
 # Env var the webapp honours to override its config file *path* (see
 # src/webapp_config.py:WEBAPP_CONFIG_PATH_ENV) — the injection that stops a
@@ -96,7 +96,7 @@ _STUB_FLAG = "--e2e-stub"
 # directly on the disposable session-host (the sentinel flag can't travel
 # through the webapp's launch endpoint, which builds flags from config).
 _AUTOBOOT_STATE: dict = {}
-# Explicit opt-in for targeting the LIVE tray on :8455 (issue #386). The
+# Explicit opt-in for targeting the LIVE tray on :8465 (issue #386). The
 # live mode is deliberate (run-e2e.ps1 dev loop), but it drives real login
 # flows and PTY sessions against the instance the user's phone is using —
 # an *accidental* bare `pytest tests/e2e` must not do that.
@@ -350,7 +350,7 @@ def _autoboot_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
 
     try:
         # Session-host: ALWAYS spawn our own on a free port — never adopt a
-        # host already listening on the live :8456, which on a dev box owns
+        # host already listening on the live :8466, which on a dev box owns
         # the user's real PTY/Claude sessions (issue #260). A free, disposable
         # host starts empty, so the destructive e2e tests can only ever touch
         # sessions this run launched. The disposable webapp is pointed at it
@@ -406,7 +406,7 @@ def _autoboot_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
             cert, key = certs
             wa_cmd += ["--ssl-keyfile", str(key), "--ssl-certfile", str(cert)]
         # Point the disposable webapp at our disposable session-host, not the
-        # config's :8456, and at the temp config copy, not the real file —
+        # config's :8466, and at the temp config copy, not the real file —
         # the two env injections that isolate the gate (issues #260, #441).
         wa_proc = _spawn(
             wa_cmd,
@@ -493,7 +493,7 @@ def _require_live_tray(request: pytest.FixtureRequest, base_url: str) -> None:
         return
     if os.environ.get(_LIVE_ENV, "") != "1":
         pytest.exit(
-            "Refusing to run the e2e suite against the LIVE tray on :8455 "
+            "Refusing to run the e2e suite against the LIVE tray on :8465 "
             "without explicit opt-in (issue #386) — an ad-hoc run load-tests "
             "the instance the phone is using. Either set LAUNCHER_E2E_LIVE=1 "
             "(scripts/run-e2e.ps1 does) to target the live tray on purpose, "
@@ -506,7 +506,7 @@ def _require_live_tray(request: pytest.FixtureRequest, base_url: str) -> None:
         res.raise_for_status()
     except Exception as exc:
         pytest.skip(
-            f"Tray not running on 8455 ({exc.__class__.__name__}) — "
+            f"Tray not running on 8465 ({exc.__class__.__name__}) — "
             "start tray.bat first, then re-run the suite."
         )
 
@@ -547,7 +547,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 def browser_context_args(
     browser_context_args: dict, browser_name: str, playwright
 ) -> dict:
-    # Self-signed cert on 8455 — the SPA + service-worker won't load otherwise.
+    # Self-signed cert on 8465 — the SPA + service-worker won't load otherwise.
     args = {**browser_context_args, "ignore_https_errors": True}
     if browser_name == "webkit":
         # Project the WebKit engine onto an iPhone 15 Pro Max — viewport,

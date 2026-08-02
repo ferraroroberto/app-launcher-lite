@@ -40,12 +40,12 @@ DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "webapp_config.json"
 SAMPLE_CONFIG_PATH = PROJECT_ROOT / "config" / "webapp_config.sample.json"
 
 DEFAULT_HOST = "0.0.0.0"
-DEFAULT_PORT = 8455
+DEFAULT_PORT = 8465
 # Loopback port the PTY session-host binds. Never network-reachable.
-DEFAULT_SESSION_HOST_PORT = 8456
+DEFAULT_SESSION_HOST_PORT = 8466
 # Env override for the session-host port. Set ONLY by the e2e pre-ship gate's
 # autoboot so a disposable webapp can be pointed at a disposable, free-port
-# session-host instead of the live :8456 a running tray owns. This is what
+# session-host instead of the live :8466 a running tray owns. This is what
 # stops the gate from reaching into — and killing — the user's real PTY
 # sessions (issue #260). Not a user-facing knob; intentionally undocumented
 # in the config sample.
@@ -253,7 +253,7 @@ def _apply_session_host_override(cfg: WebappConfig) -> WebappConfig:
 
     The webapp subprocess reads its session-host port from config; the e2e
     pre-ship gate sets this env var so its disposable webapp connects to a
-    disposable, free-port session-host rather than adopting the live :8456
+    disposable, free-port session-host rather than adopting the live :8466
     (issue #260). A missing/blank/invalid value leaves the configured port
     untouched, so normal runs are unaffected.
     """

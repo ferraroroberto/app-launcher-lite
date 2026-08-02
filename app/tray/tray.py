@@ -7,7 +7,7 @@ Windows login without keeping a console window open.
 Menu:
     Open launcher              — open the local URL in the default browser
     Copy local URL             — clipboard the local URL
-    Copy Tailscale URL         — clipboard https://<tailscale-host>:8455?token=…
+    Copy Tailscale URL         — clipboard https://<tailscale-host>:8465?token=…
     Copy Cloudflare URL        — clipboard the public URL with ?token=…
     Restart webapp             — stop + start so a new pull is picked up
     Status                     — popup with webapp state
@@ -59,15 +59,15 @@ TUNNEL_CONFIG_PATH = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 # Tailscale lookup leaves a breadcrumb here when it can't resolve a host.
 TS_DEBUG_LOG = PROJECT_ROOT / "webapp" / "tailscale_debug.log"
 # Same reason: the health watchdog (issue #386) leaves its wedge/recovery
-# breadcrumbs here — the only durable trail of *when* :8455 stopped answering.
+# breadcrumbs here — the only durable trail of *when* :8465 stopped answering.
 WATCHDOG_LOG = PROJECT_ROOT / "webapp" / "watchdog.log"
 
 # The loopback PTY session-host. It is a *linked-but-independent* child
 # (project-scaffolding#35): it hosts the user's Coding PTYs and MUST survive a
 # `tray.bat --restart`. So it is spawned detached (re-parented out of the tray
-# subtree) and adopted on start by this port, and :8456 is excluded from
+# subtree) and adopted on start by this port, and :8466 is excluded from
 # tray.bat's reclaim sweep.
-SESSION_HOST_PORT = 8456
+SESSION_HOST_PORT = 8466
 
 
 def _read_tunnel_hostname(config_path: Path) -> Optional[str]:
@@ -199,7 +199,7 @@ class TrayApp:
         DETACHED via `cmd /c start` — re-parented out of this tray's process
         subtree so `taskkill /T` cannot reach it. (DETACHED_PROCESS /
         CREATE_NEW_PROCESS_GROUP do NOT escape /T — it walks the parent-child PID
-        tree; only re-parenting does. Verified empirically.) :8456 is also
+        tree; only re-parenting does. Verified empirically.) :8466 is also
         excluded from tray.bat's reclaim sweep. We keep no Popen handle — the
         session-host is managed by port identity (adopt on start, reclaim on
         Quit), not by parentage.
