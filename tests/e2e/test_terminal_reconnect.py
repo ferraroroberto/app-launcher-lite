@@ -303,6 +303,7 @@ _SILENT_WS = """
       this.onerror = null;
       this.onclose = null;
       window.__silentWs = this;
+      window.__silentWsCount = (window.__silentWsCount || 0) + 1;
       setTimeout(() => {
         this.readyState = 1;
         if (this.onopen) this.onopen({});
@@ -352,10 +353,17 @@ def test_terminal_watchdog_fires_when_nothing_ever_paints(
     )
 
     # And it must be recoverable — tapping it starts a fresh connect attempt
-    # (a new WebSocket instance), not a dead end.
+    # (a new WebSocket instance), not a dead end. Assert the new-socket fact
+    # itself, not the transient 'Connecting…' status text: the tap handler
+    # sets that text synchronously but ws.onopen clears it again one macrotask
+    # later, so its visible window is only as long as the terminal-token fetch
+    # — reliably observable on a fast dev box, reliably MISSED on the slower
+    # CI runner (two deterministic CI reds, 2026-08-02).
+    count_before = authed_page.evaluate("() => window.__silentWsCount")
     authed_page.locator("#terminalStatus").click()
     authed_page.wait_for_function(
-        "() => document.getElementById('terminalStatus').textContent"
-        ".indexOf('Connecting') !== -1",
-        timeout=5_000,
+        "(prev) => window.__silentWsCount > prev"
+        " && window.__silentWs && window.__silentWs.readyState === 1",
+        arg=count_before,
+        timeout=10_000,
     )
