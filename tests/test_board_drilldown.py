@@ -190,6 +190,45 @@ def test_launcher_exchange_reads_only_the_bounded_capture_tail(
     assert result["assistant"]["text"] == "New reply is inside the bounded tail."
 
 
+# --------------------------------- private-DSR resilience on the capture tail (#4)
+# Byte-identical root cause to issue #2 (see test_vt_snapshot.py), but on the
+# Board drill-down's request path: `_terminal_rows` used to build a bare
+# `pyte.HistoryScreen`, so a private DSR (`ESC[?996n`, Copilot CLI 1.0.77's
+# light/dark colour-scheme query) landing inside the captured tail raised
+# `TypeError` straight out of `Stream.feed` and would 500 the endpoint.
+_COPILOT_STARTUP_PRIVATE_CSI = (
+    "\x1b[?1049h\x1b[?1004h\x1b[?2004h\x1b[?1003h\x1b[?1006h"
+    "\x1b[?9001h\x1b[?25l\x1b[?996n\x1b[?u"
+)
+
+
+def test_terminal_rows_survives_private_dsr_in_capture_tail():
+    """The exact Copilot 1.0.77 startup burst must not raise, and text on
+    either side of it must still reach the parsed rows."""
+    raw = (
+        "before" + _COPILOT_STARTUP_PRIVATE_CSI + "\r\n\x1b[39m• after\r\n"
+    )
+    rows = board_exchange._terminal_rows(raw, rows=10, cols=40)
+    plain = "\n".join(text for text, _marker in rows)
+    assert "before" in plain
+    assert "after" in plain
+
+
+def test_launcher_exchange_survives_private_dsr_end_to_end(tmp_path: Path):
+    """Same root cause exercised through the public entry point used by the
+    Board drill-down endpoint."""
+    capture = tmp_path / "s.transcript"
+    capture.write_text(
+        "\x1b[39m• before the DSR\r\n"
+        + _COPILOT_STARTUP_PRIVATE_CSI
+        + "\r\n\x1b[39m• after the DSR\r\n",
+        encoding="utf-8",
+    )
+    result = board_exchange.launcher_last_exchange(capture, rows=20, cols=80)
+    assert result["available"] is True
+    assert "after the DSR" in result["assistant"]["text"]
+
+
 # --------------------------------------------------- state_row_for_session
 
 

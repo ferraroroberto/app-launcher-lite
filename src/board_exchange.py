@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -22,6 +23,9 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import pyte
 
 from src.board_transcript import last_exchange
+from src.vt_snapshot import _MirrorScreen
+
+logger = logging.getLogger(__name__)
 
 _CAPTURE_TAIL_BYTES = 512 * 1024
 _CAPTURE_HISTORY_LINES = 2500
@@ -145,8 +149,23 @@ def _nonempty_file(path: Path) -> bool:
 
 
 def _terminal_rows(raw: str, *, rows: int, cols: int) -> List[Tuple[str, str]]:
-    screen = pyte.HistoryScreen(cols, rows, history=_CAPTURE_HISTORY_LINES)
-    pyte.Stream(screen).feed(raw)
+    """Replay a capture tail through a headless VT screen.
+
+    Built on :class:`src.vt_snapshot._MirrorScreen` — same private-DSR fix as
+    issue #2 (``ESC[?996n`` etc. would otherwise raise ``TypeError`` out of
+    pyte's dispatch) — and the ``feed`` call is guarded the same way, since
+    this runs on a request path rather than a background reader thread: an
+    unparseable capture must degrade to whatever rows were parsed before the
+    failure, never 500 the Board drill-down (issue #4).
+    """
+    screen = _MirrorScreen(cols, rows, history=_CAPTURE_HISTORY_LINES)
+    try:
+        pyte.Stream(screen).feed(raw)
+    except Exception as exc:  # noqa: BLE001 — any handler may raise
+        logger.warning(
+            f"⚠️ board_exchange capture parse failed ({type(exc).__name__}: {exc}); "
+            "rendering rows parsed before the failure"
+        )
     all_rows: Iterable[Any] = list(screen.history.top) + [
         screen.buffer[y] for y in range(screen.lines)
     ]
