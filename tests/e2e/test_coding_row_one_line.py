@@ -24,6 +24,7 @@ real scan would give whatever happens to be on the developer's disk.
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 from playwright.sync_api import Page, expect
@@ -262,6 +263,26 @@ def test_row_buttons_meet_the_44px_target_and_do_not_overlap(
         assert left["x"] + left["width"] <= right["x"] + 0.5, (
             f"{row_id}: buttons {i} and {i + 1} overlap horizontally"
         )
+
+
+def test_agent_launch_is_the_rightmost_button(rows: Page) -> None:
+    """Order is Repository · Star · Copilot (issue #8).
+
+    The launch is the row's primary action and takes the far-right slot, the
+    easiest thumb reach. It cannot sit further right than this — the strip
+    already ends at the list's content edge, with only the summary's chevron
+    column beyond it (too narrow for a --row-sm target).
+    """
+    buttons = rows.locator('.coding-item[data-id="onmain"] .icon-btn')
+    expect(buttons).to_have_count(3)
+    expect(buttons.nth(2)).to_have_attribute("data-agent", "copilot")
+    expect(buttons.nth(1)).to_have_class(re.compile(r"\bstar-btn\b"))
+    expect(buttons.nth(0)).to_have_attribute("aria-label", "Repository issues")
+
+    boxes = _button_boxes(rows, "onmain")
+    assert boxes[2]["x"] > boxes[1]["x"] > boxes[0]["x"], (
+        "DOM order and visual order disagree — the strip is not left-to-right"
+    )
 
 
 def test_row_buttons_align_with_the_summary_controls(rows: Page) -> None:
