@@ -38,6 +38,8 @@ Canonical instructions for AI coding agents working in this repository. Claude C
   - app/webapp/static/**/*.{js,html}
 - key views:                      # single tabbed SPA served at `/`
   - /          (Coding · Apps · Jobs · Team OS · Board · Settings tabs)
+- accepted exceptions:            # permanent, re-confirmed by each /design-sync run
+  - `app-icon-family` FAILs by design and stays FAIL (issue #10). The contract requires `project-scaffolding`'s `brand_gen.render_set`, which by definition is not available alongside this fork — `scripts/gen_icons.py` is a documented stub. The PWA/tray/favicon assets (`app/webapp/static/icon-180|192|512|512-maskable.png`, `favicon.ico`, `assets/tray/app-launcher.ico`) are committed byte-for-byte from upstream `app-launcher` and are shape-correct; index + manifest wiring passes. Re-sync by copying those files from an upstream checkout when its brand changes — never by adding a `project-scaffolding` dependency, which the fork exists to avoid. Do not re-file this as drift.
 
 ## CI expectations
 
