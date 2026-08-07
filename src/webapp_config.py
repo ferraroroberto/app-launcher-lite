@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Dict, Optional
 from urllib.parse import urlencode, urlparse, urlunparse
@@ -400,45 +400,12 @@ def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
     target = _resolve_config_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
 
-    payload = {
-        "host": cfg.host,
-        "port": cfg.port,
-        "projects_dir": cfg.projects_dir,
-        "projects_ignore": cfg.projects_ignore,
-        "coding_favorites": cfg.coding_favorites,
-        "coding_hidden_agents": cfg.coding_hidden_agents,
-        "apps_scan_root": cfg.apps_scan_root,
-        "team_os_dir": cfg.team_os_dir,
-        "sessions_state_file": cfg.sessions_state_file,
-        "gitlab_group": cfg.gitlab_group,
-        "gitlab_host": cfg.gitlab_host,
-        "copilot_skip_permissions": cfg.copilot_skip_permissions,
-        "copilot_models": cfg.copilot_models,
-        "copilot_model": cfg.copilot_model,
-        "copilot_autopilot": cfg.copilot_autopilot,
-        "copilot_context": cfg.copilot_context,
-        "copilot_effort": cfg.copilot_effort,
-        "auth_token": cfg.auth_token,
-        "auth_password": cfg.auth_password,
-        "session_host_port": cfg.session_host_port,
-        "tailnet_allowlist": cfg.tailnet_allowlist,
-        "show_local_window": cfg.show_local_window,
-        "terminal_history_lines": cfg.terminal_history_lines,
-        "webauthn_rp_id": cfg.webauthn_rp_id,
-        "webauthn_rp_name": cfg.webauthn_rp_name,
-        "webauthn_origin": cfg.webauthn_origin,
-        "pushover_api_token": cfg.pushover_api_token,
-        "pushover_user_key": cfg.pushover_user_key,
-        "notify_on_failure": cfg.notify_on_failure,
-        "notify_failure_streak": cfg.notify_failure_streak,
-        "telegram_bot_token": cfg.telegram_bot_token,
-        "telegram_chat_id": cfg.telegram_chat_id,
-        "jobs_coverage_interval_minutes": cfg.jobs_coverage_interval_minutes,
-        "secrets": cfg.secrets,
-        "api_tokens": cfg.api_tokens,
-    }
-
-    atomic_write_json(target, payload)
+    # Every field is persisted, so the dataclass itself is the key list —
+    # no hand-maintained payload dict to fall out of sync when a knob is
+    # added (issue #441 shipped exactly that drift). Keep every field
+    # JSON-serializable and this stays exhaustive by construction;
+    # tests/test_webapp_config_persistence.py locks it.
+    atomic_write_json(target, asdict(cfg))
     logger.info(f"💾 Saved webapp_config to {target}")
     return target
 
