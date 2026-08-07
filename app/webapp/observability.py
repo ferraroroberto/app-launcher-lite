@@ -26,7 +26,8 @@ import time
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-logger = logging.getLogger(__name__)
+from src.log_files import ensure_file_log_handler
+
 slow_logger = logging.getLogger("launcher.slowreq")
 
 _SLOW_LOG_PATH = (
@@ -48,23 +49,7 @@ def ensure_slow_log_handler() -> None:
     safe to call from ``create_app()`` on every boot. Without a file handler
     the breadcrumbs would vanish into the tray's DEVNULL exactly when they
     matter."""
-    if any(
-        isinstance(h, logging.FileHandler)
-        and Path(h.baseFilename).resolve() == _SLOW_LOG_PATH.resolve()
-        for h in slow_logger.handlers
-    ):
-        return
-    try:
-        _SLOW_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        fh = logging.FileHandler(_SLOW_LOG_PATH, encoding="utf-8")
-        fh.setLevel(logging.WARNING)
-        fh.setFormatter(
-            logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-        )
-        slow_logger.addHandler(fh)
-        slow_logger.setLevel(logging.WARNING)
-    except OSError as exc:
-        logger.warning(f"⚠️  Could not open {_SLOW_LOG_PATH}: {exc}")
+    ensure_file_log_handler(slow_logger, _SLOW_LOG_PATH, logging.WARNING)
 
 
 class SlowRequestLogMiddleware:

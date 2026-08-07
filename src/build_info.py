@@ -14,11 +14,10 @@ from __future__ import annotations
 
 import datetime as _dt
 import logging
-import subprocess
 from pathlib import Path
-from typing import Any, Dict
+from typing import Dict
 
-from src.subprocess_flags import NO_WINDOW
+from src.git_run import run_git
 
 logger = logging.getLogger(__name__)
 
@@ -29,23 +28,13 @@ def resolve_git_sha(project_root: Path = PROJECT_ROOT) -> str:
     """Short git SHA of ``project_root``'s checkout.
 
     Falls back to ``"unknown"`` if git isn't on PATH or this isn't a repo —
-    both happen in test envs and shouldn't crash startup. ``CREATE_NO_WINDOW``
-    keeps a stray console from flashing under the console-less pythonw tray
-    and avoids a console-allocation failure when the parent has none.
+    both happen in test envs and shouldn't crash startup. The invocation
+    contract (including the ``CREATE_NO_WINDOW`` that keeps a stray console
+    from flashing under the console-less pythonw tray) lives in
+    :func:`src.git_run.run_git`.
     """
-    cmd = ["git", "-C", str(project_root), "rev-parse", "--short", "HEAD"]
-    kwargs: Dict[str, Any] = dict(
-        capture_output=True,
-        stdin=subprocess.DEVNULL,
-        text=True,
-        timeout=5,
-        check=False,
-        creationflags=NO_WINDOW,
-    )
-    try:
-        result = subprocess.run(cmd, **kwargs)
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.warning("⚠️ build_info: git rev-parse raised %s: %s", type(exc).__name__, exc)
+    result = run_git(project_root, ["rev-parse", "--short", "HEAD"])
+    if result is None:
         return "unknown"
     sha = (result.stdout or "").strip()
     if not sha:
@@ -74,25 +63,21 @@ def _resolve_default_remote_ref(project_root: Path) -> str | None:
     """``origin/HEAD``'s target (e.g. ``"origin/main"``), falling back to
     whichever of ``origin/main`` / ``origin/master`` exists. ``None`` when
     neither resolves (no ``origin`` remote, git missing, not a repo)."""
-    cmd = ["git", "-C", str(project_root), "symbolic-ref", "--short", "refs/remotes/origin/HEAD"]
-    kwargs: Dict[str, Any] = dict(
-        capture_output=True, stdin=subprocess.DEVNULL, text=True,
-        timeout=5, check=False, creationflags=NO_WINDOW,
+    result = run_git(
+        project_root, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]
     )
-    try:
-        result = subprocess.run(cmd, **kwargs)
-    except (OSError, subprocess.SubprocessError):
+    if result is None:
         return None
     ref = (result.stdout or "").strip()
     if ref:
         return ref
     for candidate in ("origin/main", "origin/master"):
-        verify = ["git", "-C", str(project_root), "rev-parse", "--verify", "--quiet", candidate]
-        try:
-            result = subprocess.run(verify, **kwargs)
-        except (OSError, subprocess.SubprocessError):
+        verify = run_git(
+            project_root, ["rev-parse", "--verify", "--quiet", candidate]
+        )
+        if verify is None:
             return None
-        if result.returncode == 0:
+        if verify.returncode == 0:
             return candidate
     return None
 
@@ -114,15 +99,8 @@ def resolve_deployed_sha(project_root: Path = PROJECT_ROOT) -> str:
     ref = _resolve_default_remote_ref(project_root)
     if ref is None:
         return "unknown"
-    cmd = ["git", "-C", str(project_root), "rev-parse", "--short", ref]
-    kwargs: Dict[str, Any] = dict(
-        capture_output=True, stdin=subprocess.DEVNULL, text=True,
-        timeout=5, check=False, creationflags=NO_WINDOW,
-    )
-    try:
-        result = subprocess.run(cmd, **kwargs)
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.warning("⚠️ build_info: git rev-parse %s raised %s: %s", ref, type(exc).__name__, exc)
+    result = run_git(project_root, ["rev-parse", "--short", ref])
+    if result is None:
         return "unknown"
     sha = (result.stdout or "").strip()
     if not sha:
