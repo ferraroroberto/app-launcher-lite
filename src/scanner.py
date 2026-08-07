@@ -26,7 +26,6 @@ import fnmatch
 import logging
 import os
 import re
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -34,7 +33,7 @@ from urllib.parse import urlparse
 
 import yaml
 
-from src.subprocess_flags import NO_WINDOW
+from src.git_run import run_git
 
 logger = logging.getLogger(__name__)
 
@@ -402,26 +401,23 @@ class GitStatus:
 _NOT_GIT = GitStatus(is_git=False, branch=None, default_branch=None, dirty=False)
 
 
+#: Wider than :data:`src.git_run.DEFAULT_TIMEOUT_S` — this walks whatever
+#: project directory the user pointed the Coding tab at, which can be a large
+#: repo on a cold filesystem cache.
+_GIT_TIMEOUT_S = 10.0
+
+
 def _run_git(project_dir: Path, args: Sequence[str]) -> Optional[str]:
     """Run ``git -C <project_dir> <args>`` and return stripped stdout.
 
     Returns ``None`` on any non-zero exit, missing ``git`` binary, or
-    timeout — callers treat ``None`` as "couldn't determine".
+    timeout — callers treat ``None`` as "couldn't determine". The invocation
+    contract itself lives in :func:`src.git_run.run_git`; this wrapper only
+    flattens "ran but said no" and "couldn't run" into the single ``None``
+    its callers here already expect.
     """
-    try:
-        proc = subprocess.run(
-            ["git", "-C", str(project_dir), *args],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=10,
-            creationflags=NO_WINDOW,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.debug(f"git {' '.join(args)} failed in {project_dir}: {exc}")
-        return None
-    if proc.returncode != 0:
+    proc = run_git(project_dir, args, timeout=_GIT_TIMEOUT_S)
+    if proc is None or proc.returncode != 0:
         return None
     return proc.stdout.strip()
 

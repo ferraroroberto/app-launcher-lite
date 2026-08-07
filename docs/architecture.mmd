@@ -100,8 +100,13 @@ flowchart TB
     DIAG["diagnostics.py\nring log buffer, port_owner"]
     JSONIO["_json_io.py"]
     LOOPHTTP["_loopback_http.py"]
+    GITRUN["git_run.py\nthe one git -C invocation contract"]
+    LOGFILES["log_files.py\nfile-log-handler bootstrap"]
     AUDIT["audit.py\ntranscript_path"]
   end
+
+  SCANNER --> GITRUN
+  R_AUTH --> LOGFILES
 
   HOSTSERVER --> SESSHOST
   SESSHOST --> VTSNAP
