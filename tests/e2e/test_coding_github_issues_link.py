@@ -56,8 +56,11 @@ def _open_projects(page: Page) -> None:
 
 
 def _repo_btn(page: Page):
+    # The glyph is the fork's only forge, GitLab (issue #13) — the config
+    # pseudo-id behind the button is still `github` for back-compat, but
+    # nothing user-visible says GitHub any more.
     return page.locator('.coding-item[data-id="alpha"] .agent-btn').filter(
-        has=page.locator('img[alt="GitHub"]')
+        has=page.locator('img[alt="GitLab"]')
     )
 
 
