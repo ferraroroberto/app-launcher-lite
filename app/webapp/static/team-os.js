@@ -14,7 +14,7 @@
  */
 
 import { els, state } from './state.js';
-import { apiFailToast, jsonApi, toast, logPollFailure } from './api.js';
+import { apiFailToast, escapeHtml, jsonApi, toast, logPollFailure } from './api.js';
 import { applyLaunchSizePayload, handleLaunchResponse } from './terminal.js';
 import { icon } from './_vendored/icons/icons.js';
 import { toggleAriaChecked, wireModelCombo } from './dom-utils.js';
@@ -417,13 +417,8 @@ function closeBrowser() {
 // inline code, fenced code, links, unordered lists, paragraphs). Content
 // comes from the user's own private files over a passkey-gated tailnet
 // link, but we still escape every byte before formatting so a stray
-// `<script>` in a note can never execute.
-function escapeHtml(s) {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
+// `<script>` in a note can never execute. `escapeHtml` is the single shared
+// one from api.js (issue #10) — every other view already imports it.
 
 function inlineMd(s) {
   return s

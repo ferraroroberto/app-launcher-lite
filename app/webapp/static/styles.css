@@ -43,21 +43,26 @@
   --shadow-nav: 0 10px 34px rgba(31, 35, 40, 0.16);
   --tabbar-bg: rgba(255, 255, 255, 0.85);
   --tabbar-border: rgba(31, 35, 40, 0.12);
-  /* Brand-colour alpha overlays derive from the tokens above via relative
-     colour syntax — e.g. rgb(from var(--accent) r g b / 0.18) — so a tint
-     never forks from its base colour. */
+  /* Brand-colour alpha overlays derive from the tokens above rather than
+     forking a base colour. Named *spec roles* use the spec's literal
+     color-mix() string (below); app-local one-off tints further down still
+     use relative colour syntax — rgb(from var(--x) r g b / a) — since the
+     spec names no role for them. Both re-resolve lazily per theme. */
   /* Accent-ghost button recipe (home-automation's Net-tab .big-btn):
      soft accent tint + accent text + soft accent border — no solid fills
-     (issue #383 review round). Derived from --accent so both themes ride. */
-  --accent-soft: rgb(from var(--accent) r g b / 0.16);
-  --accent-border-soft: rgb(from var(--accent) r g b / 0.24);
-  --accent-border-strong: rgb(from var(--accent) r g b / 0.28);
+     (issue #383 review round). Derived from --accent so both themes ride.
+     Values are design.md's verbatim strings (issue #10) — color-mix() has a
+     wider browser-support floor than relative colour syntax. */
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --accent-border-soft: color-mix(in srgb, var(--accent) 24%, transparent);
+  --accent-border-strong: color-mix(in srgb, var(--accent) 28%, transparent);
   /* Vendored button.css's danger-tier token names (issue #477) — this app's
      equivalent status color is --danger, so alias rather than fork a second
-     red. Lazily re-resolves per theme same as the accent-soft trio above. */
+     red. Percentages + recipe are _vendored/button/README.md's verbatim
+     strings, same as the accent-soft trio above. */
   --deficit: var(--danger);
-  --deficit-soft: rgb(from var(--danger) r g b / 0.12);
-  --deficit-border-soft: rgb(from var(--danger) r g b / 0.30);
+  --deficit-soft: color-mix(in srgb, var(--deficit) 12%, transparent);
+  --deficit-border-soft: color-mix(in srgb, var(--deficit) 30%, transparent);
   /* radii (rounded scale) — theme-independent */
   --radius-sm: 8px;
   --radius-md: 12px;
