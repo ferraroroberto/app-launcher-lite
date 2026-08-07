@@ -1,14 +1,15 @@
 """Regression pin for issue #666 (Coding row per-agent visibility toggles).
 
 The feature: the ⚙️ Coding options card carries a "Visible agents" list —
-one vendored switch per registry agent plus the GitHub issues button —
+one vendored switch per registry agent plus the repository-issues button —
 generated from /api/agents, never hand-written per agent. Toggling one off
 drops that button from every project row immediately and persists as
 `coding_hidden_agents` in the webapp config, so it stays hidden across a
 reload.
 
 Reduced to the lite fork's single-agent registry: the Copilot launch button
-is present, and the GitHub pseudo-button hides/persists/restores.
+is present, and the repository-issues pseudo-button (config id `github`,
+kept for back-compat) hides/persists/restores.
 
 Approach: /api/apps and /api/agents are mocked for a deterministic row and
 agent set, but the config write is **real** — the e2e conftest points the
@@ -77,9 +78,12 @@ def _copilot_btn(page: Page):
     )
 
 
-def _github_btn(page: Page):
+def _repo_btn(page: Page):
+    # The glyph is the fork's only forge, GitLab (issue #13) — the config
+    # pseudo-id behind the button is still `github` for back-compat, but
+    # nothing user-visible says GitHub any more.
     return page.locator('.coding-item[data-id="alpha"] .agent-btn').filter(
-        has=page.locator('img[alt="GitHub"]')
+        has=page.locator('img[alt="GitLab"]')
     )
 
 
@@ -106,17 +110,18 @@ def test_copilot_button_present_and_github_toggle_persists(
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     _open_surfaces(authed_page)
 
-    # The list is generated from the registry: one row per agent + GitHub.
+    # The list is generated from the registry: one row per agent + the
+    # repository-issues pseudo-agent.
     copilot_toggle = authed_page.locator('[data-visibility-toggle="copilot"]')
     github_toggle = authed_page.locator('[data-visibility-toggle="github"]')
     expect(copilot_toggle).to_have_attribute("aria-checked", "true", timeout=5_000)
     expect(github_toggle).to_have_count(1)
     expect(_copilot_btn(authed_page)).to_have_count(1)
-    expect(_github_btn(authed_page)).to_have_count(1)
+    expect(_repo_btn(authed_page)).to_have_count(1)
 
-    # Toggling GitHub off drops its button from the row with no reload.
+    # Toggling it off drops the button from the row with no reload.
     github_toggle.click()
-    expect(_github_btn(authed_page)).to_have_count(0)
+    expect(_repo_btn(authed_page)).to_have_count(0)
     # Copilot stays — hiding is per button, not all-or-nothing.
     expect(_copilot_btn(authed_page)).to_have_count(1)
     # The favorite star is never hideable.
@@ -128,9 +133,9 @@ def test_copilot_button_present_and_github_toggle_persists(
     expect(authed_page.locator('[data-visibility-toggle="github"]')).to_have_attribute(
         "aria-checked", "false", timeout=5_000
     )
-    expect(_github_btn(authed_page)).to_have_count(0)
+    expect(_repo_btn(authed_page)).to_have_count(0)
     expect(_copilot_btn(authed_page)).to_have_count(1)
 
     # Toggling back on restores the button.
     authed_page.locator('[data-visibility-toggle="github"]').click()
-    expect(_github_btn(authed_page)).to_have_count(1)
+    expect(_repo_btn(authed_page)).to_have_count(1)

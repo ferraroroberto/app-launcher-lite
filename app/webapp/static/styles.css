@@ -876,7 +876,7 @@ summary + .opt-group { border-top: 0; }
    it used to render 20px and chip-less beside two 24px chips, which read as
    haphazard). Same 24px box, same chip, same border-radius; the inner
    padding shrinks the drawn glyph to 16px so its visual weight matches the
-   brand SVGs, which carry that clearance inside their own viewBox (github.svg
+   brand SVGs, which carry that clearance inside their own viewBox (gitlab.svg
    draws at 62% of its box, copilot.svg at ~72%; 16/24 sits between them). */
 .app-item .row-actions.agent-actions .icon-btn.star-btn .icon {
   display: block;

@@ -42,11 +42,14 @@ export function renderApps() {
 // up by default and needs no config migration.
 //
 // `github` is a pseudo-agent id: the repo-issues button is hideable the same
-// way, without inventing a second config key for one button. The id (and the
-// icon asset it names) predates the GitLab move — kept as-is for config
-// compatibility; the visible label/tooltip say "Repository issues".
-const GITHUB_BUTTON_ID = 'github';
-const GITHUB_BUTTON_LABEL = 'Repository issues';
+// way, without inventing a second config key for one button. The id predates
+// the GitLab move — kept as-is for config compatibility (it is a persisted
+// `coding_hidden_agents` entry, renaming it would silently un-hide the button
+// on every existing install); the visible label/tooltip say "Repository
+// issues" and the glyph is this fork's only forge, GitLab (issue #13).
+const REPO_BUTTON_ID = 'github';
+const REPO_BUTTON_LABEL = 'Repository issues';
+const REPO_BUTTON_ICON = 'gitlab';
 
 function hiddenButtons() {
   const cfg = state.config || {};
@@ -86,7 +89,7 @@ export function renderAgentVisibility() {
   const rows = (state.agents || []).map(function (agent) {
     return { id: agent.id, label: agent.label };
   });
-  rows.push({ id: GITHUB_BUTTON_ID, label: GITHUB_BUTTON_LABEL });
+  rows.push({ id: REPO_BUTTON_ID, label: REPO_BUTTON_LABEL });
 
   rows.forEach(function (row) {
     const wrap = document.createElement('span');
@@ -186,27 +189,27 @@ function renderCodingList(host, items) {
     // verbatim here. Spawns no process and creates no session. Disabled
     // with a hover hint when the project has no parseable git remote.
     // Hideable under the same pseudo-id as the agents (issue #666).
-    if (!hidden.has(GITHUB_BUTTON_ID)) {
-      const ghBtn = document.createElement('button');
-      ghBtn.type = 'button';
-      ghBtn.className = 'icon-btn agent-btn';
-      const ghIcon = document.createElement('img');
-      ghIcon.className = 'agent-icon';
-      ghIcon.src = iconUrl('github');
-      ghIcon.alt = 'GitHub';
-      ghBtn.appendChild(ghIcon);
+    if (!hidden.has(REPO_BUTTON_ID)) {
+      const repoBtn = document.createElement('button');
+      repoBtn.type = 'button';
+      repoBtn.className = 'icon-btn agent-btn';
+      const repoIcon = document.createElement('img');
+      repoIcon.className = 'agent-icon';
+      repoIcon.src = iconUrl(REPO_BUTTON_ICON);
+      repoIcon.alt = 'GitLab';
+      repoBtn.appendChild(repoIcon);
       if (a.repo_issues_url) {
-        ghBtn.title = 'Repository issues';
-        ghBtn.setAttribute('aria-label', 'Repository issues');
-        ghBtn.addEventListener('click', function () {
+        repoBtn.title = REPO_BUTTON_LABEL;
+        repoBtn.setAttribute('aria-label', REPO_BUTTON_LABEL);
+        repoBtn.addEventListener('click', function () {
           window.open(a.repo_issues_url, '_blank', 'noopener,noreferrer');
         });
       } else {
-        ghBtn.disabled = true;
-        ghBtn.title = 'No git remote';
-        ghBtn.setAttribute('aria-label', 'No git remote');
+        repoBtn.disabled = true;
+        repoBtn.title = 'No git remote';
+        repoBtn.setAttribute('aria-label', 'No git remote');
       }
-      actions.appendChild(ghBtn);
+      actions.appendChild(repoBtn);
     }
 
     // Favorite star — a toggle, kept between the repo link and the agent
