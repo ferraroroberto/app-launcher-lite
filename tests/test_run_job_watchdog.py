@@ -3,10 +3,10 @@
 
 Three layers, matching the three places the feature lives:
 
-* :class:`~app.cli.commands.run_job_cmd._RunWatchdog` itself — pointed at
+* :class:`~src.run_supervision.RunWatchdog` itself — pointed at
   a real child process, with the poll interval monkeypatched down so a
   test costs a fraction of a second instead of the production 5 s tick.
-* :func:`~app.cli.commands.run_job_cmd._resolve_watchdog_limits` — the
+* :func:`~src.run_supervision.resolve_watchdog_limits` — the
   tri-state (unset / explicit / ``0`` = off) resolution and the
   history-derived default.
 * The whole ``RunJobCommand`` path — a real sleeping child killed by the
@@ -28,6 +28,7 @@ from app.cli.commands import run_job_cmd as rjc
 from src import jobs as jobs_mod
 from src import jobs_history as jobs_history_mod
 from src import jobs_stats as jobs_stats_mod
+from src import run_supervision
 from src.jobs_config import Job, JobsConfig, job_from_dict
 from src.subprocess_flags import NO_WINDOW
 
@@ -35,7 +36,9 @@ from src.subprocess_flags import NO_WINDOW
 @pytest.fixture
 def fast_watchdog(monkeypatch):
     """Tick the watchdog ~100x faster so tests don't wait out a real poll."""
-    monkeypatch.setattr(rjc, "_WATCHDOG_POLL_INTERVAL_SECONDS", 0.05)
+    monkeypatch.setattr(
+        run_supervision, "WATCHDOG_POLL_INTERVAL_SECONDS", 0.05
+    )
 
 
 @pytest.fixture
@@ -65,7 +68,7 @@ def _wait_for(predicate, timeout: float = 10.0) -> bool:
     return predicate()
 
 
-# ================================================== _RunWatchdog itself
+# =================================================== RunWatchdog itself
 
 
 @pytest.mark.usefixtures("fast_watchdog")
@@ -74,7 +77,7 @@ class TestRunWatchdog:
         log = tmp_path / "output.log"
         log.write_bytes(b"")
         proc = _sleeper()
-        wd = rjc._RunWatchdog(
+        wd = run_supervision.RunWatchdog(
             proc, log, max_runtime_seconds=0.2, no_output_seconds=None
         )
         wd.start()
@@ -93,7 +96,7 @@ class TestRunWatchdog:
         log = tmp_path / "output.log"
         log.write_bytes(b"started\n")
         proc = _sleeper()
-        wd = rjc._RunWatchdog(
+        wd = run_supervision.RunWatchdog(
             proc, log, max_runtime_seconds=None, no_output_seconds=0.2
         )
         wd.start()
@@ -112,7 +115,7 @@ class TestRunWatchdog:
         log = tmp_path / "output.log"
         log.write_bytes(b"")
         proc = _sleeper()
-        wd = rjc._RunWatchdog(
+        wd = run_supervision.RunWatchdog(
             proc, log, max_runtime_seconds=None, no_output_seconds=0.4
         )
         wd.start()
@@ -137,7 +140,7 @@ class TestRunWatchdog:
         log.write_bytes(b"")
         proc = _sleeper(0.05)
         proc.wait(timeout=10)
-        wd = rjc._RunWatchdog(
+        wd = run_supervision.RunWatchdog(
             proc, log, max_runtime_seconds=0.1, no_output_seconds=0.1
         )
         wd.start()
@@ -151,7 +154,7 @@ class TestRunWatchdog:
         log.write_bytes(b"")
         proc = _sleeper(0.05)
         try:
-            wd = rjc._RunWatchdog(
+            wd = run_supervision.RunWatchdog(
                 proc, log, max_runtime_seconds=None, no_output_seconds=None
             )
             assert wd.armed is False
@@ -168,7 +171,7 @@ class TestRunWatchdog:
         """An unreadable stat must not masquerade as "no growth"."""
         log = tmp_path / "never-created.log"
         proc = _sleeper()
-        wd = rjc._RunWatchdog(
+        wd = run_supervision.RunWatchdog(
             proc, log, max_runtime_seconds=None, no_output_seconds=0.2
         )
         wd.start()
@@ -182,7 +185,7 @@ class TestRunWatchdog:
             proc.wait(timeout=10)
 
 
-# ============================================ _resolve_watchdog_limits
+# ============================================= resolve_watchdog_limits
 
 
 class TestResolveWatchdogLimits:
@@ -190,14 +193,14 @@ class TestResolveWatchdogLimits:
         return Job(id="demo", name="Demo", script_path="C:\\ok.py", **kw)
 
     def test_explicit_values_win(self, isolated_runs_dir):
-        max_runtime, no_output = rjc._resolve_watchdog_limits(
+        max_runtime, no_output = run_supervision.resolve_watchdog_limits(
             self._job(max_runtime_seconds=120, no_output_seconds=90)
         )
         assert max_runtime == 120.0
         assert no_output == 90.0
 
     def test_zero_disables_each_signal_independently(self, isolated_runs_dir):
-        max_runtime, no_output = rjc._resolve_watchdog_limits(
+        max_runtime, no_output = run_supervision.resolve_watchdog_limits(
             self._job(max_runtime_seconds=0, no_output_seconds=0)
         )
         assert max_runtime is None
@@ -206,8 +209,8 @@ class TestResolveWatchdogLimits:
     def test_unset_no_output_falls_back_to_the_module_default(
         self, isolated_runs_dir
     ):
-        _, no_output = rjc._resolve_watchdog_limits(self._job())
-        assert no_output == rjc._WATCHDOG_DEFAULT_NO_OUTPUT_SECONDS
+        _, no_output = run_supervision.resolve_watchdog_limits(self._job())
+        assert no_output == run_supervision.WATCHDOG_DEFAULT_NO_OUTPUT_SECONDS
 
     def test_thin_history_yields_no_runtime_ceiling(self, isolated_runs_dir):
         """Two completed runs is not evidence — better no ceiling than a
@@ -221,7 +224,7 @@ class TestResolveWatchdogLimits:
                 finished_at=f"2026-01-0{i + 1}T06:00:10",
             )
         jobs_stats_mod.invalidate_stats_cache()
-        max_runtime, _ = rjc._resolve_watchdog_limits(self._job())
+        max_runtime, _ = run_supervision.resolve_watchdog_limits(self._job())
         assert max_runtime is None
 
     def test_enough_history_derives_the_is_stuck_threshold(
@@ -236,7 +239,7 @@ class TestResolveWatchdogLimits:
                 finished_at=f"2026-01-0{i}T06:00:10",
             )
         jobs_stats_mod.invalidate_stats_cache()
-        max_runtime, _ = rjc._resolve_watchdog_limits(self._job())
+        max_runtime, _ = run_supervision.resolve_watchdog_limits(self._job())
         # 10 s runs → p95 × 3 = 30 s, so the 300 s floor is what binds.
         assert max_runtime == 300.0
         assert max_runtime == jobs_stats_mod.stuck_threshold_seconds("demo")
