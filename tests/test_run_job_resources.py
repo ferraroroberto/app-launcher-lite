@@ -1,10 +1,11 @@
 """Unit tests for the run-job executor's resource sampler + notifier hook
 (issue #66 follow-ups to issue #47).
 
-The sampler is tested by pointing it at a live child process (a short
-``time.sleep`` Python subprocess), letting it tick a couple of times,
-then asserting the on-disk run.json gained the resource fields. The
-notifier path is tested in isolation via :func:`_maybe_notify_failure`.
+The sampler lives in :mod:`src.run_supervision` (issue #14) and is tested
+by pointing it at a live child process (a short ``time.sleep`` Python
+subprocess), letting it tick a couple of times, then asserting the
+on-disk run.json gained the resource fields. The notifier path stays in
+the executor and is tested in isolation via :func:`_maybe_notify_failure`.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ import pytest
 from app.cli.commands import run_job_cmd as rjc
 from src import jobs as jobs_mod
 from src import jobs_history as jobs_history_mod
+from src import run_supervision
 
 
 # ============================================================== sampler
@@ -32,7 +34,7 @@ class TestResourceSampler:
         # Use the current Python interpreter as a guaranteed-running
         # process — we don't actually wait on it; we just point the
         # sampler at our own pid so memory_info() returns sensible values.
-        sampler = rjc._ResourceSampler(os.getpid())
+        sampler = run_supervision.ResourceSampler(os.getpid())
         sampler.start()
         # One tick is plenty — the sampler runs at 1 Hz with no warmup.
         time.sleep(1.2)
@@ -41,7 +43,7 @@ class TestResourceSampler:
         assert sampler.cpu_seconds >= 0.0
 
     def test_stop_idempotent_and_quick(self):
-        sampler = rjc._ResourceSampler(os.getpid())
+        sampler = run_supervision.ResourceSampler(os.getpid())
         sampler.start()
         t0 = time.monotonic()
         sampler.stop()
@@ -51,7 +53,7 @@ class TestResourceSampler:
     def test_handles_dead_pid_gracefully(self):
         # A PID that does not exist (or that already exited): the
         # sampler must not crash and must surface zero peak.
-        sampler = rjc._ResourceSampler(2 ** 31 - 1)
+        sampler = run_supervision.ResourceSampler(2 ** 31 - 1)
         sampler.start()
         time.sleep(0.2)
         sampler.stop()

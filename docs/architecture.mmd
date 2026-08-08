@@ -87,6 +87,7 @@ flowchart TB
     JOBSPREFLIGHT["jobs_preflight.py"]
     JOBSARGV["jobs_argv.py"]
     JOBSTRIGGER["jobs_trigger.py\n--trigger vocabulary (scheduled/manual/webhook/chain:)"]
+    RUNSUPERVISION["run_supervision.py\nlive-child supervision: console tee,\nresource sampler, run watchdog (#695)"]
     BOARD["board.py\npure assembly: sessions + GitLab"]
     GLCLIENT["gitlab_client.py\nglab CLI reads, cached snapshot"]
     NOTIFY["notifications.py\nPushover on job failure"]
@@ -118,6 +119,9 @@ flowchart TB
   R_JOBS --> JOBSFACADE
   RUNJOBCMD --> JOBSFACADE
   RUNJOBCMD --> NOTIFY
+  RUNJOBCMD --> RUNSUPERVISION
+  RUNSUPERVISION --> DIAG
+  RUNSUPERVISION --> JOBSSTATS
   JOBSFACADE --> JOBSSCHTASKS
   JOBSFACADE --> JOBSQUEUE
   JOBSFACADE --> JOBSHISTORY
