@@ -20,6 +20,9 @@ Canonical instructions for AI coding agents working in this repository. Claude C
 ## session-host
 
 - what/why: the `:8466` session-host (`src/session_host.py`, `app/session_host/`) hosts the user's live Coding/PTY sessions. Spawned detached from the tray subtree (`cmd /c start`) so a `taskkill /T` subtree kill can't reach it; deliberately excluded from `tray.bat --restart`'s port-reclaim sweep.
+- update command: `scripts/restart-session-host.ps1 -Confirm` (confirmation-gated, operator-only — kills every live PTY)
+- liveness signal: `GET /api/version`'s `session_host.stale_relevant` (raw sha-diff fact in `session_host.stale`; `stale_relevant` scopes it to whether a declared path here was touched)
+- NOT restarted/deployed by: `tray.bat --restart`
 
 ## Internal architecture
 
