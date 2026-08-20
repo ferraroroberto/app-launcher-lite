@@ -179,7 +179,7 @@ flowchart TB
 
   subgraph testing["tests/ + scripts/"]
     TESTS["pytest (unit) + tests/e2e (Playwright)\nscripts/verify-before-ship.ps1 gate"]
-    SCRIPTS["scripts/gen_tailscale_cert.py (--check on boot) ·\ngen_token.py · run_named_tunnel.py · set_password.py ·\nclassify_e2e.py · restart-session-host.ps1 ·\ntray_lifecycle.ps1 (vendored)"]
+    SCRIPTS["scripts/gen_tailscale_cert.py (--check on boot) ·\ngen_token.py · run_named_tunnel.py · set_password.py ·\nclassify_e2e.py · gen_icons.py (verify/--sync brand assets\nvs an upstream app-launcher checkout) ·\nrestart-session-host.ps1 · tray_lifecycle.ps1 (vendored)"]
   end
   TESTS -.->|exercises| webapp
   TESTS -.->|exercises| sessionhost
