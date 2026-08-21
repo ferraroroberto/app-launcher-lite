@@ -138,14 +138,14 @@ def test_tsnet_host_ignores_self_signed_cert_with_tsnet_san(tmp_path) -> None:
     # A legacy self-signed leaf (retired gen_ssl_cert.py) carried the ts.net
     # SAN too — issuer keying stops it being treated as a Tailscale cert (#354).
     p = tmp_path / "cert.pem"
-    _make_cert(p, "Launcher", ["localhost", "tower.tail1121fd.ts.net"])
+    _make_cert(p, "Launcher", ["localhost", "testhost.tailfake0.ts.net"])
     assert tsnet_host_from_cert(p) is None
 
 
 def test_tsnet_host_detects_lets_encrypt_cert(tmp_path) -> None:
     p = tmp_path / "cert.pem"
-    _make_cert(p, "Let's Encrypt", ["tower.tail1121fd.ts.net"])
-    assert tsnet_host_from_cert(p) == "tower.tail1121fd.ts.net"
+    _make_cert(p, "Let's Encrypt", ["testhost.tailfake0.ts.net"])
+    assert tsnet_host_from_cert(p) == "testhost.tailfake0.ts.net"
 
 
 def test_tsnet_host_missing_cert_is_none(tmp_path) -> None:
@@ -182,13 +182,13 @@ def test_mirror_url_loopback_on_self_signed(monkeypatch) -> None:
 
 def test_mirror_url_tsnet_with_token(monkeypatch) -> None:
     monkeypatch.setattr(
-        _helpers, "tsnet_host_from_cert", lambda: "tower.tail1121fd.ts.net"
+        _helpers, "tsnet_host_from_cert", lambda: "testhost.tailfake0.ts.net"
     )
     url = mirror_url(_request_with_gate(None), _cfg(auth_token="sekrit"), "abc")
     parsed = urlparse(url)
     q = parse_qs(parsed.query)
     assert parsed.scheme == "https"
-    assert parsed.netloc == "tower.tail1121fd.ts.net:8465"
+    assert parsed.netloc == "testhost.tailfake0.ts.net:8465"
     assert q["terminal"] == ["abc"]
     assert q["token"] == ["sekrit"]
     assert "tt" not in q  # passkey gate unconfigured → no terminal token
@@ -198,13 +198,13 @@ def test_mirror_url_tsnet_mints_terminal_token_when_gate_configured(
     monkeypatch, tmp_path
 ) -> None:
     monkeypatch.setattr(
-        _helpers, "tsnet_host_from_cert", lambda: "tower.tail1121fd.ts.net"
+        _helpers, "tsnet_host_from_cert", lambda: "testhost.tailfake0.ts.net"
     )
     gate = WebAuthnGate(devices_path=tmp_path / "devices.json")
     cfg = _cfg(
         auth_token="sekrit",
-        webauthn_rp_id="tower.tail1121fd.ts.net",
-        webauthn_origin="https://tower.tail1121fd.ts.net:8465",
+        webauthn_rp_id="testhost.tailfake0.ts.net",
+        webauthn_origin="https://testhost.tailfake0.ts.net:8465",
     )
     url = mirror_url(_request_with_gate(gate), cfg, "abc")
     q = parse_qs(urlparse(url).query)
