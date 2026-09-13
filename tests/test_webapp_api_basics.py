@@ -28,7 +28,9 @@ class TestIndex:
         # exists. Cache hygiene contract for issue #30.
         client, _, _ = webapp_client
         resp = client.get("/")
-        assert "no-cache" in resp.headers.get("cache-control", "")
+        cache_control = resp.headers.get("cache-control", "")
+        assert "no-cache" in cache_control
+        assert "must-revalidate" in cache_control
 
     def test_index_stamps_asset_urls(self, webapp_client):
         # Every /static/<name>.(css|js) referenced from the index must
@@ -58,6 +60,23 @@ class TestIndex:
         resp = client.get("/")
         body = resp.text
         assert "/static/_vendored/nav/nav-tabs.css?v=" in body
+
+    def test_index_stamps_match_on_disk_hashes(self, webapp_client):
+        # Every ?v=<hash> stamped into the served index must equal the fleet
+        # hash of that file's bytes on disk — a stale stamp is exactly the
+        # "edited a JS file but the cache never busted" regression (#30).
+        from app.webapp.routers._helpers import STATIC_DIR
+        from src.static_versioning import compute_asset_hashes
+
+        client, _, _ = webapp_client
+        body = client.get("/").text
+        served = dict(
+            re.findall(r"""(?:href|src)=['"]/static/([\w\-./]+\.(?:css|js))\?v=([a-f0-9]+)['"]""", body)
+        )
+        assert served, "no hashed /static/*.{css,js} references in served index"
+        on_disk = compute_asset_hashes(STATIC_DIR)
+        for name, stamp in served.items():
+            assert on_disk.get(name) == stamp, (name, stamp, on_disk.get(name))
 
 
 class TestStaticCaching:
