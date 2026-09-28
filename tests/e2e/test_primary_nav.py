@@ -72,6 +72,7 @@ def test_primary_nav_is_responsive_and_accessible(
             rectBottom: rect.bottom,
             rectTop: rect.top,
             viewportHeight: window.innerHeight,
+            viewportWidth: window.innerWidth,
           };
         }"""
     )
@@ -92,11 +93,15 @@ def test_primary_nav_is_responsive_and_accessible(
         )
         expect(tabs).to_be_hidden()
     else:
-        # sticky (issue #355): the vendored nav-tabs.css keeps the desktop
-        # segmented control pinned to the top of the scroll container —
-        # the fleet-standard behavior, not app-launcher's own prior static/
-        # in-flow placement.
-        assert metrics["position"] == "sticky"
+        # Below 1100px the vendored nav-tabs.css keeps the desktop segmented
+        # control sticky at the top of the scroll container (issue #355); at
+        # >= 1100px on a fine pointer it becomes the fixed full-height left
+        # rail (project-scaffolding#281, issue #37). Playwright's default
+        # 1280px desktop viewport lands on the rail.
+        if metrics["viewportWidth"] >= 1100:
+            assert metrics["position"] == "fixed"
+        else:
+            assert metrics["position"] == "sticky"
         assert metrics["display"] == "flex"
         # icon shows (issue #421): the vendored nav-tabs.css now renders the
         # desktop segmented control's SVG glyph, like the mobile pill does,
