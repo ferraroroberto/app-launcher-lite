@@ -24,6 +24,12 @@
   /* colors — accent + status (status colors signal state only) */
   --accent: #0969da;
   --accent-fg: #ffffff;      /* text/icon on an accent (or danger) fill */
+  /* fleet-config#963 roles the vendored button/nav/switch read: solid
+     primary fill, accent/danger TEXT on a tint, input/switch boundary. */
+  --accent-fill: #0969da;
+  --accent-text: #0550ae;
+  --danger-text: #a40e26;
+  --control-border: #818b98;
   --success: #1a7f37;
   --attention: #9a6700;
   --attention-fg: #ffffff;   /* text on an attention fill */
@@ -112,8 +118,8 @@
      contrast surface on the card — --card-2 here, not --card-off, because
      this app's dark --card-off is true black and would vanish on the card. */
   --close-bg: var(--card-2);
-  /* Vendored switch.css contract (project-scaffolding#120). */
-  --toggle-track: var(--line);
+  /* Vendored switch.css contract (project-scaffolding#120). --control-border
+     is the off-track fill (fleet-config#963); --toggle-track is no longer read. */
   --toggle-knob: #ffffff;
   --on: var(--success);
   color-scheme: light;
@@ -136,6 +142,10 @@
   --line-muted: #21262d;
   --accent: #2f81f7;
   --accent-fg: #ffffff;
+  --accent-fill: #1f6feb;
+  --accent-text: #58a6ff;
+  --danger-text: #ff7b72;
+  --control-border: #6e7681;
   --success: #3fb950;
   --attention: #d29922;
   --attention-fg: #181818;   /* the brighter dark amber carries dark text */
@@ -167,12 +177,14 @@
 @media (color-gamut: p3) {
   :root {
     --accent: oklch(0.52 0.18 256);
+    --accent-fill: oklch(0.52 0.18 256);
     --success: oklch(0.55 0.14 150);
     --danger: oklch(0.55 0.20 25);
     --attention: oklch(0.55 0.11 80);
   }
   [data-theme="dark"] {
     --accent: oklch(0.64 0.18 256);
+    --accent-fill: oklch(0.57 0.21 260);
     --success: oklch(0.72 0.18 150);
     --danger: oklch(0.68 0.20 25);
     --attention: oklch(0.77 0.13 85);
