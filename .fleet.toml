@@ -11,3 +11,4 @@ description  = "<b>App Launcher Lite</b> — phone-first launcher hub, Copilot +
 [vendored]
 switch = { src = "app/webapp/static/_vendored/switch", sha = "88612f23b1ab61ed2bfd96fde5b1085a051e4f90", dest = "app/webapp/static/_vendored/switch" }
 browser_sweep = { src = "tests/e2e/_browser_sweep.py", sha = "60dc05f990bfdd0b479179f02f6e5e0e0c53a7f3", dest = "tests/e2e/_browser_sweep.py" }
+nav = { src = "app/webapp/static/_vendored/nav", sha = "56e76aa373c6cb689b100f1ce14aa8171d872085", dest = "app/webapp/static/_vendored/nav" }
