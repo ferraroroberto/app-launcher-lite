@@ -90,7 +90,7 @@
   --font-heading-lg: 1.5rem;
   --font-body: 1rem;
   --font-label: 0.92rem;
-  --font-caption: 0.78rem;
+  --font-caption: 0.75rem;
   /* shared inline-control height (select / input / compact buttons) */
   --control-h: 36px;
   /* unified row-height scale for repeated list rows (issue #365): sm =
