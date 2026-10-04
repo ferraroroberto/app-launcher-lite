@@ -9,7 +9,7 @@ display_name = "App Launcher Lite"
 description  = "<b>App Launcher Lite</b> — phone-first launcher hub, Copilot + GitLab lite fork of app-launcher. Coding (Copilot CLI PTY sessions) · Apps · Jobs · Team OS · Board (GitLab kanban) · Settings, all from the phone."
 
 [vendored]
-switch = { src = "app/webapp/static/_vendored/switch", sha = "f23a32ea8d24cf5291df482f988dee334617409c", dest = "app/webapp/static/_vendored/switch" }
+switch = { src = "app/webapp/static/_vendored/switch", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/switch" }
 browser_sweep = { src = "tests/e2e/_browser_sweep.py", sha = "60dc05f990bfdd0b479179f02f6e5e0e0c53a7f3", dest = "tests/e2e/_browser_sweep.py" }
-nav = { src = "app/webapp/static/_vendored/nav", sha = "56e76aa373c6cb689b100f1ce14aa8171d872085", dest = "app/webapp/static/_vendored/nav" }
-home-head = { src = "app/webapp/static/_vendored/home-head", sha = "f23a32ea8d24cf5291df482f988dee334617409c", dest = "app/webapp/static/_vendored/home-head" }
+nav = { src = "app/webapp/static/_vendored/nav", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/nav" }
+home-head = { src = "app/webapp/static/_vendored/home-head", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/home-head" }
