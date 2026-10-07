@@ -10,7 +10,10 @@ description  = "Copilot + GitLab lite fork of app-launcher: the phone-first laun
 
 [vendored]
 switch = { src = "app/webapp/static/_vendored/switch", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/switch" }
-button = { src = "app/webapp/static/_vendored/button", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/button" }
+button = { src = "app/webapp/static/_vendored/button", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/button" }
 browser_sweep = { src = "tests/e2e/_browser_sweep.py", sha = "60dc05f990bfdd0b479179f02f6e5e0e0c53a7f3", dest = "tests/e2e/_browser_sweep.py" }
-nav = { src = "app/webapp/static/_vendored/nav", sha = "f70569640ebaf251ab0ed5f5daadd6055953a8c9", dest = "app/webapp/static/_vendored/nav" }
-home-head = { src = "app/webapp/static/_vendored/home-head", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/home-head" }
+nav = { src = "app/webapp/static/_vendored/nav", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/nav" }
+home-head = { src = "app/webapp/static/_vendored/home-head", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/home-head" }
+card = { src = "app/webapp/static/_vendored/card", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/card" }
+disclosure = { src = "app/webapp/static/_vendored/disclosure", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/disclosure" }
+icon-button = { src = "app/webapp/static/_vendored/icon-button", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/icon-button" }
