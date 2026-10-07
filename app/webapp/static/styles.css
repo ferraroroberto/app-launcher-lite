@@ -114,10 +114,6 @@
   --icon-inline: 16px;
   --icon-title: 18px;
   --icon-feature: 24px;
-  /* home-head's toggle fill (vendored home-head.css contract): a subtle-
-     contrast surface on the card — --card-2 here, not --card-off, because
-     this app's dark --card-off is true black and would vanish on the card. */
-  --close-bg: var(--card-2);
   /* Vendored switch.css contract (project-scaffolding#120). --control-border
      is the off-track fill (fleet-config#963); --toggle-track is no longer read. */
   --toggle-knob: #ffffff;
@@ -192,6 +188,7 @@
 }
 
 * { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; }
 [hidden] { display: none !important; }
 
 /* Canonical focus-visible ring (design.md v2 focus contract, issue #355).
@@ -360,7 +357,6 @@ html, body {
    position as the other fleet apps). The button's box now comes from
    home-head.css; only the sun/moon glyph pair lives here. Shows the glyph
    for the ACTION: moon in light (tap → dark), sun in dark (tap → light). */
-.home-head .home-toggle:active { background: var(--card-2); color: var(--fg); }
 .theme-toggle-icon {
   width: 18px;
   height: 18px;
@@ -489,7 +485,7 @@ summary + .opt-group { border-top: 0; }
   border-radius: var(--radius-sm);
   padding: 8px 10px;
   margin: 4px 0 0;
-  word-break: break-all;
+  overflow-wrap: anywhere;
   line-height: 1.4;
 }
 
@@ -540,13 +536,11 @@ summary + .opt-group { border-top: 0; }
   font-size: var(--font-caption);
   color: var(--muted);
   font-weight: 400;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 .launch-btn .kind-pill {
   display: inline-block;
   font-size: var(--font-caption);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   color: var(--muted);
   background: var(--card-off);
   padding: 2px 6px;
@@ -565,7 +559,7 @@ summary + .opt-group { border-top: 0; }
 .app-item .tunnel-row a {
   color: var(--accent);
   text-decoration: none;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 .app-item .tray-autostart-row {
   display: flex;
@@ -580,7 +574,7 @@ summary + .opt-group { border-top: 0; }
   min-width: 0;
   font-size: var(--font-caption);
   color: var(--muted);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 .app-item .row-actions {
   display: flex;
@@ -787,7 +781,7 @@ summary + .opt-group { border-top: 0; }
   line-height: 1.3;
 }
 .git-summary-row .git-branch-tag { margin-left: 0; font-size: var(--font-caption); }
-.git-summary-name { font-weight: 600; word-break: break-all; }
+.git-summary-name { font-weight: 600; overflow-wrap: anywhere; }
 .git-summary-name.git-off-main { color: var(--attention); }
 .git-summary-name.git-dirty { color: var(--danger); }
 .git-summary-empty { font-size: var(--font-caption); color: var(--muted); }
@@ -803,7 +797,7 @@ summary + .opt-group { border-top: 0; }
   color: var(--attention);
   background: rgb(from var(--attention) r g b / 0.12);
   vertical-align: middle;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 /* Inside a Coding tile the pill sits on its own line beneath the folder name
    (issue #8), so it gets the tile's full text width instead of fighting the
@@ -1048,8 +1042,6 @@ summary + .opt-group { border-top: 0; }
 .jobs-agenda-body { padding: 4px 0 8px; }
 .jobs-agenda-day {
   font-size: var(--font-caption);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--muted);
   padding: 8px 16px 4px;
   border-top: 1px solid var(--line);
@@ -1226,7 +1218,7 @@ summary + .opt-group { border-top: 0; }
   max-height: 50vh;
   overflow: auto;
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
 .jobs-artifacts {
@@ -1282,7 +1274,7 @@ summary + .opt-group { border-top: 0; }
   max-height: 30vh;
   overflow: auto;
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- empty / toast ---------- */
@@ -1316,7 +1308,6 @@ summary + .opt-group { border-top: 0; }
   z-index: 400;
 }
 .toast.error { border-color: var(--danger); }
-.toast.good  { border-color: var(--success); }
 
 /* ---------- settings ---------- */
 /* Settings is its own tab (issue #383): a plain card whose head mirrors
@@ -1547,8 +1538,6 @@ summary + .opt-group { border-top: 0; }
 .scan-section { margin-bottom: 12px; }
 .scan-section h3 {
   font-size: var(--font-caption);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   color: var(--muted);
   margin: 12px 0 6px;
 }
@@ -1571,7 +1560,7 @@ summary + .opt-group { border-top: 0; }
 .scan-section .meta {
   color: var(--muted);
   font-size: var(--font-caption);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 .dialog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 /* Editor-dialog footer (design modal contract): one full-width solid-accent
@@ -2171,8 +2160,6 @@ body.terminal-open {
 }
 .teamos-file-cat {
   font-size: var(--font-caption);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   color: var(--muted);
   margin: 10px 4px 4px;
 }
