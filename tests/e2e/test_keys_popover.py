@@ -44,6 +44,12 @@ def test_keys_popover_sends_escape_sequences(
     # Toggle the popover open, tap ↓ — it must stay open for chained nav.
     authed_page.locator("#terminalKeys").click()
     expect(popover).to_be_visible()
+    # Arrow keys are Lucide icons (#51), so each key needs a name of its own.
+    names = authed_page.eval_on_selector_all(
+        '#terminalKeysPopover .key-btn',
+        "els => els.map(e => (e.getAttribute('aria-label') || e.textContent).trim())",
+    )
+    assert all(names), f"key button without an accessible name: {names}"
     authed_page.locator('#terminalKeysPopover .key-btn[data-key="down"]').click()
     expect(popover).to_be_visible()
     assert wait_for_session_log(authed_page, sid, "\\x1b[B"), (

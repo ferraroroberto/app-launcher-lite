@@ -125,7 +125,6 @@ function renderSparkline(job) {
     const status = entry && entry.status ? entry.status : '';
     const className = sparkClass(status);
     dot.className = 'job-spark-dot' + (className ? ' ' + className : '');
-    dot.textContent = '●';
     dot.title = (entry && entry.run_id ? entry.run_id + ' · ' : '') +
       (status || 'unknown');
     span.appendChild(dot);
