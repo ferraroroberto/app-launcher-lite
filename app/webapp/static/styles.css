@@ -692,6 +692,13 @@ summary + .opt-group { border-top: 0; }
   white-space: nowrap;
 }
 .job-spark-dot {
+  /* A status dot is a CSS shape, not a glyph: it inherits the status colour. */
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  margin: 0 0.1em;
+  border-radius: 50%;
+  background: currentColor;
   color: var(--muted);
 }
 .job-spark-dot.up { color: var(--success); }

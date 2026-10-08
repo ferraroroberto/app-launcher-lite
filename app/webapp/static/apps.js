@@ -944,9 +944,14 @@ function buildListenerRow(l, isChild, hasChildren) {
 
   const meta = document.createElement('div');
   const strong = document.createElement('strong');
-  strong.textContent = isChild
-    ? ('↳ ' + (l.service || l.name || ('port ' + l.port)))
-    : (l.app || l.name || ('port ' + l.port));
+  if (isChild) {
+    const branch = document.createElement('span');
+    branch.className = 'inline-icon';
+    branch.innerHTML = icon('corner-down-right');
+    strong.append(branch, ' ' + (l.service || l.name || ('port ' + l.port)));
+  } else {
+    strong.textContent = l.app || l.name || ('port ' + l.port);
+  }
   const sub = document.createElement('span');
   sub.className = 'meta';
   sub.textContent = ' :' + l.port + ' · pid ' + l.pid + ' · ' + (l.name || '?');

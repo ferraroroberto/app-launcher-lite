@@ -33,7 +33,7 @@ import { ensureTerminalToken } from './webauthn.js';
 import { iconUrl } from './dom-utils.js';
 
 const COLUMNS = [
-  { key: 'backlog', btn: 'boardColBacklog', empty: 'No open issues cached — tap ↻ to fetch from GitLab.' },
+  { key: 'backlog', btn: 'boardColBacklog', empty: 'No open issues cached — tap Refresh to fetch from GitLab.' },
   { key: 'bot_turn', btn: 'boardColBot', empty: 'No sessions on the bot’s side.' },
   { key: 'your_turn', btn: 'boardColYours', empty: 'Nothing needs you right now.' },
   { key: 'done', btn: 'boardColDone', empty: 'Nothing closed today yet.' },
@@ -493,7 +493,7 @@ function renderStatusLine(body) {
   if (body.gitlab && body.gitlab.error) {
     parts.push(icon('triangle-alert') + ' GitLab: ' + escapeHtml(body.gitlab.error));
   } else if (body.gitlab && !body.gitlab.fetched_at) {
-    parts.push('GitLab not fetched yet — tap ↻');
+    parts.push('GitLab not fetched yet — tap ' + icon('refresh-cw'));
   }
   if (body.sessions_state && !body.sessions_state.available) {
     parts.push('session state unavailable (hooks not writing yet)');
@@ -570,7 +570,7 @@ export async function openBoardCard(sid) {
     }
   }
   if (!fetchOk) {
-    toast('Board refresh failed — tap ↻ to retry.', 'error');
+    toast('Board refresh failed — tap Refresh to retry.', 'error');
     return;
   }
   const columns = (state.board && state.board.columns) || {};
@@ -621,7 +621,7 @@ async function refreshGitlab() {
   } finally {
     refreshInFlight = false;
     els.boardRefresh.disabled = false;
-    els.boardRefresh.textContent = '↻';
+    els.boardRefresh.innerHTML = icon('refresh-cw');
   }
 }
 
