@@ -1329,6 +1329,9 @@ summary + .opt-group { border-top: 0; }
 #tokenMintValue { flex: 1; min-width: 0; font-family: ui-monospace, monospace; }
 #tokenMintUrl { overflow-wrap: anywhere; }
 .settings-switch-row { margin: 4px 0 10px; }
+/* Text-size range-tab row sits flush under its label (vendored .range-tabs
+   carries a 12px bottom margin meant for stacked cards). */
+.settings-textsize .range-tabs { margin-bottom: 0; }
 .settings-card .stacked {
   display: flex;
   flex-direction: column;

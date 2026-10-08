@@ -166,3 +166,33 @@ def test_settings_status_readout_has_no_tls_or_tunnel_url(
     assert "tls" not in text
     assert "tunnel" not in text
     assert "http" not in text
+
+
+def test_text_size_control_scales_and_persists(
+    authed_page: Page, base_url: str
+) -> None:
+    """The Settings Small/Default/Large control scales the root font-size and
+    survives a reload via the pre-paint stamp (#50)."""
+    page = authed_page
+    page.goto(base_url, wait_until="domcontentloaded")
+    page.evaluate("localStorage.removeItem('app-launcher.textsize')")
+    page.reload(wait_until="domcontentloaded")
+    assert page.evaluate("document.documentElement.dataset.textsize") == "default"
+
+    page.locator("#tabSettings").click()
+    for step, px in (("large", "18px"), ("small", "15px"), ("default", "16px")):
+        page.locator(f"#textSizeControl [data-textsize='{step}']").click()
+        assert page.evaluate("document.documentElement.dataset.textsize") == step
+        assert (
+            page.evaluate("getComputedStyle(document.documentElement).fontSize") == px
+        )
+        expect(page.locator("#textSizeControl .range-tab.active")).to_have_count(1)
+        expect(
+            page.locator(f"#textSizeControl [data-textsize='{step}']")
+        ).to_have_attribute("aria-pressed", "true")
+
+    page.locator("#textSizeControl [data-textsize='large']").click()
+    page.reload(wait_until="domcontentloaded")
+    # Pre-paint stamp: set from storage before any control is bound or clicked.
+    assert page.evaluate("document.documentElement.dataset.textsize") == "large"
+    assert page.evaluate("getComputedStyle(document.documentElement).fontSize") == "18px"

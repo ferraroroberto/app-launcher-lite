@@ -19,6 +19,7 @@ import { openTerminal, wireTerminal } from './terminal.js';
 import { fetchWebauthnStatus, writeTerminalToken } from './webauthn.js';
 import { icon } from './_vendored/icons/icons.js';
 import { setSwitch } from './_vendored/switch/switch.js';
+import { bindTextSize } from './_vendored/text-size/text-size.js';
 
 // --------------------------------------------------------- settings panel
 // One edit-mode state, two switches: the Settings-head toggle and the
@@ -267,5 +268,8 @@ wireTerminal();
 wireSettings();
 wireTokens();
 wireTheme();
+// Text size: the pre-paint script in index.html stamped html[data-textsize];
+// this paints the stored step on the Settings control and persists clicks.
+bindTextSize(document.getElementById('textSizeControl'), 'app-launcher');
 
 boot();

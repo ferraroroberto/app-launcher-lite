@@ -8,6 +8,25 @@
   <meta name="apple-mobile-web-app-title" content="Launcher Lite">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+  <!-- Pre-paint boot: vendored _vendored/text-size/text-size-boot.html, which
+       stamps html[data-theme] and html[data-textsize] before first paint, ahead
+       of every stylesheet. Per-app edit: the localStorage prefix. -->
+  <script>
+    (function () {
+      var app = 'app-launcher';
+      var root = document.documentElement;
+      var theme = null;
+      var size = null;
+      try {
+        theme = localStorage.getItem(app + '.theme');
+        size = localStorage.getItem(app + '.textsize');
+      } catch (e) {}
+      var dark = theme ? theme === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      root.dataset.theme = dark ? 'dark' : 'light';
+      root.dataset.textsize = size === 'small' || size === 'large' ? size : 'default';
+    })();
+  </script>
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/static/icon-180.png">
   <link rel="icon" href="/static/favicon.ico" sizes="any">
@@ -22,15 +41,10 @@
   <link rel="stylesheet" href="/static/_vendored/nav/nav-tabs.css">
   <link rel="stylesheet" href="/static/_vendored/button/button.css">
   <link rel="stylesheet" href="/static/_vendored/switch/switch.css">
+  <link rel="stylesheet" href="/static/_vendored/range-tab/range-tab.css">
+  <link rel="stylesheet" href="/static/_vendored/text-size/text-size.css">
   <link rel="stylesheet" href="/static/styles.css">
   <title>App Launcher Lite</title>
-  <script>
-    (function(){
-      var t = localStorage.getItem('app-launcher.theme');
-      var dark = t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-    })();
-  </script>
 </head>
 <body>
   <!-- Lucide icon sprite — vendored from _vendored/icons/ (issue #355 PR 3).
@@ -780,6 +794,14 @@
           <span>Terminal scrollback (lines) — how much history a full-screen agent keeps for a reconnect</span>
           <input id="terminalHistoryLines" type="number" class="input-native" step="100">
         </label>
+        <div class="stacked settings-textsize">
+          <span>Text size</span>
+          <nav class="range-tabs" id="textSizeControl" aria-label="Text size">
+            <button type="button" class="range-tab" data-textsize="small">Small</button>
+            <button type="button" class="range-tab" data-textsize="default">Default</button>
+            <button type="button" class="range-tab" data-textsize="large">Large</button>
+          </nav>
+        </div>
         <div class="switch-row settings-switch-row">
           <span>Start App Launcher Lite at log on</span>
           <button type="button" id="bootAutostartToggle" class="toggle" role="switch" aria-checked="false" aria-label="Start App Launcher Lite at log on" title="Start App Launcher Lite automatically at log on (Startup folder — no admin needed)"><span class="knob"></span><span class="toggle-label">OFF</span></button>

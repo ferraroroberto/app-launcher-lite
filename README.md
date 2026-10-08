@@ -49,7 +49,7 @@ A read-only fleet kanban over four computed columns — **Backlog** (open GitLab
 
 ### Settings
 
-Directories (projects dir + ignore globs, apps scan root, team-os dir), GitLab group/host, terminal scrollback, **Start App Launcher Lite at log on** (Startup-folder wrapper, no admin needed), Save + **Scan for new apps**, edit mode, and a machine status readout. A second card mints **job-scoped API tokens** (safe to bake into a Stream Deck button URL — each fires only its chosen job; the raw token is shown once). The light/dark theme toggle sits in the page header; passkey enrollment is deliberately started from the PC tray menu, not from the phone.
+Directories (projects dir + ignore globs, apps scan root, team-os dir), GitLab group/host, terminal scrollback, **Start App Launcher Lite at log on** (Startup-folder wrapper, no admin needed), a **Text size** control (Small / Default / Large, persisted in the browser and applied before first paint), Save + **Scan for new apps**, edit mode, and a machine status readout. A second card mints **job-scoped API tokens** (safe to bake into a Stream Deck button URL — each fires only its chosen job; the raw token is shown once). The light/dark theme toggle sits in the page header; passkey enrollment is deliberately started from the PC tray menu, not from the phone.
 
 ## Configuration reference
 
