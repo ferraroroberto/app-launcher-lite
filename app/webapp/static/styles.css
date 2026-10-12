@@ -136,6 +136,7 @@
   --muted: #7d8590;
   --line: #30363d;
   --line-muted: #21262d;
+  --input-bg: var(--line-muted); /* control fill for the vendored disabled button, not true black (fleet-config#1368) */
   --accent: #2f81f7;
   --accent-fg: #ffffff;
   --accent-fill: #1f6feb;
