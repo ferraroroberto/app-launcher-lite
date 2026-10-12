@@ -340,9 +340,12 @@ def test_terminal_watchdog_fires_when_nothing_ever_paints(
 
     # Confirm the fake socket actually reached OPEN (proves ws.onopen ran,
     # which is what arms the watchdog) before waiting out its window.
+    # Generous bound: page boot + the terminal-token fetch run before the
+    # socket is created, and a starved runner stretches both well past 10 s
+    # (reproduced under CPU burn, #58). It is a ceiling, not a delay.
     authed_page.wait_for_function(
         "() => window.__silentWs && window.__silentWs.readyState === 1",
-        timeout=10_000,
+        timeout=45_000,
     )
 
     # Past PAINT_WATCHDOG_MS (8000ms in terminal-connection.js) with margin.
