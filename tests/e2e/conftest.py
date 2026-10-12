@@ -34,6 +34,7 @@ spawns.
 
 from __future__ import annotations
 
+import glob
 import json
 import logging
 import os
@@ -49,7 +50,9 @@ from typing import Callable, IO, Iterator, List, Optional
 
 import pytest
 import requests
-from playwright.sync_api import BrowserContext, Page
+from playwright.sync_api import BrowserContext, Error as PlaywrightError, Page
+
+from src.scanner import dir_ignored
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +118,39 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Boot a disposable webapp + session-host instead of requiring a "
         "live tray. Equivalent to LAUNCHER_E2E_AUTOBOOT=1.",
     )
+
+
+def pin_scan_to_checkout(cfg: dict, checkout: Path, keep: tuple = ()) -> dict:
+    """Make ``cfg`` scan ``checkout`` (plus ``keep``) and no other project.
+
+    The SPA fetches ``/api/coding/git-status`` on every page boot, and that
+    runs ``git`` once per scanned project. With the default ``projects_dir``
+    (the checkout's parent, ~150 folders on the dev box) each test's boot
+    spawned dozens of git processes, and the disposable webapps spent their
+    time in git until unrelated waits timed out under load (#58; the same
+    cause as app-launcher#1512). Every sibling of ``checkout`` not named in
+    ``keep`` is ignored; a test that needs other project rows mocks
+    ``/api/apps`` or git-status. Mutates and returns ``cfg``.
+    """
+    shown = {checkout.name, *keep}
+    cfg["projects_dir"] = str(checkout.parent)
+    kept = [
+        pattern
+        for pattern in (cfg.get("projects_ignore") or [])
+        if not any(dir_ignored(name, [pattern]) for name in shown)
+    ]
+    try:
+        siblings = sorted(
+            child.name for child in checkout.parent.iterdir()
+            if child.name not in shown
+        )
+    except OSError as exc:
+        logger.warning("⚠️  could not list %s, the e2e webapp will scan all of it: %s",
+                       checkout.parent, exc)
+        siblings = []
+    # glob.escape: a sibling name holding [ ] * ? must match only itself.
+    cfg["projects_ignore"] = kept + [glob.escape(name) for name in siblings]
+    return cfg
 
 
 def _autoboot_enabled(config: pytest.Config) -> bool:
@@ -337,6 +373,16 @@ def _autoboot_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         # No real config (fresh checkout) — a stale copy from a prior run
         # must not leak its values into this one.
         cfg_copy.unlink()
+
+    # Scan scope (#58): the temp copy lists only this checkout (and the
+    # real-agent launch target), so a page boot's git-status fan-out stays
+    # constant instead of growing with the number of sibling repos.
+    pinned = pin_scan_to_checkout(
+        json.loads(cfg_copy.read_text(encoding="utf-8")) if cfg_copy.exists() else {},
+        _REPO_ROOT,
+        keep=(_LAUNCH_TARGET_ID,),
+    )
+    cfg_copy.write_text(json.dumps(pinned, indent=2), encoding="utf-8")
 
     # Startup-folder isolation (issue #698): give the disposable webapp its
     # own temp Startup dir so `src.boot_autostart.enable()/disable()` (called
@@ -576,6 +622,50 @@ def _seed_token_init_script(token: str) -> str:
     return f"window.localStorage.setItem({safe_key}, {safe});"
 
 
+def _tcp_state_counts() -> str:
+    """One-line TCP state histogram (``TIME_WAIT=412 ESTABLISHED=38 …``)."""
+    try:
+        out = subprocess.run(
+            ["netstat", "-an", "-p", "tcp"], capture_output=True, text=True,
+            timeout=10, creationflags=subprocess.CREATE_NO_WINDOW,
+            encoding="oem", errors="replace",
+        ).stdout
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"netstat unavailable ({exc.__class__.__name__})"
+    counts: dict = {}
+    for line in out.splitlines():
+        fields = line.split()
+        if len(fields) == 4 and fields[0] == "TCP":
+            counts[fields[3]] = counts.get(fields[3], 0) + 1
+    return " ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "no sockets"
+
+
+def _retry_goto_on_no_buffer_space(page: Page) -> None:
+    """Retry a navigation once when Windows runs out of socket buffers.
+
+    ``net::ERR_NO_BUFFER_SPACE`` (WSAENOBUFS) is the hosted runner's TCP stack
+    failing a loopback connect, not anything the page did: it reddened
+    ``Page.goto`` in two CI runs (#58). Only that exact error is retried, once,
+    after a short pause; the socket-state histogram is logged so a recurrence
+    is diagnosable from the run log. Every other navigation error, and a
+    second ``ERR_NO_BUFFER_SPACE``, still fails the test.
+    """
+    original = page.goto
+
+    def goto(*args, **kwargs):
+        try:
+            return original(*args, **kwargs)
+        except PlaywrightError as exc:
+            if "ERR_NO_BUFFER_SPACE" not in str(exc):
+                raise
+            logger.warning("⚠️  goto hit ERR_NO_BUFFER_SPACE (%s); retrying once",
+                           _tcp_state_counts())
+            time.sleep(2)
+            return original(*args, **kwargs)
+
+    page.goto = goto
+
+
 @pytest.fixture
 def authed_page(
     context: BrowserContext, base_url: str, auth_token: str
@@ -583,6 +673,7 @@ def authed_page(
     if auth_token:
         context.add_init_script(_seed_token_init_script(auth_token))
     page = context.new_page()
+    _retry_goto_on_no_buffer_space(page)
     try:
         yield page
     finally:

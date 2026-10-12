@@ -488,8 +488,10 @@ def test_backlog_start_button_posts_issue_start(
     # (seen on CI). The 5 s poll re-renders with apps loaded, so a budget
     # spanning a full poll cycle makes this deterministic.
     expect(start_btn).to_be_visible(timeout=15_000)
-    start_btn.click()
-    authed_page.wait_for_timeout(500)
+    # Wait on the POST's response (the route fulfils it after capturing the
+    # body), not a fixed sleep a starved runner can outlast.
+    with authed_page.expect_response(re.compile(r".*/api/board/issues/start$")):
+        start_btn.click()
 
     body = captured.get("body") or {}
     assert body.get("repo") == "app-launcher"
