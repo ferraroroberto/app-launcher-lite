@@ -10,15 +10,15 @@ description  = "Copilot + GitLab lite fork of app-launcher: the phone-first laun
 
 [vendored]
 switch = { src = "app/webapp/static/_vendored/switch", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/switch" }
-button = { src = "app/webapp/static/_vendored/button", sha = "69351311c9c4d6500c79f45ddd3c4441b1e90fa4", dest = "app/webapp/static/_vendored/button" }
+button = { src = "app/webapp/static/_vendored/button", sha = "59ae763c4dea588aef07a66c236ee3e57c8459ac", dest = "app/webapp/static/_vendored/button" }
 browser_sweep = { src = "tests/e2e/_browser_sweep.py", sha = "60dc05f990bfdd0b479179f02f6e5e0e0c53a7f3", dest = "tests/e2e/_browser_sweep.py" }
-nav = { src = "app/webapp/static/_vendored/nav", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/nav" }
-home-head = { src = "app/webapp/static/_vendored/home-head", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/home-head" }
+nav = { src = "app/webapp/static/_vendored/nav", sha = "59ae763c4dea588aef07a66c236ee3e57c8459ac", dest = "app/webapp/static/_vendored/nav" }
+home-head = { src = "app/webapp/static/_vendored/home-head", sha = "59ae763c4dea588aef07a66c236ee3e57c8459ac", dest = "app/webapp/static/_vendored/home-head" }
 card = { src = "app/webapp/static/_vendored/card", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/card" }
 disclosure = { src = "app/webapp/static/_vendored/disclosure", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/disclosure" }
-icon-button = { src = "app/webapp/static/_vendored/icon-button", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/icon-button" }
-range-tab = { src = "app/webapp/static/_vendored/range-tab", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/range-tab" }
-text-size = { src = "app/webapp/static/_vendored/text-size", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "app/webapp/static/_vendored/text-size" }
+icon-button = { src = "app/webapp/static/_vendored/icon-button", sha = "59ae763c4dea588aef07a66c236ee3e57c8459ac", dest = "app/webapp/static/_vendored/icon-button" }
+segmented = { src = "app/webapp/static/_vendored/segmented", sha = "59ae763c4dea588aef07a66c236ee3e57c8459ac", dest = "app/webapp/static/_vendored/segmented" }
+text-size = { src = "app/webapp/static/_vendored/text-size", sha = "59ae763c4dea588aef07a66c236ee3e57c8459ac", dest = "app/webapp/static/_vendored/text-size" }
 notify = { src = "src/notify", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "src/notify" }
 
 [[design.accepted]]

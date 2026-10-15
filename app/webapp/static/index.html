@@ -41,7 +41,7 @@
   <link rel="stylesheet" href="/static/_vendored/nav/nav-tabs.css">
   <link rel="stylesheet" href="/static/_vendored/button/button.css">
   <link rel="stylesheet" href="/static/_vendored/switch/switch.css">
-  <link rel="stylesheet" href="/static/_vendored/range-tab/range-tab.css">
+  <link rel="stylesheet" href="/static/_vendored/segmented/segmented.css">
   <link rel="stylesheet" href="/static/_vendored/text-size/text-size.css">
   <link rel="stylesheet" href="/static/styles.css">
   <title>App Launcher Lite</title>
@@ -834,11 +834,11 @@
         </label>
         <div class="stacked settings-textsize">
           <span>Text size</span>
-          <nav class="range-tabs" id="textSizeControl" aria-label="Text size">
-            <button type="button" class="range-tab" data-textsize="small">Small</button>
-            <button type="button" class="range-tab" data-textsize="default">Default</button>
-            <button type="button" class="range-tab" data-textsize="large">Large</button>
-          </nav>
+          <div class="segmented" id="textSizeControl" role="group" aria-label="Text size">
+            <button type="button" class="segmented-item" aria-pressed="false" data-textsize="small">Small</button>
+            <button type="button" class="segmented-item" aria-pressed="true" data-textsize="default">Default</button>
+            <button type="button" class="segmented-item" aria-pressed="false" data-textsize="large">Large</button>
+          </div>
         </div>
         <div class="switch-row settings-switch-row">
           <span>Start App Launcher Lite at log on</span>
