@@ -186,7 +186,9 @@ def test_text_size_control_scales_and_persists(
         assert (
             page.evaluate("getComputedStyle(document.documentElement).fontSize") == px
         )
-        expect(page.locator("#textSizeControl .range-tab.active")).to_have_count(1)
+        expect(
+            page.locator("#textSizeControl .segmented-item[aria-pressed='true']")
+        ).to_have_count(1)
         expect(
             page.locator(f"#textSizeControl [data-textsize='{step}']")
         ).to_have_attribute("aria-pressed", "true")
