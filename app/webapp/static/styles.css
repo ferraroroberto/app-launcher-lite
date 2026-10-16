@@ -29,6 +29,7 @@
   --accent-fill: #0969da;
   --accent-text: #0550ae;
   --danger-text: #a40e26;
+  --attention-text: #7d4e00;  /* status text on the attention tint (vendored home-head's exception tone) */
   --control-border: #818b98;
   --success: #1a7f37;
   --attention: #9a6700;
@@ -36,6 +37,8 @@
   --danger: #cf222e;
   --star: #bf8700;           /* favorite-star gold (spec tile-yellow) */
   --code-fg: #1f2328;        /* text inside a code/output inset */
+  /* chip / filter-pill / segmented-track fill (fg-muted at 16%, spec's neutral-soft) */
+  --neutral-soft: color-mix(in srgb, var(--muted) 16%, transparent);
   /* Terminal screen: dark in both themes by default (ANSI output is
      authored against dark), same model as home-automation's --video-matte
      (#383). terminal.js reads these. The opt-in override after the dark
@@ -142,6 +145,7 @@
   --accent-fill: #1f6feb;
   --accent-text: #58a6ff;
   --danger-text: #ff7b72;
+  --attention-text: #e3b341;  /* status text on the attention tint, dark value */
   --control-border: #6e7681;
   --success: #3fb950;
   --attention: #d29922;
@@ -149,6 +153,7 @@
   --danger: #f85149;
   --star: #d29922;           /* spec tile-yellow, dark value */
   --code-fg: #e6edf3;
+  --neutral-soft: color-mix(in srgb, var(--muted) 16%, transparent);
   /* Depth on a near-black canvas comes from surface lightness, not shadow. */
   --shadow: 0 8px 24px rgba(1, 4, 9, 0.6);
   --shadow-nav: 0 10px 34px rgba(0, 0, 0, 0.5);
