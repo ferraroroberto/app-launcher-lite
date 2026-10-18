@@ -164,3 +164,21 @@ def test_real_webapp_js_routes_full() -> None:
     assert real_js.is_file(), "fixture file moved/renamed; update this test"
     cat, _label = _classify_one("app/webapp/static/apps.js")
     assert cat is Category.FULL
+
+
+def test_run_git_disables_optional_index_lock(monkeypatch):
+    """#67: the router's git reads must never take the optional index.lock."""
+    import subprocess
+
+    from scripts import classify_e2e
+
+    seen = {}
+
+    def _capture(cmd, **kwargs):
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(cmd, 0, "a.py\n", "")
+
+    monkeypatch.setattr(subprocess, "run", _capture)
+    monkeypatch.setenv("GIT_OPTIONAL_LOCKS", "1")
+    assert classify_e2e._run_git(["diff", "--name-only"]) == ["a.py"]
+    assert seen["env"]["GIT_OPTIONAL_LOCKS"] == "0"
