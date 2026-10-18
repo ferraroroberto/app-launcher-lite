@@ -43,6 +43,7 @@ summary. Run standalone to see how the current branch would route:
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -204,6 +205,8 @@ def _run_git(args: List[str]) -> List[str]:
             ["git", *args],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             creationflags=NO_WINDOW,
+            # Read-only: never take the optional index.lock (#67).
+            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
         )
     except OSError:
         return []

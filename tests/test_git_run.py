@@ -8,6 +8,7 @@ are applied on every call rather than per site.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 
@@ -91,3 +92,24 @@ def test_timeout_is_overridable_per_call_site(monkeypatch, tmp_path):
     run_git(tmp_path, ["status"], timeout=10.0)
     assert seen["timeout"] == 10.0
     assert seen["creationflags"] == NO_WINDOW
+
+
+def test_optional_locks_off_and_environment_inherited(monkeypatch, tmp_path):
+    """#67: a read killed mid-``git status`` must not strand ``index.lock``.
+    ``GIT_OPTIONAL_LOCKS=0`` is set on top of the inherited environment —
+    replacing it would drop PATH / HOME / proxy settings git relies on."""
+    seen = {}
+
+    def _capture(cmd, **kwargs):
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", _capture)
+    monkeypatch.setenv("LAUNCHER_PROBE_VAR", "kept")
+    monkeypatch.setenv("GIT_OPTIONAL_LOCKS", "1")  # a parent value must lose
+    run_git(tmp_path, ["status"])
+
+    env = seen["env"]
+    assert env["GIT_OPTIONAL_LOCKS"] == "0"
+    assert env["LAUNCHER_PROBE_VAR"] == "kept"
+    assert env.get("PATH") == os.environ.get("PATH")
