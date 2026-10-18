@@ -119,6 +119,14 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         "passkey",
         "Team OS per-skill file tree (#102) — same sensitivity as the file endpoint above.",
     ),
+    (
+        lambda p: p.startswith("/api/screen/"),
+        "passkey",
+        "Screen view (#60): the PC's desktop, live — whatever is on screen, "
+        "terminals included, so terminal-grade. The /api/screen/ws stream is "
+        "a WebSocket this middleware never sees; desktop_screen.screen_ws "
+        "re-applies these legs through ws_terminal_gate.",
+    ),
 )
 
 

@@ -13,8 +13,9 @@ PyYAML>=6.0
 # Process introspection (port-owner lookup, smart kill)
 psutil>=5.9
 
-# Tray icon image loading (app/tray/tray.py). The PWA/tray icon assets are
-# committed — scripts/gen_icons.py is a stub in the lite fork (regeneration
+# Tray icon image loading (app/tray/tray.py), and the Screen view's frame
+# resize + JPEG encode (src/desktop_capture.py, #60). The PWA/tray icon assets
+# are committed — scripts/gen_icons.py is a stub in the lite fork (regeneration
 # needs project-scaffolding's brand_gen, see that file's docstring).
 Pillow>=10.0
 
@@ -34,7 +35,8 @@ pyte>=0.8.2
 
 # Win32 window handle lookup + WM_CLOSE for the PC mirror window
 # (issue #20 — Stop & Close on the phone dismisses the Edge --app window
-# without a fresh --user-data-dir profile).
+# without a fresh --user-data-dir profile), and the Screen view's per-monitor
+# BitBlt capture (src/desktop_capture.py, #60).
 pywin32>=306; sys_platform == "win32"
 
 # WebAuthn passkey gate for the interactive terminal

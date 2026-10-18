@@ -76,6 +76,7 @@ from app.webapp.routers import (
     board,
     coding,
     config,
+    desktop_screen,
     jobs,
     misc,
     sessions,
@@ -332,6 +333,7 @@ def create_app() -> FastAPI:
     app.include_router(apps.router)
     app.include_router(jobs.router)
     app.include_router(sessions.router)
+    app.include_router(desktop_screen.router)
     app.include_router(coding.router)
     app.include_router(team_os.router)
     app.include_router(board.router)

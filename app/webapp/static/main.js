@@ -14,6 +14,7 @@ import { fetchAgents, fetchApps, fetchListeners, fetchRunningApps, refreshGitSta
 import { fetchJobs, renderJobs, wireJobs } from './jobs.js';
 import { fetchSkills, wireTeamOs } from './team-os.js';
 import { fetchBoard, openBoardCard, wireBoard } from './board.js';
+import { wireScreenView } from './screen-view.js';
 import { wireTokens } from './tokens.js';
 import { openTerminal, wireTerminal } from './terminal.js';
 import { fetchWebauthnStatus, writeTerminalToken } from './webauthn.js';
@@ -265,6 +266,7 @@ wireJobs();
 wireTeamOs();
 wireBoard();
 wireTerminal();
+wireScreenView();
 wireSettings();
 wireTokens();
 wireTheme();
