@@ -6,8 +6,8 @@ callers must present it, and terminal endpoints additionally require a
 private network — the tailnet CGNAT range or an allowlisted VPN/LAN
 subnet — plus a passkey terminal token for interactive ones.
 
-WebSocket auth is re-applied inline in the session router because Starlette
-middleware doesn't see WebSocket handshakes.
+WebSocket handshakes never reach the middleware, so every terminal-grade
+WebSocket route re-applies the same legs through :func:`ws_terminal_gate`.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import ipaddress
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from fastapi import Request
+from fastapi import Request, WebSocket
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -173,6 +173,49 @@ def terminal_http_gate(request: Request) -> Optional[JSONResponse]:
                 status_code=401,
                 content={"detail": "passkey unlock required"},
             )
+    return None
+
+
+def ws_terminal_gate(
+    websocket: WebSocket, *, label: str = "terminal",
+) -> Optional[Tuple[int, str]]:
+    """``(code, reason)`` to close a terminal-grade WebSocket with, or
+    ``None`` when it may stream.
+
+    The one gate for every WebSocket this strict, re-applied inline by each
+    such route after ``accept()`` (so the browser gets the close code and
+    reason) because Starlette middleware never sees a handshake. The PC
+    itself — loopback with no Cloudflare edge header — bypasses; anything
+    else must not have come over the public edge, must be on a private
+    network (tailnet or allowlist), must present the bearer token when one
+    is configured, and must hold a passkey terminal token when the passkey
+    gate is configured.
+
+    The edge-header check runs before the loopback bypass: cloudflared dials
+    the webapp over loopback, so a loopback address alone never proves the
+    caller is the PC (#60).
+
+    ``label`` names the service in the close reason (``"terminal"`` /
+    ``"screen"``); the legs and close codes are shared.
+    """
+    cfg: Any = websocket.app.state.webapp_config
+    client_host = websocket.client.host if websocket.client else ""
+    if via_cloudflare(websocket.headers):
+        return 4403, f"{label} is private-network-only — blocked on the public tunnel"
+    if client_host in LOOPBACK_HOSTS:
+        return None
+    if not client_in_tailnet(client_host, getattr(cfg, "tailnet_allowlist", [])):
+        return 4403, f"{label} is private-network-only (tailnet or allowlisted VPN)"
+    token = (getattr(cfg, "auth_token", "") or "").strip()
+    if token:
+        presented = websocket.query_params.get("token", "").strip()
+        if not (presented and hmac.compare_digest(presented, token)):
+            return 4401, "missing or invalid bearer token"
+    if WebAuthnGate.configured(cfg):
+        gate: WebAuthnGate = websocket.app.state.webauthn_gate
+        tt = websocket.query_params.get("tt", "").strip()
+        if not gate.valid_terminal_token(tt):
+            return 4401, "passkey unlock required"
     return None
 
 
