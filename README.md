@@ -49,7 +49,7 @@ A read-only fleet kanban over four computed columns — **Backlog** (open GitLab
 
 ### Settings
 
-Directories (projects dir + ignore globs, apps scan root, team-os dir), GitLab group/host, terminal scrollback, **Start App Launcher Lite at log on** (Startup-folder wrapper, no admin needed), a **Text size** control (Small / Default / Large, persisted in the browser and applied before first paint), Save + **Scan for new apps**, edit mode, and a machine status readout. A second card mints **job-scoped API tokens** (safe to bake into a Stream Deck button URL — each fires only its chosen job; the raw token is shown once). The light/dark theme toggle sits in the page header; passkey enrollment is deliberately started from the PC tray menu, not from the phone.
+Directories (projects dir + ignore globs, apps scan root, team-os dir), GitLab group/host, terminal scrollback, **Start App Launcher Lite at log on** (Startup-folder wrapper, no admin needed), a **Text size** control (Small / Default / Large, persisted in the browser and applied before first paint), Save + **Scan for new apps**, edit mode, a **Screen → View live** row (the PC's desktop, live — see [Screen view from the phone](#screen-view-from-the-phone)), and a machine status readout. A second card mints **job-scoped API tokens** (safe to bake into a Stream Deck button URL — each fires only its chosen job; the raw token is shown once). The light/dark theme toggle sits in the page header; passkey enrollment is deliberately started from the PC tray menu, not from the phone.
 
 ## Configuration reference
 
@@ -182,6 +182,35 @@ Nothing in the launcher *requires* Tailscale — it is just the zero-config defa
 4. **Passkeys** — set `webauthn_rp_id` (bare hostname from step 2) and `webauthn_origin` (full https origin). WebAuthn requires HTTPS on that exact hostname, hence step 3.
 
 Either way, the public Cloudflare tunnel stays terminal-refused — the live terminal never rides a public edge.
+
+## Screen view from the phone
+
+A live, read-only view of what is on the PC's screen (issue #60, ported from upstream app-launcher#1520; click and type is Step 2/2, #61). Open the **Settings** tab, then **Screen → View live**. The view opens full screen in the page. It needs no extra app and no admin rights: the tray-owned webapp runs in your interactive session, so it reads the desktop directly with plain GDI.
+
+- **Displays.** With more than one monitor, a picker in the bar names them by where they sit: **Main** for the primary, then **Above**, **Below**, **Left** or **Right**, judged by each display's centre against the primary's. It opens on the primary. Monitors use virtual-desktop coordinates, so one above or left of the primary (a negative origin) works like any other.
+- **Zoom.** Pinch to zoom (up to 5×) and drag to pan; on a desktop browser, scroll to zoom and double-click to reset. The zoom is local to the view, since the page itself stays zoom-locked.
+- **States.** A locked or asleep PC can't be read from a user-session process (the lock screen is Windows' secure desktop). The view says so: the last frame stays under a "Last updated … · live data unavailable" line, or, with no frame yet, a message that the screen may be locked or asleep. It picks up again by itself when the desktop comes back. A refusal names its cause (private network, passkey), and a dropped connection offers one Retry.
+
+**Same gate as the terminal.** A picture of the desktop shows whatever is on it, terminals included, so `/api/screen/*` is terminal-grade: refused over the Cloudflare tunnel, private-network-only (Tailscale or `tailnet_allowlist`), bearer token, and a passkey unlock. `GET /api/screen/monitors` gets that from its `_TERMINAL_GUARD_RULES` row; the `WS /api/screen/ws` stream re-applies the same legs through the shared `middleware.ws_terminal_gate()`, because the HTTP middleware never sees a WebSocket handshake. The PC itself (loopback with no Cloudflare header) bypasses, as it does for the terminal.
+
+**How it streams** (`src/desktop_capture.py`):
+
+- The process is set per-monitor-v2 DPI aware before the first capture, so frames and monitor rects are in physical pixels.
+- Each grab BitBlts only the chosen monitor's rect (Pillow's `ImageGrab` grabs the whole virtual desktop and crops).
+- The frame is downscaled to the width the viewer asks for (the phone's long side, at most 1920, never wider than the monitor) and JPEG-encoded at quality 70.
+- **An unchanged screen sends nothing.** A digest of a 4×-reduced thumbnail decides, so an idle desktop costs one frame.
+- **Flow control is client-acked.** The next frame is grabbed only after the viewer acks the last one it drew, at most one every 150 ms (~7 fps), so a slow link lowers the frame rate instead of building a queue.
+- **Capture runs only while a viewer is connected.** There is no background task. Closing the view, or hiding the page, closes the socket, and the loop stops with it.
+
+Every connect and disconnect writes one line to `webapp/terminal_audit.log`: `[screen_open]` (client IP, monitor, rect, width) and `[screen_close]` (duration, frames and **bytes** sent — the session's real traffic on the link — and `unavailable`, how many times the desktop stopped being readable).
+
+Capture lives in the webapp process, so `tray.bat --restart` makes a change here live. Nothing here is part of the session-host.
+
+**If endpoint security objects** (first use on a managed PC), it shows one of three ways:
+
+- **The webapp is killed:** the phone loses the launcher, and the tray's health watchdog toasts and writes a line to `webapp/watchdog.log`. Recovery is `tray.bat --restart`.
+- **Capture is blocked:** the view says the screen "may be locked or asleep" while the PC is unlocked, and the session's `[screen_close]` line reads `frames=0` with `unavailable` of 1 or more.
+- **A visible alert:** a security notification or a quarantined `python.exe`, which only an eye on the PC can catch.
 
 ## Deploying to a new machine
 

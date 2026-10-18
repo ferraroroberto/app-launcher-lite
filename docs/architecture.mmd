@@ -50,6 +50,7 @@ flowchart TB
       R_TEAMOS["team_os.py — /api/team-os/* (Team OS tab)"]
       R_BOARD["board.py — /api/board, gitlab/refresh,\nexchange, one-tap issue start\n+ board_spawn.py (shared spawn helpers)"]
       R_WEBAUTHN["webauthn.py — passkey ceremonies"]
+      R_DESKTOP["desktop_screen.py — /api/screen/monitors, WS /api/screen/ws\nthe PC desktop, live, passkey-gated (#60)"]
     end
   end
   WEBAPPCMD --> MGR
@@ -104,6 +105,7 @@ flowchart TB
     GITRUN["git_run.py\nthe one git -C invocation contract"]
     LOGFILES["log_files.py\nfile-log-handler bootstrap"]
     AUDIT["audit.py\ntranscript_path"]
+    DESKCAP["desktop_capture.py\nScreen view: per-monitor BitBlt + JPEG,\nack-paced, unchanged frames skipped"]
   end
 
   SCANNER --> GITRUN
@@ -154,6 +156,8 @@ flowchart TB
   JOBSQUEUE --> JOBSTRIGGER
   R_TOKENS --> WEBAPPCFG
   R_WEBAUTHN --> WEBAUTHNGATE
+  R_DESKTOP --> DESKCAP
+  R_DESKTOP -->|ws_terminal_gate| MW
   WSERVER --> STATICVER
 
   subgraph external["External dependencies"]
@@ -162,7 +166,9 @@ flowchart TB
     TEAMOSREPO["team-os repo (sibling)\nskills invoked via copilot session"]
     CLOUDFLARE["Cloudflare named tunnel"]
     TAILSCALE["Tailscale (optional —\nany VPN via tailnet_allowlist)"]
+    GDI["Windows GDI\n(the interactive desktop)"]
   end
+  DESKCAP --> GDI
   JOBSSCHTASKS --> SCHTASKS
   GLCLIENT --> GL
   R_TEAMOS --> TEAMOSREPO

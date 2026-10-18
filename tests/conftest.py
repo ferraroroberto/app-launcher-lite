@@ -245,8 +245,10 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     # import lives in routers/apps.py, routers/sessions.py, and
     # routers/webauthn.py — patch all three.
     audit_mock = MagicMock()
+    from app.webapp.routers import desktop_screen as desktop_screen_router
     from app.webapp.routers import webauthn as webauthn_router
     monkeypatch.setattr(apps_router, "audit", audit_mock)
+    monkeypatch.setattr(desktop_screen_router, "audit", audit_mock)
     monkeypatch.setattr(sessions_router, "audit", audit_mock)
     monkeypatch.setattr(webauthn_router, "audit", audit_mock)
     monkeypatch.setattr(team_os_router, "audit", audit_mock)

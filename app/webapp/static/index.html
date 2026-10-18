@@ -849,6 +849,11 @@
           <button id="rescanBtn" type="button" class="button-ghost"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> Scan for new apps</button>
         </div>
         <hr>
+        <!-- The Screen view's entry (#60): screen-view.js owns the tap. -->
+        <div class="switch-row settings-switch-row">
+          <span>Screen — the PC's desktop, live</span>
+          <button type="button" id="screenOpen" class="button-ghost" aria-haspopup="dialog"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg> View live</button>
+        </div>
         <p id="statusReadout" class="muted small"></p>
         </div>
       </div>
@@ -902,6 +907,22 @@
         <div id="teamOsFileContent" class="teamos-file-content" hidden></div>
       </div>
     </div>
+
+    <!-- The Screen view (#60): the PC's desktop, live, full screen. Opened
+         from the Settings tab's Screen row; screen-view.js drives it. -->
+    <dialog id="screenView" class="screen-view" aria-labelledby="screenViewTitle">
+      <div class="screen-view-bar">
+        <h2 id="screenViewTitle" class="screen-view-title" tabindex="-1" autofocus><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg> Screen</h2>
+        <div id="screenPicker" class="segmented screen-picker" role="group" aria-label="Display" hidden></div>
+        <button type="button" id="screenViewClose" class="icon-button" aria-label="Close" title="Close">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+        </button>
+      </div>
+      <div id="screenStage" class="screen-stage">
+        <img id="screenImage" class="screen-image" alt="The PC's screen" draggable="false" hidden>
+        <div id="screenState" class="screen-state" role="status" aria-live="polite" hidden></div>
+      </div>
+    </dialog>
 
     <dialog id="jobDialog" class="rename-dialog">
       <form id="jobForm">
