@@ -1,14 +1,13 @@
 """Live PTY sessions — list, stop, upload image, WebSocket proxy.
 
-The WS proxy is the only endpoint where auth is re-applied inline:
-Starlette middleware doesn't see WebSocket handshakes, so the Tailscale
-+ bearer + passkey checks live here.
+Starlette middleware doesn't see WebSocket handshakes, so the WS proxy
+re-applies the private-network + bearer + passkey legs inline through
+``middleware.ws_terminal_gate``.
 """
 
 from __future__ import annotations
 
 import asyncio
-import hmac
 import json
 import logging
 import os
@@ -22,13 +21,8 @@ from websockets.exceptions import InvalidHandshake
 
 from src import audit, board, launcher, session_client
 from src.webapp_config import SESSION_HOST_PORT_ENV, WebappConfig
-from src.webauthn_gate import WebAuthnGate
 
-from app.webapp.middleware import (
-    LOOPBACK_HOSTS,
-    client_in_tailnet,
-    via_cloudflare,
-)
+from app.webapp.middleware import LOOPBACK_HOSTS, ws_terminal_gate
 from app.webapp.routers._helpers import (
     audit_off_loop,
     client_ip,
@@ -261,44 +255,16 @@ async def proxy_session_ws(websocket: WebSocket, sid: str) -> None:
     Tailscale + bearer + passkey checks are re-applied here.
     """
     cfg: WebappConfig = websocket.app.state.webapp_config
-    gate: WebAuthnGate = websocket.app.state.webauthn_gate
     client_host = websocket.client.host if websocket.client else ""
 
     # Accept first, *then* gate — so the browser receives the close
     # code + reason and can show a clear message instead of a bare
     # "Disconnected" (closing before accept just fails the handshake).
     await websocket.accept()
-
-    if client_host not in LOOPBACK_HOSTS:
-        if via_cloudflare(websocket.headers):
-            await websocket.close(
-                code=4403,
-                reason="terminal is private-network-only — blocked on the public tunnel",
-            )
-            return
-        if not client_in_tailnet(
-            client_host, getattr(cfg, "tailnet_allowlist", [])
-        ):
-            await websocket.close(
-                code=4403,
-                reason="terminal is private-network-only (tailnet or allowlisted VPN)",
-            )
-            return
-        token = (cfg.auth_token or "").strip()
-        if token:
-            presented = websocket.query_params.get("token", "").strip()
-            if not (presented and hmac.compare_digest(presented, token)):
-                await websocket.close(
-                    code=4401, reason="missing or invalid bearer token"
-                )
-                return
-        if WebAuthnGate.configured(cfg):
-            tt = websocket.query_params.get("tt", "").strip()
-            if not gate.valid_terminal_token(tt):
-                await websocket.close(
-                    code=4401, reason="passkey unlock required"
-                )
-                return
+    refusal = ws_terminal_gate(websocket, label="terminal")
+    if refusal is not None:
+        await websocket.close(code=refusal[0], reason=refusal[1])
+        return
 
     # The phone drives the PTY size; the loopback PC mirror window
     # connects as role=pc and never resizes it (see session-host).
