@@ -5,7 +5,7 @@
  * each fetchX() refreshes its slice of state and re-renders.
  */
 
-import { els, state, BOARD_POLL_MS, GIT_STATUS_POLL_MS, JOBS_POLL_MS, LISTENERS_POLL_MS, RUNNING_APPS_POLL_MS, SESSIONS_POLL_MS, TUNNEL_POLL_MS, WEBAUTHN_POLL_MS } from './state.js';
+import { els, state, BOARD_POLL_MS, GIT_STATUS_POLL_MS, JOBS_POLL_MS, LISTENERS_POLL_MS, RUNNING_APPS_POLL_MS, SESSIONS_POLL_MS, SYSTEM_LOAD_POLL_MS, TUNNEL_POLL_MS, WEBAUTHN_POLL_MS } from './state.js';
 import { apiFailToast, consumeUrlParam, jsonApi, toast, wireLoginForm, writeToken } from './api.js';
 import { wireTabs } from './tabs.js';
 import { fetchConfig, patchConfig, wireCopilotOptions } from './copilot-options.js';
@@ -15,6 +15,7 @@ import { fetchJobs, renderJobs, wireJobs } from './jobs.js';
 import { fetchSkills, wireTeamOs } from './team-os.js';
 import { fetchBoard, openBoardCard, wireBoard } from './board.js';
 import { wireScreenView } from './screen-view.js';
+import { fetchSystemLoad, wireSystemLoad } from './system-load.js';
 import { wireTokens } from './tokens.js';
 import { openTerminal, wireTerminal } from './terminal.js';
 import { fetchWebauthnStatus, writeTerminalToken } from './webauthn.js';
@@ -194,6 +195,8 @@ async function boot() {
   const safe = function (fn) { return fn().catch(function (exc) {
     console.warn('boot: non-critical fetch failed', exc);
   }); };
+  // The header's CPU reading (#65) fills alongside the rest of boot.
+  const load = safe(fetchSystemLoad);
   await safe(fetchAgents);
   await safe(fetchApps);
   await safe(fetchSkills);
@@ -246,6 +249,12 @@ async function boot() {
   setInterval(function () {
     fetchWebauthnStatus().catch(function () {});
   }, WEBAUTHN_POLL_MS);
+  load.then(function () {
+    setInterval(function () {
+      // The header shows it on the Coding tab; fetchSystemLoad() skips a hidden page.
+      fetchSystemLoad().catch(function () {});
+    }, SYSTEM_LOAD_POLL_MS);
+  });
   setInterval(function () {
     // Always-on git flags (#496): refresh only while a tab that shows them
     // is visible (Coding tiles / Board backlog) and the page is foreground —
@@ -267,6 +276,7 @@ wireTeamOs();
 wireBoard();
 wireTerminal();
 wireScreenView();
+wireSystemLoad();
 wireSettings();
 wireTokens();
 wireTheme();

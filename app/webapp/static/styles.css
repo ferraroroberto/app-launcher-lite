@@ -1584,6 +1584,51 @@ summary + .opt-group { border-top: 0; }
   padding-top: 12px;
   border-top: 1px solid var(--line-muted);
 }
+/* The Coding header's CPU reading (#65), left of the theme toggle: a quiet
+   muted number, colour only for an exception. A fixed 38px box so "9%" to
+   "100%" never moves the row; .hit-target's ::before takes it past the 44px
+   floor, and the row's 12px gap keeps it off the toggle's. */
+.home-head .cpu-reading {
+  flex: none;
+  width: 38px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--font-label);
+  font-variant-numeric: tabular-nums;
+  line-height: normal;
+  text-align: center;
+  cursor: pointer;
+}
+.home-head .cpu-reading[data-level="attention"] { color: var(--attention-text); }
+.home-head .cpu-reading[data-level="danger"] { color: var(--danger-text); }
+/* The PC load sheet's rows: flat label/value rows on a top hairline (design
+   list-row), the value right-aligned and tone-coloured on an exception. */
+.cpu-sheet-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 12px 0;
+  border-top: 1px solid var(--line-muted);
+}
+.cpu-sheet-label { min-width: 0; overflow-wrap: anywhere; }
+.cpu-sheet-value {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.cpu-sheet-value[data-tone="attention"] { color: var(--attention-text); }
+.cpu-sheet-value[data-tone="danger"] { color: var(--danger-text); }
+.cpu-sheet-caption {
+  margin: var(--space-md) 0 0;
+  font-size: var(--font-caption);
+  color: var(--muted);
+}
 /* The rename forms' bare title field: .input-native has no width rule, so
    outside a .stacked flex column it renders at the browser's intrinsic
    <input> width. Stacked editor controls already stretch; this makes the
