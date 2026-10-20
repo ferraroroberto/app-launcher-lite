@@ -449,6 +449,8 @@
           Launcher Lite
         </span>
         <span id="homeHeadStatus" class="status"></span>
+        <button type="button" class="cpu-reading hit-target" data-level="unknown"
+                title="CPU load" aria-label="CPU load unknown. Show details">–</button>
         <button type="button" id="themeToggle" class="icon-button home-toggle hit-target"
                 title="Toggle theme" aria-label="Toggle dark mode">
           <svg class="theme-toggle-icon theme-icon-moon hit-target" aria-hidden="true" focusable="false"><use href="#i-moon"></use></svg>
@@ -1153,6 +1155,22 @@
       <div id="scanResults" class="scan-results"></div>
       <div class="dialog-actions dialog-actions--stacked">
         <button id="scanSave" type="button" class="button-primary">Add selected</button>
+      </div>
+    </dialog>
+
+    <!-- The PC load sheet (#65), behind the Coding header's CPU reading:
+         total CPU, memory and the busiest processes (names only).
+         system-load.js fills it on open and on each poll while it is open. -->
+    <dialog id="cpuSheet" class="rename-dialog" aria-labelledby="cpuSheetTitle">
+      <div class="dialog-head">
+        <h2 id="cpuSheetTitle"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg> PC load</h2>
+        <button type="button" id="cpuSheetClose" class="dialog-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+        </button>
+      </div>
+      <div id="cpuSheetBody" class="cpu-sheet-body"></div>
+      <div class="dialog-actions dialog-actions--stacked">
+        <button type="button" id="cpuSheetDone" class="button-primary">Done</button>
       </div>
     </dialog>
 

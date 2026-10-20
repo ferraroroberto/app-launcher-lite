@@ -39,7 +39,7 @@ flowchart TB
     MW["middleware.py\nBearerTokenMiddleware"]
     MGR["manager.py\nWebappManager (start/stop/status)"]
     subgraph routers["routers/"]
-      R_MISC["misc.py — /, /healthz, /api/version"]
+      R_MISC["misc.py — /, /healthz, /api/version, /api/system/load"]
       R_AUTH["auth.py — /api/login"]
       R_CONFIG["config.py — /api/config, /api/status, /api/ports"]
       R_TOKENS["tokens.py — /api/tokens\nscoped-token mint/list/revoke (#72)"]
@@ -60,7 +60,7 @@ flowchart TB
   MGR --> WSERVER
 
   subgraph static["app/webapp/static/ — vanilla JS PWA"]
-    STATICJS["index.html, tabs.js, state.js,\nterminal*.js, sessions.js, jobs*.js,\nboard*.js, apps.js, team-os.js"]
+    STATICJS["index.html, tabs.js, state.js,\nterminal*.js, sessions.js, jobs*.js,\nboard*.js, apps.js, team-os.js,\nsystem-load.js"]
   end
   R_MISC --> STATICJS
 
@@ -85,6 +85,7 @@ flowchart TB
     JOBSINDEX["jobs_index.py\nderived SQLite + FTS5 run mirror"]
     JOBSSTATS["jobs_stats.py\npercentiles, health, stuck detection"]
     JOBSCOVERAGE["jobs_coverage.py\nmissed-fire coverage (#697)"]
+    SYSLOAD["system_load.py\nheader CPU reading: one shared sampler,\none-syscall process snapshot,\ncached behind /api/system/load (#65)"]
     JOBSPREFLIGHT["jobs_preflight.py"]
     JOBSARGV["jobs_argv.py"]
     JOBSTRIGGER["jobs_trigger.py\n--trigger vocabulary (scheduled/manual/webhook/chain:)"]
@@ -135,6 +136,8 @@ flowchart TB
   JOBSCOVERAGE --> JOBSHISTORY
   JOBSCOVERAGE --> NOTIFY
   WSERVER -->|"lifespan coverage tick (#697)"| JOBSCOVERAGE
+  WSERVER -->|"lifespan load sampler, while polled (#65)"| SYSLOAD
+  R_MISC --> SYSLOAD
   JOBSFACADE --> JOBSCFG
   JOBSFACADE --> JOBSPREFLIGHT
   JOBSFACADE --> JOBSARGV

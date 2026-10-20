@@ -51,9 +51,16 @@ class TestLifespanGate:
 
         def _spy(coro, *a, **k):
             task = real_create_task(coro, *a, **k)
-            created.append(task)
+            # The header's load sampler (#65) starts on every instance; it is
+            # pinned by test_system_load_sampler_runs_on_every_instance below.
+            module = coro.cr_frame.f_globals.get("__name__") if coro.cr_frame else ""
+            if coro.__qualname__ == "tick_forever" and module == "src.system_load":
+                self.load_ticks.append(task)
+            else:
+                created.append(task)
             return task
 
+        self.load_ticks = []
         monkeypatch.setattr(server.asyncio, "create_task", _spy)
         # Never let the real tick body run — it would sleep two minutes and
         # then shell out to schtasks.
@@ -66,6 +73,15 @@ class TestLifespanGate:
         async with server._lifespan(app):
             pass
         return created
+
+    async def test_system_load_sampler_runs_on_every_instance(self, monkeypatch):
+        """The header's CPU reading (#65) polls on every instance, so its
+        sampler starts on every instance too (it only samples while polled),
+        and is cancelled with the lifespan."""
+        monkeypatch.setenv(SESSION_HOST_PORT_ENV, "54321")  # disposable
+        await self._run_lifespan(_app(), monkeypatch)
+        assert len(self.load_ticks) == 1
+        assert self.load_ticks[0].cancelled()
 
     async def test_disposable_instance_never_starts_the_tick(
         self, monkeypatch

@@ -38,6 +38,7 @@ import glob
 import json
 import logging
 import os
+import re
 import shutil
 import signal
 import socket
@@ -666,12 +667,29 @@ def _retry_goto_on_no_buffer_space(page: Page) -> None:
     page.goto = goto
 
 
+_QUIET_SYSTEM_LOAD = json.dumps({
+    "level": "normal", "reason": None, "cpu_percent": 12.0,
+    "memory": {"used_bytes": 8 * 1024**3, "total_bytes": 32 * 1024**3, "percent": 25.0},
+    "top": [], "other_cores": None, "cores": 8, "age_seconds": 1.0,
+})
+
+
 @pytest.fixture
 def authed_page(
     context: BrowserContext, base_url: str, auth_token: str
 ) -> Iterator[Page]:
     if auth_token:
         context.add_init_script(_seed_token_init_script(auth_token))
+    # The header's CPU reading (#65) reads the real box, and the gate loads
+    # it: a hot reading would make every header-width test depend on the
+    # gate's own load. A quiet default; a page.route() in a test takes
+    # precedence over this context route.
+    context.route(
+        re.compile(r".*/api/system/load$"),
+        lambda route: route.fulfill(
+            status=200, content_type="application/json", body=_QUIET_SYSTEM_LOAD
+        ),
+    )
     page = context.new_page()
     _retry_goto_on_no_buffer_space(page)
     try:

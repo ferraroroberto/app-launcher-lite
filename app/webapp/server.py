@@ -8,6 +8,7 @@ full per-family surface.  Top-level families:
                  GET  /healthz                  → liveness probe
                  GET  /api/version              → git_sha + asset_hash
                  GET  /api/agents               → registered coding agents
+                 GET  /api/system/load          → header CPU reading (cached)
 
     auth         POST /api/login                → swap password for token
 
@@ -55,7 +56,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope
 
-from src import launcher, session_client
+from src import launcher, session_client, system_load
 from src.app_config import load_app_config
 from src.static_versioning import (
     compute_asset_hashes,
@@ -263,6 +264,9 @@ async def _coverage_tick(app: FastAPI) -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     await _reconcile_orphan_mirror_windows(app)
+    # The header's CPU reading (#65): one shared sampler, awake only while a
+    # page polls /api/system/load, so every instance runs it.
+    load_task = asyncio.create_task(system_load.tick_forever())
     coverage_task = None
     cfg = getattr(app.state, "webapp_config", None)
     disposable = bool(os.environ.get(SESSION_HOST_PORT_ENV, "").strip())
@@ -276,10 +280,12 @@ async def _lifespan(app: FastAPI):
     try:
         yield
     finally:
-        if coverage_task is not None:
-            coverage_task.cancel()
+        for task in (coverage_task, load_task):
+            if task is None:
+                continue
+            task.cancel()
             try:
-                await coverage_task
+                await task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
 

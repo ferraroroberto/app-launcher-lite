@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from src import session_client
+from src import session_client, system_load
 from src.agents import detect_agents
 from src.build_info import build_identity, resolve_deployed_sha, resolve_git_sha
 from src.diagnostics import find_pids_on_port, kill_pids, list_app_listeners
@@ -198,6 +198,13 @@ async def agents() -> Dict[str, Any]:
 @router.get("/healthz")
 async def healthz() -> Dict[str, Any]:
     return {"ok": True, "service": "launcher"}
+
+
+@router.get("/api/system/load")
+async def system_load_reading() -> Dict[str, Any]:
+    """The page header's CPU reading (#65): the shared sampler's cached
+    sample, never a scan on request. A read also keeps the sampler awake."""
+    return system_load.read()
 
 
 @router.get("/api/ports/probe")
