@@ -18,7 +18,13 @@ SCANNED_DIRS = ("src", "app", "scripts")
 #: Repo-relative paths allowed to spawn git themselves. ``git_run`` is the
 #: contract; ``classify_e2e`` runs outside the app's import path and sets the
 #: same env inline (pinned in tests/test_classify_e2e.py).
-ALLOWED = {"src/git_run.py", "scripts/classify_e2e.py"}
+ALLOWED = {"src/git_run.py", "scripts/classify_e2e.py", "src/build_info.py"}
+
+#: Allowlisted files that are the scaffold's verbatim copy and so cannot route
+#: through ``run_git`` (a byte-identical copy must stay self-contained). Their
+#: one spawn is a read-only ``rev-parse``, which never takes the optional index
+#: lock. Each must be declared in ``.fleet.toml`` ``[vendored]``.
+VENDORED_VERBATIM = {"src/build_info.py"}
 
 
 def _is_git_argv(node: ast.AST) -> bool:
@@ -65,3 +71,10 @@ def test_the_scan_sees_the_allowlisted_spawns():
     the test above would pass vacuously."""
     for rel in ALLOWED:
         assert _direct_git_spawns(REPO_ROOT / rel), f"{rel} no longer matches"
+
+
+def test_the_vendored_exemption_is_declared():
+    """An exempted file that is no longer a declared scaffold copy has been
+    forked again, and must go back through ``run_git``."""
+    manifest = (REPO_ROOT / ".fleet.toml").read_text(encoding="utf-8")
+    assert all(f'dest = "{r}"' in manifest for r in VENDORED_VERBATIM), "exemption not in [vendored]"

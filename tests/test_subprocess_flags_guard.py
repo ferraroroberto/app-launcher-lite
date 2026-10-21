@@ -40,6 +40,20 @@ _VISIBLE_CONSOLE_EXEMPT = {
 }
 
 
+#: Scaffold copies vendored byte-for-byte that must stay self-contained, so they
+#: derive the flag locally instead of importing ``src.subprocess_flags``. Each
+#: must define ``_NO_WINDOW`` as ``subprocess.CREATE_NO_WINDOW`` on Windows and
+#: pass it on every spawn — ``test_vendored_verbatim_spawns_still_suppress_the_console``
+#: holds it to that, so the exemption can't hide a real regression.
+_VENDORED_VERBATIM_EXEMPT = {
+    "src/build_info.py": (
+        "The scaffold's build identity, vendored byte-for-byte and declared in "
+        ".fleet.toml [vendored]; its git spawn uses a locally derived _NO_WINDOW."
+    ),
+}
+_VENDORED_NO_WINDOW = "_NO_WINDOW"
+
+
 def _resolves_to_no_window(node: ast.AST) -> bool:
     """True when a ``creationflags=`` value provably resolves to the shared
     constant — directly, via attribute access, or OR'd into a combined
@@ -171,6 +185,8 @@ def test_every_runtime_subprocess_spawn_suppresses_the_console():
     offenders: List[str] = []
     for py in _runtime_python_files():
         label = py.relative_to(_REPO_ROOT).as_posix()
+        if label in _VENDORED_VERBATIM_EXEMPT:
+            continue
         tree = ast.parse(py.read_text(encoding="utf-8"), filename=str(py))
         offenders.extend(_offenders_in_tree(tree, label))
     assert not offenders, (
@@ -178,6 +194,39 @@ def test_every_runtime_subprocess_spawn_suppresses_the_console():
         "src.subprocess_flags.NO_WINDOW / NO_WINDOW_NEW_GROUP:\n  "
         + "\n  ".join(offenders)
     )
+
+
+def test_vendored_verbatim_spawns_still_suppress_the_console():
+    """An exempt vendored file must still define ``_NO_WINDOW`` as
+    ``subprocess.CREATE_NO_WINDOW`` on Windows and pass it on every spawn."""
+    for label in _VENDORED_VERBATIM_EXEMPT:
+        tree = ast.parse((_REPO_ROOT / label).read_text(encoding="utf-8"), filename=label)
+        defines = any(
+            isinstance(node, (ast.Assign, ast.AnnAssign))
+            and any(
+                isinstance(t, ast.Name) and t.id == _VENDORED_NO_WINDOW
+                for t in (node.targets if isinstance(node, ast.Assign) else [node.target])
+            )
+            and isinstance(node.value, ast.IfExp)
+            and isinstance(node.value.body, ast.Attribute)
+            and node.value.body.attr == "CREATE_NO_WINDOW"
+            for node in tree.body
+        )
+        assert defines, f"{label} no longer derives {_VENDORED_NO_WINDOW} from subprocess.CREATE_NO_WINDOW"
+        spawns = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in _SPAWN_ATTRS
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "subprocess"
+        ]
+        assert spawns, f"{label}: no subprocess spawn found; drop its exemption"
+        for call in spawns:
+            flags = next((kw.value for kw in call.keywords if kw.arg == "creationflags"), None)
+            assert isinstance(flags, ast.Name) and flags.id == _VENDORED_NO_WINDOW, (
+                f"{label}:{call.lineno} spawns without creationflags={_VENDORED_NO_WINDOW}"
+            )
 
 
 def test_no_runtime_file_imports_a_spawn_name_directly():
