@@ -147,7 +147,10 @@ def _classify_one(path: str) -> tuple[Category, str]:
         or path.startswith(".github/")
     ):
         return Category.NONE, "tooling/config"
-    if path in {".fleet.toml", ".gitignore", "LICENSE", "AGENTS.md", "CLAUDE.md"} or ext == "bat":
+    if path in {
+        ".fleet.toml", ".gitignore", ".static-ratchet-baseline.json",
+        "LICENSE", "AGENTS.md", "CLAUDE.md",
+    } or ext == "bat":
         return Category.NONE, "repo-meta"
 
     # --- fail-safe: anything unrecognized runs the full suite ---------------
