@@ -39,6 +39,8 @@ from src.subprocess_flags import NO_WINDOW
 
 logger = logging.getLogger(__name__)
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 #: Default wall-clock cap. Every consumer but :mod:`src.scanner` (which walks
 #: whole project directories and allows itself more headroom) runs with this.
 DEFAULT_TIMEOUT_S = 5.0
@@ -83,3 +85,56 @@ def run_git(
             " ".join(args), project_root, type(exc).__name__, exc,
         )
         return None
+
+
+def _resolve_default_remote_ref(project_root: Union[Path, str]) -> Optional[str]:
+    """``origin/HEAD``'s target (e.g. ``"origin/main"``), falling back to
+    whichever of ``origin/main`` / ``origin/master`` exists. ``None`` when
+    neither resolves (no ``origin`` remote, git missing, not a repo)."""
+    result = run_git(
+        project_root, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]
+    )
+    if result is None:
+        return None
+    ref = (result.stdout or "").strip()
+    if ref:
+        return ref
+    for candidate in ("origin/main", "origin/master"):
+        verify = run_git(
+            project_root, ["rev-parse", "--verify", "--quiet", candidate]
+        )
+        if verify is None:
+            return None
+        if verify.returncode == 0:
+            return candidate
+    return None
+
+
+def resolve_deployed_sha(project_root: Union[Path, str] = PROJECT_ROOT) -> str:
+    """Short git SHA of ``project_root``'s resolved default remote branch
+    (``origin/HEAD`` -> ``origin/main`` -> ``origin/master``) — the ref that
+    reflects what's actually mergeable/deployed.
+
+    Unlike :func:`src.build_info.resolve_git_sha`, which reports the live
+    checkout's *current branch tip*, this is stable across whatever branch the
+    checkout transiently sits on (e.g. a worker occupying the primary tree
+    mid-issue), so ``/api/version``'s ``stale_relevant`` compares against the
+    ref that is actually deployed. No fetch is performed: this reads the local
+    ``origin/*`` remote-tracking ref as last synced. Falls back to
+    ``"unknown"`` when no candidate ref resolves, git isn't on PATH, or this
+    isn't a repo.
+    """
+    ref = _resolve_default_remote_ref(project_root)
+    if ref is None:
+        return "unknown"
+    result = run_git(project_root, ["rev-parse", "--short", ref])
+    if result is None:
+        return "unknown"
+    sha = (result.stdout or "").strip()
+    if not sha:
+        logger.warning(
+            "⚠️ git rev-parse %s exit=%s stderr=%r",
+            ref, result.returncode, (result.stderr or "").strip(),
+        )
+        return "unknown"
+    return sha
