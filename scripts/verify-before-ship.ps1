@@ -1,7 +1,8 @@
 # Pre-ship verification gate (issue #33, Phone-validation 4/5).
 #
 # Runs the full validation pipeline locally before a change is declared
-# "done": byte-compile, the non-e2e pytest suite, then the Playwright e2e
+# "done": byte-compile, the non-e2e pytest suite, the static ratchet (no new
+# duplicate block / unused import beyond the committed baseline), then the Playwright e2e
 # suite (Chromium — this app is Android-only, issue #6) against a disposable
 # webapp the script boots itself on a free port.
 #
@@ -63,6 +64,15 @@ try {
     Phase "pytest (non-e2e)..."
     & $python -m pytest -q --ignore=tests/e2e
     if ($LASTEXITCODE -ne 0) { Fail "non-e2e pytest suite failed." }
+
+    # Static ratchet (scaffold docs/static-ratchet.md): no new duplicate block
+    # (jscpd via npx) or unused import/variable (ruff F401,F841) beyond
+    # .static-ratchet-baseline.json. Whole tree, so never diff-routed. Runs
+    # through the wrapper, which fails exit 3 (a detector could not run) as
+    # NOT CONFIRMED instead of letting it read as a pass.
+    Phase "static ratchet..."
+    & $python -m scripts.static_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "static ratchet failed or NOT CONFIRMED: a new duplicate block or unused import/variable, a detector that could not run (Node/npx or ruff missing), or a baseline problem; see the output above and .static-ratchet-baseline.json." }
 
     # Diff-proportionate e2e routing (issue #568). Classify the branch's
     # changed files vs main and run an e2e slice proportionate to the diff:

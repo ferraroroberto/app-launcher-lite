@@ -52,6 +52,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
         ("config/apps.sample.json", Category.NONE),
         (".github/workflows/e2e.yml", Category.NONE),
         (".fleet.toml", Category.NONE),
+        (".static-ratchet-baseline.json", Category.NONE),
         ("tray.bat", Category.NONE),
         # unrecognized -> fail-safe FULL
         ("some/weird/new_dir/thing.xyz", Category.FULL),
