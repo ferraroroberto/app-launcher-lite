@@ -4,7 +4,6 @@
   "entries": [
     {"key": "dup:305a2ce8f183:tests/test_session_host_paths.py|tests/test_session_host_paths.py", "files": ["tests/test_session_host_paths.py", "tests/test_session_host_paths.py"]},
     {"key": "dup:3c0405eea42c:tests/test_webapp_api_jobs.py|tests/test_webapp_api_jobs.py", "files": ["tests/test_webapp_api_jobs.py", "tests/test_webapp_api_jobs.py"]},
-    {"key": "dup:4306bb086600:scripts/docs_ratchet.py|scripts/static_ratchet.py", "files": ["scripts/docs_ratchet.py", "scripts/static_ratchet.py"]},
     {"key": "dup:5715bd9a78c3:tests/test_jobs_elevated.py|tests/test_jobs_elevated.py", "files": ["tests/test_jobs_elevated.py", "tests/test_jobs_elevated.py"]},
     {"key": "dup:6e5c41c3d798:tests/test_git_run.py|tests/test_git_run.py", "files": ["tests/test_git_run.py", "tests/test_git_run.py"]},
     {"key": "dup:aa1f14c5ec4a:tests/test_webapp_api_apps.py|tests/test_webapp_api_apps.py", "files": ["tests/test_webapp_api_apps.py", "tests/test_webapp_api_apps.py"]},
