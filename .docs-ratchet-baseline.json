@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "entries": [
+    {"key": "README.md", "markers": 7},
+    {"key": "docs/board.md", "markers": 45},
+    {"key": "docs/cache-hygiene-asset-hashing.md", "markers": 6},
+    {"key": "docs/ci-github-actions.md", "markers": 2},
+    {"key": "docs/detached-stop-decision.md", "markers": 2},
+    {"key": "docs/jobs-tab.md", "markers": 48},
+    {"key": "docs/launcher-owned-pty.md", "markers": 2}
+  ]
+}

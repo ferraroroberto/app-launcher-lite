@@ -149,7 +149,7 @@ def _classify_one(path: str) -> tuple[Category, str]:
         return Category.NONE, "tooling/config"
     if path in {
         ".fleet.toml", ".gitignore", ".static-ratchet-baseline.json",
-        "LICENSE", "AGENTS.md", "CLAUDE.md",
+        ".docs-ratchet-baseline.json", "LICENSE", "AGENTS.md", "CLAUDE.md",
     } or ext == "bat":
         return Category.NONE, "repo-meta"
 

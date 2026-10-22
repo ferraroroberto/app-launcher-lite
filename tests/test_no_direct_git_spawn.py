@@ -18,13 +18,17 @@ SCANNED_DIRS = ("src", "app", "scripts")
 #: Repo-relative paths allowed to spawn git themselves. ``git_run`` is the
 #: contract; ``classify_e2e`` runs outside the app's import path and sets the
 #: same env inline (pinned in tests/test_classify_e2e.py).
-ALLOWED = {"src/git_run.py", "scripts/classify_e2e.py", "src/build_info.py"}
+ALLOWED = {
+    "src/git_run.py", "scripts/classify_e2e.py", "src/build_info.py",
+    "scripts/docs_ratchet.py",
+}
 
 #: Allowlisted files that are the scaffold's verbatim copy and so cannot route
 #: through ``run_git`` (a byte-identical copy must stay self-contained). Their
-#: one spawn is a read-only ``rev-parse``, which never takes the optional index
-#: lock. Each must be declared in ``.fleet.toml`` ``[vendored]``.
-VENDORED_VERBATIM = {"src/build_info.py"}
+#: one spawn is a read-only ``rev-parse`` (build_info) or ``ls-files``
+#: (docs_ratchet, which also sets ``GIT_OPTIONAL_LOCKS=0`` inline). Each must be
+#: declared in ``.fleet.toml`` ``[vendored]``.
+VENDORED_VERBATIM = {"src/build_info.py", "scripts/docs_ratchet.py"}
 
 
 def _is_git_argv(node: ast.AST) -> bool:
