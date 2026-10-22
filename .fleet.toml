@@ -22,6 +22,7 @@ text-size = { src = "app/webapp/static/_vendored/text-size", sha = "59ae763c4dea
 notify = { src = "src/notify", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "src/notify" }
 build_info = { src = "src/build_info.py", sha = "c9e54e917fd3cbc96011d6c09f9d363af460b205", dest = "src/build_info.py" }
 static_ratchet = { src = "scripts/static_ratchet.py", sha = "2f1e2f7c81b9a91a062271881fc87830104808ae", dest = "scripts/static_ratchet.py" }
+docs_ratchet = { src = "scripts/docs_ratchet.py", sha = "fdb750461997c4a13eacea8091f115ff12bba564", dest = "scripts/docs_ratchet.py" }
 
 # [static_ratchet] -- the scaffold's baseline-and-ratchet static analysis. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/static_ratchet_gate.py, which wraps
@@ -35,6 +36,17 @@ static_ratchet = { src = "scripts/static_ratchet.py", sha = "2f1e2f7c81b9a91a062
 enabled  = true
 baseline = ".static-ratchet-baseline.json"
 exclude  = ["**/_vendored/**"]
+
+# [docs_ratchet] -- the scaffold's baseline-and-ratchet docs check. The gate runs
+# scripts/docs_ratchet.py through scripts/docs_ratchet_gate.py: README.md past its
+# size budget or baselined size, or a new history marker (issue reference, dated
+# heading, changelog heading) in README.md or docs/**/*.md that is not in
+# .docs-ratchet-baseline.json, fails. No generated or dated report folder exists
+# under docs/, so nothing is excluded. Exit 3 (a file could not be read) fails as
+# NOT CONFIRMED. Procedure + limits: project-scaffolding docs/docs-ratchet.md.
+[docs_ratchet]
+enabled  = true
+baseline = ".docs-ratchet-baseline.json"
 
 [[design.accepted]]
 check  = "vendored-tokens"

@@ -2,7 +2,8 @@
 #
 # Runs the full validation pipeline locally before a change is declared
 # "done": byte-compile, the non-e2e pytest suite, the static ratchet (no new
-# duplicate block / unused import beyond the committed baseline), then the Playwright e2e
+# duplicate block / unused import beyond the committed baseline), the docs
+# ratchet (no new history marker, README within its size budget), then the Playwright e2e
 # suite (Chromium — this app is Android-only, issue #6) against a disposable
 # webapp the script boots itself on a free port.
 #
@@ -73,6 +74,15 @@ try {
     Phase "static ratchet..."
     & $python -m scripts.static_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "static ratchet failed or NOT CONFIRMED: a new duplicate block or unused import/variable, a detector that could not run (Node/npx or ruff missing), or a baseline problem; see the output above and .static-ratchet-baseline.json." }
+
+    # Docs ratchet (scaffold docs/docs-ratchet.md): README.md within its size
+    # budget and no new history marker (issue reference, dated or changelog
+    # heading) in README.md / docs/**/*.md beyond .docs-ratchet-baseline.json.
+    # Whole tree, so never diff-routed. Same wrapper shape as the static ratchet:
+    # exit 3 (a file could not be read) is NOT CONFIRMED and fails.
+    Phase "docs ratchet..."
+    & $python -m scripts.docs_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "docs ratchet failed or NOT CONFIRMED: a new history marker, a README past its size budget, a file that could not be read, or a baseline problem; see the output above and .docs-ratchet-baseline.json." }
 
     # Diff-proportionate e2e routing (issue #568). Classify the branch's
     # changed files vs main and run an e2e slice proportionate to the diff:
