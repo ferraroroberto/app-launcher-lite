@@ -14,7 +14,6 @@ import json
 import re
 import sqlite3
 import subprocess
-from pathlib import Path
 from typing import List
 from unittest.mock import MagicMock
 
@@ -31,7 +30,6 @@ from src.jobs_argv import decode_params_token, encode_params_token
 from src.jobs_config import (
     Job,
     JobsConfig,
-    Param,
     Schedule,
     add_job,
     get_by_id,

@@ -43,7 +43,6 @@ from pathlib import Path
 from typing import Any, Dict
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket
-from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 
 from src.agents import DEFAULT_AGENT, SESSION_HOST_AGENTS, is_fullscreen

@@ -23,6 +23,21 @@ def _write_fleet_toml(repo_dir: Path, port_line: str) -> None:
     )
 
 
+def _two_autostart_trays(tmp_path: Path):
+    """Two autostart ``tray`` entries with real ``tray.bat`` files on disk;
+    returns ``(bat_a, bat_b, entries)``."""
+    bat_a = tmp_path / "repo-a" / "tray.bat"
+    bat_b = tmp_path / "repo-b" / "tray.bat"
+    for b in (bat_a, bat_b):
+        b.parent.mkdir(parents=True, exist_ok=True)
+        b.write_text("@echo off\r\n", encoding="utf-8")
+    entries = [
+        AppEntry(id="a", name="A", kind="tray", bat_path=str(bat_a), autostart=True),
+        AppEntry(id="b", name="B", kind="tray", bat_path=str(bat_b), autostart=True),
+    ]
+    return bat_a, bat_b, entries
+
+
 class TestFleetTomlPort:
     def test_bare_int_port(self, tmp_path: Path):
         _write_fleet_toml(tmp_path, "port = 8447")
@@ -76,16 +91,11 @@ class TestLaunchRegisteredTrays:
     def test_launches_autostart_trays_in_registry_order(
         self, monkeypatch, tmp_path: Path
     ):
-        bat_a = tmp_path / "repo-a" / "tray.bat"
-        bat_b = tmp_path / "repo-b" / "tray.bat"
-        for b in (bat_a, bat_b):
-            b.parent.mkdir(parents=True, exist_ok=True)
-            b.write_text("@echo off\r\n", encoding="utf-8")
+        bat_a, bat_b, trays = _two_autostart_trays(tmp_path)
         registry = Registry(
             scan_root=str(tmp_path),
             apps=[
-                AppEntry(id="a", name="A", kind="tray", bat_path=str(bat_a), autostart=True),
-                AppEntry(id="b", name="B", kind="tray", bat_path=str(bat_b), autostart=True),
+                *trays,
                 AppEntry(
                     id="c", name="C", kind="streamlit",
                     bat_path=str(tmp_path / "repo-c" / "run.bat"), autostart=True,
@@ -110,18 +120,8 @@ class TestLaunchRegisteredTrays:
     def test_one_tray_failing_does_not_abort_the_rest(
         self, monkeypatch, tmp_path: Path
     ):
-        bat_a = tmp_path / "repo-a" / "tray.bat"
-        bat_b = tmp_path / "repo-b" / "tray.bat"
-        for b in (bat_a, bat_b):
-            b.parent.mkdir(parents=True, exist_ok=True)
-            b.write_text("@echo off\r\n", encoding="utf-8")
-        registry = Registry(
-            scan_root=str(tmp_path),
-            apps=[
-                AppEntry(id="a", name="A", kind="tray", bat_path=str(bat_a), autostart=True),
-                AppEntry(id="b", name="B", kind="tray", bat_path=str(bat_b), autostart=True),
-            ],
-        )
+        bat_a, bat_b, trays = _two_autostart_trays(tmp_path)
+        registry = Registry(scan_root=str(tmp_path), apps=trays)
         monkeypatch.setattr(rt_mod, "load_registry", lambda: registry)
 
         def _spawn(bat_path):

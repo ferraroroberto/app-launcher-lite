@@ -89,6 +89,21 @@ def project_root() -> Path:
     return PROJECT_ROOT
 
 
+@pytest.fixture
+def isolated_jobs(tmp_path, monkeypatch):
+    """Point the jobs run history, queue and registry at ``tmp_path``.
+
+    JOBS_RUNS_DIR / JOBS_QUEUE_PATH are owned by ``src.jobs_history`` /
+    ``src.jobs_queue`` (not the ``src.jobs`` facade), so they are patched there.
+    """
+    from src import jobs_config, jobs_history, jobs_queue
+
+    monkeypatch.setattr(jobs_history, "JOBS_RUNS_DIR", tmp_path)
+    monkeypatch.setattr(jobs_queue, "JOBS_QUEUE_PATH", tmp_path / "_queue.json")
+    monkeypatch.setattr(jobs_config, "DEFAULT_JOBS_PATH", tmp_path / "jobs.json")
+    return tmp_path
+
+
 @pytest.fixture(autouse=True)
 def _no_real_mirror_window(request, monkeypatch):
     """Never spawn a real PC mirror window from a non-e2e test (issue #279).

@@ -67,7 +67,6 @@ def test_toggle_precedes_confirm_toggle_in_dialog(
 
     expect(authed_page.locator("#jobDialog")).to_be_visible()
     alert_toggle = authed_page.locator("#jobAlertOnFailureInput")
-    confirm_toggle = authed_page.locator("#jobConfirmInput")
     expect(alert_toggle).to_have_attribute("role", "switch")
     expect(alert_toggle).to_have_attribute("aria-checked", "false")
 
