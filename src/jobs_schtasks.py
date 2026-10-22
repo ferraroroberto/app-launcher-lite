@@ -29,7 +29,6 @@ percentiles/health in :mod:`src.jobs_stats`.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import subprocess
@@ -39,6 +38,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from src.jobs_argv import encode_params_token
 from src.jobs_config import Job, Schedule
 from src.subprocess_flags import NO_WINDOW
 
@@ -154,10 +154,11 @@ def spawn_run_job_detached(
     an app-launcher issue via ``/issue-finish``).
 
     ``params`` (issue #67) is the validated ``{name: value}`` payload from
-    the run-now dialog. When present, it is JSON-encoded onto argv as
-    ``--params <json>`` so the executor (which re-validates) sees an
-    exact byte-for-byte copy. Schedule + Stream-Deck callers omit the
-    arg entirely.
+    the run-now dialog. When present, it rides argv as
+    ``--params-b64 <token>`` (:func:`src.jobs_argv.encode_params_token`):
+    cmd.exe re-reads this command line, and only a base64url token is
+    guaranteed to reach the executor (which re-validates) byte-for-byte.
+    Schedule + Stream-Deck callers omit the arg entirely.
 
     ``dry_run`` (issue #69 'execute' mode) appends ``--dry-run`` so the
     executor spawns the child with ``JOB_DRY_RUN=1`` and stamps the run
@@ -174,7 +175,7 @@ def spawn_run_job_detached(
         trigger,
     ]
     if params:
-        argv.extend(["--params", json.dumps(params)])
+        argv.extend(["--params-b64", encode_params_token(params)])
     if dry_run:
         argv.append("--dry-run")
     # `start` launches the child and cmd exits, orphaning it out of this

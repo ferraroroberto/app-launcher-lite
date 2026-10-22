@@ -491,6 +491,52 @@ def test_team_os_browser_full_screen_doc_toggle(
     expect(authed_page.locator("#teamOsDocClose")).to_be_hidden()
 
 
+def test_team_os_doc_link_keeps_its_url_inside_href(
+    authed_page: Page, base_url: str
+) -> None:
+    """A markdown link whose URL carries quote characters renders as one
+    anchor with only href/target/rel, the quotes kept inside the href."""
+    _mock_skills(authed_page)
+    authed_page.route(
+        re.compile(r".*/api/team-os/skills/journal-daily/files$"),
+        lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body=_json.dumps({
+                "skill": {"id": "journal-daily", "name": "journal-daily"},
+                "files": [{"path": ".claude/skills/journal-daily/SKILL.md",
+                           "name": "SKILL.md", "category": "skill"}],
+            }),
+        ),
+    )
+    url = "https://example.com/a\"data-x=\"1'b"
+    authed_page.route(
+        re.compile(r".*/api/team-os/file\?.*$"),
+        lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body=_json.dumps({
+                "path": "x", "name": "SKILL.md",
+                "content": f"see [the page]({url}) here", "truncated": False,
+            }),
+        ),
+    )
+
+    authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
+    authed_page.locator("#tabTeamOS").click()
+    tile = authed_page.locator(
+        "#teamOsList li.teamos-item[data-id='journal-daily']"
+    )
+    expect(tile).to_be_visible(timeout=5_000)
+    tile.locator("button[title^='Browse']").click()
+    authed_page.locator(".teamos-file-btn").first.click()
+
+    link = authed_page.locator("#teamOsFileContent a")
+    expect(link).to_have_count(1)
+    expect(link).to_have_text("the page")
+    attrs = link.evaluate("el => el.getAttributeNames().sort()")
+    assert attrs == ["href", "rel", "target"], attrs
+    assert link.get_attribute("href") == url
+
+
 def test_team_os_delete_conversation_log_from_doc_toolbar(
     authed_page: Page, base_url: str
 ) -> None:
