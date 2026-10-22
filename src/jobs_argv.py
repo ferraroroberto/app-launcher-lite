@@ -8,8 +8,8 @@ executor-side composition exactly.
 
 The function is pure: no I/O, no globals, no subprocess. The router
 calls it up front so bad values become 400 before any run directory is
-written; the executor calls it again after un-marshalling the ``--params``
-JSON blob so a scheduled invocation goes through the same validator.
+written; the executor calls it again after decoding the params payload
+from its argv so a scheduled invocation goes through the same validator.
 
 Composition rules (also enforced by the editor / dialog client-side):
 
@@ -26,6 +26,9 @@ Composition rules (also enforced by the editor / dialog client-side):
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import re
 from typing import Any, Dict, List, Tuple
 
@@ -156,3 +159,25 @@ def _stringify(param: Param, value: Any) -> str:
     if param.kind == "int":
         return str(int(value))
     return str(value)
+
+
+def encode_params_token(values: Dict[str, Any]) -> str:
+    """``values`` as base64url-encoded JSON, for the detached executor's argv.
+
+    The detached spawn goes through ``cmd /c start``, and cmd.exe re-reads
+    its own command line: only a token made of letters, digits, ``-``, ``_``
+    and ``=`` is guaranteed to reach the executor exactly as written.
+    """
+    raw = json.dumps(values, ensure_ascii=False).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii")
+
+
+def decode_params_token(token: str) -> str:
+    """The JSON text :func:`encode_params_token` encoded.
+
+    Raises ``ValueError`` when ``token`` is not valid base64url or UTF-8.
+    """
+    try:
+        return base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8")
+    except (binascii.Error, UnicodeError) as exc:
+        raise ValueError(f"not a base64url params token ({exc})") from exc

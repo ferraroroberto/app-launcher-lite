@@ -61,7 +61,7 @@ from src.jobs import (
     runs_dir,
     write_run_json,
 )
-from src.jobs_argv import compose_argv
+from src.jobs_argv import compose_argv, decode_params_token
 from src.jobs_config import Job, get_by_id, load_jobs
 from src.jobs_secrets import resolve_env_overlay
 from src.jobs_trigger import TRIGGER_SYNTAX, is_valid_trigger
@@ -690,6 +690,15 @@ class RunJobCommand(BaseCommand):
             ),
         )
         p.add_argument(
+            "--params-b64",
+            default=None,
+            help=(
+                "The same payload as --params, base64url-encoded — how the "
+                "webapp's detached spawn passes it (see "
+                "src.jobs_argv.encode_params_token)."
+            ),
+        )
+        p.add_argument(
             "--dry-run",
             action="store_true",
             help=(
@@ -709,7 +718,15 @@ class RunJobCommand(BaseCommand):
         # Older test scaffolding builds the args namespace by hand and may
         # not set --params; getattr keeps that path working without forcing
         # every caller to fake the new field.
-        values, params_error = _parse_run_params(job, getattr(args, "params", None))
+        params_raw = getattr(args, "params", None)
+        params_token = getattr(args, "params_b64", None)
+        if params_token:
+            try:
+                params_raw = decode_params_token(params_token)
+            except ValueError as exc:
+                logger.error(f"❌ run-job {job.id}: --params-b64 is invalid ({exc})")
+                return 2
+        values, params_error = _parse_run_params(job, params_raw)
         if params_error is not None:
             return params_error
 

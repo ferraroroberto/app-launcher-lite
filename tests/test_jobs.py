@@ -11,6 +11,7 @@ tests mock — no real ``schtasks.exe`` is invoked.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -26,6 +27,7 @@ from src import jobs_index as jobs_index_mod
 from src import jobs_queue as jobs_queue_mod
 from src import jobs_schtasks as jobs_schtasks_mod
 from src.jobs import resolve_venv_python
+from src.jobs_argv import decode_params_token, encode_params_token
 from src.jobs_config import (
     Job,
     JobsConfig,
@@ -838,9 +840,45 @@ class TestSpawnRunJobDetached:
 
         argv = captured["argv"]
         assert argv[:5] == ["cmd", "/c", "start", "", "/b"]
-        assert "--params" in argv
-        assert json.dumps({"x": 1}) in argv
+        token = argv[argv.index("--params-b64") + 1]
+        assert json.loads(decode_params_token(token)) == {"x": 1}
         assert "--dry-run" in argv
+
+    def test_spawn_argv_after_the_interpreter_is_plain_tokens(self, monkeypatch):
+        """cmd.exe re-reads the spawn's command line, so every token after
+        the interpreter and script paths must come through it unchanged:
+        letters, digits and ``-_.:=`` only, whatever the param values hold."""
+        captured = {}
+
+        class _FakeProc:
+            pid = 1
+
+        def fake_popen(argv, **kwargs):
+            captured["argv"] = argv
+            return _FakeProc()
+
+        monkeypatch.setattr(jobs_schtasks_mod.subprocess, "Popen", fake_popen)
+        values = {"msg": 'a & b | c > d < e ^ f % g ! h " i ñ€'}
+
+        jobs_schtasks_mod.spawn_run_job_detached(
+            "demo", "run-3", "manual", params=values
+        )
+
+        tail = captured["argv"][captured["argv"].index("run-job"):]
+        for token in tail:
+            assert re.fullmatch(r"[A-Za-z0-9._:=\-]+", token), token
+        decoded = decode_params_token(tail[tail.index("--params-b64") + 1])
+        assert json.loads(decoded) == values
+
+    def test_executor_parser_reads_the_encoded_params(self):
+        from app.cli.main import _build_parser
+
+        values = {"msg": 'x & y "z"'}
+        args = _build_parser().parse_args([
+            "run-job", "demo", "--run-id", "r1", "--trigger", "manual",
+            "--params-b64", encode_params_token(values),
+        ])
+        assert json.loads(decode_params_token(args.params_b64)) == values
 
 
 class TestSyncSchtasks:

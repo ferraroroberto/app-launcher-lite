@@ -15,6 +15,7 @@ from __future__ import annotations
 import hmac
 import ipaddress
 import logging
+import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from fastapi import Request, WebSocket
@@ -35,13 +36,19 @@ AUTH_EXEMPT_PREFIXES = ("/static/", "/healthz")
 AUTH_EXEMPT_EXACT = frozenset({"/", "/healthz", "/api/login"})
 
 
-def _is_webhook_hook_path(path: str) -> bool:
+_WEBHOOK_HOOK_PATH = re.compile(r"/api/jobs/[^/]+/hook")
+
+
+def _is_webhook_hook_path(method: str, path: str) -> bool:
     """``POST /api/jobs/<id>/hook`` (issue #73) authenticates itself via the
     job's provider-specific signature, never the bearer token — an external
     service (GitHub, Stripe, …) can't carry it, and the whole point is a URL
     that's safe to hand to a third party in plaintext.
+
+    Exactly that method and path shape: any other route whose path happens
+    to end in ``/hook`` (a job id, an artifact name) still needs the token.
     """
-    return path.startswith("/api/jobs/") and path.endswith("/hook")
+    return method == "POST" and _WEBHOOK_HOOK_PATH.fullmatch(path) is not None
 
 # Tailscale hands every node an address in the CGNAT range. The
 # interactive terminal is gated to this range (plus loopback and an
@@ -289,7 +296,7 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
             if gate_err is not None:
                 return gate_err
 
-        if _is_webhook_hook_path(path):
+        if _is_webhook_hook_path(request.method, path):
             return await call_next(request)
 
         cfg = self._get_config()

@@ -172,11 +172,15 @@ export function wireLoginForm(onLoginSuccess) {
 }
 
 // --------------------------------------------------------------- toast
+// Quotes are escaped too, so the output is safe inside an attribute value
+// as well as in text (team-os.js renders markdown links into href="…").
 export function escapeHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 let toastTimer = null;

@@ -389,3 +389,21 @@ class TestBearerExemption:
         app.state.webapp_config.auth_token = "supersecret"
         resp = client.post(f"/api/jobs/{job['id']}/run")
         assert resp.status_code == 401
+
+    @pytest.mark.parametrize(
+        "method, path",
+        [
+            ("PUT", "/api/jobs/hook"),
+            ("DELETE", "/api/jobs/hook"),
+            ("GET", "/api/jobs/demo/runs/r1/artifacts/hook"),
+            ("GET", "/api/jobs/demo/hook"),
+        ],
+    )
+    def test_only_post_to_the_hook_route_skips_the_bearer(
+        self, webapp_client, mocked_jobs_side_effects, method, path
+    ):
+        """Other routes whose path ends in ``/hook`` keep the bearer gate."""
+        client, app, _ = webapp_client
+        app.state.webapp_config.auth_token = "supersecret"
+        resp = client.request(method, path, json={})
+        assert resp.status_code == 401
