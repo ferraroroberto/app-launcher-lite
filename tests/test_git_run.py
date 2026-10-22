@@ -116,13 +116,10 @@ def test_optional_locks_off_and_environment_inherited(monkeypatch, tmp_path):
     assert env.get("PATH") == os.environ.get("PATH")
 
 
-def test_resolve_deployed_sha_returns_short_sha_for_this_repo(tmp_path):
-    """#655: must not depend on the ambient CI checkout's ``origin`` remote
-    state -- GitHub Actions' shallow PR checkout can leave both
-    ``origin/HEAD`` and an ``origin/main`` tracking ref unresolvable, which
-    is a property of that checkout, not a defect in this function. Exercise
-    it against a throwaway repo we control instead (same fixture pattern as
-    ``test_resolve_deployed_sha_differs_from_checkout_branch_tip`` below)."""
+def _repo_with_origin(tmp_path):
+    """A throwaway repo with one commit and a bare ``origin`` whose HEAD and
+    ``main`` resolve without a network; returns ``(repo, run)`` where ``run``
+    invokes git inside the repo."""
     repo = tmp_path / "repo"
     repo.mkdir()
     no_hooks = tmp_path / "no-hooks"
@@ -146,6 +143,17 @@ def test_resolve_deployed_sha_returns_short_sha_for_this_repo(tmp_path):
     run("remote", "add", "origin", str(remote))
     run("push", "-q", "origin", "main")
     run("remote", "set-head", "origin", "main")
+    return repo, run
+
+
+def test_resolve_deployed_sha_returns_short_sha_for_this_repo(tmp_path):
+    """#655: must not depend on the ambient CI checkout's ``origin`` remote
+    state -- GitHub Actions' shallow PR checkout can leave both
+    ``origin/HEAD`` and an ``origin/main`` tracking ref unresolvable, which
+    is a property of that checkout, not a defect in this function. Exercise
+    it against a throwaway repo we control instead (same fixture pattern as
+    ``test_resolve_deployed_sha_differs_from_checkout_branch_tip`` below)."""
+    repo, _ = _repo_with_origin(tmp_path)
 
     sha = resolve_deployed_sha(repo)
     assert isinstance(sha, str) and sha
@@ -169,30 +177,7 @@ def test_resolve_deployed_sha_differs_from_checkout_branch_tip(tmp_path):
     branch tip (``resolve_git_sha``) and the resolved deployed ref
     (``resolve_deployed_sha``, ``origin/main``) must be free to diverge —
     the whole point of having two separate functions."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    no_hooks = tmp_path / "no-hooks"
-    no_hooks.mkdir()
-
-    def run(*args):
-        return subprocess.run(
-            ["git", *args], cwd=repo, check=True, capture_output=True, text=True
-        )
-
-    run("init", "-q", "-b", "main")
-    run("config", "core.hooksPath", str(no_hooks))
-    run("config", "user.email", "test@example.com")
-    run("config", "user.name", "Test")
-    (repo / "f.txt").write_text("v1", encoding="utf-8")
-    run("add", ".")
-    run("commit", "-q", "-m", "base")
-
-    # A bare remote so origin/HEAD + origin/main resolve without a network.
-    remote = tmp_path / "remote.git"
-    subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True, capture_output=True)
-    run("remote", "add", "origin", str(remote))
-    run("push", "-q", "origin", "main")
-    run("remote", "set-head", "origin", "main")
+    repo, run = _repo_with_origin(tmp_path)
 
     main_sha = resolve_deployed_sha(repo)
 

@@ -1194,11 +1194,9 @@ class TestBulkCacheNextRun:
         assert calls == first_window
 
     def test_invalidation_after_sync(self, monkeypatch):
-        from unittest.mock import MagicMock
 
         from src import jobs as jobs_mod
         from src import jobs_schtasks as jobs_schtasks_mod
-        from src.jobs_config import Job, Schedule
 
         # Set up a fake runner that records calls.
         calls = []
@@ -1305,9 +1303,10 @@ class TestReapOnPoll:
     """A run stranded "running" by a dead executor self-heals on the very
     next GET /api/jobs poll — no human needs to notice and tap Kill."""
 
-    def test_get_jobs_reaps_a_stranded_run(
-        self, webapp_client, mocked_jobs_side_effects, monkeypatch
-    ):
+    @staticmethod
+    def _seed_running_run(webapp_client, monkeypatch, alive: bool):
+        """Seed a job with a run recorded "running"; the pid-liveness probe
+        reports ``alive``. Returns ``(client, run_dir)``."""
         client, _, _ = webapp_client
         created = _seed_one_job(client, name="Demo").json()["job"]
         from src import jobs as jobs_mod
@@ -1321,7 +1320,15 @@ class TestReapOnPoll:
             started_at="2026-05-24T08:00:00",
             pid=4242,
         )
-        monkeypatch.setattr(jobs_reap_mod, "is_pid_alive", lambda *a, **k: False)
+        monkeypatch.setattr(jobs_reap_mod, "is_pid_alive", lambda *a, **k: alive)
+        return client, run_dir
+
+    def test_get_jobs_reaps_a_stranded_run(
+        self, webapp_client, mocked_jobs_side_effects, monkeypatch
+    ):
+        from src import jobs as jobs_mod
+
+        client, run_dir = self._seed_running_run(webapp_client, monkeypatch, alive=False)
 
         resp = client.get("/api/jobs")
         assert resp.status_code == 200
@@ -1336,20 +1343,7 @@ class TestReapOnPoll:
     def test_get_jobs_leaves_a_live_run_running(
         self, webapp_client, mocked_jobs_side_effects, monkeypatch
     ):
-        client, _, _ = webapp_client
-        created = _seed_one_job(client, name="Demo").json()["job"]
-        from src import jobs as jobs_mod
-        from src import jobs_reap as jobs_reap_mod
-
-        run_dir = jobs_mod.new_run_dir(created["id"], "20260524T080000")
-        jobs_mod.write_run_json(
-            run_dir,
-            run_id=run_dir.name,
-            status="running",
-            started_at="2026-05-24T08:00:00",
-            pid=4242,
-        )
-        monkeypatch.setattr(jobs_reap_mod, "is_pid_alive", lambda *a, **k: True)
+        client, _ = self._seed_running_run(webapp_client, monkeypatch, alive=True)
 
         resp = client.get("/api/jobs")
         assert resp.status_code == 200

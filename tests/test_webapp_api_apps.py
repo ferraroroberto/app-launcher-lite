@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
 
 import pytest
@@ -30,6 +29,26 @@ def _seed_registry(tmp_registry_path, apps):
     save_registry(
         Registry(scan_root="C:\\stub", apps=apps), path=tmp_registry_path
     )
+
+
+def _capture_spawn(monkeypatch) -> dict:
+    """Replace ``spawn_agent_session`` with a stub; the returned dict fills
+    with the ``flags`` / ``kind`` / ``agent`` of the launch the route makes."""
+    from app.webapp.routers import apps as apps_router
+
+    captured: dict = {}
+
+    def fake_spawn(
+        project_dir, name, flags, port, kind="pty", agent="copilot",
+        rows=40, cols=120, history_lines=None,
+    ):
+        captured["flags"] = flags
+        captured["kind"] = kind
+        captured["agent"] = agent
+        return {"session_id": "s1", "kind": kind, "agent": agent}
+
+    monkeypatch.setattr(apps_router, "spawn_agent_session", fake_spawn)
+    return captured
 
 
 class TestGetApps:
@@ -227,21 +246,8 @@ class TestCodingDiscovery:
         a streamed pty, and the spawn's flags begin with the agent's resume
         token (`--resume` for Copilot)."""
         client, _, overrides = webapp_client
-        from app.webapp.routers import apps as apps_router
-
         (overrides["tmp_projects_dir"] / "live-proj").mkdir()
-        captured: dict = {}
-
-        def fake_spawn(
-            project_dir, name, flags, port, kind="pty", agent="copilot",
-            rows=40, cols=120, history_lines=None,
-        ):
-            captured["flags"] = flags
-            captured["kind"] = kind
-            captured["agent"] = agent
-            return {"session_id": "s1", "kind": kind, "agent": agent}
-
-        monkeypatch.setattr(apps_router, "spawn_agent_session", fake_spawn)
+        captured = _capture_spawn(monkeypatch)
         resp = client.post(
             "/api/apps/live-proj/launch", json={"resume": True}
         )
@@ -258,21 +264,8 @@ class TestCodingDiscovery:
         renders in a detached console window rather than forcing a pty. The
         spawn is kind="remote" with the agent's resume token in its flags."""
         client, _, overrides = webapp_client
-        from app.webapp.routers import apps as apps_router
-
         (overrides["tmp_projects_dir"] / "live-proj").mkdir()
-        captured: dict = {}
-
-        def fake_spawn(
-            project_dir, name, flags, port, kind="pty", agent="copilot",
-            rows=40, cols=120, history_lines=None,
-        ):
-            captured["flags"] = flags
-            captured["kind"] = kind
-            captured["agent"] = agent
-            return {"session_id": "s1", "kind": kind, "agent": agent}
-
-        monkeypatch.setattr(apps_router, "spawn_agent_session", fake_spawn)
+        captured = _capture_spawn(monkeypatch)
         resp = client.post(
             "/api/apps/live-proj/launch",
             json={"mode": "remote", "resume": True},

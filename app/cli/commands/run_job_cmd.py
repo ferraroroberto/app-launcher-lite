@@ -606,7 +606,6 @@ def _cleanup_once_schedule(job: Job, args: argparse.Namespace) -> None:
         # Mutate the registry so the row stops showing "once …"
         # and surfaces as a plain manual job.
         from src.jobs_config import (  # local import to avoid cycles
-            JobsConfig,
             Schedule,
             save_jobs,
         )

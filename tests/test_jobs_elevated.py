@@ -10,7 +10,6 @@ the schema round-trip and the skip behaviour.
 
 from __future__ import annotations
 
-import logging
 import subprocess
 from typing import List
 
@@ -66,14 +65,8 @@ class TestSyncSchtasksSkipsElevated:
     by a prior non-elevated schedule, otherwise that old un-elevated task
     keeps firing on its old schedule indefinitely."""
 
-    def test_elevated_job_deletes_stale_entry_but_never_creates(self):
-        job = Job(
-            id="hwinfo",
-            name="HWiNFO restart",
-            script_path="C:\\stub\\hwinfo_restart.py",
-            schedule=Schedule(type="hourly", every=8),
-            elevated=True,
-        )
+    @staticmethod
+    def _assert_deletes_but_never_creates(job):
         calls: List[List[str]] = []
 
         def runner(argv):
@@ -86,6 +79,16 @@ class TestSyncSchtasksSkipsElevated:
         assert created == []
         assert calls  # delete_schtasks still runs (issue #409)
         assert not any(c[:2] == ["schtasks", "/Create"] for c in calls)
+
+    def test_elevated_job_deletes_stale_entry_but_never_creates(self):
+        job = Job(
+            id="hwinfo",
+            name="HWiNFO restart",
+            script_path="C:\\stub\\hwinfo_restart.py",
+            schedule=Schedule(type="hourly", every=8),
+            elevated=True,
+        )
+        self._assert_deletes_but_never_creates(job)
 
     def test_elevated_job_skipped_even_when_paused(self):
         # pause() parks the schedule as "none" before calling sync_schtasks —
@@ -98,18 +101,7 @@ class TestSyncSchtasksSkipsElevated:
             schedule=Schedule(type="none"),
             elevated=True,
         )
-        calls: List[List[str]] = []
-
-        def runner(argv):
-            calls.append(argv)
-            if argv[:2] == ["schtasks", "/Query"]:
-                return _mk_completed(stdout="", rc=0)
-            return _mk_completed(rc=0)
-
-        created = jobs_mod.sync_schtasks(job, runner=runner)
-        assert created == []
-        assert calls  # delete_schtasks still runs (issue #409)
-        assert not any(c[:2] == ["schtasks", "/Create"] for c in calls)
+        self._assert_deletes_but_never_creates(job)
 
     def test_default_job_still_syncs_normally(self):
         job = Job(

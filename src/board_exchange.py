@@ -14,7 +14,6 @@ and avoids any cwd-based guessing.
 from __future__ import annotations
 
 import ast
-import json
 import logging
 import re
 from pathlib import Path

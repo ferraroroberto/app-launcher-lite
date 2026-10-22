@@ -217,8 +217,6 @@ def _parse_osc_title(buffer: str) -> Tuple[str, str]:
             break
 
         try:
-            # Extract the full sequence
-            seq = remaining[start_idx : end_idx + term_len]
             # Parse: ESC ] <code> ; <text> <term>
             # Find the code (0 or 2)
             code_end = remaining.find(";", start_idx)
