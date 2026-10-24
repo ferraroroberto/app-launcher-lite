@@ -97,6 +97,15 @@ try {
     & $python -m scripts.structure_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "structure ratchet failed or NOT CONFIRMED: a file, function or directory grew past its baseline, a new offender, a root folder outside the declared shape, a file that could not be measured, or a baseline problem; see the output above, docs/layout.md and .structure-ratchet-baseline.json." }
 
+    # Instruction ratchet (scaffold docs/instruction-ratchet.md): no instruction file
+    # (CLAUDE.md, AGENTS.md, .claude/rules, SKILL.md and the docs a skill links to) may
+    # carry more weekly-prompt-audit rule hits than .instruction-ratchet-baseline.json
+    # records or pass its size cap. Whole tree, so never diff-routed. Same wrapper shape
+    # as the other ratchets: exit 3 (a file could not be read) is NOT CONFIRMED and fails.
+    Phase "instruction ratchet..."
+    & $python -m scripts.instruction_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "instruction ratchet failed or NOT CONFIRMED: an instruction file has a new rule hit or passed its size cap, a file could not be read, or a baseline problem; see the output above and .instruction-ratchet-baseline.json." }
+
     # Comment ratchet (scaffold docs/comment-ratchet.md): no file may carry more
     # issue references (#NNN) inside code comments than .comment-ratchet-baseline.json
     # records, and a new file may carry none. Whole tree, so never diff-routed. Same
