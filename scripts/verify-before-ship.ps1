@@ -207,6 +207,8 @@ try {
                 Phase "shot baseline: skipped on CI (the baseline is this machine's)"
             } else {
                 $env:LAUNCHER_E2E_AUTOBOOT = "1"
+                # The vendored script spawns git without setting this itself.
+                $env:GIT_OPTIONAL_LOCKS = "0"
                 try {
                     if (@("tests/e2e", "tests/e2e/test_screen_shots.py") -contains $e2eTarget) {
                         $since = $shotSince.ToString([Globalization.CultureInfo]::InvariantCulture)
@@ -220,6 +222,7 @@ try {
                 }
                 finally {
                     Remove-Item Env:\LAUNCHER_E2E_AUTOBOOT -ErrorAction SilentlyContinue
+                    Remove-Item Env:\GIT_OPTIONAL_LOCKS -ErrorAction SilentlyContinue
                 }
                 if ($shotExit -eq 3) { Fail "shot baseline NOT CONFIRMED (no baseline, no shot recaptured, an unreadable image, or the capture failed)." }
                 if ($shotExit -ne 0) { Fail "shot baseline failed (exit $shotExit): a screen drifted from tests/e2e/shots. A deliberate UI change re-baselines (CLAUDE.md); anything else is unpinned content." }
