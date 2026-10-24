@@ -335,7 +335,7 @@ would be the same blast radius as leaking the token outright. Instead the
 route trusts **only** the job's own provider-specific signature:
 
 - **`github`** — `X-Hub-Signature-256: sha256=<hex>`, an HMAC-SHA256 of the
-  raw request body, `hmac.compare_digest`-checked.
+  raw request body, compared in constant time.
 - **`stripe`** — `Stripe-Signature: t=<epoch>,v1=<hex>`, HMAC-SHA256 of
   `f"{t}.{body}"`; `t` must be within 300 s (Stripe's own SDK default) of
   now, rejecting a replayed-but-otherwise-valid signature.
@@ -623,11 +623,12 @@ POST /api/jobs/<id>/runs/<rid>/kill
 
 - 404 when job or run is unknown.
 - 409 when the run's status is not `running` or `pending`.
-- Loads the persisted `pid` from `run.json` and uses `psutil` to:
+- Finalises `run.json` first, to `status: failed`, `exit_code: -9`, `killed: true`, `finished_at: now`, with `duration_seconds` derived from `started_at`.
+- Then loads the persisted `pid` from `run.json` and uses `psutil` to:
   1. `terminate()` the parent + every recursive child,
   2. `wait_procs` with a 5 s grace,
   3. `kill()` whatever survived.
-- Finalises `run.json` to `status: failed`, `exit_code: -9`, `killed: true`, `finished_at: now`, with `duration_seconds` derived from `started_at`.
+- Drains the run's mutex queue once. The `pid` is the job's child, so the executor survives it and wakes from `wait()`; because `killed` is already on the record it skips its own notification, `on_failure` chain and mutex drain.
 
 If the executor has already exited (orphan pid), the route still finalises the record — the UI is the authoritative "is this run done?" surface, and a stale `running` row that nothing is actually executing is the bug the kill button fixes.
 

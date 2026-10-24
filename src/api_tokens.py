@@ -122,12 +122,24 @@ def parse_tokens(raw_list: Any) -> List[ApiToken]:
     return tokens
 
 
+def constant_time_equals(presented: str, expected: str) -> bool:
+    """Constant-time ``str`` compare that tolerates non-ASCII input.
+
+    ``hmac.compare_digest`` raises ``TypeError`` for ``str`` arguments with
+    non-ASCII characters, which would turn a hostile or merely accented
+    credential into a 500 (or lock out a non-ASCII password). Comparing the
+    UTF-8 bytes is safe for any input. Every secret comparison goes through
+    here; ``tests/test_api_tokens.py`` bans the raw call elsewhere.
+    """
+    return hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8"))
+
+
 def find_match(presented: str, raw_list: Any) -> Optional[ApiToken]:
     """Constant-time match of a presented bearer against the token list."""
     if not presented:
         return None
     for token in parse_tokens(raw_list):
-        if hmac.compare_digest(_hash_token(presented, token.salt), token.hash):
+        if constant_time_equals(_hash_token(presented, token.salt), token.hash):
             return token
     return None
 

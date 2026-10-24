@@ -36,7 +36,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Lock
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from src.jobs_argv import encode_params_token
 from src.jobs_config import Job, Schedule
@@ -58,6 +58,9 @@ TASK_FOLDER_PREFIX = f"\\{TASK_NAMESPACE}\\"
 _NEXT_RUN_TTL_SECONDS = 30.0
 _next_run_cache: Optional[Tuple[float, Dict[str, Optional[str]]]] = None
 _next_run_lock = Lock()
+
+# The ``-N`` suffix ``task_names_for`` gives each ``daily_times`` slot.
+_SLOT_SUFFIX_RE = re.compile(r"-\d+")
 
 # Defensive upper bound when blind-deleting daily_times variants without
 # a query first. 24 covers every hour of the day with headroom.
@@ -273,9 +276,40 @@ def list_known_tasks(
     return names
 
 
+def _other_job_ids(job_id: str) -> List[str]:
+    """Ids of every configured job except ``job_id`` (best-effort).
+
+    A load failure yields an empty list: ownership then falls back to the
+    slot grammar alone.
+    """
+    try:
+        from src.jobs_config import load_jobs  # local: avoids an import cycle
+
+        return [j.id for j in load_jobs().jobs if j.id != job_id]
+    except Exception:  # noqa: BLE001 — a config read must not block a sync
+        logger.warning("⚠️  could not load jobs to scope task ownership")
+        return []
+
+
+def owns_task(name: str, job_id: str, other_job_ids: Iterable[str]) -> bool:
+    """True when Task Scheduler task ``name`` belongs to ``job_id``.
+
+    A job owns its bare ``\\AppLauncher\\<id>`` task and its ``<id>-<digits>``
+    ``daily_times`` slots. A slot-shaped name that is another job's bare
+    task (job ``backup-2`` next to job ``backup``) is that job's, not a slot.
+    """
+    base = TASK_FOLDER_PREFIX + job_id
+    if name == base:
+        return True
+    if not name.startswith(base) or not _SLOT_SUFFIX_RE.fullmatch(name[len(base):]):
+        return False
+    return name not in {TASK_FOLDER_PREFIX + o for o in other_job_ids}
+
+
 def delete_schtasks(
     job_id: str,
     runner: Optional[Callable[[List[str]], subprocess.CompletedProcess]] = None,
+    other_job_ids: Optional[Iterable[str]] = None,
 ) -> List[str]:
     """Delete every ``\\AppLauncher\\<job_id>`` and ``…-N`` variant.
 
@@ -289,11 +323,10 @@ def delete_schtasks(
     base = TASK_FOLDER_PREFIX + job_id
     known = list_known_tasks(runner=runner)
     if known:
-        targets = [
-            n
-            for n in known
-            if n == base or n.startswith(base + "-")
-        ]
+        others = (
+            _other_job_ids(job_id) if other_job_ids is None else list(other_job_ids)
+        )
+        targets = [n for n in known if owns_task(n, job_id, others)]
     else:
         # Blind fallback — covers the bare task + every daily_times slot.
         targets = [base] + [
@@ -537,8 +570,13 @@ def invalidate_next_run_cache() -> None:
 def query_next_run(
     job_id: str,
     runner: Optional[Callable[[List[str]], subprocess.CompletedProcess]] = None,
+    other_job_ids: Optional[Iterable[str]] = None,
 ) -> Optional[str]:
     """Best-effort: the earliest 'Next Run Time' across this job's tasks.
+
+    ``other_job_ids`` (default: read from the jobs config) keeps another
+    job's bare task from being mistaken for one of this job's slots; a
+    caller decorating many jobs passes it once to skip the per-job read.
 
     Backed by a 30 s process-local cache of one bulk ``schtasks /Query``
     call (see :func:`_cached_bulk_next_runs`). Returns ``None`` when no
@@ -547,10 +585,10 @@ def query_next_run(
     localisation tidying.
     """
     snapshot = _cached_bulk_next_runs(runner=runner)
-    base = TASK_FOLDER_PREFIX + job_id
+    others = _other_job_ids(job_id) if other_job_ids is None else list(other_job_ids)
     candidates: List[str] = []
     for name, next_run in snapshot.items():
-        if name != base and not name.startswith(base + "-"):
+        if not owns_task(name, job_id, others):
             continue
         if next_run:
             candidates.append(next_run)

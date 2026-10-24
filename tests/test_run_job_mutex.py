@@ -140,6 +140,46 @@ class TestExecutorMutexDrain:
         assert jobs_mod.peek_mutex_queue("chrome") == []
 
 
+class TestExecutorSkipsFinalisationForKilledRun:
+    def test_killed_run_is_not_notified_chained_or_drained(
+        self, isolated_jobs, tmp_path, monkeypatch
+    ):
+        """The kill route stamps ``killed`` and owns the single mutex drain;
+        the surviving executor must not notify, chain or drain a second time."""
+        script = tmp_path / "ok.py"
+        script.write_text("pass\n", encoding="utf-8")
+        job = Job(
+            id="alpha", name="Alpha", script_path=str(script),
+            mutex_group="chrome", on_failure=["beta"],
+        )
+        monkeypatch.setattr(rjc, "load_jobs", lambda: JobsConfig(jobs=[job]))
+
+        def killed_spawn(job_, argv, cwd, env, run_dir):
+            # What the kill route did while the child was running.
+            jobs_mod.write_run_json(
+                run_dir, status="failed", exit_code=-9, killed=True
+            )
+            return -9, "failed", None, None
+
+        monkeypatch.setattr(rjc, "_spawn_and_wait", killed_spawn)
+        notify = MagicMock()
+        chain = MagicMock()
+        drain = MagicMock()
+        monkeypatch.setattr(rjc, "_maybe_notify_failure", notify)
+        monkeypatch.setattr(rjc, "_dispatch_chain", chain)
+        monkeypatch.setattr(rjc, "_drain_mutex_queue_for", drain)
+        _silence_notifier(monkeypatch)
+
+        rc = rjc.RunJobCommand(AppConfig()).execute(SimpleNamespace(
+            job_id="alpha", trigger="manual", run_id=None, params=None,
+        ))
+
+        assert rc == 1
+        notify.assert_not_called()
+        chain.assert_not_called()
+        drain.assert_not_called()
+
+
 class TestExecutorScheduledAdmission:
     """Scheduled (schtasks) fires honour ``mutex_group`` (issue #696).
 

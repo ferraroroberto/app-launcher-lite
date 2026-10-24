@@ -238,7 +238,7 @@ def _live_sess(session_id: str, project_dir: str, started_min_ago: int) -> dict:
         "kind": "pty",
         "alive": True,
         "project_dir": project_dir,
-        "started_at": _iso(NOW - timedelta(minutes=started_min_ago)),
+        "started_at": (NOW - timedelta(minutes=started_min_ago)).timestamp(),
     }
 
 

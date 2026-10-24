@@ -58,6 +58,7 @@ from src.jobs import (
     new_run_id,
     prune_runs,
     read_output_tail,
+    read_run,
     runs_dir,
     write_run_json,
 )
@@ -632,6 +633,43 @@ def _drain_mutex_queue_for(job: Job) -> None:
         logger.warning(f"⚠️  mutex drain {job.mutex_group!r} raised: {exc}")
 
 
+def _finish_run(
+    job: Job,
+    args: argparse.Namespace,
+    run_dir: Path,
+    exit_code: int,
+    status: str,
+    spawn_started: float,
+    sampler: Optional[ResourceSampler],
+    watchdog: Optional[RunWatchdog],
+) -> bool:
+    """Finalise a finished run and run its follow-ups; ``False`` if it was killed.
+
+    The kill route stamps ``killed`` on the record before it kills the child
+    and owns the mutex drain, so finalising again would fire the failure
+    notification and chain and pop a second mutex-queue entry.
+    """
+    if read_run(run_dir).get("killed"):
+        logger.info(
+            f"🛑 run-job {job.id} run {run_dir.name} was killed; "
+            "skipping finalisation"
+        )
+        return False
+    _finalize_run(
+        job,
+        run_dir,
+        exit_code=exit_code,
+        status=status,
+        spawn_started=spawn_started,
+        sampler=sampler,
+        watchdog=watchdog,
+    )
+    _dispatch_chain(job, status)
+    _cleanup_once_schedule(job, args)
+    _drain_mutex_queue_for(job)
+    return True
+
+
 def _trigger_arg(value: str) -> str:
     """argparse ``type=`` for ``--trigger``.
 
@@ -811,18 +849,10 @@ class RunJobCommand(BaseCommand):
             job, argv, cwd, env, run_dir
         )
 
-        _finalize_run(
-            job,
-            run_dir,
-            exit_code=exit_code,
-            status=status,
-            spawn_started=spawn_started,
-            sampler=sampler,
-            watchdog=watchdog,
-        )
-        _dispatch_chain(job, status)
-        _cleanup_once_schedule(job, args)
-        _drain_mutex_queue_for(job)
+        if not _finish_run(
+            job, args, run_dir, exit_code, status, spawn_started, sampler, watchdog
+        ):
+            return 1
 
         watchdog_note = (
             f", {watchdog.note}" if watchdog is not None and watchdog.fired else ""

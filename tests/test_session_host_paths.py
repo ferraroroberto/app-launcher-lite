@@ -7,6 +7,7 @@ determinism and never exercise these functions' real logic.
 
 from __future__ import annotations
 
+import ast
 import subprocess
 from pathlib import Path
 
@@ -131,3 +132,53 @@ class TestPathsTouchedBetween:
             tmp_path, "abc1234", "def5678", ["src/session_host.py"]
         )
         assert result is None
+
+
+def _session_host_import_closure(repo_root: Path) -> set[str]:
+    """Repo-relative ``.py`` files the session-host process can load: its entry
+    points plus every ``src.*``/``app.*`` module they import, transitively
+    (function-local imports included)."""
+
+    def module_file(name: str) -> Path | None:
+        base = repo_root / name.replace(".", "/")
+        for candidate in (base.with_suffix(".py"), base / "__init__.py"):
+            if candidate.is_file():
+                return candidate
+        return None
+
+    pending = [repo_root / "src" / "session_host.py"]
+    pending += sorted((repo_root / "app" / "session_host").rglob("*.py"))
+    seen: set[Path] = set()
+    while pending:
+        path = pending.pop()
+        if path in seen:
+            continue
+        seen.add(path)
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                names = [node.module] + [f"{node.module}.{a.name}" for a in node.names]
+            else:
+                continue
+            for name in names:
+                if name.split(".")[0] in {"src", "app"}:
+                    target = module_file(name)
+                    if target is not None:
+                        pending.append(target)
+    return {p.relative_to(repo_root).as_posix() for p in seen}
+
+
+class TestDeclaredPathsCoverImportGraph:
+    def test_every_module_the_session_host_loads_is_declared(self):
+        root = _CLAUDE_MD.parent
+        declared = session_host_paths.declared_session_host_paths(_CLAUDE_MD)
+        loaded = _session_host_import_closure(root)
+        assert "src/vt_snapshot.py" in loaded  # the walk really follows imports
+        undeclared = sorted(
+            f for f in loaded if not session_host_paths._touched_by([f], declared)
+        )
+        assert undeclared == [], (
+            "session-host loads modules CLAUDE.md's `## session-host` block "
+            f"does not declare, so stale_relevant would miss them: {undeclared}"
+        )
