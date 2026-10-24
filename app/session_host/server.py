@@ -55,17 +55,17 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8466
 
 # Background repaint-nudge tasks, kept referenced so the event loop doesn't
-# GC them before they run (issue #128).
+# GC them before they run.
 _repaint_tasks: "set[asyncio.Task]" = set()
 
-# Repaint-nudge timing (issue #128). The initial delay lets the client's
+# Repaint-nudge timing. The initial delay lets the client's
 # real-size resize land first (so we toggle around the right dimensions);
 # the gap between the two setwinsize calls stops ConPTY coalescing them
 # into a net-zero change that would fire no SIGWINCH.
 _REPAINT_SETTLE = 0.15
 _REPAINT_TOGGLE_GAP = 0.05
 
-# Clean-frame preamble for a full-screen TUI (re)connect (#270 tail-jump).
+# Clean-frame preamble for a full-screen TUI (re)connect (avoids a tail-jump).
 # A no-alt-screen differential agent paints the *main* buffer, so on a
 # reconnect — where the client reuses the same xterm instance with the stale
 # frame still in its buffer — the forced repaint is appended *below* that
@@ -74,11 +74,11 @@ _REPAINT_TOGGLE_GAP = 0.05
 # clear-screen + home preamble before the repaint nudge wipes the client's
 # buffer so the fresh frame lands on an empty screen — the reopened session
 # jumps straight to the current frame. CSI only (no OSC/DA), so it can't
-# reintroduce the query leak the #128/#270 strip removed.
+# reintroduce the query leak the query strip removed.
 _CLEAR_FRAME = "\x1b[H\x1b[2J\x1b[3J"
 
 # Where uploaded files land inside the project so the agent can read them.
-# Any file type is accepted (issue #366 — the compose-bar attach covers
+# Any file type is accepted (the compose-bar attach covers
 # documents, not just photos): the file is only ever *stored* here and its
 # path pasted into the user's own prompt, nothing executes it; the surface
 # is loopback-only and the size cap below still applies. A suffix that
@@ -88,7 +88,7 @@ _SAFE_SUFFIX_RE = re.compile(r"^\.[A-Za-z0-9]{1,10}$")
 _MAX_IMAGE_BYTES = 12 * 1024 * 1024
 
 # Captured once at import — the whole point is that this does NOT track live
-# git state (#615): it's what this specific process loaded when it started,
+# git state: it's what this specific process loaded when it started,
 # which is what a caller needs to know when this process is excluded from
 # the webapp's own restart and can keep running for days unattended.
 _IDENTITY = build_identity()
@@ -140,16 +140,16 @@ def create_app() -> FastAPI:
         flags = str(body.get("flags") or "").strip()
         kind = str(body.get("kind") or "pty").strip().lower()
         agent = str(body.get("agent") or DEFAULT_AGENT).strip().lower()
-        # Role tag (#245) so callers can find a purpose-built session
+        # Role tag so callers can find a purpose-built session
         # deterministically. PTY-only; remote sessions ignore it.
         label = str(body.get("label") or "").strip().lower()
-        # Phone-supplied spawn dimensions (issue #126): size the PTY to the
+        # Phone-supplied spawn dimensions: size the PTY to the
         # real viewport before first paint so a ratatui TUI isn't cut.
         # Omitted → the manager's legacy 40×120 default.
         rows = int(body.get("rows") or 40)
         cols = int(body.get("cols") or 120)
-        # User-configurable scrollback depth for full-screen agents (issue
-        # #435 follow-up, Settings tab). Omitted/absent → SessionManager's
+        # User-configurable scrollback depth for full-screen agents (set from
+        # the Settings tab). Omitted/absent → SessionManager's
         # own default (older webapp builds, or a caller that doesn't set it).
         history_lines_raw = body.get("history_lines")
         history_lines = int(history_lines_raw) if history_lines_raw else None
@@ -158,14 +158,14 @@ def create_app() -> FastAPI:
         if agent not in SESSION_HOST_AGENTS:
             raise HTTPException(status_code=400, detail=f"unknown agent: {agent}")
         try:
-            # Off the event loop (issue #610): SessionManager.create/
+            # Off the event loop: SessionManager.create/
             # create_remote block on a real OS spawn (PtyProcess.spawn / a
             # PowerShell Start-Process). Left un-threaded, one slow spawn
             # freezes every other coroutine sharing this loop — including
             # an already-attached terminal's _pump_to_client, which is a
             # concrete contributor to "terminal opens blank" under a
             # multi-session burst (a fixed-delay mitigation was already
-            # ruled insufficient for the analogous #499 readiness problem).
+            # ruled insufficient for the analogous readiness problem).
             if kind == "remote":
                 session = await asyncio.to_thread(
                     manager.create_remote, project_dir, name, flags, agent
@@ -200,8 +200,8 @@ def create_app() -> FastAPI:
         data = str(body.get("data") or "")
         submit = bool(body.get("submit", True))
         # submit_input() blocks in real time — a bulk payload's settle wait
-        # (issue #611) plus write()'s own chunk-and-pace pauses over ~512
-        # bytes — so offload it like .stop (issue #253) so it doesn't stall
+        # plus write()'s own chunk-and-pace pauses over ~512
+        # bytes — so offload it like .stop so it doesn't stall
         # every other live session's WS pump.
         delivered = await asyncio.to_thread(session.submit_input, data, submit)
         if not delivered:
@@ -209,7 +209,7 @@ def create_app() -> FastAPI:
             # can still be sitting in manager.get() for up to the 30s reap
             # window. Report the drop instead of the previous unconditional
             # {"ok": true}, which let a caller believe a message landed when
-            # it never reached the PTY at all (issue #607).
+            # it never reached the PTY at all.
             raise HTTPException(
                 status_code=409, detail=f"session {sid} not accepting input (exited)"
             )
@@ -232,7 +232,7 @@ def create_app() -> FastAPI:
         body = await _json(request)
         mode = str(body.get("mode") or "quit")
         # The graceful stop polls for exit up to a few seconds — run it off
-        # the event loop so the session-host stays responsive (issue #253).
+        # the event loop so the session-host stays responsive.
         await asyncio.to_thread(session.stop, mode)
         return {"ok": True, "mode": mode}
 
@@ -254,7 +254,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"unknown session {sid}")
         path = await _save_image(session.project_dir, file)
         # inline=1 (compose bar open): skip the paste — the caller drops the
-        # returned path into the textarea for review-before-send (issue #41).
+        # returned path into the textarea for review-before-send.
         if not inline:
             # Bracketed paste so the agent TUI takes the path as one unit.
             session.write(f"\x1b[200~{path}\x1b[201~")
@@ -273,11 +273,11 @@ def create_app() -> FastAPI:
         role = (websocket.query_params.get("role") or "phone").strip().lower()
         await websocket.accept()
         snapshot, queue = session.subscribe()
-        # Breadcrumb for #610 ("terminal opens blank and never paints"): an
+        # Breadcrumb for the "terminal opens blank and never paints" symptom: an
         # empty ring at attach is expected for a session that hasn't
         # printed yet, but if a future report recurs, this timestamp +
         # ring size lets it be correlated against a concurrent create burst
-        # (see #610's asyncio.to_thread fix above) without guessing blind.
+        # (see the asyncio.to_thread create above) without guessing blind.
         logger.info(
             f"🔌 WS attach {sid[:8]} role={role} ring_chars={len(snapshot)}"
         )
@@ -287,16 +287,16 @@ def create_app() -> FastAPI:
                 # the raw scrollback ring. Replaying its stale move-cursor /
                 # clear deltas garbles a fresh xterm, and replaying the
                 # agent's startup terminal queries makes xterm re-answer them
-                # as input — the `[?1;2c` DA leak (issue #128).
+                # as input — the `[?1;2c` DA leak.
                 #
-                # Wipe the client's buffer first (#270 tail-jump): the xterm
+                # Wipe the client's buffer first (avoids a tail-jump): the xterm
                 # instance is reused across a reconnect, so without this a
                 # repaint appends below the stale frame and crawls through it.
                 await websocket.send_text(_CLEAR_FRAME)
-                # Serve the headless-VT current-frame snapshot (issue #432):
+                # Serve the headless-VT current-frame snapshot:
                 # no winsize toggle, no SIGWINCH, no agent re-emission — a
-                # ratatui agent re-emits its ENTIRE transcript on any resize
-                # (issue #430), which is exactly what the old toggle-based
+                # ratatui agent re-emits its ENTIRE transcript on any resize,
+                # which is exactly what the old toggle-based
                 # repaint nudge below used to trigger on every (re)connect,
                 # visible to every subscriber including the PC mirror.
                 frame = session.snapshot_frame()
@@ -309,10 +309,10 @@ def create_app() -> FastAPI:
                     _repaint_tasks.add(task)
                     task.add_done_callback(_repaint_tasks.discard)
             elif snapshot:
-                # Wipe the client's buffer before the raw-ring replay
-                # (#444). The phone reuses the same xterm instance across
-                # reconnects — the #28 backoff re-runs connectTerminalWs on
-                # the same terminal, and the #430 warm cache keeps it alive
+                # Wipe the client's buffer before the raw-ring replay.
+                # The phone reuses the same xterm instance across
+                # reconnects — the backoff re-runs connectTerminalWs on
+                # the same terminal, and the warm cache keeps it alive
                 # across overlay close/re-open — so without the wipe this
                 # full-ring replay is APPENDED below the stale buffer,
                 # duplicating the conversation tail on every reconnect

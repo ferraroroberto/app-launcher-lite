@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 # Worktree sibling suffix (``skills/_lib/worktree_claim.py``'s ``<repo>-wt-<N>``)
 # stripped so a session built in an isolated worktree still resolves to its
-# primary repo's own active-issue marker (#627).
+# primary repo's own active-issue marker.
 _WORKTREE_SUFFIX_RE = re.compile(r"-wt-\d+$")
 
 
@@ -69,7 +69,7 @@ def active_issue_repos(active_issue_rows: Dict[str, Any]) -> FrozenSet[str]:
 
 # Statuses the hook writer emits; anything else renders as "unknown". This
 # gates the *raw* row status only — a card's final ``status`` can diverge
-# further downstream (the transcript overlay, and #608's needs-you split;
+# further downstream (the transcript overlay, and the needs-you split;
 # see :func:`merge_sessions`).
 _KNOWN_STATUSES = frozenset({"working", "needs-you", "idle"})
 

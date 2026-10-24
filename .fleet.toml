@@ -30,6 +30,7 @@ build_info = { src = "src/build_info.py", sha = "c9e54e917fd3cbc96011d6c09f9d363
 static_ratchet = { src = "scripts/static_ratchet.py", sha = "f0e6f5449ecf64c9b188ed394c2a9fd8ff678406", dest = "scripts/static_ratchet.py" }
 docs_ratchet = { src = "scripts/docs_ratchet.py", sha = "fdb750461997c4a13eacea8091f115ff12bba564", dest = "scripts/docs_ratchet.py" }
 structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "84d2b12ab416551762e4a615e4a706df91cea69f", dest = "scripts/structure_ratchet.py" }
+comment_ratchet = { src = "scripts/comment_ratchet.py", sha = "e56308e1c099712cf5a006557c94e3f9ae4fe8aa", dest = "scripts/comment_ratchet.py" }
 
 # [static_ratchet] -- the scaffold's baseline-and-ratchet static analysis. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/static_ratchet_gate.py, which wraps
@@ -67,6 +68,19 @@ baseline = ".docs-ratchet-baseline.json"
 [structure_ratchet]
 enabled  = true
 baseline = ".structure-ratchet-baseline.json"
+
+# [comment_ratchet] -- the scaffold's baseline-and-ratchet check on issue references
+# (`#NNN`) inside product-code comments. The gate runs scripts/comment_ratchet.py
+# through scripts/comment_ratchet_gate.py: a file whose count of references in
+# comments rose, or a new file carrying any, fails against
+# .comment-ratchet-baseline.json. A comment states the present-tense why; the story
+# of how the code got here lives in the issue and `git log`. Product code only:
+# tests, vendored components and generated files are left out by the script itself.
+# Exit 3 (a file could not be scanned) fails as NOT CONFIRMED. Procedure + limits:
+# project-scaffolding docs/comment-ratchet.md.
+[comment_ratchet]
+enabled  = true
+baseline = ".comment-ratchet-baseline.json"
 
 [[design.accepted]]
 check  = "vendored-tokens"

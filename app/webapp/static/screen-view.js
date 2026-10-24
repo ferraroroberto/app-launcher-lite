@@ -1,4 +1,4 @@
-/* Screen view (#60, ported from app-launcher#1520): the PC's desktop, live,
+/* Screen view (ported from app-launcher): the PC's desktop, live,
  * behind the terminal's gate.
  *
  * openScreen() is the one way in; the Settings tab's Screen row calls it. It

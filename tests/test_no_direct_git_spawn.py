@@ -20,15 +20,18 @@ SCANNED_DIRS = ("src", "app", "scripts")
 #: same env inline (pinned in tests/test_classify_e2e.py).
 ALLOWED = {
     "src/git_run.py", "scripts/classify_e2e.py", "src/build_info.py",
-    "scripts/docs_ratchet.py", "scripts/structure_ratchet.py",
+    "scripts/docs_ratchet.py", "scripts/structure_ratchet.py", "scripts/comment_ratchet.py",
 }
 
 #: Allowlisted files that are the scaffold's verbatim copy and so cannot route
 #: through ``run_git`` (a byte-identical copy must stay self-contained). Their
 #: one spawn is a read-only ``rev-parse`` (build_info) or ``ls-files``
-#: (docs_ratchet and structure_ratchet, which also set ``GIT_OPTIONAL_LOCKS=0``
+#: (docs_ratchet, structure_ratchet and comment_ratchet, which also set ``GIT_OPTIONAL_LOCKS=0``
 #: inline). Each must be declared in ``.fleet.toml`` ``[vendored]``.
-VENDORED_VERBATIM = {"src/build_info.py", "scripts/docs_ratchet.py", "scripts/structure_ratchet.py"}
+VENDORED_VERBATIM = {
+    "src/build_info.py", "scripts/docs_ratchet.py", "scripts/structure_ratchet.py",
+    "scripts/comment_ratchet.py",
+}
 
 
 def _is_git_argv(node: ast.AST) -> bool:

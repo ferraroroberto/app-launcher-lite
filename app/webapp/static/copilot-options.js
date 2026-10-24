@@ -101,7 +101,7 @@ export async function patchConfig(patch) {
   }
 }
 
-// role="switch" buttons (issue #355): click reads the current aria-checked,
+// role="switch" buttons: click reads the current aria-checked,
 // flips it, applies it optimistically, then patchConfig() round-trips
 // through GET /api/config, which re-renders from server truth anyway.
 function wireBoolSwitch(el, patchKey) {
@@ -126,7 +126,7 @@ export function wireCopilotOptions() {
   });
   // The ☁️ Detached and ↺ Resume toggles are plain client-side switches
   // (no server config — read at session-launch time in apps.js). They live
-  // in the Projects card's <summary> (#496 — the launch surface) so they
+  // in the Projects card's <summary> (the launch surface) so they
   // stay visible when the panel is collapsed — but a click there would
   // also expand/collapse the <details>, so stopPropagation lives alongside
   // the flip.

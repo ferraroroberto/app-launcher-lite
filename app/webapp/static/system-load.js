@@ -1,4 +1,4 @@
-/* The Coding header's CPU reading (#65, port of app-launcher#1522): "is the
+/* The Coding header's CPU reading (ported from app-launcher): "is the
  * work PC loaded?" at a glance, and "by what?" one tap away.
  *
  * The home-head carries one .cpu-reading button left of the theme toggle. It

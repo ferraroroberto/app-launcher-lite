@@ -49,9 +49,9 @@ logger = logging.getLogger(__name__)
 _FG_CODE = {name: code for code, name in pyte.graphics.FG_ANSI.items() if name != "default"}
 _BG_CODE = {name: code for code, name in pyte.graphics.BG_ANSI.items() if name != "default"}
 
-# Bounded scrollback window (issue #435): enough to page back through a
+# Bounded scrollback window: enough to page back through a
 # genuine chunk of conversation without the reconnect payload ballooning
-# back toward the full-transcript re-emission #430/#432 exist to avoid.
+# back toward the full-transcript re-emission this mirror exists to avoid.
 # Twice undersized in practice, each time re-measured against a real live
 # session rather than guessed: 500 was cleared by a single README dump
 # (797 lines); 2000 was cleared TWICE by one heavy Codex exchange (a user
@@ -67,7 +67,7 @@ _BG_CODE = {name: code for code, name in pyte.graphics.BG_ANSI.items() if name !
 # rate that's a worst-case ~650 KB payload, still well within what the
 # existing repaint-batch concealment handles.
 #
-# User-configurable (issue #435 follow-up): the Settings tab exposes this
+# User-configurable: the Settings tab exposes this
 # as `terminal_history_lines` (src/webapp_config.py), threaded through
 # SessionManager.create()'s `history_lines` param. This constant is only
 # the fallback for a caller that doesn't pass one (e.g. a direct
@@ -78,7 +78,7 @@ _HISTORY_LINES = 10_000
 # How many consecutive parse failures get logged in full before the breadcrumb
 # throttles to every Nth. A malformed sequence the agent re-emits on every
 # frame must not turn the session-host log into a flood, but the *first* few
-# must always be loud enough to diagnose from (issue #2).
+# must always be loud enough to diagnose from.
 _FEED_ERROR_LOG_FIRST = 3
 _FEED_ERROR_LOG_EVERY = 500
 # Characters of the offending chunk to quote in that breadcrumb.
@@ -200,7 +200,7 @@ class VtSnapshot:
             _render_row(row, cols) + "\r\n" for row in history_rows
         )
         # Force the viewport clear via real linefeeds before the frame's
-        # absolute-positioned paint (issue #435 follow-up: "conversation
+        # absolute-positioned paint (otherwise the client shows "conversation
         # beginning visible, a chunk in the middle missing, latest lines
         # visible"). After the history text scrolls naturally, the client's
         # viewport still holds the LAST `rows` history lines — only content
@@ -216,7 +216,7 @@ class VtSnapshot:
         # history to protect — nothing has scrolled off yet, so there's
         # nothing sitting in the viewport for the frame to clobber, and
         # unconditionally forcing it would inject stray blank lines above
-        # every frame (the #432 backward-compatible empty-history case).
+        # every frame (the backward-compatible empty-history case).
         force_scroll = ("\r\n" * rows) if history_rows else ""
         return history_text + force_scroll + frame
 
@@ -259,7 +259,7 @@ def _render_row(row, cols: int) -> str:
         # wcwidth-aware cursor advance already skips it once we've emitted
         # the wide char, so we must not also write to it (that shifted
         # everything after it by one column — caught by the vt_snapshot
-        # round-trip probe, issue #432).
+        # round-trip probe).
         width = wcswidth(data)
         x += width if width and width > 0 else 1
     return "".join(out)

@@ -57,8 +57,7 @@ async def _dry_run_check(job: Job, raw_params: Dict[str, Any]) -> Dict[str, Any]
             build_invocation, job, raw_params, run_dir
         )
         if job.env:
-            # "Would this even start?" includes the env overlay (issue
-            # #72): an unresolvable $secret: reference must fail the
+            # "Would this even start?" includes the env overlay: an unresolvable $secret: reference must fail the
             # check, not wait for a real fire. Values are discarded —
             # only argv ever lands in the note.
             from src.jobs_secrets import resolve_env_overlay  # local: leaf util

@@ -286,13 +286,13 @@ async def audit_session_start_and_maybe_mirror(
         sid, "start", agent=agent, skill=skill, name=name, project=project,
     )
     # Mirror the session into a dedicated interactive terminal window on the
-    # PC — the default for every caller (issue #241, widened by #609); only
+    # PC — the default for every caller; only
     # an explicit in-page loopback browser skips it (see should_mirror_to_pc).
     # mirror_url picks loopback (auth-bypass) or the ts.net URL with explicit
-    # credentials, keyed on the active cert (#356).
+    # credentials, keyed on the active cert.
     if should_mirror_to_pc(cfg.show_local_window, request, body):
         # Pass sid so launcher tracks the mirror window's HWND for Stop &
-        # Close to dismiss it later (issue #20).
+        # Close to dismiss it later.
         asyncio.create_task(
             asyncio.to_thread(mirror_fn, mirror_url(request, cfg, sid), sid)
         )

@@ -67,10 +67,10 @@ async def stop_coding_session(sid: str, request: Request) -> Dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
     body = await maybe_json(request)
     mode = str(body.get("mode") or "quit")
-    # Every stop now closes the window (issue #253 unified the button), so
-    # always Win32-close the PC mirror window (issue #20). close_mirror_window
+    # Every stop closes the window (one unified stop button), so
+    # always Win32-close the PC mirror window. close_mirror_window
     # first tries the HWND stashed at spawn time, then falls back to a fresh
-    # title-scan of live windows (issue #199) so it works even after a webapp
+    # title-scan of live windows so it works even after a webapp
     # restart wiped the in-memory registry. Best-effort: swallow any exception
     # so a busted HWND can't keep the session alive. The cooperative WS
     # shutdown the session-host fires is a further fallback for when no
@@ -148,7 +148,7 @@ async def mirror_coding_session(sid: str, request: Request) -> Dict[str, Any]:
     # A disposable e2e / verify-before-ship instance (identified by the
     # session-host port override, set only by autoboot) must never spawn a real
     # Edge window or focus the canonical instance's desktop windows — the same
-    # rule the orphan-mirror sweep follows (issue #278). Report ``mirrored`` so
+    # rule the orphan-mirror sweep follows. Report ``mirrored`` so
     # the desktop client still skips the in-page terminal, but touch no window.
     if os.environ.get(SESSION_HOST_PORT_ENV, "").strip():
         return {"mirrored": True, "action": "skipped"}
@@ -272,7 +272,7 @@ async def proxy_session_ws(websocket: WebSocket, sid: str) -> None:
     upstream_url = session_client.ws_url(cfg.session_host_port, sid, role)
     try:
         async with ws_connect(upstream_url) as upstream:
-            # Off the event loop via audit_off_loop (issue #610) — and gating first
+            # Off the event loop via audit_off_loop — and gating first
             # paint on THIS connection too, since the pump doesn't start
             # until these return.
             await audit_off_loop(
@@ -288,7 +288,7 @@ async def proxy_session_ws(websocket: WebSocket, sid: str) -> None:
         # HTTP layer — e.g. the session-host answering 403 for a reaped
         # or unknown session (InvalidStatus). Same "upstream not usable"
         # condition as OSError; map it to the clean 4502 close instead of
-        # letting it escape as an unhandled ASGI traceback (issue #61).
+        # letting it escape as an unhandled ASGI traceback.
         logger.debug(f"WS proxy {sid[:8]} ended: {exc}")
         try:
             await websocket.close(
@@ -314,7 +314,7 @@ async def _proxy_websocket(client: WebSocket, upstream, sid: str) -> None:
             try:
                 msg = json.loads(raw)
                 if isinstance(msg, dict) and msg.get("type") == "input":
-                    # Off the event loop via audit_off_loop (issue #610): fires on
+                    # Off the event loop via audit_off_loop: fires on
                     # every keystroke/paste frame for as long as the terminal
                     # stays open, sharing this one worker's loop with every
                     # other live session's pump — the highest-frequency

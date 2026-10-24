@@ -70,7 +70,7 @@ router.include_router(jobs_run_store_routes.router)
 # ``create_job`` reads each via ``body.get(field)``, ``edit_job`` reads each
 # via ``if field in body: patch[field] = body[field]``. Kept as one list so
 # adding a field to the schema can't silently land on only one of the two
-# routes (issue #405). ``name``/``script_path``/``args``/``schedule``/``params``
+# routes. ``name``/``script_path``/``args``/``schedule``/``params``
 # are excluded — they get real validation/parsing on create that isn't a bare
 # passthrough, so they stay hand-written in each route.
 JOB_OPTIONAL_FIELDS = (
@@ -131,7 +131,7 @@ def _decorate_job(
     payload["next_run"] = jobs_mod.query_next_run(
         job.id, other_job_ids=all_job_ids
     )
-    # Computed next fire from the schedule shape (issue #229). Unlike the
+    # Computed next fire from the schedule shape. Unlike the
     # schtasks string above, this is sortable + countdown-able. None for
     # manual-only / paused / already-elapsed-once jobs.
     nf = jobs_mod.next_fire(job.schedule)
@@ -139,7 +139,7 @@ def _decorate_job(
     payload["next_run_iso"] = (
         nf.isoformat(timespec="seconds") if nf is not None else None
     )
-    # A run stranded "running" by a dead executor (issue #591) is reconciled
+    # A run stranded "running" by a dead executor is reconciled
     # opportunistically here, on every poll, before it's decorated for the
     # client — mirrors src.app_runtime.prune_dead's lazy-on-read pattern.
     jobs_mod.reap_stranded_runs(job)
@@ -159,7 +159,7 @@ def _decorate_job(
     payload["running"] = jobs_mod.is_running(job.id)
     payload["stats"] = jobs_mod.run_stats(job.id)
     payload["stuck"] = jobs_mod.is_stuck(job.id)
-    # Missed-fire coverage (issue #697). Reads a process-local cached scan —
+    # Missed-fire coverage. Reads a process-local cached scan —
     # the schtasks half rides the same 30 s bulk-query cache `next_run` uses,
     # so this adds no shell-out to the poll path.
     payload["coverage"] = jobs_mod.coverage_for_job(job.id)
@@ -279,7 +279,7 @@ async def get_jobs_agenda(request: Request, days: int = 7) -> Dict[str, Any]:
 async def create_job(request: Request) -> Dict[str, Any]:
     body = await maybe_json(request)
     name = str(body.get("name") or "").strip()
-    # script_path requiredness is kind-dependent (issue #70: inline-shell /
+    # script_path requiredness is kind-dependent (inline-shell /
     # http-check carry no script_path at all) — job_from_dict's
     # validate_kind_shape is the single place that owns this now, so it is
     # deliberately not hard-checked here.
@@ -292,7 +292,7 @@ async def create_job(request: Request) -> Dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    # Validate params (issue #67) at the boundary so a bad shape fails
+    # Validate params at the boundary so a bad shape fails
     # fast with a 400 instead of being caught downstream by job_from_dict.
     params_raw = body.get("params")
     try:
@@ -320,7 +320,7 @@ async def create_job(request: Request) -> Dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    # Save-time pre-flight (issue #69). Errors 400 with a structured
+    # Save-time pre-flight. Errors 400 with a structured
     # problems list; warnings short-circuit to a saved:false body unless
     # the caller already acknowledged them.
     acknowledged = bool(body.get("acknowledge_warnings"))
@@ -355,11 +355,11 @@ async def edit_job(job_id: str, request: Request) -> Dict[str, Any]:
         if field in body:
             patch[field] = body[field]
 
-    # Save-time pre-flight (issue #69) on the *effective* post-edit job.
+    # Save-time pre-flight on the *effective* post-edit job.
     # Synthesize a candidate from the existing job overlaid with this patch
     # and gate on it before update_job persists. kind/script_path/kind_config
     # are validated together here (mirroring update_job's own effective-shape
-    # check, issue #70) so a bad combination fails with its own clear message
+    # check) so a bad combination fails with its own clear message
     # rather than a misleading "script not found" from pre-flight.
     eff_kind = str(patch["kind"] or "").strip() if "kind" in patch else existing.kind
     if "script_path" in patch:
@@ -471,7 +471,7 @@ async def run_job(job_id: str, request: Request) -> Dict[str, Any]:
     if job is None:
         raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
 
-    # Typed parameter payload (issue #67). Empty body keeps today's
+    # Typed parameter payload. Empty body keeps today's
     # one-tap fire path for parameter-less jobs. Validation happens up
     # front via compose_argv so bad values never get a run directory.
     body = await maybe_json(request)
@@ -483,7 +483,7 @@ async def run_job(job_id: str, request: Request) -> Dict[str, Any]:
             status_code=400, detail="params must be an object"
         )
 
-    # Dry-run modes (issue #69). "check" verifies the job would *start*
+    # Dry-run modes. "check" verifies the job would *start*
     # (path/venv/param resolution) without spawning the child; "execute"
     # spawns with JOB_DRY_RUN=1 so opted-in scripts suppress side effects.
     # Both are explicit verification fires, so they bypass cooldown +
@@ -501,7 +501,7 @@ async def run_job(job_id: str, request: Request) -> Dict[str, Any]:
             ),
         )
 
-    # Confirm-on-fire gate (issue #69). A job flagged ``confirm`` must
+    # Confirm-on-fire gate. A job flagged ``confirm`` must
     # carry ``?confirmed=1`` to actually execute — this keeps the gate
     # honest against a direct curl / Stream Deck hit, not just the UI.
     # A dry-run "check" has no side effects, so it is exempt.
@@ -521,7 +521,7 @@ async def run_job(job_id: str, request: Request) -> Dict[str, Any]:
     if dry_mode == "execute":
         return await _dry_run_execute(job, raw_params)
 
-    # Run-record provenance (issue #72): who fired this, from where, with
+    # Run-record provenance: who fired this, from where, with
     # what credential. token_id/label are set by the auth middleware only
     # for a minted (scoped) token — never the secret itself; the legacy
     # auth_token and loopback callers record ip+ua alone.
@@ -655,7 +655,7 @@ async def get_job_run(job_id: str, run_id: str) -> Dict[str, Any]:
     record["output_tail"] = await asyncio.to_thread(
         jobs_mod.read_output_tail, run_dir
     )
-    # Raw webhook payload (issue #73), when this run was webhook-triggered —
+    # Raw webhook payload, when this run was webhook-triggered —
     # surfaced alongside the output tail for the run's expanded panel.
     record["webhook_payload"] = await asyncio.to_thread(
         jobs_mod.read_webhook_payload, run_dir

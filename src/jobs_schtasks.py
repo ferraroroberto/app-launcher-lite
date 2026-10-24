@@ -363,7 +363,7 @@ def sync_schtasks(
     runner = runner or _run_schtasks
     if job.elevated:
         # Still delete any stale entry from a prior non-elevated schedule
-        # (issue #409) — otherwise it keeps firing un-elevated on its old
+        # — otherwise it keeps firing un-elevated on its old
         # schedule indefinitely. We just never *create* the elevated entry
         # ourselves (see docstring): that still needs an elevated shell.
         delete_schtasks(job.id, runner=runner)
@@ -698,7 +698,7 @@ def next_fire(
 
 
 # Schedule types whose cadence is too dense to enumerate over an agenda
-# window (issue #230). The agenda summarises these as a single "frequent"
+# window. The agenda summarises these as a single "frequent"
 # row instead of one entry per fire. next_fire never returns None for
 # them, so upcoming_fires must short-circuit before the enumeration loop.
 FREQUENT_SCHEDULE_TYPES = frozenset({"minutes", "hourly"})

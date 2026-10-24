@@ -69,7 +69,7 @@ from src.board_transcript import (  # noqa: F401 — re-exported
 logger = logging.getLogger(__name__)
 
 
-# #608: the family of statuses that still mean "a human needs to look at
+# The family of statuses that still mean "a human needs to look at
 # this" after board_transcript's needs-you split. ``idle-finished`` is
 # deliberately excluded — a clean-stopped session that nothing is pending on
 # isn't an alert, it's Claude quietly holding a workspace, same as ``idle``.

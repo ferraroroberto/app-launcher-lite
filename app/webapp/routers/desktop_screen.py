@@ -104,7 +104,7 @@ async def screen_ws(websocket: WebSocket) -> None:
     # is the session's real traffic on the work link, and ``unavailable``
     # counts the times the desktop stopped being readable — the one durable
     # trace of a blocked capture, since the tray discards the webapp's own
-    # log output (#60).
+    # log output.
     sent = {"frames": 0, "bytes": 0, "unavailable": 0}
 
     async def send_frame(data: bytes) -> None:

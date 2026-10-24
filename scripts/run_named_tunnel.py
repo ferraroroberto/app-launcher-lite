@@ -60,7 +60,7 @@ def _find_python() -> Path:
 
 def _spawn_uvicorn(port: int) -> subprocess.Popen:
     # Auto-renew a Tailscale cert expiring within 30 days before uvicorn
-    # binds (project-scaffolding#89); no-op on self-signed, never blocks.
+    # binds; no-op on self-signed, never blocks.
     check_script = PROJECT_ROOT / "scripts" / "gen_tailscale_cert.py"
     if check_script.exists():
         try:

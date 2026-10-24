@@ -1,5 +1,5 @@
 /* ---------- settings ---------- */
-/* Settings is its own tab (issue #383): a plain card whose head mirrors
+/* Settings is its own tab: a plain card whose head mirrors
    the disclosure summary's box (52px, 0 14px, divider) without the
    collapse behavior — a dedicated pane has nothing to collapse. */
 .settings-card { padding: 0; }
@@ -12,7 +12,7 @@
   border-bottom: 1px solid var(--line-muted);
 }
 .settings-edit-row { min-height: 0; font-size: var(--font-caption); }
-/* API-tokens panel (issue #72) */
+/* API-tokens panel */
 .token-row { justify-content: space-between; }
 .token-meta { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 #tokenMintValue { flex: 1; min-width: 0; font-family: ui-monospace, monospace; }
@@ -34,7 +34,7 @@
   min-height: var(--control-h);
 }
 /* .big-btn / .ghost-btn migrated to the vendored button-tint / button-ghost
-   tiers (issue #477, project-scaffolding's button/ component) — fill,
+   tiers (project-scaffolding's button/ component) — fill,
    border, radius, cursor and the shared :disabled recipe now come from
    _vendored/button/button.css. What's left here is app-launcher's own
    layout/size/weight/press-feedback, kept as-is so this migration doesn't
@@ -62,7 +62,7 @@
 .muted { color: var(--muted); }
 .small { font-size: var(--font-caption); }
 
-/* Status + build identity footer (issue #212): centred plain text at the
+/* Status + build identity footer: centred plain text at the
    very bottom of the page, outside every card. */
 .page-foot {
   margin: 16px 4px;
@@ -76,7 +76,7 @@
   gap: 0;
   margin: 10px 0;
 }
-/* Flat separator rows (issue #365) — same treatment as .app-item. */
+/* Flat separator rows — same treatment as .app-item. */
 .listener-row {
   display: flex;
   align-items: center;
@@ -89,14 +89,14 @@
 }
 .listener-row:last-child { border-bottom: none; }
 .listener-row > div { min-width: 0; }
-/* A helper service nested under its parent app's row (#224). */
+/* A helper service nested under its parent app's row. */
 .listener-row.child {
   margin-left: 18px;
   border-left: 2px solid var(--accent);
 }
 .listener-row strong { word-break: break-word; }
 .listener-row .meta { color: var(--muted); font-size: var(--font-caption); }
-/* Parent row whose dependent children are collapsed behind a tap (#480). */
+/* Parent row whose dependent children are collapsed behind a tap. */
 .listener-row.expandable { cursor: pointer; }
 .listener-chevron {
   flex-shrink: 0;

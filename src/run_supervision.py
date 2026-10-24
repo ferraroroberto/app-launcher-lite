@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 # How often the resource sampler thread walks the process tree.
 RESOURCE_SAMPLE_INTERVAL_SECONDS = 1.0
 
-# --------------------------------------------------- executor watchdog (#695)
+# --------------------------------------------------- executor watchdog
 # How often the watchdog thread re-checks its two signals. Coarse on
 # purpose: both thresholds are minutes-to-hours, and the tick costs one
 # ``stat`` plus one ``poll`` — there is nothing to gain from checking
@@ -60,7 +60,7 @@ WATCHDOG_DEFAULT_NO_OUTPUT_SECONDS = 3600.0
 WATCHDOG_KILL_GRACE_SECONDS = 5.0
 
 # The console half of a ``visible`` job's tee is best-effort live display
-# only (issue #694). A console that stops *draining* — a Windows console
+# only. A console that stops *draining* — a Windows console
 # put into mark/select mode by a click is the classic trigger — blocks
 # ``console.write()`` indefinitely with no exception and no timeout. When
 # that write sat on the reader thread it stopped the child's pipe being

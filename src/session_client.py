@@ -26,7 +26,7 @@ _TIMEOUT = 8.0
 _CREATE_TIMEOUT = 45.0
 # A graceful stop polls for the agent to exit on its quit command (up to the
 # host's ~5 s grace window) before force-falling-back, so the stop call needs
-# more headroom than the 8 s default (issue #253).
+# more headroom than the 8 s default.
 _STOP_TIMEOUT = 10.0
 
 
@@ -99,15 +99,15 @@ def create_session(
         "kind": kind,
         "agent": agent,
         # Phone's real terminal size, so the PTY's first frame is the
-        # right width for a ratatui TUI (issue #126).
+        # right width for a ratatui TUI.
         "rows": rows,
         "cols": cols,
     }
-    # User-configurable scrollback depth for full-screen agents (issue
-    # #435 follow-up). Omitted → the session-host's own default.
+    # User-configurable scrollback depth for full-screen agents.
+    # Omitted → the session-host's own default.
     if history_lines is not None:
         payload["history_lines"] = history_lines
-    # Role tag (#245). Omitted when unset — a legacy host
+    # Role tag. Omitted when unset — a legacy host
     # ignores unknown keys, so this stays backward compatible either way.
     if label:
         payload["label"] = label

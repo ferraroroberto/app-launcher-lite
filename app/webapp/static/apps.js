@@ -36,7 +36,7 @@ export function renderApps() {
 
 // ------------------------------------------- Coding row button visibility
 // The row strip grew to one button per registered agent plus GitHub plus the
-// star (issue #666: six agents made it crowded on the phone). The user hides
+// star (six agents made it crowded on the phone). The user hides
 // the ones they don't use from the options card. Persisted server-side as
 // `coding_hidden_agents` — a *hidden* list, so a newly registered agent shows
 // up by default and needs no config migration.
@@ -46,7 +46,7 @@ export function renderApps() {
 // the GitLab move — kept as-is for config compatibility (it is a persisted
 // `coding_hidden_agents` entry, renaming it would silently un-hide the button
 // on every existing install); the visible label/tooltip say "Repository
-// issues" and the glyph is this fork's only forge, GitLab (issue #13).
+// issues" and the glyph is this fork's only forge, GitLab.
 const REPO_BUTTON_ID = 'github';
 const REPO_BUTTON_LABEL = 'Repository issues';
 const REPO_BUTTON_ICON = 'gitlab';
@@ -80,7 +80,7 @@ let visibilityWrite = Promise.resolve();
 
 // The toggle list is *generated* from the live agent registry, never
 // hand-written per agent: adding an agent to src/agents.py puts it in this
-// list with no further code change (the whole point of issue #666).
+// list with no further code change (the whole point of the list).
 export function renderAgentVisibility() {
   const host = els.agentVisibility;
   if (!host) return;
@@ -132,7 +132,7 @@ export function renderAgentVisibility() {
 // remove controls — Settings → Edit mode does not apply here.
 function renderCodingList(host, items) {
   host.innerHTML = '';
-  // Favorites pinned to the top (issue #250). `items` arrives alphabetical
+  // Favorites pinned to the top. `items` arrives alphabetical
   // from the scanner, so a stable partition keeps both groups A–Z. The
   // "Favorites" header toggle (state.codingFavFilter) narrows the list to
   // just the starred ones.
@@ -159,8 +159,8 @@ function renderCodingList(host, items) {
     const name = document.createElement('div');
     name.className = 'coding-name';
     // The folder name rides its own span, not a bare text node, so it can
-    // ellipsis-truncate independently of the branch pill beside it (issue
-    // #8 — one line per project). `title` keeps the full name reachable
+    // ellipsis-truncate independently of the branch pill beside it (one
+    // line per project). `title` keeps the full name reachable
     // when it is cut, mirroring the pill's own tooltip.
     const nameText = document.createElement('span');
     nameText.className = 'coding-name-text';
@@ -174,12 +174,12 @@ function renderCodingList(host, items) {
     const actions = document.createElement('div');
     actions.className = 'row-actions agent-actions';
 
-    // Buttons the user hid in the options card (issue #666). Re-derived on
+    // Buttons the user hid in the options card. Re-derived on
     // every render (like syncFavFilterBtn) so the ~4 s poll can't resurrect
     // a hidden button.
     const hidden = hiddenButtons();
 
-    // Order is Repository · Star · agents (issue #8). The agent launch is the
+    // Order is Repository · Star · agents. The agent launch is the
     // row's primary action, so it sits rightmost — the far side of the strip
     // is the easiest thumb reach on a phone, and it cannot go any further
     // right than this: the strip already ends at the list's content edge.
@@ -188,7 +188,7 @@ function renderCodingList(host, items) {
     // vs GitLab `/-/issues`, registry.py owns the host check) and used
     // verbatim here. Spawns no process and creates no session. Disabled
     // with a hover hint when the project has no parseable git remote.
-    // Hideable under the same pseudo-id as the agents (issue #666).
+    // Hideable under the same pseudo-id as the agents.
     if (!hidden.has(REPO_BUTTON_ID)) {
       const repoBtn = document.createElement('button');
       repoBtn.type = 'button';
@@ -254,7 +254,7 @@ function renderCodingList(host, items) {
   });
 }
 
-// Star / unstar a coding project (issue #250). Persists server-side, then
+// Star / unstar a coding project. Persists server-side, then
 // re-fetches /api/apps so the star and the favorites-first ordering update
 // from the authoritative payload (no optimistic local mutation to drift).
 async function toggleFavorite(a) {
@@ -270,7 +270,7 @@ async function toggleFavorite(a) {
   }
 }
 
-// Flip a Registered Trays entry's autostart flag (issue #456 part 2/2) via
+// Flip a Registered Trays entry's autostart flag via
 // the same PATCH /api/apps/{id} the rename dialog uses. Re-fetches
 // /api/apps on success so the switch reflects the authoritative persisted
 // state, not an optimistic local flip.
@@ -296,17 +296,17 @@ function syncFavFilterBtn() {
   const on = state.codingFavFilter;
   btn.classList.toggle('active', on);
   btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-  // Label in its own span so narrow phones can drop it to icon-only (#496:
-  // the Projects summary now also carries the Detached/Resume toggles).
+  // Label in its own span so narrow phones can drop it to icon-only (
+  // the Projects summary also carries the Detached/Resume toggles).
   btn.innerHTML = icon('star') + '<span class="fav-filter-label"> Favorites</span>';
 }
 
-// Colour a Coding tile's folder name from the cached git-status map
-// (issue #115): red when the working tree is dirty (needs cleaning),
+// Colour a Coding tile's folder name from the cached git-status map:
+// red when the working tree is dirty (needs cleaning),
 // yellow when parked on a non-default branch (not a fresh start). Red
 // wins the colour when both apply, but the branch tag still shows so the
 // "why" behind a yellow stays visible. No-op only until the boot fetch
-// lands (#496) — state.gitStatus fills automatically now, no tap needed.
+// lands — state.gitStatus fills automatically now, no tap needed.
 function annotateGitStatus(nameEl, id) {
   const gs = state.gitStatus && state.gitStatus[id];
   if (!gs || !gs.is_git) return;
@@ -323,8 +323,8 @@ function annotateGitStatus(nameEl, id) {
   }
 }
 
-// Always-on git-status refresh (#496, deliberately reversing #115's
-// on-demand contract). Runs git per project on the server, fanned out
+// Always-on git-status refresh (deliberately not
+// on-demand). Runs git per project on the server, fanned out
 // across threads; caches the result in state and re-renders every surface
 // that reads it (Coding tiles + legend, home-head aggregate, Board
 // backlog). Called at boot and on the GIT_STATUS_POLL_MS interval in
@@ -340,11 +340,11 @@ export async function refreshGitStatus(options) {
     if (els.gitStatusLegend) els.gitStatusLegend.hidden = false;
     renderApps();
     renderHomeHead();
-    // The Board backlog reads the same cache (#496 item 4); repaint it if
+    // The Board backlog reads the same cache; repaint it if
     // it's the visible tab — its own 5 s poll does no git work. Self-gate on
     // an open drawer (pattern: fetchBoard() at board.js:598) so this refresh
     // can't tear down a drawer's DOM out from under an in-progress
-    // interaction (#512).
+    // interaction.
     if (state.tab === 'board' && !state.boardExpanded) renderBoard();
   } catch (exc) {
     if (!quiet) throw exc;
@@ -353,7 +353,7 @@ export async function refreshGitStatus(options) {
 }
 
 // The header ⎇ status button: re-fetch fresh data, then open the off-main
-// drill-down popover (#139). The data is usually already warm from the
+// drill-down popover. The data is usually already warm from the
 // poll — the re-fetch just guarantees the popover never shows stale state.
 export async function fetchGitStatus() {
   const btn = els.gitStatusBtn;
@@ -368,7 +368,7 @@ export async function fetchGitStatus() {
   }
 }
 
-// Compact "what am I working on" popover (issue #139). Reads the same
+// Compact "what am I working on" popover. Reads the same
 // cached git-status the tiles use and lists one line per project parked
 // off its default branch, colour-matched to the list (red = dirty,
 // yellow = off-main). Anchored below the status button; closes on a
@@ -491,7 +491,7 @@ function renderList(host, items) {
       main.appendChild(tr);
     }
 
-    // Autostart switch (issue #456 part 2/2, tightened in #593) — persists
+    // Autostart switch — persists
     // via the same PATCH /api/apps/{id} the rename dialog uses, just with
     // `autostart` instead of `name`. The switch is a sibling of the launch
     // button, so its compact 44px target remains independent of launching.
@@ -552,8 +552,8 @@ function renderList(host, items) {
 // Coding-tab launch mode is the ☁️ Detached toggle in the options
 // card: checked → 'remote' (detached console window, listed + killable
 // here but no phone terminal); unchecked → full-control PTY streamed to
-// the phone. The ↺ Resume toggle (issue #151) reopens the agent's own
-// session picker; it is orthogonal to Detached (issue #157) — Detached +
+// the phone. The ↺ Resume toggle reopens the agent's own
+// session picker; it is orthogonal to Detached — Detached +
 // Resume opens the picker in the detached console, Resume alone streams it
 // to the phone over a PTY. `agentId` (copilot) is set by the Coding
 // tile's per-agent button; undefined for Apps-tab bat launches.
@@ -574,9 +574,9 @@ async function launchApp(a, agentId) {
     // (remote) launches have no PTY, so skip it.
     if (a.kind === 'coding' && !mode) {
       // A desktop browser gets a dedicated PC Edge --app window, not an
-      // in-page terminal (issue #241); a phone carries its real terminal
+      // in-page terminal; a phone carries its real terminal
       // size so the PTY's first frame is the right width for a ratatui
-      // TUI (issue #126) — see applyLaunchSizePayload.
+      // TUI — see applyLaunchSizePayload.
       applyLaunchSizePayload(payload);
     }
     if (Object.keys(payload).length) {
@@ -603,7 +603,7 @@ async function launchApp(a, agentId) {
       // Full-control sessions drop straight into the terminal; detached
       // ones only appear in the running-sessions list. A desktop browser
       // gets its terminal in a dedicated PC Edge window instead of in-page,
-      // so it stays on the launcher SPA (issue #241).
+      // so it stays on the launcher SPA.
       handleLaunchResponse(body.session);
     } else if (a.kind !== 'coding') {
       // Non-coding: a bat was spawned and is now tracked. Port
@@ -892,8 +892,8 @@ function wireScanDialog() {
 }
 
 // ----------------------------------------------------------- listeners panel (Apps tab)
-// Parent rows with dependent children keep them collapsed behind a tap
-// (#480). Module-level so the expand state survives the poll's re-renders.
+// Parent rows with dependent children keep them collapsed behind a tap.
+// Module-level so the expand state survives the poll's re-renders.
 const expandedListenerPorts = new Set();
 let lastListenerItems = [];
 
@@ -914,7 +914,7 @@ function renderListeners(items) {
   els.listenersEmpty.hidden = items.length !== 0;
 
   // Group helper services (parent_port set, parent present) under their
-  // parent app's row so one app reads as one top-level entry — see #224.
+  // parent app's row so one app reads as one top-level entry.
   const byPort = {};
   items.forEach(function (l) { byPort[l.port] = l; });
   const childrenOf = {};
@@ -960,7 +960,7 @@ function buildListenerRow(l, isChild, hasChildren) {
   row.appendChild(meta);
 
   if (hasChildren) {
-    // Collapsed by default (#480): the whole parent row is the tap target;
+    // Collapsed by default: the whole parent row is the tap target;
     // the chevron rotates open like the panel-level disclosure idiom.
     row.classList.add('expandable');
     row.setAttribute('aria-expanded', expandedListenerPorts.has(l.port) ? 'true' : 'false');
@@ -980,7 +980,7 @@ function buildListenerRow(l, isChild, hasChildren) {
   kill.type = 'button';
   kill.innerHTML = icon('octagon-x') + ' Kill';
   kill.addEventListener('click', async function (ev) {
-    // Kill on a parent row must never toggle the collapse (#480).
+    // Kill on a parent row must never toggle the collapse.
     ev.stopPropagation();
     const label = (isChild ? l.service : l.app) || ('port ' + l.port);
     if (!confirm('Kill ' + label + '?\n\npid ' + l.pid + ' on :' + l.port)) return;

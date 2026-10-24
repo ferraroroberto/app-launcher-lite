@@ -47,19 +47,19 @@ DEFAULT_SESSION_HOST_PORT = 8466
 # autoboot so a disposable webapp can be pointed at a disposable, free-port
 # session-host instead of the live :8466 a running tray owns. This is what
 # stops the gate from reaching into — and killing — the user's real PTY
-# sessions (issue #260). Not a user-facing knob; intentionally undocumented
+# sessions. Not a user-facing knob; intentionally undocumented
 # in the config sample.
 SESSION_HOST_PORT_ENV = "LAUNCHER_SESSION_HOST_PORT"
 # Env override for the config file *path* itself. Set ONLY by the e2e
 # pre-ship gate's autoboot (tests/e2e/conftest.py) so the disposable webapp
 # reads AND writes a temp copy of the config instead of the real, shared
 # config/webapp_config.json — a Settings-tab e2e test that clicks Save must
-# never mutate the user's real file (issue #441; the #438 port corruption
-# was this exact shared-file design biting). Not a user-facing knob;
+# never mutate the user's real file (a shared-file design once corrupted
+# the configured port that way). Not a user-facing knob;
 # intentionally undocumented in the config sample.
 WEBAPP_CONFIG_PATH_ENV = "LAUNCHER_WEBAPP_CONFIG"
 
-# Bounded scrollback for full-screen agent sessions (issue #435 follow-up) —
+# Bounded scrollback for full-screen agent sessions —
 # how many lines of history the session-host retains and replays on a
 # (re)connect. 10,000 is evidence-based, not a guess: a real, tool-heavy
 # full-screen agent exchange was observed producing 3371-4447 total scrolled
@@ -122,12 +122,12 @@ class WebappConfig:
     # globs honoured). VCS / build dirs are always skipped regardless.
     projects_ignore: list = field(default_factory=list)
     # Project ids (scanner slugs) the user starred as favorites in the
-    # Coding tab (issue #250). Favorites sort to the top of the project
+    # Coding tab. Favorites sort to the top of the project
     # list and can be filtered to on their own. Stored exactly like
     # `projects_ignore` — a plain string list in this same config — so the
     # feature needs no new file.
     coding_favorites: list = field(default_factory=list)
-    # Agent ids whose Coding-row launch button the user hid (issue #666),
+    # Agent ids whose Coding-row launch button the user hid,
     # plus the pseudo-id `github` for the repo-issues button. A *hidden*
     # list rather than a visible one so a newly registered agent shows up
     # by default and needs no config migration. Stored like
@@ -135,13 +135,13 @@ class WebappConfig:
     coding_hidden_agents: list = field(default_factory=list)
     # Where the Apps tab scans recursively for launcher `.bat` files.
     apps_scan_root: str = field(default_factory=_default_projects_dir)
-    # Root of the team-os checkout the Team OS tab surfaces (issue #102).
+    # Root of the team-os checkout the Team OS tab surfaces.
     # Skills live at `<team_os_dir>/.claude/skills`, identity at
     # `<team_os_dir>/identity`. When the skills dir doesn't exist the tab
     # shows disabled, the same way the Coding tab handles a missing
     # `projects_dir`.
     team_os_dir: str = field(default_factory=_default_team_os_dir)
-    # --- Board tab (issue #300 / #164) -----------------------------------
+    # --- Board tab -----------------------------------
     # The sessions-state file written by fleet-config-lite's session_state
     # hook. The board reads it defensively — absent/corrupt/stale degrades
     # to unknown session status, never an error.
@@ -155,8 +155,8 @@ class WebappConfig:
     # env var). Empty = glab's own default context (gitlab.com or whatever
     # `glab auth login` configured).
     gitlab_host: str = ""
-    # GitHub Copilot CLI launch settings (issue #48; config-driven since the
-    # lite fork's Phase 3). `copilot_models` is the UI/select list of model
+    # GitHub Copilot CLI launch settings (config-driven in the
+    # lite fork). `copilot_models` is the UI/select list of model
     # ids offered — read-only from the UI, edited in the JSON file directly
     # (explicit ids are tenant-gated). `copilot_model` is the persisted
     # `--model` value ("" or "default" = let Copilot pick auto);
@@ -180,7 +180,7 @@ class WebappConfig:
     # browser when the user types it correctly. Lets a fresh device
     # bootstrap without copy-pasting a tokenised URL.
     auth_password: str = ""
-    # --- interactive phone terminal (issue #1) ---------------------------
+    # --- interactive phone terminal ---------------------------
     # Loopback port the PTY session-host binds (never network-reachable).
     session_host_port: int = DEFAULT_SESSION_HOST_PORT
     # Extra IPs / CIDRs allowed to reach the terminal endpoints on top of
@@ -192,7 +192,7 @@ class WebappConfig:
     # interactive terminal window for it on the PC (over loopback, so it
     # bypasses the private-network + passkey gate). Input works from both sides.
     show_local_window: bool = True
-    # Bounded scrollback (issue #435 follow-up): how many lines of a
+    # Bounded scrollback: how many lines of a
     # full-screen agent's history the session-host retains and replays on
     # a (re)connect. See DEFAULT_TERMINAL_HISTORY_LINES for the
     # real-session evidence behind the default.
@@ -203,7 +203,7 @@ class WebappConfig:
     webauthn_rp_id: str = ""
     webauthn_rp_name: str = "App Launcher Lite"
     webauthn_origin: str = ""
-    # --- Jobs-tab failure notifications (issue #66) ---------------------
+    # --- Jobs-tab failure notifications ---------------------
     # Pushover credentials — both empty means no-op notifier (executor
     # still finalises runs identically). The master switch
     # `notify_on_failure` defaults off so the feature ships dormant.
@@ -214,7 +214,7 @@ class WebappConfig:
     # (useful when single-failure pushes are muted via Pushover quiet
     # hours). 0 disables the streak fire.
     notify_failure_streak: int = 0
-    # --- Per-job Telegram failure alerts (issue #597) --------------------
+    # --- Per-job Telegram failure alerts --------------------
     # Credentials for the vendored src/notify Telegram primitive. Both
     # empty means no-op — the executor still finalises runs identically.
     # Unlike notify_on_failure above (global, Pushover, every job), this
@@ -222,7 +222,7 @@ class WebappConfig:
     # here, so the shared Telegram chat isn't spammed by every failure.
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
-    # --- Jobs missed-fire coverage (issue #697) --------------------------
+    # --- Jobs missed-fire coverage --------------------------
     # How often the webapp re-scans every scheduled job for coverage: a
     # missing/disabled Task Scheduler entry, or an elapsed slot with no run
     # record. 0 disables the background tick entirely (the `/api/jobs` badge
@@ -230,16 +230,16 @@ class WebappConfig:
     # the notify_* switches above it pushes nothing on its own: alerts still
     # route through notify_on_failure / Job.alert_on_failure, both opt-in.
     jobs_coverage_interval_minutes: int = 60
-    # --- Job secrets (issues #73, #72) ----------------------------------
+    # --- Job secrets ----------------------------------
     # One gitignored place for secret values, referenced from jobs.json by
     # opaque "$secret:<key>" strings resolved at fire time
-    # (src.jobs_secrets): a job's webhook.secret (issue #73) and every
-    # Job.env value (issue #72) both draw from this dict, so a rotated
+    # (src.jobs_secrets): a job's webhook.secret and every
+    # Job.env value both draw from this dict, so a rotated
     # credential lives here and never in jobs.json. Loaded from the
     # "secrets" key, falling back to the legacy "webhook_secrets" key this
-    # block shipped under before #72 generalized it. Empty by default.
+    # block shipped under before it became a general secrets map. Empty by default.
     secrets: Dict[str, str] = field(default_factory=dict)
-    # --- Scoped API bearer tokens (issue #72) ---------------------------
+    # --- Scoped API bearer tokens ---------------------------
     # List of token records minted from the Settings tab (see
     # src.api_tokens): {id, label, salt, hash, scope, created_at,
     # last_used_at}. Only the salted SHA-256 hash is stored — the raw
@@ -402,7 +402,7 @@ def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
 
     # Every field is persisted, so the dataclass itself is the key list —
     # no hand-maintained payload dict to fall out of sync when a knob is
-    # added (issue #441 shipped exactly that drift). Keep every field
+    # added (a hand-written dict drifts exactly that way). Keep every field
     # JSON-serializable and this stays exhaustive by construction;
     # tests/test_webapp_config_persistence.py locks it.
     atomic_write_json(target, asdict(cfg))

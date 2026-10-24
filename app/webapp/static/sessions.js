@@ -1,6 +1,6 @@
 /* Running coding sessions panel: list, stop, refresh.
  *
- * One 🛑 "Stop and kill" button per row (issue #253), same for both kinds.
+ * One 🛑 "Stop and kill" button per row, same for both kinds.
  * The session-host types the agent's own quit command (Copilot's /exit),
  * waits briefly for a clean exit so shutdown hooks run, then
  * force-terminates as a fallback — and the window always closes.
@@ -33,12 +33,12 @@ function projectBasename(s) {
   return (parts.length ? parts[parts.length - 1] : '').toLowerCase();
 }
 
-// Display title for a session, with smart precedence (issue #266, extended
-// #396, #458). The single source of truth both the Coding tab and the Board
+// Display title for a session, with smart precedence (first prompt, agent title,
+// manual override). The single source of truth both the Coding tab and the Board
 // tab call, so a live session shows an identical title on both — do not
 // re-derive a title in board.js or anywhere else.
 //
-//   0. ``manual_title`` (issue #458) — a launcher-native rename always wins.
+//   0. ``manual_title`` — a launcher-native rename always wins.
 //      It is the one title channel that works identically across every
 //      agent (including detached sessions) without depending on agent-native
 //      OSC support, so it overrides every auto-derived source below.
@@ -96,7 +96,7 @@ export function renderSessions() {
     li.className = 'app-item session-item';
     // Stable hook so a test (or any consumer) can target a specific
     // session's row by id rather than position — e.g. the kill regression
-    // must act on the session it launched, never ".first" (issue #260).
+    // must act on the session it launched, never ".first".
     li.dataset.sessionId = s.session_id;
 
     const main = document.createElement('div');
@@ -112,7 +112,7 @@ export function renderSessions() {
 
     // Title on its own full-width line at the top of the card, so a long
     // project title wraps across the whole card instead of being squeezed
-    // into the narrow space beside the badges (issue #113).
+    // into the narrow space beside the badges.
     const name = document.createElement('span');
     name.className = 'name';
     name.appendChild(document.createTextNode(sessionTitle(s)));
@@ -123,7 +123,7 @@ export function renderSessions() {
     const dot = document.createElement('span');
     dot.className = 'health-dot ' + (s.alive === false ? 'down' : 'up');
     head.appendChild(dot);
-    // Which coding agent this session is running (issue #45). Resolved
+    // Which coding agent this session is running. Resolved
     // against the agent registry (state.agents) so a new agent's icon +
     // label flow through without touching this file; falls back to
     // Copilot for an unrecognised id.
@@ -161,7 +161,7 @@ export function renderSessions() {
     const actions = document.createElement('div');
     actions.className = 'row-actions session-actions';
 
-    // Rename (issue #458) — a launcher-native override that always wins in
+    // Rename — a launcher-native override that always wins in
     // sessionTitle()'s precedence, for both kinds. Submitting a blank title
     // clears it, reverting to the automatic precedence.
     const renameBtn = document.createElement('button');
@@ -173,7 +173,7 @@ export function renderSessions() {
     renameBtn.addEventListener('click', function () { openSessionRename(s); });
     actions.appendChild(renameBtn);
 
-    // Single Stop-and-kill button per row, both kinds (issue #253). The
+    // Single Stop-and-kill button per row, both kinds. The
     // session-host quits gracefully then force-falls-back; the window
     // always closes. A plain ✕ glyph (not a loud 🛑 emoji) inherits the
     // theme — muted by default via `action-stop-close`, danger-red on press.
@@ -193,7 +193,7 @@ export function renderSessions() {
 }
 
 // Open a full-control session when its row is tapped. On a desktop browser
-// this opens a dedicated PC Edge --app window (issue #282) — the same window
+// this opens a dedicated PC Edge --app window — the same window
 // a new-session launch opens — instead of rendering the terminal inside the
 // user's own browser, so it can be closed without fear while the session
 // keeps running headless. A second tap focuses that window rather than
@@ -226,7 +226,7 @@ export async function openSession(s) {
 }
 
 export async function stopSession(s) {
-  // No confirm — one tap stops (issue #253 follow-up). The stop is graceful
+  // No confirm — one tap stops. The stop is graceful
   // (the agent's own quit, then force-fallback) and a mis-tap is resumable,
   // so a confirmation dialog is just friction.
   try {
@@ -260,7 +260,7 @@ export async function fetchSessions() {
   }
 }
 
-// --------------------------------------------------- rename dialog (#458)
+// --------------------------------------------------- rename dialog
 //
 // One dialog shared by the Coding tab's row rename button and the Board
 // tab's drawer rename button (board.js imports openSessionRename), the same

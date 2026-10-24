@@ -59,12 +59,12 @@ TUNNEL_CONFIG_PATH = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 # The tray runs windowless (pythonw) with no console to log to, so the
 # Tailscale lookup leaves a breadcrumb here when it can't resolve a host.
 TS_DEBUG_LOG = PROJECT_ROOT / "webapp" / "tailscale_debug.log"
-# Same reason: the health watchdog (issue #386) leaves its wedge/recovery
+# Same reason: the health watchdog leaves its wedge/recovery
 # breadcrumbs here — the only durable trail of *when* :8465 stopped answering.
 WATCHDOG_LOG = PROJECT_ROOT / "webapp" / "watchdog.log"
 
-# The loopback PTY session-host. It is a *linked-but-independent* child
-# (project-scaffolding#35): it hosts the user's Coding PTYs and MUST survive a
+# The loopback PTY session-host. It is a *linked-but-independent* child:
+# it hosts the user's Coding PTYs and MUST survive a
 # `tray.bat --restart`. So it is spawned detached (re-parented out of the tray
 # subtree) and adopted on start by this port, and :8466 is excluded from
 # tray.bat's reclaim sweep.
@@ -178,7 +178,7 @@ class TrayApp:
         self.tunnel_proc: Optional[subprocess.Popen] = None
         self.starter_exc: Optional[Exception] = None
 
-        # Health watchdog (issue #386): a wedged uvicorn still LISTENs, so
+        # Health watchdog: a wedged uvicorn still LISTENs, so
         # only a real /healthz round-trip can tell "up" from "hung".
         # Alerting only — recovery stays manual (tray.bat --restart) until
         # the failure mode is understood; no improvised process kills.
@@ -547,7 +547,7 @@ def run_tray(app_config: AppConfig) -> int:
         )
         return 1
 
-    # In-process single-instance guard (project-scaffolding#39): the tray.bat CIM
+    # In-process single-instance guard: the tray.bat CIM
     # pre-check can let two near-simultaneous launches through, so the guarantee
     # must live in the process. Held for the tray's lifetime; the OS frees the
     # named mutex on exit.

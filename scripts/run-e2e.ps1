@@ -16,7 +16,7 @@ if (-not (Test-Path $python)) {
     exit 1
 }
 
-# Explicit live-tray opt-in (issue #386): this script IS the deliberate
+# Explicit live-tray opt-in: this script IS the deliberate
 # dev-loop entry point for e2e-against-the-live-tray, so it sets the flag a
 # bare `pytest tests/e2e` refuses to run without.
 $env:LAUNCHER_E2E_LIVE = "1"

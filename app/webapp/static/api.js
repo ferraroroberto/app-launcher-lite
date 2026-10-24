@@ -12,7 +12,7 @@ import { icon } from './_vendored/icons/icons.js';
 // Read a `?<name>=<value>` deep-link param once, strip it from the visible
 // URL, and return its trimmed value (or null if absent/blank). Used for the
 // bearer ?token=, the PC-mirror ?terminal=<sid> deep link, and the Board
-// ?board=<sid> deep link (issue #301).
+// ?board=<sid> deep link.
 export function consumeUrlParam(name) {
   const params = new URLSearchParams(window.location.search);
   const v = (params.get(name) || '').trim();
@@ -51,9 +51,9 @@ export function authHeaders({ terminalToken, contentType } = {}) {
 // True when this browser is a desktop (a fine/mouse pointer), as opposed
 // to a phone (a coarse/touch pointer). A coding launch carries this so the
 // server opens a dedicated PC mirror window rather than rendering the
-// terminal inside the desktop browser's own tab (issue #241 — the "obvious"
-// #159 optimization of skipping a redundant in-page render was reversed:
-// that redundancy was what let Stop & Close tear down the controlling
+// terminal inside the desktop browser's own tab (skipping the "obvious" redundant
+// in-page render would be wrong:
+// that redundancy is what lets Stop & Close tear down the controlling
 // browser window). The flag is what distinguishes a desktop from a phone
 // regardless of loopback vs tunnel, since the server can't tell by IP alone.
 export function isDesktopClient() {
@@ -113,7 +113,7 @@ export async function jsonApi(path, opts) {
 
 // A raw-Response counterpart to jsonApi() for callers that need the Response
 // itself (FormData uploads, streamed audio bodies) instead of jsonApi()'s
-// parsed-JSON contract (issue #333). Folds authHeaders() in so a caller
+// parsed-JSON contract. Folds authHeaders() in so a caller
 // doesn't have to build the passkey terminal-token / content-type headers by
 // hand — pass them as `opts.terminalToken` / `opts.contentType` alongside the
 // usual fetch options — then goes through the exact same 401 → showLogin() +
@@ -206,8 +206,7 @@ export function toast(msg, kind, opts) {
 // up and a red toast on top of it would double-fire. `prefix` may be falsy
 // for the few sites that just toast the raw message.
 //
-// A plain Error carrying `.status === 401` gets the same treatment (issue
-// #333): a module kept free of api.js imports by design (receiving
+// A plain Error carrying `.status === 401` gets the same treatment: a module kept free of api.js imports by design (receiving
 // credentials as parameters rather than reaching into this module's token
 // storage itself) can't throw AuthRequiredError from its own fetches — it
 // tags `.status` on its thrown Error instead, and this is the one place

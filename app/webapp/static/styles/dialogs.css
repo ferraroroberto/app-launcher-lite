@@ -102,7 +102,7 @@
   color: var(--muted);
   margin: 12px 0 6px;
 }
-/* role="switch" row (issue #355) — was a <label><input type=checkbox>. */
+/* role="switch" row — was a <label><input type=checkbox>. */
 .scan-section .scan-row {
   display: flex;
   align-items: center;
@@ -132,7 +132,7 @@
   padding-top: 12px;
   border-top: 1px solid var(--line-muted);
 }
-/* The Coding header's CPU reading (#65), left of the theme toggle: a quiet
+/* The Coding header's CPU reading, left of the theme toggle: a quiet
    muted number, colour only for an exception. A fixed 38px box so "9%" to
    "100%" never moves the row; .hit-target's ::before takes it past the 44px
    floor, and the row's 12px gap keeps it off the toggle's. */
@@ -193,7 +193,7 @@
 }
 
 /* Dry-run toggle in the run-now dialog + confirm-on-fire toggle in the
-   job editor (issue #69) — role="switch" rows (issue #355), styled as a
+   job editor — role="switch" rows, styled as a
    full modal row (44px tap target on a top divider). */
 .job-run-dryrow,
 .job-confirm-row {
@@ -216,7 +216,7 @@
   border-radius: var(--radius-sm);
 }
 
-/* Save-time pre-flight problems (issue #69) — rendered inline in the job
+/* Save-time pre-flight problems — rendered inline in the job
  * dialog above the actions row. Errors block the save (red); warnings
  * save once acknowledged via "Save anyway" (amber). */
 .job-preflight-problems {
@@ -246,7 +246,7 @@
 }
 .job-preflight-tag { flex: 0 0 auto; }
 
-/* Job-kind registry (issue #70) — inline-shell body + http-check config
+/* Job-kind registry — inline-shell body + http-check config
  * groups swapped in/out of #jobForm by kind (jobs-dialog.js syncKindFields). */
 .job-kind-group {
   display: flex;
@@ -258,7 +258,7 @@
 }
 
 /* Job chain checklist (on-success / on-failure) — role="switch" rows
-   (issue #355) rendered per the list-row contract: flat full-bleed rows on
+ rendered per the list-row contract: flat full-bleed rows on
    a hairline divider, capped with an inner scroll so a dozen registered
    jobs don't triple the dialog's height. */
 .job-chain-list {
@@ -285,7 +285,7 @@
   text-align: left;
 }
 
-/* Job parameters editor (issue #67) — embedded inside #jobDialog as a
+/* Job parameters editor — embedded inside #jobDialog as a
  * .dialog-section. The Run-now dialog uses the same stacked label pattern
  * as the rest of the form, so no extra styling is needed there. */
 .job-params-list {

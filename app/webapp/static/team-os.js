@@ -1,4 +1,4 @@
-/* Team OS tab (issue #102): skill tiles + one-tap launch + a read-only
+/* Team OS tab: skill tiles + one-tap launch + a read-only
  * private-content browser.
  *
  * ~80% a clone of the Coding tab. A tile launches a GitHub Copilot CLI
@@ -20,7 +20,7 @@ import { icon } from './_vendored/icons/icons.js';
 import { toggleAriaChecked, wireModelCombo } from './dom-utils.js';
 
 // The Skills-summary launch-model dropdown controller ({setValue, getValue}),
-// created in the tab's wiring once the DOM exists (#540). Read at launch time;
+// created in the tab's wiring once the DOM exists. Read at launch time;
 // no server round-trip — it's per-launch.
 // '' is the Default option: let Copilot pick its own (auto) model.
 let teamOsModelCombo = null;
@@ -55,7 +55,7 @@ export function renderSkills() {
     main.className = 'app-main';
     const name = document.createElement('div');
     name.className = 'coding-name';
-    // Same inner span as the Coding tab's tiles (issue #8): .coding-name is
+    // Same inner span as the Coding tab's tiles: .coding-name is
     // a flex row now, so the label needs its own box to truncate in.
     const nameText = document.createElement('span');
     nameText.className = 'coding-name-text';
@@ -93,7 +93,7 @@ export function renderSkills() {
   });
 }
 
-// ------------------------------------------------- weekly recap (issue #167)
+// ------------------------------------------------- weekly recap
 // A pinned tile above the skills list: a staleness badge driven by the recap
 // ledger's mtime, and a 🚀 that launches /weekly-recap (the interactive
 // review). The drafting half runs headless on a schedule, so this is
@@ -146,9 +146,9 @@ async function launchRecap() {
     ? 'remote' : 'pty';
   const model = teamOsModel();
   const payload = { mode: mode, model: model };
-  // A desktop browser launch gets a dedicated PC Edge --app window (issue
-  // #241); the phone carries its real terminal size so the PTY spawns at
-  // the width the overlay will fit() to (issue #374, #126). Remote
+  // A desktop browser launch gets a dedicated PC Edge --app window;
+  // the phone carries its real terminal size so the PTY spawns at
+  // the width the overlay will fit() to. Remote
   // launches have no terminal/mirror, so it only matters for pty.
   if (mode !== 'remote') applyLaunchSizePayload(payload);
   try {
@@ -164,7 +164,7 @@ async function launchRecap() {
       { icon: 'sprout' }
     );
     // A desktop browser gets its terminal in a dedicated PC Edge window,
-    // not in-page (issue #241) — so it stays on the launcher SPA.
+    // not in-page — so it stays on the launcher SPA.
     handleLaunchResponse(body.session);
   } catch (exc) {
     apiFailToast('Recap launch failed', exc);
@@ -172,9 +172,9 @@ async function launchRecap() {
 }
 
 async function launchSkill(s) {
-  // Resume (issue #151) reopens Copilot's session picker, dropping the
-  // /<skill> prompt. Detached and Resume are orthogonal (issue #157,
-  // matching the Coding tab): Detached → 'remote' independent of Resume, so
+  // Resume reopens Copilot's session picker, dropping the
+  // /<skill> prompt. Detached and Resume are orthogonal (matching
+  // the Coding tab): Detached → 'remote' independent of Resume, so
   // a Detached+Resume launch renders the picker in the detached console
   // while Resume alone streams it to the phone over a PTY.
   const resume = !!(els.teamOsResume && els.teamOsResume.getAttribute('aria-checked') === 'true');
@@ -182,7 +182,7 @@ async function launchSkill(s) {
     ? 'remote' : 'pty';
   const model = teamOsModel();
   const payload = { mode: mode, model: model, resume: resume };
-  // Same size contract as launchRecap (issue #374, #126, #241). Remote
+  // Same size contract as launchRecap. Remote
   // launches have no terminal/mirror, so it only matters for pty.
   if (mode !== 'remote') applyLaunchSizePayload(payload);
   try {
@@ -203,7 +203,7 @@ async function launchSkill(s) {
     // Full-control sessions drop straight into the terminal; detached
     // ones only appear in the Coding tab's running-sessions list. A
     // desktop browser gets its terminal in a dedicated PC Edge window
-    // instead of in-page (issue #241), so it stays on the launcher SPA.
+    // instead of in-page, so it stays on the launcher SPA.
     handleLaunchResponse(body.session);
   } catch (exc) {
     apiFailToast('Launch failed', exc);
@@ -418,7 +418,7 @@ function closeBrowser() {
 // comes from the user's own private files over a passkey-gated tailnet
 // link, but we still escape every byte before formatting so a stray
 // `<script>` in a note can never execute. `escapeHtml` is the single shared
-// one from api.js (issue #10) — every other view already imports it.
+// one from api.js — every other view already imports it.
 
 function inlineMd(s) {
   return s
@@ -531,9 +531,9 @@ export function wireTeamOs() {
   if (els.teamOsRecapLaunch) {
     els.teamOsRecapLaunch.addEventListener('click', launchRecap);
   }
-  // Detached/Resume are plain client-side switches (issue #355) — no server
+  // Detached/Resume are plain client-side switches — no server
   // config, just read at launch time above. They live in the Skills card's
-  // <summary> (#496 round 2, mirroring the Coding tab's Projects card), so
+  // <summary> (mirroring the Coding tab's Projects card), so
   // stopPropagation keeps a tap from also collapsing the panel.
   [els.teamOsDetached, els.teamOsResume].forEach(function (btn) {
     if (!btn) return;
@@ -542,7 +542,7 @@ export function wireTeamOs() {
       toggleAriaChecked(btn);
     });
   });
-  // The model dropdown (#540) shares that summary; wireModelCombo owns its
+  // The model dropdown shares that summary; wireModelCombo owns its
   // open/close + the summary-tap guard. Read at launch time via teamOsModel().
   populateModelMenu();
   teamOsModelCombo = wireModelCombo(

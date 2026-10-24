@@ -12,7 +12,7 @@
  * This module coordinates the xterm instance, sizing/keyboard-pan, the
  * on-screen keys D-pad, and image paste/drop. The WebSocket lifecycle lives
  * in terminal-connection.js and theme resolution in terminal-theme.js.
- * Two earlier concerns split out (issue #315):
+ * Two earlier concerns split out:
  * the compose bar (terminal-compose.js) and the
  * PC-mirror-window title/guard logic (terminal-mirror.js).
  */
@@ -55,7 +55,7 @@ import {
   readTerminalToken,
 } from './webauthn.js';
 
-// Test seam (#20/#135/#166/#181/#264): several pure helpers below are
+// Test seam: several pure helpers below are
 // imported directly by the e2e suite via `import('/static/terminal.js')`
 // (terminalPanY, keyboardOverlayHeight, sendSubmit, framePaste, routeFrame,
 // mirrorDocTitle). Re-export the ones that moved to a split module so those
@@ -74,7 +74,7 @@ export {
 // exists, so the launch request can spawn the PTY at the right width and
 // a full-screen differential TUI (ratatui-style) paints its first frame
 // at the correct width instead of the legacy 40×120 — which wrapped/cut on
-// a portrait phone (issue #126). Measures one monospace cell with the same
+// a portrait phone. Measures one monospace cell with the same
 // font the live terminal uses, then divides the visual viewport. Cols (the
 // cause of the "cut") is what matters; rows a touch high is harmless —
 // applySize sends the exact size on WS open and ratatui reflows. Any
@@ -109,14 +109,14 @@ export function estimateTermSize() {
 }
 
 // Desktop-vs-phone launch-size contract, shared by every PTY-launch call
-// site (Coding tab, Board issue-start, Team OS recap/skill launch,
-// issue #374): a desktop browser gets the dedicated PC mirror window sized
+// site (Coding tab, Board issue-start, Team OS recap/skill launch):
+// a desktop browser gets the dedicated PC mirror window sized
 // to its own default, a phone carries its real terminal size so the PTY's
 // first frame is painted at the right width. Mutates `payload` in place —
 // callers apply their own outer gate (e.g. "only for a streamed/pty launch")
 // before calling this.
 //
-// `in_page: true` (issue #609) is the explicit "I will render this myself"
+// `in_page: true` is the explicit "I will render this myself"
 // signal the server's `should_mirror_to_pc` now requires from a genuine SPA
 // loopback client, instead of inferring it from "loopback and no desktop
 // flag" — an inference a non-browser loopback API caller (a script, an
@@ -138,7 +138,7 @@ export function applyLaunchSizePayload(payload) {
 // tab's launchApp, Team OS's launchRecap/launchSkill): refresh the sessions
 // list, then drop straight into the in-page terminal for a full-control
 // (non-'remote') session on a phone — a desktop browser already got its
-// dedicated PC Edge window instead (issue #241), so it stays on the SPA.
+// dedicated PC Edge window instead, so it stays on the SPA.
 // No-op when the launch produced no session (a non-coding app launch).
 export function handleLaunchResponse(session) {
   if (!session) return;
@@ -156,7 +156,7 @@ export function handleLaunchResponse(session) {
 // keyboard slides up but does NOT shrink the layout viewport, so a
 // `position:fixed; inset:0` overlay keeps covering the whole screen
 // *behind* the keyboard and the active prompt row renders hidden under
-// it (issue #135). Only a substantial shrink counts as the keyboard;
+// it. Only a substantial shrink counts as the keyboard;
 // smaller URL-bar / home-indicator chrome changes (<~120px) are left to
 // the existing 100dvh + fit() path so this doesn't fight that behaviour.
 const _KEYBOARD_SHRINK_PX = 120;
@@ -175,7 +175,7 @@ export function keyboardOverlayHeight(layoutHeight, visualHeight) {
 // differential agent (ratatui-style) the phone must NOT reflow xterm to the
 // smaller keyboard box — reflowing changes the PTY rows, which SIGWINCHes
 // the agent into repainting its whole frame on every keyboard open/close
-// (the visible "refreshment", issue #264). Instead we keep the PTY at its
+// (the visible "refreshment"). Instead we keep the PTY at its
 // stable size and pan the fixed canvas: translate it up by the overflow so
 // the bottom stays visible while the top scrolls off behind the chrome.
 // Clamped at 0 so a canvas already shorter than the box never shifts down.
@@ -184,7 +184,7 @@ export function terminalPanY(contentHeight, visibleHeight) {
   return Math.max(0, Math.round(contentHeight - visibleHeight));
 }
 
-// Warm-terminal cache (#430 round 3): sid → the live terminal object.
+// Warm-terminal cache: sid → the live terminal object.
 // Closing the overlay does NOT dispose the xterm or the WebSocket any
 // more — the painted frame and the stream stay warm so re-opening a
 // session shows its tail instantly, with no re-subscribe and therefore
@@ -205,7 +205,7 @@ function stashActiveTerminal() {
   // Drop compose state so a re-open never shows a stale bar/draft.
   resetComposeBar();
   if (t.term && t.term.element) t.term.element.style.display = 'none';
-  // Release any keyboard-driven override (issue #135) so the next open
+  // Release any keyboard-driven override so the next open
   // starts from the CSS-driven full height and inset:0 origin.
   if (els.terminalOverlay) {
     els.terminalOverlay.style.height = '';
@@ -297,14 +297,14 @@ export async function openTerminal(session) {
   setTerminalTitleText(session);
   setTerminalStatus('Connecting…');
 
-  // The PC mirror window is the launcher-spawned Edge --app window (issue
-  // #241 — see terminal-mirror.js for why this can't just be the loopback
+  // The PC mirror window is the launcher-spawned Edge --app window (see
+  // terminal-mirror.js for why this can't just be the loopback
   // reason check). It renders whatever size the phone set and never resizes
   // the PTY — the phone is the single size authority, so the two clients
   // never fight (the server also ignores resize frames from role=pc).
   const isMirror = isMirrorWindowSession();
 
-  // The compose bar (issue #37) is phone-only — the PC mirror already
+  // The compose bar is phone-only — the PC mirror already
   // has a real keyboard with full predictive support. Reset the button
   // visible on every (non-mirror) open so a prior mirror open can't
   // leave it stuck hidden.
@@ -312,10 +312,10 @@ export async function openTerminal(session) {
 
   // Mirror window uses a uniquely identifiable OS title so the launcher
   // can find this Edge --app window via EnumWindows and dismiss it
-  // with WM_CLOSE on Stop & Close (issue #20).
+  // with WM_CLOSE on Stop & Close.
   if (isMirror) announceMirrorWindow(sid, sessionTitle(session));
 
-  // Warm re-open (#430): the session's terminal is still alive from a
+  // Warm re-open: the session's terminal is still alive from a
   // previous open — show its already-painted frame and reuse its WS.
   // Nothing is re-subscribed, so the session-host never fires the repaint
   // nudge and ratatui never re-emits the transcript. Only if the WS died
@@ -349,9 +349,9 @@ export async function openTerminal(session) {
   }
 
   // Source the terminal colours from the design tokens so they can't fork
-  // from the stylesheet (issue #314). --term-bg/--term-fg are the
-  // terminal-screen tokens (issue #355), following the app theme
-  // (issue #383) — resolved by termScreenTheme(), which also carries the
+  // from the stylesheet. --term-bg/--term-fg are the
+  // terminal-screen tokens, following the app theme
+  // — resolved by termScreenTheme(), which also carries the
   // light ANSI palette.
   const term = new window.Terminal({
     cursorBlink: true,
@@ -359,7 +359,7 @@ export async function openTerminal(session) {
     fontSize: 13,
     scrollback: 10000,
     theme: termScreenTheme(),
-    // Per-cell contrast floor for the light screen (issue #381); 1 (off)
+    // Per-cell contrast floor for the light screen; 1 (off)
     // on the default dark screen.
     minimumContrastRatio: termContrastRatio(),
   });
@@ -393,13 +393,13 @@ export async function openTerminal(session) {
   }
 
   // Full-screen differential agents (Copilot's ratatui-style TUI)
-  // drive the pan-not-reflow keyboard path (issue #264): on these the phone
+  // drive the pan-not-reflow keyboard path: on these the phone
   // pans the fixed canvas above the keyboard rather than resizing the PTY.
   // Resolved off the live /api/agents flag; an unknown/missing agent (or a
   // degraded fallback agents list) reads as non-fullscreen — Claude's
-  // inline reflow (#135), the safe default. Board drill-down and ?session=
+  // inline reflow, the safe default. Board drill-down and ?session=
   // deep links pass a synthetic {session_id, name} with no agent field
-  // (#430) — resolve it from the sessions list so a fullscreen session opened
+  // — resolve it from the sessions list so a fullscreen session opened
   // from the Board still gets the fullscreen client handling.
   const liveSession = (state.sessions || []).find(function (x) {
     return x.session_id === sid;
@@ -414,7 +414,7 @@ export async function openTerminal(session) {
     retryTimer: null, visibilityListener: null, tapHandler: null,
     disposeTouch: null, composeOpen: false, composeHasImage: false,
     isFullscreen: !!(knownAgent && knownAgent.fullscreen),
-    // Resize-dedupe + repaint-batch state (#430). lastSentSize suppresses
+    // Resize-dedupe + repaint-batch state. lastSentSize suppresses
     // same-size resize frames; fsSized gates the fullscreen pan path until
     // the first real fit has run; batch* is owned by terminal-connection.js.
     lastSentSize: null, fsSized: false,
@@ -422,7 +422,7 @@ export async function openTerminal(session) {
     onShutdown: closeTerminal,
   };
   state.terminal = t;
-  // Register in the warm cache (#430) and evict the least-recently-used
+  // Register in the warm cache and evict the least-recently-used
   // beyond the cap — a full teardown, so its WS/GL context are released.
   _termCache.set(sid, t);
   while (_termCache.size > _TERM_CACHE_MAX) {
@@ -430,11 +430,11 @@ export async function openTerminal(session) {
     if (!oldest || oldest === t) break;
     disposeTerminal(oldest);
   }
-  // Sync the overlay chrome with any user background override (#381) —
+  // Sync the overlay chrome with any user background override —
   // the constructor already resolved theme + contrast for xterm itself.
   applyTermTheme();
 
-  // Live-refresh the title while the overlay is open (issue #266). The main
+  // Live-refresh the title while the overlay is open. The main
   // sessions poll is paused under the overlay (main.js), so without this an
   // open terminal / PC mirror window stays stuck on its first-paint title when
   // the agent renames the conversation (or a first-prompt title lands). Reuses
@@ -452,13 +452,13 @@ export async function openTerminal(session) {
     }).catch(function () { /* best-effort; title just won't refresh */ });
   }, SESSIONS_POLL_MS);
 
-  // Native iOS momentum (fling) scrolling on the phone (issue #23).
+  // Native iOS momentum (fling) scrolling on the phone.
   // Skipped for the PC mirror window — it scrolls with a wheel and
   // should keep mouse text-selection.
   if (!isMirror) t.disposeTouch = enableNativeTouchScroll(term);
 
   function applySize() {
-    // A stashed warm terminal (#430) is inert: its resize listeners stay
+    // A stashed warm terminal is inert: its resize listeners stay
     // bound while hidden, but only the ACTIVE terminal may touch the
     // shared overlay chrome or its own layout. Resume re-runs applySize.
     if (t !== state.terminal) return;
@@ -474,8 +474,8 @@ export async function openTerminal(session) {
     }
     // Pin the overlay to the visual viewport when the keyboard is up so
     // its bottom edge lands at the top of the keyboard and the prompt
-    // stays visible — then fit() reflows xterm to the smaller box
-    // (issue #135). iOS doesn't just shrink the visual viewport for the
+    // stays visible — then fit() reflows xterm to the smaller box.
+    // iOS doesn't just shrink the visual viewport for the
     // keyboard, it also shifts it *down* (visualViewport.offsetTop > 0)
     // to sweep the focused line into view; a position:fixed; inset:0
     // overlay is anchored to the layout-viewport top, so unless we match
@@ -499,11 +499,11 @@ export async function openTerminal(session) {
       }
     }
     // Full-screen differential agent: once sized, the PTY is PINNED for the
-    // rest of the session's lifetime — no further reflow, ever (#432b).
+    // rest of the session's lifetime — no further reflow, ever.
     // EVERY change after the first real size (keyboard up/down, compose
     // bar, browser chrome, a PWA layout-viewport shrink, OR a phone
-    // rotation) PANS/letterboxes the fixed-size canvas instead (#264,
-    // #430, #432). Empirical (#430 probe): a ratatui-style TUI re-emits its
+    // rotation) PANS/letterboxes the fixed-size canvas instead.
+    // Empirical (probed): a ratatui-style TUI re-emits its
     // ENTIRE transcript on any winsize change — rows or cols, either
     // direction (~65 KB on a long conversation) — so a single stray
     // SIGWINCH replays the whole conversation through the phone terminal.
@@ -524,8 +524,8 @@ export async function openTerminal(session) {
       const screen = term.element &&
         term.element.querySelector('.xterm-screen');
       const contentH = screen ? screen.getBoundingClientRect().height : 0;
-      // Pan against the HOST's real box, not the visual-viewport height
-      // (#430 round 2): the overlay also holds the header bar and the
+      // Pan against the HOST's real box, not the visual-viewport height:
+      // the overlay also holds the header bar and the
       // compose bar, so the viewport height over-states the terminal's
       // visible box by their combined height — under-panning by exactly
       // that much and hiding the bottom rows (the prompt echo) behind
@@ -550,7 +550,7 @@ export async function openTerminal(session) {
       if (b.viewportY >= b.baseY - 1) term.scrollToBottom();
     } catch (_) {}
     if (t.ws && t.ws.readyState === WebSocket.OPEN) {
-      // Same-size dedupe (#430): a resize frame that changes nothing
+      // Same-size dedupe: a resize frame that changes nothing
       // still costs a setwinsize round-trip; skip it. A real change on a
       // fullscreen agent triggers the transcript re-emission — batch it
       // into a single paint (terminal-connection.js).
@@ -587,10 +587,10 @@ export async function openTerminal(session) {
       // Keyboard-driven shifts of visualViewport.offsetTop (iOS sweeping
       // the focused line into view) ride on 'scroll', not 'resize' — wire
       // it too so the overlay re-tracks the offset mid-sweep instead of
-      // leaving a band of the page behind it above the keyboard (#135).
+      // leaving a band of the page behind it above the keyboard.
       window.visualViewport.addEventListener('scroll', applySize);
     }
-    // A portrait/landscape rotation cycle (issue #446) can leave
+    // A portrait/landscape rotation cycle can leave
     // window.innerHeight and visualViewport.height transiently mismatched
     // while iOS's chrome bars settle, so a 'resize'/'visualViewport resize'
     // event mid-rotation can sample keyboardOverlayHeight() at a bad
@@ -602,7 +602,7 @@ export async function openTerminal(session) {
     // applySize() once the viewport has settled so a keyboard that's
     // genuinely still open gets correctly re-pinned.
     t.onOrientationChange = function () {
-      // Stashed (warm-cached, #430) terminals keep this listener bound
+      // Stashed (warm-cached) terminals keep this listener bound
       // while hidden — same as applySize()'s own guard, only the ACTIVE
       // terminal may touch the shared overlay chrome.
       if (t !== state.terminal) return;
@@ -618,7 +618,7 @@ export async function openTerminal(session) {
   }
 
   term.onData(function (d) {
-    // Typing during a repaint batch (#430): flush first so the echo isn't
+    // Typing during a repaint batch: flush first so the echo isn't
     // held back behind the batch's quiet-gap/deadline window.
     flushRepaintBatch(t);
     if (t.ws && t.ws.readyState === WebSocket.OPEN) {
@@ -636,7 +636,7 @@ export function closeTerminal() {
   const t = state.terminal;
   if (!t) return;
   disposeTerminal(t);
-  // Release any keyboard-driven override (issue #135) so the next open
+  // Release any keyboard-driven override so the next open
   // starts from the CSS-driven full height and inset:0 origin.
   if (els.terminalOverlay) {
     els.terminalOverlay.style.height = '';
@@ -676,7 +676,7 @@ function unlockBodyScroll() {
 }
 
 export function hideTerminal() {
-  // Stash, don't dispose (#430): the xterm keeps its painted frame and
+  // Stash, don't dispose: the xterm keeps its painted frame and
   // the WS keeps streaming, so re-opening this session is instant and
   // never triggers the server's repaint nudge. The host's DOM is NOT
   // cleared for the same reason.
@@ -689,7 +689,7 @@ export function hideTerminal() {
   fetchSessions().catch(function () {});
 }
 
-// `opts.silent` (issue #448): suppress this call's own success toast so a
+// `opts.silent`: suppress this call's own success toast so a
 // multi-file selection can fire one summary toast instead of N flickering
 // ones — toast() is a single-slot control, a rapid-fire second call just
 // cancels the first's timer. Errors are never silenced. Returns true on
@@ -700,7 +700,7 @@ async function sendImage(file, opts) {
   const silent = !!(opts && opts.silent);
   // Compose bar open: ask the session-host to skip the paste-into-PTY
   // step (inline=1) and just return the stored path, so we can drop it
-  // into the textarea for review-before-send — mirroring 📋 (issue #41).
+  // into the textarea for review-before-send — mirroring 📋.
   const inline = !!t.composeOpen;
   const fd = new FormData();
   fd.append('file', file, file.name || 'image.png');
@@ -720,7 +720,7 @@ async function sendImage(file, opts) {
       const path = body && body.path;
       if (path) {
         const ta = els.terminalComposeInput;
-        // Always append at the very end as its own paragraph (issue #366)
+        // Always append at the very end as its own paragraph
         // — never splice at the caret, which glued the path onto whatever
         // the cursor happened to sit on. A blank line separates it from
         // existing text, so sequential attachments stack cleanly:
@@ -732,7 +732,7 @@ async function sendImage(file, opts) {
         ta.selectionStart = ta.selectionEnd = ta.value.length;
         growComposeInput();
         ta.focus();
-        // #450: mark that this compose buffer now carries an attached image
+        // Mark that this compose buffer now carries an attached image
         // path, so the ➤ Send handler defers its submitting CR (see
         // sendSubmit). Claude Code runs a pasted-path→image-attachment
         // conversion on submit that swallows a CR arriving in the same burst
@@ -753,7 +753,7 @@ async function sendImage(file, opts) {
   }
 }
 
-// On-screen keys popover (issue #36): a D-pad of arrow/Esc/Tab/Enter
+// On-screen keys popover: a D-pad of arrow/Esc/Tab/Enter
 // keys for iPhone keyboards (SwiftKey etc.) that lack them, so Claude's
 // TUI prompts are navigable from the phone. Each key sends the matching
 // VT/xterm escape sequence over the same WS `input` channel as paste.
@@ -762,7 +762,7 @@ const KEY_BYTES = {
   enter: '\r', esc: '\x1b', tab: '\t',
 };
 
-// Shift-modified variants (issue #137). The ⇧ key is a sticky toggle that
+// Shift-modified variants. The ⇧ key is a sticky toggle that
 // simulates holding Shift, so the next key sent uses these sequences. Tab
 // becomes back-tab (`\x1b[Z`) — that's Shift+Tab, the way Claude Code cycles
 // permission modes — and the arrows get their xterm Shift CSI form (modifier
@@ -846,7 +846,7 @@ function wireKeysPopover() {
 }
 
 export function wireTerminal() {
-  // The terminal screen follows the app theme (issue #383): live-restyle
+  // The terminal screen follows the app theme: live-restyle
   // the open terminal whenever the app theme flips — xterm colors live in
   // the renderer, so CSS alone can't restyle an already-open screen;
   // options.theme can.
@@ -854,15 +854,15 @@ export function wireTerminal() {
     attributes: true,
     attributeFilter: ['data-theme'],
   });
-  // User theme file (issue #381) — best-effort; the built-ins are already
+  // User theme file — best-effort; the built-ins are already
   // a complete theme, so a missing/failed fetch changes nothing.
   jsonApi('/api/terminal-themes').then(function (body) {
     setUserTermThemes(body && body.themes);
     applyTermTheme();
   }).catch(function () { /* built-ins stand */ });
   els.terminalBack.addEventListener('click', hideTerminal);
-  // 🛑 Stop-and-kill the session straight from the terminal view (issue
-  // #253) — no need to go back to the list first. Resolve the open
+  // 🛑 Stop-and-kill the session straight from the terminal view
+  // — no need to go back to the list first. Resolve the open
   // session from state.sessions by sid; stopSession() confirms, then
   // hides the overlay when it stops the session we're viewing.
   els.terminalKill.addEventListener('click', function () {
@@ -912,12 +912,12 @@ export function wireTerminal() {
       ? Array.prototype.slice.call(picked) : [];
     els.terminalImageInput.value = '';
     if (!list.length) return;
-    // Issue #448: upload sequentially (never Promise.all) — sendImage's
+    // Upload sequentially (never Promise.all) — sendImage's
     // inline-append path reads then writes ta.value, so concurrent calls
     // would race and corrupt the append order. Each call is silent; one
     // summary toast fires at the end instead of N flickering ones.
     const inline = !!(state.terminal && state.terminal.composeOpen);
-    // Issue #450: reopen the on-screen keyboard NOW, synchronously inside this
+    // Reopen the on-screen keyboard NOW, synchronously inside this
     // `change` tick — the native photo picker dismissed it, and the `change`
     // event is still a trusted continuation of the user's gesture. Same iOS
     // rule as every focus path here: WebKit only honours

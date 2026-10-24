@@ -86,7 +86,7 @@ async def get_apps(request: Request) -> Dict[str, Any]:
     for d in decorated:
         if d.get("kind") == KIND_TUNNEL:
             d["health"] = health.get(d.get("tunnel_url"))
-    # Mark which live coding rows the user has starred (issue #250). Bat-
+    # Mark which live coding rows the user has starred. Bat-
     # based kinds never carry the flag — favorites are a Coding-tab concept.
     favorites = set(cfg.coding_favorites)
     for d in decorated:
@@ -196,13 +196,13 @@ async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
         body = await maybe_json(request)
         mode = str(body.get("mode") or "pty").strip().lower()
         agent = str(body.get("agent") or agents.DEFAULT_AGENT).strip().lower()
-        # Resume (issue #151): reopen the agent's own native session picker.
+        # Resume: reopen the agent's own native session picker.
         # It swaps the normal flags for the agent's resume invocation but
-        # honours the requested `mode` (issue #157): with Detached on, the
+        # honours the requested `mode`: with Detached on, the
         # picker renders in the detached console window; with Detached off it
         # streams to the phone over a PTY. Resume no longer forces a PTY.
         resume = bool(body.get("resume"))
-        # Phone's real terminal size (issue #126): a pty session spawns at
+        # Phone's real terminal size: a pty session spawns at
         # these dimensions so a ratatui TUI's first frame isn't cut. Absent
         # (older client, or remote mode) → the legacy 40×120 default.
         rows = int(body.get("rows") or 40)
@@ -228,7 +228,7 @@ async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
         if resume:
             # Swap the normal flags for the agent's resume invocation; the
             # requested `mode` decides where its picker renders — a detached
-            # console (mode="remote") or a streamed PTY (issue #157).
+            # console (mode="remote") or a streamed PTY.
             flags = build_resume_flags(cfg, agent)
         else:
             flags = flag_builders[agent](cfg)
@@ -306,7 +306,7 @@ async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
     # taps). Tracking it here would offer a port/URL that never resolves
     # and a Stop button that can't reach the real process either — so a
     # tray launch isn't tracked at all; Port listeners already resolves it
-    # correctly once it's actually up (issue #456 follow-up).
+    # correctly once it's actually up.
     if entry.kind != KIND_TRAY:
         app_runtime.record_spawn(entry.id, entry.name, entry.kind, pid)
     return {"launched": entry.id, "name": entry.name, "kind": entry.kind}

@@ -59,7 +59,7 @@ def cooldown_check(
         return None
     anchor: Optional[Dict[str, Any]] = None
     for run in list_runs(job.id):
-        # skipped (cooldown no-ops) and dry-run records (issue #69) are
+        # skipped (cooldown no-ops) and dry-run records are
         # not real fires — counting them as the anchor would let a dry
         # verification reset the cooldown window.
         if run.get("status") in (
@@ -185,7 +185,7 @@ def invalidate_stats_cache(job_id: Optional[str] = None) -> None:
 
 
 # How many *completed* runs a job needs before its derived duration
-# threshold is trusted to auto-kill (issue #695). The same threshold has
+# threshold is trusted to auto-kill. The same threshold has
 # always been safe to *warn* on with zero history — a false ⚠️ costs a
 # glance — but killing a healthy run is not recoverable, so the executor's
 # watchdog refuses to derive a ceiling until the history can carry it. A

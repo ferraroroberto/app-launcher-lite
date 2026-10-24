@@ -1,4 +1,4 @@
-"""The one ``git`` invocation contract for this repo (issue #11).
+"""The one ``git`` invocation contract for this repo.
 
 Every ``git -C <root> …`` shell-out here needs the same kwargs — capture the
 output, close stdin so a git that wants to prompt fails instead of hanging,
@@ -6,12 +6,10 @@ decode as text, cap the wall clock, never raise on a non-zero exit, and pass
 ``creationflags=NO_WINDOW`` so no console flashes under the console-less
 ``pythonw`` tray, ``GIT_OPTIONAL_LOCKS=0`` so a killed read can't strand
 ``index.lock`` — plus the same ``except (OSError, subprocess.SubprocessError)``
-arm around it. That contract used to be hand-typed at five separate call sites
-across :mod:`src.build_info`, :mod:`src.session_host_paths` and
-:mod:`src.scanner`, and the copies had already drifted: structurally identical
-blocks disagreed on whether a failed run warned or degraded silently. Named
-once here, changing the timeout or the exception set is a one-line edit rather
-than a five-file sweep that misses one.
+arm around it. Named once here for :mod:`src.build_info`,
+:mod:`src.session_host_paths` and :mod:`src.scanner`, so every caller warns or
+degrades the same way on a failed run, and changing the timeout or the exception
+set is a one-line edit.
 
 The split of responsibility is deliberate:
 
@@ -49,7 +47,7 @@ DEFAULT_TIMEOUT_S = 5.0
 #: optionally, to write refreshed stat info back, and a process killed
 #: mid-write (this module's own timeout, on a loaded box) strands the 0-byte
 #: lock — invisible to every read, fatal to the next ``add``/``checkout``/
-#: ``pull`` in that checkout (#67; fleet-config#667, #939). With the variable
+#: ``pull`` in that checkout. With the variable
 #: set a read never takes the lock, so a killed one cannot leave it behind.
 READ_ONLY_ENV = {"GIT_OPTIONAL_LOCKS": "0"}
 

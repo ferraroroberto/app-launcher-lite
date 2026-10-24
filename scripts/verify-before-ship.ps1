@@ -1,11 +1,12 @@
-# Pre-ship verification gate (issue #33, Phone-validation 4/5).
+# Pre-ship verification gate.
 #
 # Runs the full validation pipeline locally before a change is declared
 # "done": byte-compile, the non-e2e pytest suite, the static ratchet (no new
 # duplicate block / unused import beyond the committed baseline), the docs
 # ratchet (no new history marker, README within its size budget), the structure
-# ratchet (no file/function/directory growth, root layout matches the shape),
-# then the Playwright e2e suite (Chromium — this app is Android-only, issue #6) against a disposable
+# ratchet (no file/function/directory growth, root layout matches the shape), the
+# comment ratchet (no more issue references in code comments than the baseline),
+# then the Playwright e2e suite (Chromium — this app is Android-only) against a disposable
 # webapp the script boots itself on a free port.
 #
 # Usage:
@@ -21,7 +22,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $python = Join-Path $repoRoot ".venv\Scripts\python.exe"
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
-# Persistent progress log (issue #534): phase markers land here from this
+# Persistent progress log: phase markers land here from this
 # script, per-test START/DONE lines from the pytest hook in tests/conftest.py
 # (via LAUNCHER_VERIFY_PROGRESS_LOG). If an outer timeout kills the gate, the
 # last lines name the active phase + node id and the per-test timings survive.
@@ -95,7 +96,16 @@ try {
     & $python -m scripts.structure_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "structure ratchet failed or NOT CONFIRMED: a file, function or directory grew past its baseline, a new offender, a root folder outside the declared shape, a file that could not be measured, or a baseline problem; see the output above, docs/layout.md and .structure-ratchet-baseline.json." }
 
-    # Diff-proportionate e2e routing (issue #568). Classify the branch's
+    # Comment ratchet (scaffold docs/comment-ratchet.md): no file may carry more
+    # issue references (#NNN) inside code comments than .comment-ratchet-baseline.json
+    # records, and a new file may carry none. Whole tree, so never diff-routed. Same
+    # wrapper shape as the other ratchets: exit 3 (a file could not be scanned) is
+    # NOT CONFIRMED and fails.
+    Phase "comment ratchet..."
+    & $python -m scripts.comment_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "comment ratchet failed or NOT CONFIRMED: a file carries more issue references in comments than its baseline, a file could not be scanned, or a baseline problem; see the output above and .comment-ratchet-baseline.json." }
+
+    # Diff-proportionate e2e routing. Classify the branch's
     # changed files vs main and run an e2e slice proportionate to the diff:
     # static assets -> Chromium smoke only, real UI/behaviour -> the full
     # suite, backend/docs-only -> no browser suite. Fail-safe: any
@@ -130,10 +140,10 @@ try {
         Log-Progress "e2e routing: tier=$tier target=$e2eTarget browsers=$e2eBrowsers reason=$routeReason"
 
         # Serialize full-tier e2e legs across concurrent primary/worktree gate
-        # runs on this machine (issue #685). Two overlapping full-tier runs --
+        # runs on this machine. Two overlapping full-tier runs --
         # a normal outcome of the fleet's own claim-or-worktree concurrency
         # model -- each spinning up ~400 browser contexts is the
-        # ephemeral-port burst fleet-config#498 traced to this suite (Tcpip
+        # ephemeral-port burst this suite can cause (Tcpip
         # 4231, TIME_WAIT 206->979). A kernel-managed
         # named mutex, not a lockfile: auto-released if a holder crashes, no
         # stale-file cleanup path. Scoped to only this e2e leg -- byte-compile
@@ -163,8 +173,7 @@ try {
             $env:LAUNCHER_E2E_AUTOBOOT = "1"
             # On CI run verbose + unbuffered so a hung test (pytest-timeout aborts
             # the process via os._exit, skipping the summary) is named by the last
-            # nodeid logged at test start. Locally keep the compact dotted output
-            # (#184).
+            # nodeid logged at test start. Locally keep the compact dotted output.
             $verbosity = if ($env:CI -eq "true") { "-v" } else { "-q" }
             if ($env:CI -eq "true") { $env:PYTHONUNBUFFERED = "1" }
             $e2eArgs = @($e2eTarget, $verbosity)
@@ -203,9 +212,8 @@ Write-Host ("[OK] Ready to ship -- all checks passed in {0:n1}s." -f $sw.Elapsed
 
 # A green gate + merge + tray.bat --restart still does not make a
 # session-host-path change live -- that process is deliberately excluded
-# from the reclaim sweep (project-scaffolding#35) and can run stale code for
-# days with nothing else surfacing that (issue #615, demonstrated live on
-# #611). Reuse classify_e2e.py's own path categorization (the "session-host"
+# from the reclaim sweep and can run stale code for
+# days with nothing else surfacing that. Reuse classify_e2e.py's own path categorization (the "session-host"
 # / "session-host/launcher" label it already computes for e2e routing) so
 # this warning never drifts out of sync with that classifier's path list.
 if ($routeReason -match "session-host") {

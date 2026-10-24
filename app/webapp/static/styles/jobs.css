@@ -2,8 +2,8 @@
 .sessions-card .card-list { margin-top: 4px; }
 
 /* ---------- jobs tab ---------- */
-/* The list lives inside a collapsible `.sessions-card.card--collapsible` (issue
-   #226). The ➕ Add job button sits in the summary row alongside the title,
+/* The list lives inside a collapsible `.sessions-card.card--collapsible`.
+   The ➕ Add job button sits in the summary row alongside the title,
    mirroring the Running-sessions card's ⎇ status button. */
 .jobs-header-actions {
   display: flex;
@@ -24,7 +24,7 @@
   padding: 6px 10px;
   white-space: nowrap;
 }
-/* Sort toggle (issue #229) — same compact footprint as the Add button,
+/* Sort toggle — same compact footprint as the Add button,
    always visible (Add is edit-mode-only). */
 .jobs-sort-btn {
   font-size: var(--font-caption);
@@ -82,7 +82,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Agenda panel (issue #230) — foldable 🗓️ Schedule list above Registered
+/* Agenda panel — foldable 🗓️ Schedule list above Registered
    jobs. Day headers separate time-ordered rows; tapping a row reveals that
    job in the list below. */
 .jobs-agenda-body { padding: 4px 0 8px; }
@@ -136,7 +136,7 @@
   letter-spacing: 0;
 }
 
-/* Missed-fire coverage badge (issue #697) — "this schedule is not firing".
+/* Missed-fire coverage badge — "this schedule is not firing".
    Same .kind-pill geometry as its row neighbours, danger-coloured because it
    means the job silently produced nothing. Scoped under .launch-btn for the
    same specificity reason as the countdown chip above. */

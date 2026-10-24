@@ -236,16 +236,16 @@ async def start_issue(request: Request) -> Dict[str, Any]:
         sid=sid, agent=agent, name=entry.name, project=entry.project_dir,
         skill=prompt, audit_mod=audit, mirror_fn=open_local_terminal_window,
     )
-    # Auto-name the session after the issue title (#467): a Board-started
+    # Auto-name the session after the issue title: a Board-started
     # session is then recognizable in the Coding tab immediately, instead of
-    # inheriting the first-prompt/OSC-derived default. Reuses the #458 manual
+    # inheriting the first-prompt/OSC-derived default. Reuses the manual-title
     # override (a launcher-side ``manual_title`` set, wins over the agent's
     # later self-naming). Best-effort — a rename failure must never fail an
     # otherwise-successful launch. No readiness wait needed: the rename is a
     # pure in-memory attribute set on the session record, never typed into
-    # the PTY (the racy agent-native injection was removed in #555). Agents
+    # the PTY (agent-native injection is racy against the live TUI). Agents
     # with a verified spawn-time --name flag also receive the same safe title
-    # above, so their native resume picker is synchronized from birth (#556).
+    # above, so their native resume picker is synchronized from birth.
     if sid and title:
         try:
             await asyncio.to_thread(

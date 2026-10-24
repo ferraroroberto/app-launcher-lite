@@ -131,7 +131,7 @@ def _classify_one(path: str) -> tuple[Category, str]:
     # --- things with no browser impact -> NONE ------------------------------
     #   backend Python off the session-host path; non-e2e tests; docs; scripts;
     #   config; CI yaml; repo meta files.
-    # Deliberate #568 decision, not an oversight: backend `src/` code off the
+    # Deliberate decision, not an oversight: backend `src/` code off the
     # session-host path has no browser surface of its own — it's covered by
     # the non-e2e pytest suite (TestClient etc.), so it skips the browser
     # tier here. Do not "fix" this by routing all of src/ to FULL.
@@ -149,7 +149,7 @@ def _classify_one(path: str) -> tuple[Category, str]:
         return Category.NONE, "tooling/config"
     if path in {
         ".fleet.toml", ".gitignore", ".static-ratchet-baseline.json",
-        ".docs-ratchet-baseline.json", "LICENSE", "AGENTS.md", "CLAUDE.md",
+        ".docs-ratchet-baseline.json", ".comment-ratchet-baseline.json", "LICENSE", "AGENTS.md", "CLAUDE.md",
     } or ext == "bat":
         return Category.NONE, "repo-meta"
 
@@ -208,7 +208,7 @@ def _run_git(args: List[str]) -> List[str]:
             ["git", *args],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             creationflags=NO_WINDOW,
-            # Read-only: never take the optional index.lock (#67).
+            # Read-only: never take the optional index.lock.
             env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
         )
     except OSError:

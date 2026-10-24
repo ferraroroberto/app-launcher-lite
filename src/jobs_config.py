@@ -245,7 +245,7 @@ def update_job(cfg: JobsConfig, job_id: str, **fields: Any) -> Optional[Job]:
         setattr(job, attr, transform(raw))
 
     # kind / script_path / kind_config are validated together as the
-    # *effective* post-edit shape (issue #70) — an edit to any one of the
+    # *effective* post-edit shape — an edit to any one of the
     # three must still describe a structurally valid job, and validation
     # runs before any of the three is mutated so a rejected edit leaves the
     # job untouched.
