@@ -60,25 +60,6 @@ _SUBGROUP_ISSUE = {
     },
 }
 
-# MR shape: issue shape plus draft/work_in_progress; references use !N.
-_REAL_MR = {
-    "iid": 3289,
-    "project_id": 5261717,
-    "title": "Draft: rework language server bootstrap",
-    "state": "opened",
-    "updated_at": "2026-07-30T12:00:00.000Z",
-    "closed_at": None,
-    "web_url": "https://gitlab.com/gitlab-org/gitlab-vscode-extension/-/merge_requests/3289",
-    "labels": ["type::maintenance"],
-    "draft": True,
-    "work_in_progress": True,
-    "references": {
-        "short": "!3289",
-        "relative": "!3289",
-        "full": "gitlab-org/gitlab-vscode-extension!3289",
-    },
-}
-
 
 def _fake_run(rows_by_match, calls=None):
     """subprocess.run stand-in: pick canned rows by substring of the api path."""
@@ -133,36 +114,15 @@ def test_norm_issue_maps_real_shape(monkeypatch):
     assert issues[1]["number"] == 1079
 
 
-def test_norm_mr_keeps_pr_kind_and_maps_draft(monkeypatch):
-    monkeypatch.setattr(
-        gitlab_client.subprocess, "run",
-        _fake_run({"merge_requests": [_REAL_MR]}),
-    )
-    prs = gitlab_client.search_open_prs("gitlab-org")
-    assert prs == [{
-        "kind": "pr",             # internal kind name — board vocabulary
-        "repo": "gitlab-vscode-extension",   # from "...extension!3289"
-        "number": 3289,
-        "title": "Draft: rework language server bootstrap",
-        "url": "https://gitlab.com/gitlab-org/gitlab-vscode-extension/-/merge_requests/3289",
-        "updated_at": "2026-07-30T12:00:00.000Z",
-        "is_draft": True,
-        "labels": ["type::maintenance"],
-    }]
-
-
-def test_audit_meta_label_filtered_from_issues_and_mrs(monkeypatch):
-    ledger_issue = {**_REAL_ISSUE, "iid": 37, "labels": ["audit-meta"]}
-    ledger_mr = {**_REAL_MR, "iid": 38, "labels": ["Audit-Meta"]}
+def test_audit_meta_label_filtered_from_issues(monkeypatch):
+    ledger_issue = {**_REAL_ISSUE, "iid": 37, "labels": ["Audit-Meta"]}
     monkeypatch.setattr(
         gitlab_client.subprocess, "run",
         _fake_run({
             "/issues?state=opened": [_REAL_ISSUE, ledger_issue],
-            "merge_requests": [_REAL_MR, ledger_mr],
         }),
     )
     assert [i["number"] for i in gitlab_client.search_open_issues("g")] == [2323]
-    assert [p["number"] for p in gitlab_client.search_open_prs("g")] == [3289]
 
 
 # ------------------------------------------------------- query construction
@@ -355,5 +315,5 @@ def test_reset_cache_restores_pristine_state(monkeypatch):
     assert gitlab_client.snapshot()["issues"]
     gitlab_client.reset_cache()
     assert gitlab_client.snapshot() == {
-        "fetched_at": None, "issues": [], "prs": [], "done": [], "error": None,
+        "fetched_at": None, "issues": [], "done": [], "error": None,
     }

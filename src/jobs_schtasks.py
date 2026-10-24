@@ -455,14 +455,6 @@ def _parse_bulk_records(stdout: str) -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def _parse_bulk_query(stdout: str) -> Dict[str, Optional[str]]:
-    """``{task_name: next_run}`` view of :func:`_parse_bulk_records`."""
-    return {
-        name: record["next_run"]
-        for name, record in _parse_bulk_records(stdout).items()
-    }
-
-
 def _bulk_records(
     runner: Optional[Callable[[List[str]], subprocess.CompletedProcess]] = None,
 ) -> Optional[Dict[str, Dict[str, Any]]]:

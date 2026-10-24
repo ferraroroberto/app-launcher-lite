@@ -8,10 +8,6 @@ on a poll** — :func:`refresh` runs the queries only when the user asks (or
 once on first Board activation), while :func:`snapshot` is a pure memory
 read the 5s board poll can hit for free.
 
-:func:`search_open_prs` (merge requests) is public and tested but not wired
-into :func:`refresh` — the 4-column Board has no MR surface; it awaits a
-future one.
-
 Errors degrade, never break the board: a failed refresh keeps the previous
 snapshot's data and surfaces ``error`` so the UI can badge it.
 """
@@ -33,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 _GLAB_TIMEOUT_SECONDS = 20.0
 _ISSUE_LIMIT = 100
-_MR_LIMIT = 50
 
 
 class GlabError(RuntimeError):
@@ -108,20 +103,6 @@ def _norm_issue(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _norm_mr(row: Dict[str, Any]) -> Dict[str, Any]:
-    # Kind stays "pr" — the internal card vocabulary board.js reads.
-    return {
-        "kind": "pr",
-        "repo": _repo_name(row),
-        "number": row.get("iid"),
-        "title": row.get("title"),
-        "url": row.get("web_url"),
-        "updated_at": row.get("updated_at"),
-        "is_draft": bool(row.get("draft")),
-        "labels": [str(lab) for lab in (row.get("labels") or [])],
-    }
-
-
 # The fleet's ``/codebase-audit`` skill files ledger/decision-log issues under
 # this label ("codebase-audit ledger / metadata — not actionable work") —
 # real bookkeeping, not dispatchable work, so the Board hides them entirely.
@@ -145,22 +126,6 @@ def search_open_issues(group: str, host: str = "") -> List[Dict[str, Any]]:
     )
     issues = [_norm_issue(r) for r in rows]
     return [i for i in issues if _is_actionable(i["labels"])]
-
-
-def search_open_prs(group: str, host: str = "") -> List[Dict[str, Any]]:
-    """Open merge requests across the group, normalized to ``kind: "pr"``.
-
-    Tested but deliberately unwired: the 4-column Board dropped its MR
-    surface (the old "Other" column), so :func:`refresh` never calls this.
-    Kept public — field mapping validated by tests — for a future MR view.
-    """
-    rows = _api(
-        f"groups/{_group_path(group)}/merge_requests"
-        f"?state=opened&order_by=updated_at&sort=desc&per_page={_MR_LIMIT}",
-        host,
-    )
-    prs = [_norm_mr(r) for r in rows]
-    return [p for p in prs if _is_actionable(p["labels"])]
 
 
 def _local_midnight() -> datetime:
@@ -216,9 +181,6 @@ _lock = threading.Lock()
 _cache: Dict[str, Any] = {
     "fetched_at": None,
     "issues": [],
-    # Reserved for a future MR surface — refresh() never fills it (the
-    # 4-column Board consumes issues + done only).
-    "prs": [],
     "done": [],
     "error": None,
 }
@@ -264,4 +226,4 @@ def refresh(group: str, host: str = "") -> Dict[str, Any]:
 def reset_cache() -> None:
     """Test helper — restore the pristine empty cache."""
     with _lock:
-        _cache.update(fetched_at=None, issues=[], prs=[], done=[], error=None)
+        _cache.update(fetched_at=None, issues=[], done=[], error=None)

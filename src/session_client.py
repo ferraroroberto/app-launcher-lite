@@ -125,10 +125,6 @@ def list_sessions(port: int) -> List[Dict[str, Any]]:
     return list(data.get("sessions") or [])
 
 
-def get_session(port: int, session_id: str) -> Dict[str, Any]:
-    return _request("GET", port, f"/sessions/{session_id}")
-
-
 def send_input(port: int, session_id: str, data: str, submit: bool = True) -> Dict[str, Any]:
     """Write ``data`` and, if ``submit``, submit it (issue #611).
 

@@ -127,7 +127,7 @@ _STOP_GRACE_SECONDS = 5.0
 
 # Session kinds. "pty" is a launcher-owned ConPTY streamed to the phone;
 # "remote" is a detached console window the launcher only tracks (no PTY,
-# no scrollback, no WebSocket — the Claude cloud app drives it).
+# no scrollback, no WebSocket — it is driven from its own console window).
 KIND_PTY = "pty"
 KIND_REMOTE = "remote"
 
@@ -772,15 +772,14 @@ class PtySession:
         """Stop the session: graceful agent-own quit, then force-fallback.
 
         ``STOP_QUIT`` (the path the single "Stop and kill" button drives)
-        types the agent's *own* quit command — Copilot's ``/exit``,
-        Copilot's ``/exit``, … (see :func:`quit_command_for`) — after an
-        ESC that clears any partial prompt, then waits up to
-        ``grace_seconds`` for the agent to exit on its own. The clean exit
-        lets the agent run its shutdown path (Claude Code SessionEnd hooks,
-        transcript finalisation, …) deterministically, rather than relying
-        on the abnormal console-close path a bare force-terminate triggers.
-        Only if the agent has not exited within the grace window do we
-        force-terminate the ConPTY — the guarantee that a stop always ends
+        types the agent's *own* quit command — Copilot's ``/exit`` (see
+        :func:`quit_command_for`) — after an ESC that clears any partial
+        prompt, then waits up to ``grace_seconds`` for the agent to exit on
+        its own. The clean exit lets the agent run its shutdown path
+        (session-end hooks, transcript finalisation, …) deterministically,
+        rather than relying on the abnormal console-close path a bare
+        force-terminate triggers. Only if the agent has not exited within
+        the grace window do we force-terminate the ConPTY — the guarantee that a stop always ends
         the session (issue #253).
 
         ``STOP_KILL`` force-terminates immediately (no graceful step);
@@ -871,11 +870,11 @@ class PtySession:
             "prompt_title": self.prompt_title,
             "manual_title": self.manual_title,
             "output_chars": output_chars,
-            # Raw PTY-activity timestamp (issue #627 remainder): exposed so a
-            # future check can tell "still genuinely producing output" apart
-            # from "live_title frozen on a busy glyph because the PTY wedged"
-            # — not consumed anywhere yet, see board_transcript.py's
-            # _live_title_is_busy docstring for why that's still open.
+            # Raw PTY-activity timestamp: lets the board tell "still genuinely
+            # producing output" apart from "live_title frozen on a busy glyph
+            # because the PTY wedged" — board_sessions.py passes it to
+            # board_transcript._pty_output_is_fresh, which gates the busy-title
+            # override on it.
             "last_output_at": self._last_output_at,
         }
 
@@ -889,8 +888,8 @@ class RemoteSession:
     ``tray.bat --restart`` tear-down (issue #130) — that survival is the whole
     point of the detached mode. The launcher keeps only the console PID, so the
     session shows up in the running-sessions list and can be killed from the
-    phone — there is no PTY, no scrollback, and no WebSocket. Remote control
-    comes from the Claude cloud app.
+    phone — there is no PTY, no scrollback, and no WebSocket. The session is
+    driven from its own console window on the PC.
     """
 
     kind = KIND_REMOTE
