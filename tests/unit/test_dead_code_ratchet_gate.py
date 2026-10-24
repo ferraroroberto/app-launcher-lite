@@ -7,27 +7,17 @@ own verdicts and wiring. Exit 3 must read as NOT CONFIRMED, never as a pass or a
 from __future__ import annotations
 
 import tomllib
-from pathlib import Path
 
 from scripts.dead_code_ratchet_gate import classify_exit
-
-ROOT = Path(__file__).resolve().parents[2]
-
-
-def _gate_lines() -> list[str]:
-    return (ROOT / "scripts" / "verify-before-ship.ps1").read_text(encoding="utf-8").splitlines()
+from tests.unit._gate_wiring import ROOT, assert_fails_closed, gate_stages
 
 
 def test_exit_zero_is_the_only_pass_and_three_is_not_confirmed() -> None:
-    verdicts = {code: classify_exit(code) for code in range(-1, 6)}
-    assert [code for code, (ok, _) in verdicts.items() if ok] == [0]
-    assert all(label for _, label in verdicts.values())
-    assert "NOT CONFIRMED" in verdicts[3][1] and "skip" not in verdicts[3][1].lower()
+    assert_fails_closed(classify_exit)
 
 
 def test_the_gate_runs_the_wrapper_once_right_after_the_doc_refs_ratchet() -> None:
-    calls = [i for i, ln in enumerate(_gate_lines()) if ln.lstrip().startswith("&")]
-    stages = [_gate_lines()[i].split("-m ")[-1] for i in calls if "-m scripts." in _gate_lines()[i]]
+    stages = gate_stages()
     assert stages.count("scripts.dead_code_ratchet_gate") == 1
     at = stages.index("scripts.dead_code_ratchet_gate")
     assert stages[at - 1] == "scripts.doc_refs_ratchet_gate"

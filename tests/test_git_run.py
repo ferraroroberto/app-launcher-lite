@@ -127,7 +127,8 @@ def _repo_with_origin(tmp_path):
 
     def run(*args):
         return subprocess.run(
-            ["git", *args], cwd=repo, check=True, capture_output=True, text=True
+            ["git", *args], cwd=repo, check=True, capture_output=True, text=True,
+            creationflags=NO_WINDOW,
         )
 
     run("init", "-q", "-b", "main")
@@ -139,7 +140,10 @@ def _repo_with_origin(tmp_path):
     run("commit", "-q", "-m", "base")
 
     remote = tmp_path / "remote.git"
-    subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "init", "-q", "--bare", str(remote)],
+        check=True, capture_output=True, creationflags=NO_WINDOW,
+    )
     run("remote", "add", "origin", str(remote))
     run("push", "-q", "origin", "main")
     run("remote", "set-head", "origin", "main")
