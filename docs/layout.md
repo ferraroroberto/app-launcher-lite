@@ -26,7 +26,7 @@ Beside them sit the entry points (`launcher.py`, `tray.bat`, `webapp.bat`, `weba
 | `app/session_host/` | The loopback PTY host process on `:8466`. |
 | `app/webapp/` | `server.py` (app factory), `manager.py` (adopt-or-spawn of uvicorn), `middleware.py`, `observability.py`, `event_loop.py`. |
 | `app/webapp/routers/` | Thin routers: parse the request, call `src/`, return. One module per concern. |
-| `app/webapp/static/` | The single-page shell (`index.html`, `styles.css`, one script per view and per terminal concern), the PWA manifest and icons. |
+| `app/webapp/static/` | The single-page shell (`index.html`, `styles/` for the CSS, one script per view and per terminal concern), the PWA manifest and icons. |
 | `app/webapp/static/_vendored/` | Vendor-verbatim components, never edited here. |
 | `app/webapp/static/vendor/` | The vendored xterm.js bundle. |
 
@@ -55,4 +55,14 @@ Flat `test_<module>.py` files mirror the module they test. `tests/` is past the 
 ## Declared exceptions
 
 - **`webapp/`** is the tray-owned webapp's runtime-state folder (certificates, logs, briefs, the pid and tunnel files, all gitignored). It also tracks two sample files, `cloudflared.sample.yml` and `terminal-themes.sample.json`, which sit next to the real copies they template. It is listed in `extra_roots` because the tray and the webapp read and write it at that path.
-- **Baselined offenders.** `.structure-ratchet-baseline.json` records each file, function and directory already over a limit at its size when the ratchet was adopted. They may not grow; they are split in their own changes, not hidden. The largest are `app/webapp/static/styles.css`, `tests/test_webapp_api_jobs.py`, `tests/test_board.py` and `app/webapp/static/index.html`; the longest functions are `openTerminal` in `terminal.js`, `create_app` in `app/session_host/server.py` and `renderJobRow` in `jobs-row.js`.
+- **Baselined offenders.** `.structure-ratchet-baseline.json` records each file, function and directory already over a limit at its size when the ratchet was adopted. They may not grow; they are split in their own changes, not hidden. The largest are `tests/test_webapp_api_jobs.py`, `tests/test_board.py`, `src/session_host.py` and `app/webapp/static/index.html`; the longest functions are `openTerminal` in `terminal.js`, `create_app` in `app/session_host/server.py` and `renderJobRow` in `jobs-row.js`.
+
+## Stylesheets
+
+`app/webapp/static/styles/` holds the app's own rules, cut into files of at most 1,000 lines. `index.html` links them one by one, and that link order is the cascade: a rule in a later file wins a tie against an earlier one exactly as it did when they were a single sheet.
+
+- **Tokens, tabs and cards** live in `base.css`; it stays first.
+- **A view's rules go in that view's file**: `code.css` (Coding tiles, git flags, favorites), `jobs.css`, `settings.css`, `terminal.css` (running sessions and the terminal overlay), `team-os.css` and `board.css`. Rules several views share go in `shared.css` (empty state, toast), `dialogs.css` or `lists.css` (collapsible cards, option rows, card lists).
+- **A rule that overrides another stays after it.** A new file goes where its rules must win, not alphabetically.
+- **A file that would pass 1,000 lines splits at a section comment**, never inside a block, and its link goes right after the file it was cut from.
+- **Cache-busting is automatic**: `src/static_versioning.py` stamps every `href="/static/styles/*.css"` with the fleet hash, so a new file needs only its `<link>`. `index.html` is itself at its baselined size, so a new link is paid for by trimming elsewhere in the page.

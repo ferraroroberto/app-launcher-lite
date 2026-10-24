@@ -1,0 +1,377 @@
+/* Phone-first launcher hub.
+ * Touch targets >= 56 px, tuned for one-thumb use.
+ */
+
+/* ============================================================ design tokens
+   Fleet design system (~/.claude/design.md + design.dark.md, canonical spec
+   ferraroroberto/fleet-config#178; this app's migration: issue #355). Token
+   *names* are this app's; their *values* are the spec's. Light = :root,
+   dark = [data-theme="dark"] (stamped pre-paint by the index.html boot
+   script — localStorage override, prefers-color-scheme fallback). P3
+   wide-gamut (oklch) twins override the saturated tokens behind
+   @media (color-gamut: p3) below. */
+:root {
+  /* colors — neutrals */
+  --bg: #ffffff;             /* canvas (page background) */
+  --card: #ffffff;           /* elevated card surface */
+  --card-2: #f6f8fa;         /* elevation-2: hover/active + raised chrome */
+  --card-off: #f6f8fa;       /* canvas-subtle: inset chips / code blocks */
+  --fg: #1f2328;             /* primary text */
+  --ink: #1f2328;            /* vendored card.css token name (== --fg) */
+  --muted: #656d76;          /* fg-muted (secondary text) */
+  --line: #d1d9e0;           /* border — default hairline, the dominant border */
+  --line-muted: #d8dee4;     /* border-muted — quieter ghost-toggle border */
+  /* colors — accent + status (status colors signal state only) */
+  --accent: #0969da;
+  --accent-fg: #ffffff;      /* text/icon on an accent (or danger) fill */
+  /* fleet-config#963 roles the vendored button/nav/switch read: solid
+     primary fill, accent/danger TEXT on a tint, input/switch boundary. */
+  --accent-fill: #0969da;
+  --accent-text: #0550ae;
+  --danger-text: #a40e26;
+  --attention-text: #7d4e00;  /* status text on the attention tint (vendored home-head's exception tone) */
+  --control-border: #818b98;
+  --success: #1a7f37;
+  --attention: #9a6700;
+  --attention-fg: #ffffff;   /* text on an attention fill */
+  --danger: #cf222e;
+  --star: #bf8700;           /* favorite-star gold (spec tile-yellow) */
+  --code-fg: #1f2328;        /* text inside a code/output inset */
+  /* chip / filter-pill / segmented-track fill (fg-muted at 16%, spec's neutral-soft) */
+  --neutral-soft: color-mix(in srgb, var(--muted) 16%, transparent);
+  /* Terminal screen: dark in both themes by default (ANSI output is
+     authored against dark), same model as home-automation's --video-matte
+     (#383). terminal.js reads these. The opt-in override after the dark
+     block (issue #359) flips them light when the user asks the terminal
+     to follow the app theme. */
+  --term-bg: #0a0a0a;
+  --term-fg: #f3f3f3;
+  /* elevation — cards lean on surface + hairline; popovers/toasts share one
+     shadow token, the floating bottom bar its own (the only real shadow). */
+  --shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+  --shadow-nav: 0 10px 34px rgba(31, 35, 40, 0.16);
+  --tabbar-bg: rgba(255, 255, 255, 0.85);
+  --tabbar-border: rgba(31, 35, 40, 0.12);
+  /* Brand-colour alpha overlays derive from the tokens above rather than
+     forking a base colour. Named *spec roles* use the spec's literal
+     color-mix() string (below); app-local one-off tints further down still
+     use relative colour syntax — rgb(from var(--x) r g b / a) — since the
+     spec names no role for them. Both re-resolve lazily per theme. */
+  /* Accent-ghost button recipe (home-automation's Net-tab .big-btn):
+     soft accent tint + accent text + soft accent border — no solid fills
+     (issue #383 review round). Derived from --accent so both themes ride.
+     Values are design.md's verbatim strings (issue #10) — color-mix() has a
+     wider browser-support floor than relative colour syntax. */
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --accent-border-soft: color-mix(in srgb, var(--accent) 24%, transparent);
+  --accent-border-strong: color-mix(in srgb, var(--accent) 28%, transparent);
+  /* Vendored button.css's danger-tier token names (issue #477) — this app's
+     equivalent status color is --danger, so alias rather than fork a second
+     red. Percentages + recipe are _vendored/button/README.md's verbatim
+     strings, same as the accent-soft trio above. */
+  --deficit: var(--danger);
+  --deficit-soft: color-mix(in srgb, var(--deficit) 12%, transparent);
+  --deficit-border-soft: color-mix(in srgb, var(--deficit) 30%, transparent);
+  /* radii (rounded scale) — theme-independent */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius: 16px;            /* rounded.lg — cards */
+  --radius-pill: 9999px;
+  --radius-nav: 30px;        /* the floating bottom-tab bar */
+  /* spacing scale + the uniform gutter (between cards and from page edges) */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --gap: 12px;
+  /* typography roles — system stack; the five sizes cover every text need
+     (nav labels keep the vendored nav-tabs.css's phone-validated 11px
+     default via --bottom-tabs-label) */
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-heading-xl: 2rem;
+  --font-heading-lg: 1.5rem;
+  --font-body: 1rem;
+  --font-label: 0.92rem;
+  --font-caption: 0.75rem;
+  /* shared inline-control height (select / input / compact buttons) */
+  --control-h: 36px;
+  /* unified row-height scale for repeated list rows (issue #365): sm =
+     utility/action targets (iOS 44px tap minimum), md = single-line rows,
+     lg = the standard two-line row (name + meta). Every list row height
+     derives from these three — no more per-tab ad hoc values. */
+  --row-sm: 44px;
+  --row-md: 52px;
+  --row-lg: 60px;
+  /* Action-cluster alignment (issue #8). A collapsible card's summary ends
+     with the disclosure chevron, so its controls stop short of the content
+     edge that the rows below run to. Reserving the same trailing column on
+     both — chevron width plus the 6px .summary-actions gap — is what puts a
+     row's buttons on the same vertical centre lines as the summary's. Both
+     sides then step at --row-sm + 6px. Change these together or not at all;
+     tests/e2e/test_coding_row_one_line.py pins the result. */
+  --collapse-chevron-w: 20px;
+  --action-cluster-gap: 6px;
+  --action-cluster-trail: calc(var(--collapse-chevron-w) + var(--action-cluster-gap));
+  /* canonical icon-size steps — emoji glyph buttons size via font-size */
+  --icon-inline: 16px;
+  --icon-title: 18px;
+  --icon-feature: 24px;
+  /* Vendored switch.css contract (project-scaffolding#120). --control-border
+     is the off-track fill (fleet-config#963); --toggle-track is no longer read. */
+  --toggle-knob: #ffffff;
+  --on: var(--success);
+  color-scheme: light;
+  /* --bottom-tabs-* geometry (height/margin/pill-height/padding/gap/icon/
+     label) is intentionally undefined here (issue #355) — nav-tabs.css's
+     own canonical var(..., fallback) defaults (61/21/53/4/4/20/11px) are
+     the fleet-standard floating-bar geometry, phone-validated on
+     home-automation. Define one here only to deliberately diverge. */
+}
+
+[data-theme="dark"] {
+  --bg: #0d1117;             /* canvas (GitHub dark canvas) */
+  --card: #161b22;           /* elevated card surface */
+  --card-2: #21262d;         /* elevation-2: hover/active + raised chrome */
+  --card-off: #010409;       /* canvas-subtle: true-black inset */
+  --fg: #e6edf3;
+  --ink: #e6edf3;
+  --muted: #7d8590;
+  --line: #30363d;
+  --line-muted: #21262d;
+  --input-bg: var(--line-muted); /* control fill for the vendored disabled button, not true black (fleet-config#1368) */
+  --accent: #2f81f7;
+  --accent-fg: #ffffff;
+  --accent-fill: #1f6feb;
+  --accent-text: #58a6ff;
+  --danger-text: #ff7b72;
+  --attention-text: #e3b341;  /* status text on the attention tint, dark value */
+  --control-border: #6e7681;
+  --success: #3fb950;
+  --attention: #d29922;
+  --attention-fg: #181818;   /* the brighter dark amber carries dark text */
+  --danger: #f85149;
+  --star: #d29922;           /* spec tile-yellow, dark value */
+  --code-fg: #e6edf3;
+  --neutral-soft: color-mix(in srgb, var(--muted) 16%, transparent);
+  /* Depth on a near-black canvas comes from surface lightness, not shadow. */
+  --shadow: 0 8px 24px rgba(1, 4, 9, 0.6);
+  --shadow-nav: 0 10px 34px rgba(0, 0, 0, 0.5);
+  --tabbar-bg: rgba(22, 27, 34, 0.86);
+  --tabbar-border: rgba(255, 255, 255, 0.13);
+  --toggle-knob: var(--ink);
+  color-scheme: dark;
+}
+
+/* Light terminal screen: the terminal always follows the app theme
+   (issue #383; supersedes the #359 opt-in switch). The matching
+   ANSI palette rides terminal.js (xterm colors live in the renderer, not
+   CSS). Values are the spec's colors.canvas / colors.fg. */
+:root:not([data-theme="dark"]) {
+  --term-bg: #ffffff;
+  --term-fg: #1f2328;
+}
+
+/* P3 wide-gamut twins — on a wide-gamut display the saturated tokens render
+   the richer oklch() value; sRGB displays keep the hex values above. Only
+   saturated tokens have twins; neutrals are sRGB-only by design. Values are
+   the fleet spec's exact oklch (design.md / design.dark.md). */
+@media (color-gamut: p3) {
+  :root {
+    --accent: oklch(0.52 0.18 256);
+    --accent-fill: oklch(0.52 0.18 256);
+    --success: oklch(0.55 0.14 150);
+    --danger: oklch(0.55 0.20 25);
+    --attention: oklch(0.55 0.11 80);
+  }
+  [data-theme="dark"] {
+    --accent: oklch(0.64 0.18 256);
+    --accent-fill: oklch(0.57 0.21 260);
+    --success: oklch(0.72 0.18 150);
+    --danger: oklch(0.68 0.20 25);
+    --attention: oklch(0.77 0.13 85);
+  }
+}
+
+* { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; }
+[hidden] { display: none !important; }
+
+/* Canonical focus-visible ring (design.md v2 focus contract, issue #355).
+   One tokenized rule covers every interactive element app-wide; without it
+   keyboard focus falls to the browser default, which on Windows Chrome is
+   themed off the OS accent, not this app's --accent. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Lucide sprite glyphs (_vendored/icons required CSS contract — verbatim
+   from its README). Icons inherit currentColor; size via width/height or
+   the surrounding font-size (1em default). */
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -0.15em;
+}
+/* Icons are decorative (aria-hidden) and must never win hit-testing — taps
+   land on the owning button, the same rule .agent-icon already carries.
+   Belt-and-braces for iOS touch adjudication around svg <use> content. */
+.icon { pointer-events: none; }
+
+/* Shared 44px hit-area expansion for an isolated compact control (design.md
+   "Touch targets"): keeps the compact visual (e.g. the home-head's 34px
+   toggle) while the invisible ::before inset grows the effective target to
+   44×44 (34 + 2×5). Only for controls with clearance on every side —
+   adjacent clusters need real geometry, never overlapping expansions. */
+.hit-target { position: relative; }
+.hit-target::before { content: ""; position: absolute; inset: -5px; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: var(--font-body);
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: contain;
+  /* No system double-tap-to-zoom on the page itself — pairs with the
+     viewport meta's maximum-scale=1/user-scalable=no zoom lock (design.md
+     Layout; fleet-config#296). Individual elements still opt into their own
+     gesture handling (e.g. touch-action: pan-y on scrollable lists). */
+  touch-action: manipulation;
+  /* Reserve the scrollbar gutter so the centred .app container doesn't
+     shift ~8 px sideways when one tab needs a vertical scrollbar and
+     another doesn't — visible as a "tabs aren't aligned" jitter on
+     desktop when switching Coding ↔ Apps ↔ Jobs. */
+  scrollbar-gutter: stable;
+}
+
+.app {
+  max-width: 772px;
+  margin: 0 auto;
+  padding-top: env(safe-area-inset-top, 0);
+  padding-left: var(--gap);
+  padding-right: var(--gap);
+}
+/* Bottom padding is desktop/wide-only, deliberately split out of the rule
+   above (issue #355): the coarse-pointer + narrow breakpoint below is where
+   nav-tabs.css reserves .app's bottom padding for the floating tab bar (its
+   own `.app { padding: ... }` in that same media condition) — a shorthand
+   `padding` here would win the cascade (equal specificity, later in source
+   order) and silently clobber that reservation. */
+@media (pointer: fine), (min-width: 521px) {
+  .app {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0) + 24px);
+    scroll-padding-bottom: calc(env(safe-area-inset-bottom, 0) + 24px);
+  }
+}
+
+/* ---------- tabs ----------
+   Nav geometry + the desktop segmented control / mobile floating pill are
+   now owned by the vendored _vendored/nav/nav-tabs.css (issue #355) — see
+   its <link> in index.html. `.tab.active`, `.tab-icon` sizing, the
+   standalone fixed-inset .app shell, and the visualViewport pin all live
+   there; do not re-add them here.
+
+   The overlay-hide rule below is app-specific glue the vendored file
+   anticipates (its README: "a non-<dialog> overlay -> add the class
+   nav-hidden to <body>") — these five are hand-rolled [hidden]-toggled
+   overlays, not native <dialog>, which the vendored file already covers via
+   body:has(dialog[open]). visibility (not display) matches the vendored
+   technique — gentler on iOS fixed-layer repainting across show/hide. */
+@media (pointer: coarse) and (max-width: 520px) {
+  body.terminal-open .tabs,
+  body:has(#teamOsBrowser:not([hidden])) .tabs,
+  body:has(#loginOverlay:not([hidden])) .tabs {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  /* In the standalone shell .app (not the document) is the real scroller
+     (home-automation#303, via nav-tabs.css). terminal.js's lockBodyScroll()
+     pins document.body during an overlay — a no-op there since body was
+     never the scroller in standalone — so without this, .app's own content
+     stays touch-scrollable behind a hand-rolled overlay. Mirrors
+     home-automation's `body:has(dialog[open]) .app { overflow: hidden }`;
+     the app-specific overlays get the same treatment as the .tabs hide
+     rule above, plus native <dialog> for completeness (this app has both). */
+  @media (display-mode: standalone) {
+    body.terminal-open .app,
+    body:has(#teamOsBrowser:not([hidden])) .app,
+    body:has(#loginOverlay:not([hidden])) .app,
+    body:has(dialog[open]) .app {
+      overflow: hidden;
+    }
+  }
+}
+
+@media (pointer: coarse) and (max-width: 520px) and (prefers-reduced-motion: reduce) {
+  .tab { transition: none; }
+}
+
+/* ---------- card ---------- */
+/* Surface/border/radius/padding come from the vendored card.css; the app
+   adds only the inter-card gutter. */
+.card { margin: 0 0 var(--gap); }
+/* Detached toggle — modelled on voice-transcriber's `.incognito-btn`: a
+   real button, role="switch" + aria-checked (issue #355). Opacity + accent
+   border flip on `[aria-checked="true"]` so it reads as on/off instead of
+   a tick that everyone misses on a phone. */
+.detached-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: var(--font-caption);
+  white-space: nowrap;
+  padding: 6px 10px;
+  min-height: var(--control-h);
+  border: 1px solid var(--line-muted);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  opacity: 0.55;
+  transition: opacity 0.15s, border-color 0.15s, background 0.15s;
+}
+.detached-toggle:active { background: var(--card-2); }
+.detached-toggle[aria-checked="true"] {
+  opacity: 1;
+  border-color: var(--accent);
+  background: rgb(from var(--accent) r g b / 0.18);
+}
+/* #540: Detached/Resume are icon-only now (the Coding + Team OS launch rows
+   gained a model combo and needed the room). Render the glyph at the app's
+   standard --icon-title size in a square-ish tap target — matching the other
+   icon buttons — while keeping the pill's opacity + accent-border on/off
+   shading that marks them as toggles rather than one-shot actions. */
+.detached-toggle .icon { font-size: var(--icon-title); }
+.detached-toggle { padding: 6px; min-width: var(--control-h); }
+.settings-actions { flex-wrap: wrap; gap: 8px; }
+
+/* Theme toggle (issue #355; #392 put it in the options summary, #496 moved
+   it into the vendored home-head card's .home-toggle slot — the same
+   position as the other fleet apps). The button's box now comes from
+   home-head.css; only the sun/moon glyph pair lives here. Shows the glyph
+   for the ACTION: moon in light (tap → dark), sun in dark (tap → light). */
+.theme-toggle-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+:root[data-theme="dark"] .theme-icon-moon { display: none; }
+:root:not([data-theme="dark"]) .theme-icon-sun { display: none; }
+

@@ -1,0 +1,325 @@
+/* ---------- running sessions (tap to open the terminal) ---------- */
+.session-item .session-open {
+  width: 100%;
+  text-align: left;
+}
+/* Single declaration for `.session-head` (issue #690 — it used to be declared
+   twice, non-adjacently, and the two halves both mattered: the earlier copy
+   carried the font, this one the gap). Emitted by `sessions.js`, `apps.js`,
+   `jobs.js` and `jobs-row.js`. */
+.session-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-body);
+  font-weight: 600;
+}
+/* Title on its own full-width line above the badges (issue #113), but
+   clamped to a single line with an ellipsis (issue #120): a long title
+   no longer wraps to a second line and eats vertical space — the
+   `up <ago> · <folder>` meta line below already disambiguates. */
+.session-item .session-open .name {
+  display: block;
+  max-width: 100%;
+  font-size: var(--font-label);
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-chevron {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+}
+/* kind tag — full-control PTY vs detached console window */
+.session-kind {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+.session-kind.pty { background: rgb(from var(--success) r g b / 0.16); color: var(--success); }
+.session-kind.remote { background: rgb(from var(--fg) r g b / 0.08); color: var(--muted); }
+/* detached rows aren't tappable — they have no streamable terminal */
+.session-item .session-open.inert {
+  cursor: default;
+  display: block;
+}
+
+/* ---------- interactive terminal overlay ---------- */
+/* Stop iOS rubber-band / pull-to-refresh chrome from leaking through
+   into the underlying page when the terminal overlay is open. Applied
+   globally (harmless on the launcher home view) because Safari's
+   negative-overscroll behaviour is rooted at the document, not body. */
+html, body { overscroll-behavior: none; }
+/* When the terminal is open the body is scroll-locked so the overlay is
+   the only thing on screen — long output can't push the bar off-screen
+   or reveal the app list underneath. The JS lockBodyScroll() also pins
+   position:fixed + top:-Ypx + width:100%; the rules below cap the height
+   and isolate touch gestures so iOS doesn't try to scroll the page that
+   isn't there. 100dvh handles the dynamic chrome (URL bar show/hide). */
+body.terminal-open {
+  overflow: hidden;
+  height: 100dvh;
+  height: 100vh;            /* fallback for engines without dvh */
+  touch-action: none;       /* iOS: no system pan/zoom on body itself */
+}
+.terminal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: var(--term-bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top, 0);
+  /* No padding-bottom: let the xterm host extend edge-to-edge so the
+     dead black band above the iOS home-indicator goes away. The home
+     gesture area itself remains touch-reserved by iOS, so content
+     there isn't interactive but it does fill the screen visually.
+     If a future row of bottom UI ever needs to sit *above* the home
+     indicator, switch this back to env(safe-area-inset-bottom, 0). */
+  /* Containment + the iOS-supported `overscroll-behavior: contain`
+     stop any scroll attempt that exits the overlay from bubbling up
+     to the (now-pinned) body and triggering rubber-band. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  overflow-anchor: none;
+}
+.terminal-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* (#514) 6px, matching .terminal-bar-actions' own gap, so all eight
+     buttons sit at one uniform distance — and the full row (8 × 44px
+     + gaps + bar padding = 420px) fits a 430px phone viewport at once. */
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.terminal-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: var(--font-label);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* (#514) .terminal-bar-actions is a flex item of the row-flex .terminal-bar;
+   without min-width: 0 a flex item's automatic minimum size is its content's
+   min-content width, so this group refused to shrink below the sum of its
+   six 44px buttons and pushed past the viewport edge once #496 widened the
+   adjacent Back/Kill buttons — same shrinkable-scroll-container contract as
+   design.md's grid minmax(0, 1fr) rule, applied to a flex row. overflow-x:
+   auto lets it scroll internally, within the bar's own padding, instead of
+   clipping the last button off-screen. */
+.terminal-bar-actions {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.terminal-bar-actions::-webkit-scrollbar { display: none; }
+.term-btn {
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 9px 12px;
+  font-size: var(--font-label);
+  /* 44×44 effective minimum app-wide (#496 audit, extending #477 beyond the
+     terminal bar): the base class also dresses the Team OS browser bar. */
+  min-height: 44px;
+  min-width: 44px;
+  cursor: pointer;
+}
+/* Every icon-only button in the terminal toolbar meets the 44x44pt HIG
+   minimum (issue #477) — restated here for clarity even though the base
+   .term-btn now carries 44×44 itself (#496). */
+.terminal-bar .term-btn { min-width: 44px; min-height: 44px; }
+/* ‹ Back button — #496 had widened it to 64px (+ 4px kill clearance) after
+   the #259 close-tap complaint, but the extra 24px pushed the eight-button
+   row past the phone viewport (#514). Reverted to the uniform 44px HIG
+   target (#477) every other bar button uses, at the bar's uniform 6px gap,
+   so the whole row fits on-screen at once. */
+#terminalBack { text-align: center; }
+/* ✕ Stop-and-kill in the terminal bar (issue #253) — a muted glyph that
+   blends with the dark bar by default, flashing danger-red on press like
+   the list row's stop button (so it doesn't shout a loud red emoji). */
+.term-btn.term-kill {
+  color: var(--muted);
+}
+.term-btn.term-kill:active {
+  background: rgb(from var(--danger) r g b / 0.25);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+/* On-screen keys popover (issue #36): D-pad anchored below the
+   terminal bar, right-aligned under the ⌨️ button. */
+.keys-popover {
+  position: absolute;
+  top: 48px;
+  right: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  gap: 8px;
+  padding: 10px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  z-index: 30;
+  box-shadow: var(--shadow);
+}
+/* Not migrated to the button tiers (issue #477 audit): this is a fixed 3-col
+   D-pad grid keyboard popover, not a standalone action button. */
+.key-btn {
+  min-height: 52px;
+  font-size: var(--icon-title);
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.key-btn:active { background: var(--card-2); }
+/* Sticky-Shift engaged (issue #137): ⇧ stays lit until tapped off so the
+   user can see Shift is being held for the next key. */
+.key-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+/* Empty grid cell to the right of ⇧ keeps the down-arrow centered in row 3. */
+.key-spacer { display: block; }
+.terminal-host {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 4px 4px 8px;
+  background: var(--term-bg);
+  overflow: hidden;
+  /* xterm.js owns the inner scrollback; tell iOS the host is a
+     vertical pan target so edge touches don't get hijacked by
+     system gestures. (Momentum-scrolling hints belong on
+     .xterm-viewport — the actual scrolling element — see below.) */
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+/* The element xterm.js actually scrolls is .xterm-viewport, not
+   .terminal-host (host has overflow:hidden). On iOS this is where
+   the -webkit-overflow-scrolling: touch hint earns its keep —
+   inside the rendered window xterm can give the browser a real
+   scrollable area, and iOS will apply native momentum there. */
+.terminal-host .xterm-viewport {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.terminal-host .xterm { height: 100%; }
+/* Compose bar (issue #37): a predictive-keyboard text surface docked
+   at the bottom of the overlay, between the xterm host and the status
+   line. flex-shrink:0 lets it claim its height; the host (flex:1)
+   shrinks and xterm re-fits on the visualViewport resize. */
+.compose-bar {
+  display: flex;
+  /* flex-end, not stretch (issue #447): the textarea auto-grows as long
+     text lands, and its growth pushes the row's TOP edge up while the
+     bottom stays put. With align-items:stretch the attach column and the
+     Send button stretched to match the taller row, moving their buttons up
+     with it — measured 46px of drift on a realistic long paste, a
+     moving-target race against a tap aimed at the pre-grow position.
+     flex-end keeps every button's own natural size, anchored to the row's
+     one stable edge (the bottom), so only the textarea grows. */
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+/* 🎤 / 🔍 / 🖼 / ➤ sit in a 2x2 grid, anchored bottom-right of the bar, so
+   the textarea keeps the horizontal space (issue #171 UX) while all four
+   buttons read as one matched cluster (issue #453) instead of a tall 1x4
+   column. Fixed cell size + the size rule below give every button the same
+   canonical footprint and tap area. */
+.compose-tools {
+  display: grid;
+  grid-template-columns: repeat(2, 44px);
+  grid-template-rows: repeat(2, 44px);
+  gap: 6px;
+  flex-shrink: 0;
+}
+/* Override the base .compose-record/.compose-send padding (which differ
+   from each other) so all four buttons in the terminal compose grid are
+   identical squares. */
+.compose-tools .compose-record,
+.compose-tools .compose-send {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.compose-input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  /* Taller start so the bar is a roomy writing area from the first tap;
+     JS auto-grows up to 8 rows from there. */
+  min-height: 92px;
+  /* System font, not the xterm monospace — predictive UI looks native.
+     16px keeps iOS from auto-zooming the page on focus. */
+  font-family: var(--font);
+  font-size: var(--font-body);
+  line-height: 20px;
+  padding: 10px 12px;
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.compose-send {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: var(--icon-title);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border-soft);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.compose-send:active { opacity: 0.85; }
+.compose-record {
+  flex-shrink: 0;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  font-size: var(--icon-title);
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.compose-record:active { opacity: 0.85; }
+.compose-record:disabled { opacity: 0.4; cursor: default; }
+.terminal-status {
+  padding: 8px 12px;
+  font-size: var(--font-caption);
+  color: var(--attention);
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+

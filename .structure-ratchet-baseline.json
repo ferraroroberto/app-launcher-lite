@@ -27,7 +27,6 @@
     {"key": "fn:tests/test_session_host_concurrent_paint.py:test_five_concurrent_sessions_each_paint_their_own_first_frame", "lines": 114},
     {"key": "size:app/webapp/static/apps.js", "lines": 1031},
     {"key": "size:app/webapp/static/index.html", "lines": 1280},
-    {"key": "size:app/webapp/static/styles.css", "lines": 2816},
     {"key": "size:src/session_host.py", "lines": 1255},
     {"key": "size:tests/test_board.py", "lines": 1645},
     {"key": "size:tests/test_jobs.py", "lines": 1189},

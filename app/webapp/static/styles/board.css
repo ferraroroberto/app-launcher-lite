@@ -1,0 +1,586 @@
+/* ---------- Board tab (issue #300 / #164) ---------- */
+/* Launch-model dropdown (#540) for the Coding + Team OS card summaries. A
+   native <select> cannot live inside a <summary> — WebKit's HTML parser
+   derails on it (closes the <details> early, cascading into a broken tree
+   that even zeroes custom-property inheritance on ancestors). So this is
+   built from phrasing-only content — a <button> trigger + a
+   <span role="listbox"> of <button role="option"> — which is valid in a
+   summary, styled to the shared flat control recipe (36px control height,
+   12px radius, --card-2 fill, ▾ affordance). */
+.model-combo { position: relative; display: inline-flex; }
+.model-combo-trigger {
+  height: var(--control-h);
+  min-height: var(--control-h);
+  padding: 0 24px 0 10px;
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: var(--font-caption);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.model-combo-trigger:active { background: var(--card); }
+.model-combo::after {
+  content: '▾';
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: var(--font-caption);
+  pointer-events: none;
+}
+/* Opens downward from the summary; cards don't clip overflow, so a high
+   z-index keeps it above the collapsed card body below it. */
+.model-combo-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.model-combo-menu[hidden] { display: none; }
+.model-combo-menu button {
+  padding: 8px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-size: var(--font-caption);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.model-combo-menu button:hover,
+.model-combo-menu button[aria-selected="true"] {
+  background: var(--card);
+  color: var(--accent);
+}
+/* Column switcher strip: four count buttons + the glab refresh. Doubles as
+   the column header on the phone, where the carousel shows one column. */
+.board-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+/* Not migrated to the button tiers (issue #477 audit): the column-switcher
+   strip is a segmented control (has an .active state). */
+.board-strip-btn {
+  flex: 1;
+  min-width: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  padding: 8px 2px;
+  font-size: var(--font-caption);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.board-strip-btn.active { background: var(--card-2); color: var(--fg); }
+.board-count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: var(--radius-pill);
+  background: var(--card-2);
+  font-size: var(--font-caption);
+}
+/* "Your turn" holding work is the one number that matters. State signal,
+   not decoration — the warn color marks pending human action. */
+.board-strip-btn.attention .board-count { background: var(--attention); color: var(--attention-fg); }
+/* Had no icon-button box at all before #547 (only flex: 0 0 auto — a bare
+   default browser button). Same 36px --control-h square recipe as
+   .model-combo-trigger, so every icon-sized button in the Board tab
+   shares one footprint. */
+.board-refresh {
+  flex: 0 0 auto;
+  height: var(--control-h);
+  min-height: var(--control-h);
+  width: var(--control-h);
+  min-width: var(--control-h);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-label);
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.board-refresh:active { background: var(--card); }
+.board-status { color: var(--muted); font-size: var(--font-caption); margin: 0 0 8px; }
+
+/* Phone-first carousel: one column per viewport, swipe between them.
+   scroll-snap gives the swipe for free — no gesture JS. */
+.board-columns {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.board-columns::-webkit-scrollbar { display: none; }
+.board-col {
+  flex: 0 0 100%;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+/* The strip is the column header on the carousel; the per-column title
+   only earns space in the desktop grid below. */
+.board-col-title { display: none; }
+
+.board-list { list-style: none; margin: 0; padding: 0; }
+/* Column, not the shared .app-item row: the drawer and the issue-action
+   buttons must land BELOW the card, never split it horizontally (#301
+   phone feedback). */
+.board-item {
+  margin: 0;
+  flex-direction: column;
+  align-items: stretch;
+}
+/* Flat separator row (issue #365 — the backlog's #337/#339 look extended
+   to Bot's/Yours/Done): no per-card box; the status accents below keep
+   signalling on the row's left edge. */
+.board-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  min-height: var(--row-lg);
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 12px 14px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.board-card:disabled { cursor: default; opacity: 0.75; }
+.board-card-top {
+  font-size: var(--font-caption);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-agent-icon { width: 16px; height: 16px; }
+.board-card-title {
+  font-size: var(--font-label);
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+/* Status accents on the card's left edge — state colors signal state. #608
+   split needs-you into four values: awaiting-decision/awaiting-input stay
+   the same attention accent as the old needs-you; stalled is a genuine
+   anomaly and gets the danger accent; idle-finished is dimmed like idle —
+   nothing pending, just Claude holding a workspace. */
+.board-item.is-awaiting-decision .board-card,
+.board-item.is-awaiting-input .board-card { border-left: 3px solid var(--attention); }
+.board-item.is-stalled .board-card { border-left: 3px solid var(--danger); }
+.board-item.is-working .board-card { border-left: 3px solid var(--accent); }
+.board-item.is-idle .board-card,
+.board-item.is-idle-finished .board-card { opacity: 0.7; }
+.board-empty { margin: 4px 0 12px; }
+
+/* Backlog issue tiles (#337, restyled #339): a flat separator row — no card
+   background/border/radius, just a bottom-border divider between rows
+   (issue-tracker-list style) — with repo/# and the title on their own lines
+   and the ▶/⚡ actions vertically centered against the full row height.
+   .app-item is already a row flexbox by default; .board-item overrides that
+   to a column for the stacked layout the other card kinds use, so this
+   pairs both classes to opt back into a row. Since issue #365 the flat
+   look IS the .app-item base (this pattern got generalized app-wide), so
+   the old box-resetting overrides are gone — only the row direction and
+   the flat button geometry remain. The truncating spans still need
+   `min-width: 0` on the flex item along the row axis (.board-card-text),
+   not just its ancestors — a flex item's default min-width is `auto`
+   (content-based), which silently defeats overflow/ellipsis by letting
+   the item grow to fit its content instead of shrinking to the row's
+   available space (the textbook "ellipsis inside flex doesn't truncate"
+   bug, not a mobile-Safari quirk). */
+.board-item.board-item-issue {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+/* Active workflow marker (#528): keep the flat issue-row geometry while the
+   canonical accent tint distinguishes in-flight work in both themes. Git
+   dirty/off-main colours remain on the meta text independently. */
+.board-item.board-item-issue.is-in-progress {
+  background: var(--accent-soft);
+}
+.board-card-flat {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  padding: 10px 4px;
+}
+.board-card-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+.board-card-title-compact {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--font-label);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.board-card-meta-inline {
+  color: var(--muted);
+  font-size: var(--font-caption);
+  font-weight: 400;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.board-issue-actions.board-issue-actions-compact {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 0;
+}
+.board-issue-btn.icon-only {
+  /* Real 44px geometry (#496 audit): the ▶/⚡ pair is an adjacent cluster,
+     so the rectangles are grown for real, not via overlapping insets. */
+  min-width: 44px;
+  padding: 8px 10px;
+  font-size: var(--font-label);
+  text-align: center;
+}
+.board-issue-btn:disabled {
+  background: var(--card-off);
+  color: var(--muted);
+  border-color: var(--line);
+  cursor: default;
+}
+
+/* Backlog repo-state annotation (#496 item 4): the meta line inherits the
+   Coding tab's git colour vocabulary — red = dirty tree, yellow = parked
+   off the default branch (red wins when both; same precedence as
+   annotateGitStatus). Fed from the shared state.gitStatus cache — the
+   board's own 5 s poll does no git work. */
+.board-card-meta-inline.git-dirty { color: var(--danger); }
+.board-card-meta-inline.git-off-main { color: var(--attention); }
+
+/* Drill-down drawer (#301): last exchange + reply, inline under the card. */
+.board-drawer {
+  margin: 6px 0 4px;
+  padding: 10px 12px;
+  background: var(--card-2);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.board-exchange {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 40vh;
+  overflow-y: auto;
+  font-size: var(--font-caption);
+}
+.board-exchange[data-state="loading"],
+.board-exchange[data-state="empty"],
+.board-exchange[data-state="error"] {
+  color: var(--muted);
+  min-height: 44px;
+  justify-content: center;
+}
+.board-exchange-user {
+  color: var(--muted);
+  font-size: var(--font-caption);
+  white-space: pre-wrap;
+  border-left: 2px solid var(--muted);
+  padding-left: 8px;
+}
+.board-exchange-assistant { white-space: pre-wrap; }
+/* Drawer action layout (#496 round 2, on-device feedback): the reply box
+   takes a full line of its own, and the buttons form one right-aligned
+   row beneath it — canonical 44px footprints, leftover space on the left
+   is fine. flex-wrap keeps the row inside its own column at narrow
+   desktop grid widths too (#473). */
+.board-drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.board-reply-input {
+  flex: 1 1 100%;
+  min-width: 0;
+  resize: vertical;
+  background: var(--card-off);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-size: var(--font-label);
+  font-family: inherit;
+}
+/* One-tap issue start (#301) — a compact row under the card button. */
+.board-issue-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 0 10px 10px;
+}
+/* Every board action button gets the dark theme explicitly — without this
+   they render as the UA's native white buttons (phone feedback, #301). */
+.board-refresh,
+.board-issue-btn,
+.board-reply-send,
+.board-open-terminal,
+.board-rename-btn,
+.board-stop-btn {
+  background: var(--card-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  font-size: var(--font-caption);
+  cursor: pointer;
+}
+.board-reply-send { font-size: var(--font-body); }
+.board-issue-btn:active,
+.board-reply-send:active,
+.board-open-terminal:active,
+.board-rename-btn:active { background: var(--card); }
+/* Drawer action row at the 44px floor (#496 audit) — these sit in an
+   adjacent cluster, so they get real height, not hit-target insets. The
+   icon-only Rename/Stop also need real width around their lone glyph. */
+.board-reply-send,
+.board-open-terminal,
+.board-rename-btn,
+.board-stop-btn {
+  min-height: var(--row-sm);
+}
+.board-reply-send,
+.board-rename-btn,
+.board-stop-btn { min-width: 44px; }
+/* Stop (#496 item 5): same unified stop path as the Coding tab's row ✕
+   (#253) — muted glyph at rest, danger-red on press. */
+.board-stop-btn { color: var(--muted); }
+.board-stop-btn:active {
+  background: rgb(from var(--danger) r g b / 0.2);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* Desktop / wide: all four columns side by side; titles come back.
+   Board (only) also breaks out of the phone-first `.app` 720px cap —
+   full-bleed to the viewport, since `.app`'s horizontal centering makes
+   the standard breakout offsets cancel out exactly (issue #325). Every
+   other tab stays inside the 720px column unchanged. */
+@media (min-width: 700px) and (pointer: fine) {
+  #paneBoard {
+    width: 100vw;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+    padding: 0 24px;
+    box-sizing: border-box;
+  }
+  .board-columns {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px;
+    overflow-x: visible;
+    scroll-snap-type: none;
+  }
+  .board-col-title {
+    display: block;
+    margin: 0 0 8px;
+    font-size: var(--font-caption);
+    font-weight: 600;
+    text-transform: none;
+    color: var(--muted);
+  }
+  .board-col-count { font-weight: 400; }
+  /* #495: the phone tab-switcher strip duplicates the grid's own aligned
+     .board-col-title headers, with no shared width/gap math between the two
+     rows. Hide just the switcher buttons — .board-strip also hosts the glab
+     refresh button, which still needs a home on desktop. */
+  .board-strip-btn { display: none; }
+  .board-strip { justify-content: flex-end; }
+}
+.teamos-file-btn {
+  flex: 1;
+  display: block;
+  text-align: left;
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: var(--font-label);
+  min-height: 40px;
+  cursor: pointer;
+}
+.teamos-file-btn.active {
+  border-color: var(--accent);
+  background: rgb(from var(--accent) r g b / 0.18);
+}
+.teamos-file-content {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 12px 16px 32px;
+  -webkit-overflow-scrolling: touch;
+}
+.teamos-file-content h1,
+.teamos-file-content h2,
+.teamos-file-content h3,
+.teamos-file-content h4 { line-height: 1.3; }
+.teamos-file-content p { line-height: 1.5; }
+.teamos-file-content a { color: var(--accent); }
+.teamos-file-content code {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+  font-size: var(--font-caption);
+}
+.teamos-file-content pre.md-code {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+.teamos-file-content pre.md-code code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* The Screen view (#60, ported from app-launcher#1520): the PC's desktop,
+   full screen. A bar on the card surface (title, the display picker when
+   there is more than one, the x) over a stage the frame fills, letterboxed
+   on the canvas. The page is zoom-locked, so pinch and pan are the view's
+   own (screen-view.js): the stage takes every touch, and the frame moves by
+   transform alone. */
+.screen-view {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+.screen-view[open] { display: flex; flex-direction: column; }
+.screen-view::backdrop { background: var(--bg); }
+.screen-view-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  min-height: var(--row-md);
+  padding: env(safe-area-inset-top, 0px) 14px 0;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+.screen-view-title {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--font-heading-lg);
+}
+.screen-view-title .icon { width: var(--icon-title); height: var(--icon-title); color: var(--muted); }
+.screen-picker { flex: 1 1 auto; min-width: 0; margin: 0; }
+.screen-picker[hidden] { display: none; }
+.screen-view-bar .icon-button { margin-left: auto; }
+.screen-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.screen-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.screen-image[hidden] { display: none; }
+/* The state block floats centred over the stage as a card, so it reads over
+   the last frame as well as over an empty canvas. */
+.screen-state {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(320px, calc(100% - 2 * var(--gap)));
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  text-align: center;
+}
+.screen-state[hidden] { display: none; }
+.screen-state-message { margin: 0; }
+.screen-state[data-state="stale"] {
+  top: var(--gap);
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  color: var(--muted);
+}
