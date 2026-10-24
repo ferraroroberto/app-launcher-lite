@@ -212,6 +212,8 @@ def classify(paths: Sequence[str]) -> Routing:
 # --------------------------------------------------------------------- git diff
 def _run_git(args: List[str]) -> List[str]:
     try:
+        # git-wrapper-exempt: runs in the caller's cwd and degrades to [] on any
+        # failure so routing escalates to full; src.git_run is `git -C` and logs.
         out = subprocess.run(
             ["git", *args],
             capture_output=True, text=True, encoding="utf-8", errors="replace",

@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 from src import session_host_paths
+from src.subprocess_flags import NO_WINDOW
 
 _CLAUDE_MD = Path(__file__).resolve().parent.parent / "CLAUDE.md"
 
@@ -59,7 +60,8 @@ class TestPathsTouchedBetween:
         no_hooks = tmp_path / "no-hooks"
         no_hooks.mkdir()
         run = lambda *args: subprocess.run(  # noqa: E731
-            ["git", *args], cwd=repo, check=True, capture_output=True, text=True
+            ["git", *args], cwd=repo, check=True, capture_output=True, text=True,
+            creationflags=NO_WINDOW,
         )
         run("init", "-q")
         # This machine's global git config points core.hooksPath at a
@@ -73,13 +75,17 @@ class TestPathsTouchedBetween:
     @staticmethod
     def _commit_all(repo: Path, message: str) -> str:
         """Commit everything in ``repo``; return the new short HEAD sha."""
-        subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
         subprocess.run(
-            ["git", "commit", "-q", "-m", message], cwd=repo, check=True, capture_output=True
+            ["git", "add", "."], cwd=repo, check=True, capture_output=True,
+            creationflags=NO_WINDOW,
+        )
+        subprocess.run(
+            ["git", "commit", "-q", "-m", message], cwd=repo, check=True, capture_output=True,
+            creationflags=NO_WINDOW,
         )
         return subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"], cwd=repo, check=True,
-            capture_output=True, text=True,
+            capture_output=True, text=True, creationflags=NO_WINDOW,
         ).stdout.strip()
 
     def test_returns_true_when_declared_path_touched(self, tmp_path):
