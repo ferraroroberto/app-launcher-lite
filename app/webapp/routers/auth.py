@@ -8,12 +8,12 @@ phone-side review is easy).
 
 from __future__ import annotations
 
-import hmac
 import logging
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request
 
+from src.api_tokens import constant_time_equals
 from src.log_files import ensure_file_log_handler
 from src.webapp_config import WebappConfig
 
@@ -52,7 +52,7 @@ async def login(request: Request) -> Dict[str, Any]:
         )
     body = await maybe_json(request)
     presented = str(body.get("password") or "")
-    if not presented or not hmac.compare_digest(presented, cfg.auth_password):
+    if not presented or not constant_time_equals(presented, cfg.auth_password):
         auth_logger.warning(
             f"🚨 Failed password attempt from {client_host} "
             f"(presented: {len(presented)} chars)"

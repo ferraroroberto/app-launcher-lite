@@ -631,8 +631,8 @@ class TestParamValidation:
 
 class TestMakeJobId:
     def test_slug_collision_suffix(self):
-        existing = ["demo", "demo-2"]
-        assert make_job_id("Demo", existing) == "demo-3"
+        existing = ["demo", "demo-dup2"]
+        assert make_job_id("Demo", existing) == "demo-dup3"
         assert make_job_id("Fresh", existing) == "fresh"
 
 

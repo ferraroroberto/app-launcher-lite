@@ -770,7 +770,12 @@ def job_from_dict(raw: Dict[str, Any]) -> Job:
 
 
 def make_job_id(name: str, existing_ids: Optional[List[str]] = None) -> str:
-    """Slugify ``name`` into a job id, suffixing to avoid collisions."""
+    """Slugify ``name`` into a job id, suffixing to avoid collisions.
+
+    The suffix is ``-dup<N>``, never ``-<digits>``: that shape is the Task
+    Scheduler slot suffix of a ``daily_times`` job (``src.jobs_schtasks``), so
+    a ``-<digits>`` id could collide with a sibling job's slot task.
+    """
     base = slugify(name) or "job"
     if not existing_ids:
         return base
@@ -778,9 +783,9 @@ def make_job_id(name: str, existing_ids: Optional[List[str]] = None) -> str:
     if base not in have:
         return base
     n = 2
-    while f"{base}-{n}" in have:
+    while f"{base}-dup{n}" in have:
         n += 1
-    return f"{base}-{n}"
+    return f"{base}-dup{n}"
 
 
 # ----------------------------------------------------------- JobsConfig

@@ -97,7 +97,9 @@ def _truthy(value: Optional[str]) -> bool:
 
 
 def _decorate_job(
-    job: Job, run_counts: Optional[tuple[int, int]] = None
+    job: Job,
+    run_counts: Optional[tuple[int, int]] = None,
+    all_job_ids: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """API shape for one job — base fields plus runtime decoration.
 
@@ -126,7 +128,9 @@ def _decorate_job(
     # but cannot safely run it now or change the external task's state.
     payload["manual_run_allowed"] = not job.elevated
     payload["schedule_controls_allowed"] = not job.elevated
-    payload["next_run"] = jobs_mod.query_next_run(job.id)
+    payload["next_run"] = jobs_mod.query_next_run(
+        job.id, other_job_ids=all_job_ids
+    )
     # Computed next fire from the schedule shape (issue #229). Unlike the
     # schtasks string above, this is sortable + countdown-able. None for
     # manual-only / paused / already-elapsed-once jobs.
@@ -213,8 +217,11 @@ async def get_jobs(request: Request) -> Dict[str, Any]:
     counts = await asyncio.to_thread(jobs_index.run_counts_by_job)
     # query_next_run shells out to schtasks per job — offload the whole
     # decoration to a worker thread so the event loop doesn't block.
+    job_ids = [j.id for j in cfg.jobs]
     decorated = await asyncio.to_thread(
-        lambda: [_decorate_job(j, counts.get(j.id, (0, 0))) for j in cfg.jobs]
+        lambda: [
+            _decorate_job(j, counts.get(j.id, (0, 0)), job_ids) for j in cfg.jobs
+        ]
     )
     return {"jobs": decorated}
 
@@ -555,9 +562,6 @@ async def kill_job_run(job_id: str, run_id: str) -> Dict[str, Any]:
             detail=f"run is {status!r}, not killable",
         )
     pid = record.get("pid")
-    signalled: List[int] = []
-    if isinstance(pid, int) and pid > 0:
-        signalled = await asyncio.to_thread(kill_process_tree, pid, 5.0)
     finished_at = datetime.now().isoformat(timespec="seconds")
     started_at = record.get("started_at")
     duration: Optional[float] = None
@@ -578,11 +582,16 @@ async def kill_job_run(job_id: str, run_id: str) -> Dict[str, Any]:
         duration_seconds=duration,
         killed=True,
     )
+    # The record is stamped before the tree dies: ``pid`` is the job's child,
+    # so the executor survives it, wakes from ``proc.wait()`` and must already
+    # see ``killed`` to skip its own notify / chain / drain.
+    signalled: List[int] = []
+    if isinstance(pid, int) and pid > 0:
+        signalled = await asyncio.to_thread(kill_process_tree, pid, 5.0)
     jobs_mod.invalidate_stats_cache(job_id)
-    # If the killed run was the head of a mutex group, drain so the
-    # queue doesn't wedge waiting for a finalisation that already
-    # happened (the executor we just killed will not run its own
-    # finalisation block).
+    # The surviving executor skips its finalisation for a killed run, so the
+    # route owns the single mutex drain (a head-of-group kill would otherwise
+    # wedge the queue).
     if job.mutex_group:
         await asyncio.to_thread(jobs_mod.drain_mutex_queue, job.mutex_group)
     logger.info(

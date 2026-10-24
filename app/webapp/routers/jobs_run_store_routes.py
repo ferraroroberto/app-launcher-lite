@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hmac
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +13,7 @@ from starlette.websockets import WebSocketDisconnect
 from app.webapp.middleware import LOOPBACK_HOSTS
 from app.webapp.routers._helpers import maybe_json
 from src import jobs as jobs_mod
+from src.api_tokens import constant_time_equals
 from src.jobs_config import get_by_id, load_jobs
 
 router = APIRouter()
@@ -73,7 +73,7 @@ async def stream_job_run(websocket: WebSocket, job_id: str, run_id: str) -> None
         expected = (cfg.auth_token or "").strip()
         if expected:
             presented = websocket.query_params.get("token", "").strip()
-            if not (presented and hmac.compare_digest(presented, expected)):
+            if not (presented and constant_time_equals(presented, expected)):
                 await websocket.close(code=4401, reason="missing or invalid bearer token")
                 return
     run_dir = _known_run_dir(job_id, run_id)

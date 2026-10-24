@@ -93,6 +93,22 @@ def _row_agent(row: Dict[str, Any]) -> str:
     return str(row.get("agent") or "copilot").strip().lower()
 
 
+def _session_started(session: Dict[str, Any]) -> Optional[datetime]:
+    """When a live session started, or ``None`` if unreadable.
+
+    The session-host reports ``started_at`` as an epoch float
+    (``PtySession.to_api``); ISO strings are accepted too, since state rows
+    and older fixtures carry those.
+    """
+    raw = session.get("started_at")
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        try:
+            return datetime.fromtimestamp(raw, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    return _parse_iso(raw)
+
+
 def _session_agent(session: Dict[str, Any]) -> str:
     return str(session.get("agent") or "copilot").strip().lower()
 
@@ -156,7 +172,7 @@ def _match_state_row(
     project_dir_norm = _normalize_dir(session.get("project_dir"))
     if not project_dir_norm:
         return None
-    session_started = _parse_iso(session.get("started_at")) or _EPOCH
+    session_started = _session_started(session) or _EPOCH
     best_sid: Optional[str] = None
     best_stamp = _EPOCH
     for sid, row in unmatched.items():
@@ -190,7 +206,7 @@ def _claim_walk(
     pairs: List[tuple] = []
 
     def started(sess: Dict[str, Any]) -> datetime:
-        return _parse_iso(sess.get("started_at")) or _EPOCH
+        return _session_started(sess) or _EPOCH
 
     # Counted over the FULL live list (not the shrinking unmatched-rows
     # walk) — the ambiguity is about how many live sessions are competing
@@ -332,7 +348,7 @@ def merge_sessions(
         raw_status = (row or {}).get("status")
         status = raw_status if raw_status in _KNOWN_STATUSES else "unknown"
         anchor = (_parse_iso(row.get("updated_at")) if row else None) or (
-            _parse_iso(sess.get("started_at"))
+            _session_started(sess)
         )
         status, anchor = _transcript_overlay(
             row,

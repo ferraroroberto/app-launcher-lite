@@ -12,7 +12,6 @@ WebSocket route re-applies the same legs through :func:`ws_terminal_gate`.
 
 from __future__ import annotations
 
-import hmac
 import ipaddress
 import logging
 import re
@@ -224,7 +223,7 @@ def ws_terminal_gate(
     token = (getattr(cfg, "auth_token", "") or "").strip()
     if token:
         presented = websocket.query_params.get("token", "").strip()
-        if not (presented and hmac.compare_digest(presented, token)):
+        if not (presented and api_tokens.constant_time_equals(presented, token)):
             return 4401, "missing or invalid bearer token"
     if WebAuthnGate.configured(cfg):
         gate: WebAuthnGate = websocket.app.state.webauthn_gate
@@ -319,7 +318,7 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
         if not presented:
             presented = request.query_params.get("token", "").strip()
 
-        if presented and token and hmac.compare_digest(presented, token):
+        if presented and token and api_tokens.constant_time_equals(presented, token):
             return await call_next(request)
 
         match = api_tokens.find_match(presented, minted)

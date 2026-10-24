@@ -69,3 +69,28 @@ class TestBearerGate:
         app.state.webapp_config.auth_token = "secret-token"
         resp = client.get("/healthz")
         assert resp.status_code == 200
+
+
+class TestNonAsciiCredentials:
+    """``hmac.compare_digest`` raises TypeError on non-ASCII ``str`` input."""
+
+    def test_non_ascii_password_can_log_in(self, webapp_client):
+        client, app, _ = webapp_client
+        app.state.webapp_config.auth_password = "contraseña"
+        app.state.webapp_config.auth_token = "secret-token"
+        resp = client.post("/api/login", json={"password": "contraseña"})
+        assert resp.status_code == 200
+        assert resp.json() == {"token": "secret-token"}
+
+    def test_non_ascii_wrong_password_is_401_not_500(self, webapp_client):
+        client, app, _ = webapp_client
+        app.state.webapp_config.auth_password = "hunter2"
+        app.state.webapp_config.auth_token = "secret-token"
+        resp = client.post("/api/login", json={"password": "pässword"})
+        assert resp.status_code == 401
+
+    def test_non_ascii_bearer_query_token_is_401_not_500(self, webapp_client):
+        client, app, _ = webapp_client
+        app.state.webapp_config.auth_token = "secret-token"
+        resp = client.get("/api/config?token=t%C3%B6ken")
+        assert resp.status_code == 401

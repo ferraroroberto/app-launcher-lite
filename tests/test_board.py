@@ -118,7 +118,7 @@ def _live(session_id: str, project_dir: str, started_min_ago: int, **extra):
         "project_dir": project_dir,
         "name": Path(project_dir).name,
         "alive": True,
-        "started_at": _iso(NOW - timedelta(minutes=started_min_ago)),
+        "started_at": (NOW - timedelta(minutes=started_min_ago)).timestamp(),
         "live_title": "",
         "prompt_title": "",
     }

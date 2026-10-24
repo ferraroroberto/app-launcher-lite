@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from src import api_tokens
 
 
@@ -101,3 +103,29 @@ class TestTouchLastUsed:
         record, _ = _mint()
         public = api_tokens.parse_tokens([record])[0].public_dict()
         assert "hash" not in public and "salt" not in public
+
+
+class TestConstantTimeEquals:
+    def test_equal_and_unequal(self):
+        assert api_tokens.constant_time_equals("abc", "abc")
+        assert not api_tokens.constant_time_equals("abc", "abd")
+
+    def test_non_ascii_does_not_raise(self):
+        assert api_tokens.constant_time_equals("contraseña", "contraseña")
+        assert not api_tokens.constant_time_equals("contraseña", "contrasena")
+        assert not api_tokens.constant_time_equals("ö", "o")
+
+
+def test_no_raw_compare_digest_outside_the_helper():
+    """Structural guard: every secret comparison goes through
+    ``constant_time_equals`` — a raw ``hmac.compare_digest`` on ``str`` raises
+    on non-ASCII input."""
+    root = Path(__file__).resolve().parent.parent
+    offenders = [
+        path.relative_to(root).as_posix()
+        for folder in ("src", "app")
+        for path in (root / folder).rglob("*.py")
+        if "hmac.compare_digest(" in path.read_text(encoding="utf-8")
+        and path.name != "api_tokens.py"
+    ]
+    assert offenders == []
