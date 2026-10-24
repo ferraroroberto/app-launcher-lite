@@ -123,6 +123,8 @@ STOP_KILL = "kill"            # force-terminate the ConPTY
 # A clean /quit exits in ~0.7 s empirically; 5 s is generous headroom and
 # stays under the session-client stop timeout.
 _STOP_GRACE_SECONDS = 5.0
+_TASKKILL_TIMEOUT_SECONDS = 10  # unmeasured guess; equals the client's stop timeout
+_DETACHED_SPAWN_TIMEOUT_SECONDS = 30  # unmeasured guess; under the client's 45 s create timeout
 
 # Session kinds. "pty" is a launcher-owned ConPTY streamed to the phone;
 # "remote" is a detached console window the launcher only tracks (no PTY,
@@ -938,7 +940,7 @@ class RemoteSession:
                 ["taskkill", "/PID", str(self._pid), "/T", "/F"],
                 capture_output=True,
                 creationflags=NO_WINDOW,
-                timeout=10,
+                timeout=_TASKKILL_TIMEOUT_SECONDS,
             )
         except (OSError, subprocess.SubprocessError) as exc:
             logger.debug(f"remote {self.session_id[:8]} taskkill failed: {exc}")
@@ -1170,7 +1172,7 @@ class SessionManager:
             capture_output=True,
             text=True,
             creationflags=NO_WINDOW,
-            timeout=30,
+            timeout=_DETACHED_SPAWN_TIMEOUT_SECONDS,
             env=agent_child_env(session_id, agent),
         )
         pid = _parse_started_pid(result.stdout)
