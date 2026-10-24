@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "entries": [
+    {"key": "scripts/classify_e2e.py", "counts": {"git-wrapper": 1}},
+    {"key": "tests/test_git_run.py", "counts": {"no-window": 2}},
+    {"key": "tests/test_scanner_git_status.py", "counts": {"no-window": 1}},
+    {"key": "tests/test_session_host_paths.py", "counts": {"no-window": 4}}
+  ]
+}

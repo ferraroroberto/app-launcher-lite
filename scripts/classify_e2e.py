@@ -156,7 +156,8 @@ def _classify_one(path: str) -> tuple[Category, str]:
         ".fleet.toml", ".gitignore", ".static-ratchet-baseline.json",
         ".docs-ratchet-baseline.json", ".comment-ratchet-baseline.json",
         ".instruction-ratchet-baseline.json", ".doc-refs-ratchet-baseline.json", "LICENSE",
-        ".dead-code-ratchet-baseline.json", "AGENTS.md", "CLAUDE.md",
+        ".dead-code-ratchet-baseline.json", ".conventions-ratchet-baseline.json",
+        "AGENTS.md", "CLAUDE.md",
     } or ext == "bat":
         return Category.NONE, "repo-meta"
 
