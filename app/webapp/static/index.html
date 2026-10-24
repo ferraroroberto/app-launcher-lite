@@ -43,7 +43,17 @@
   <link rel="stylesheet" href="/static/_vendored/switch/switch.css">
   <link rel="stylesheet" href="/static/_vendored/segmented/segmented.css">
   <link rel="stylesheet" href="/static/_vendored/text-size/text-size.css">
-  <link rel="stylesheet" href="/static/styles.css">
+  <!-- The app's own rules, in cascade order: one file per view, base first. -->
+  <link rel="stylesheet" href="/static/styles/base.css">
+  <link rel="stylesheet" href="/static/styles/lists.css">
+  <link rel="stylesheet" href="/static/styles/code.css">
+  <link rel="stylesheet" href="/static/styles/jobs.css">
+  <link rel="stylesheet" href="/static/styles/shared.css">
+  <link rel="stylesheet" href="/static/styles/settings.css">
+  <link rel="stylesheet" href="/static/styles/dialogs.css">
+  <link rel="stylesheet" href="/static/styles/terminal.css">
+  <link rel="stylesheet" href="/static/styles/team-os.css">
+  <link rel="stylesheet" href="/static/styles/board.css">
   <title>App Launcher Lite</title>
 </head>
 <body>
@@ -435,7 +445,6 @@
       <span class="tab-label">Settings</span>
     </button>
   </nav>
-
   <main class="app">
     <section id="paneCoding" class="pane" role="tabpanel" aria-labelledby="tabCoding">
       <!-- Vendored home-head summary card (#496): one-line dashboard row —
@@ -457,7 +466,6 @@
           <svg class="theme-toggle-icon theme-icon-sun hit-target" aria-hidden="true" focusable="false"><use href="#i-sun"></use></svg>
         </button>
       </div>
-
       <!-- Options moved below the launch surfaces (#496 item 2): the
            per-agent option groups are configuration, not launch controls,
            so the card sits last on the tab (see the bottom of this pane).
@@ -486,7 +494,6 @@
         <p class="launcher-note">Only sessions launched from here appear — agent windows started directly on the PC can't be attached.</p>
         </div>
       </details>
-
       <!-- Collapsed by default (#383 review round): the running-sessions
            card above is the tab's working set; expand to reach the tiles.
            Detached + Resume live here (#496 item 2): they are launch-time
@@ -528,7 +535,6 @@
         </p>
         </div>
       </details>
-
       <details id="codingOptions" class="card card--collapsible">
         <summary class="collapse-summary">
           <span class="collapse-main">
@@ -537,13 +543,11 @@
           </span>
           <span class="collapse-chevron" aria-hidden="true">›</span>
         </summary>
-
         <div class="opt-group">
           <h3 class="opt-group-title">Visible agents</h3>
           <p class="opt-hint">Which launch buttons each project row paints. Hiding one only trims the row — a running session still shows its agent in the sessions list and on the Board.</p>
           <div id="agentVisibility" class="toggles"></div>
         </div>
-
         <div class="opt-group">
           <h3 class="opt-group-title">GitHub Copilot</h3>
           <div class="opt-row">
@@ -567,7 +571,6 @@
         </div>
       </details>
     </section>
-
     <section id="paneApps" class="pane" role="tabpanel" aria-labelledby="tabApps" hidden>
       <details class="card card--collapsible sessions-card" open>
         <summary class="collapse-summary">
@@ -583,7 +586,6 @@
         <p class="launcher-note">Only apps launched from here appear — tap a registered app below to start one.</p>
         </div>
       </details>
-
       <!-- Collapsed by default (#383 review round) — Running apps above is
            the tab's working set. -->
       <details class="card card--collapsible listeners-card">
@@ -600,7 +602,6 @@
         <p class="launcher-note">The launcher itself isn't listed — it can't kill its own process.</p>
         </div>
       </details>
-
       <details class="card card--collapsible apps-list-card">
         <summary class="collapse-summary">
           <span class="collapse-main">
@@ -1188,7 +1189,6 @@
         </div>
       </form>
     </dialog>
-
 
     <dialog id="sessionRenameDialog" class="rename-dialog">
       <form id="sessionRenameForm">

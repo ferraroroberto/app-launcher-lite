@@ -28,7 +28,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
         ("app/webapp/static/icons/foo.svg", Category.STATIC),
         # real browser surface -> FULL
         ("app/webapp/static/apps.js", Category.FULL),
-        ("app/webapp/static/styles.css", Category.FULL),
+        ("app/webapp/static/styles/base.css", Category.FULL),
         ("app/webapp/static/index.html", Category.FULL),          # real page, not vendored
         ("app/webapp/static/_vendored/nav/nav.css", Category.FULL),  # vendored CSS is layout
         ("app/webapp/server.py", Category.FULL),
@@ -86,7 +86,7 @@ def test_js_change_routes_to_full() -> None:
 
 
 def test_css_change_routes_to_full() -> None:
-    r = classify(["app/webapp/static/styles.css"])
+    r = classify(["app/webapp/static/styles/base.css"])
     assert r.tier == "full"
 
 

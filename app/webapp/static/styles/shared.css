@@ -1,0 +1,32 @@
+/* ---------- empty / toast ---------- */
+.empty {
+  padding: 24px;
+  background: var(--card);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-align: center;
+  font-size: var(--font-label);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0) + 20px);
+  transform: translateX(-50%);
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-label);
+  max-width: calc(100vw - 32px);
+  box-shadow: var(--shadow);
+  /* Above the full-screen terminal overlay (z-index 300) — otherwise every
+     toast raised while the terminal is open (paste/attach results, send
+     feedback) renders behind it and is invisible on the phone. A transient
+     toast should sit above everything. */
+  z-index: 400;
+}
+.toast.error { border-color: var(--danger); }
+

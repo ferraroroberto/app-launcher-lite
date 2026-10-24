@@ -1,0 +1,93 @@
+/* ---------- Team OS tab (issue #102) ---------- */
+/* The model combo + Detached/Resume controls live in the Skills card's
+   summary (#496 round 2 — no separate options card); the recap tile is the
+   only .card--row left on the tab. */
+/* Single-row (non-collapsible) cards inherit the disclosure closed-box:
+   zero vertical padding, a 52px .card-head (vendored card.css) owns the
+   height, so they sit pixel-identical beside collapsed disclosure cards. */
+.card--row { padding: 0 14px; }
+.card--row .card-head { min-height: 52px; }
+/* Right-aligned toggle group: keeps a summary row's switches packed together
+   as a single flex child so the row stays title-left / toggles-right. Without
+   this the Coding row's three children space-between and Detached floats in the
+   center (issue #155). Shared by the Coding + Team OS option rows. */
+.coding-toggles,
+.teamos-toggles { display: flex; gap: 6px; }
+.teamos-launch { font-size: var(--icon-title); }
+
+/* Weekly-recap tile (issue #167): title + a staleness badge on the left, the
+   🚀 review launch on the right. The badge is a coloured dot + label whose
+   colour tracks how stale the recap ledger is — green/accent fresh, amber
+   (--attention) past 7 days, red (--danger) past 14, muted when never run. Mirrors
+   the .health-dot colour vocabulary used elsewhere. */
+.teamos-recap-main { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.teamos-recap-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--font-caption); color: var(--muted); white-space: nowrap;
+}
+.teamos-recap-badge::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted); flex: 0 0 auto;
+}
+.teamos-recap-badge.fresh { color: var(--muted); }
+.teamos-recap-badge.fresh::before { background: var(--accent); }
+.teamos-recap-badge.due { color: var(--attention); }
+.teamos-recap-badge.due::before { background: var(--attention); }
+.teamos-recap-badge.overdue { color: var(--danger); }
+.teamos-recap-badge.overdue::before { background: var(--danger); }
+.teamos-recap-badge.never::before { background: var(--muted); }
+/* The recap card isn't an .app-item, so it doesn't inherit the tab's
+   .app-item .row-actions .icon-btn treatment — restate it here so the 🚀
+   matches the skill-tile launch buttons instead of rendering as a default
+   (white) UA button. */
+.teamos-recap-card .icon-btn {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--icon-title);
+  min-width: 52px;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.teamos-recap-card .icon-btn:active {
+  background: var(--card-2);
+  color: var(--fg);
+}
+
+/* Read-only content browser: a full-screen file list; tapping a file
+   opens it in a full-screen layer that overlays the list (the ✕ in the
+   bar closes it back to the list). Inside the reused .terminal-overlay. */
+/* The Team OS browser reuses .terminal-overlay for its full-screen shell,
+   but it is a READING surface, not a terminal screen — it follows the app
+   theme instead of the invariant --term-bg (issue #355 PR 3 on-device
+   review: dark background stuck in light theme). */
+#teamOsBrowser.terminal-overlay { background: var(--bg); }
+
+.teamos-browser-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.teamos-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.teamos-file-cat {
+  font-size: var(--font-caption);
+  color: var(--muted);
+  margin: 10px 4px 4px;
+}
+.teamos-file-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin: 4px 0;
+}
+

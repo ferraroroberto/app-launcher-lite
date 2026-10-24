@@ -1,0 +1,349 @@
+/* ---------- collapsible cards (vendored disclosure) ---------- */
+/* Structure and closed-box geometry come from _vendored/disclosure — the
+   .card--collapsible modifier + .collapse-summary/.collapse-main/
+   .collapse-title/.collapse-chevron/.collapse-body classes. The app adds
+   only the action cluster that rides between title and chevron (git
+   status, favorites filter, sort/add, the option toggles, Edit mode). */
+.summary-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* The Coding-options card keeps its .opt-group children as direct body
+   content (they bring their own padding + dividers); the [open] summary
+   hairline is the only divider under the header. */
+summary + .opt-group { border-top: 0; }
+/* Favorites filter: the star fills gold when the filter is active. */
+.fav-filter-btn.active .icon { fill: currentColor; }
+
+/* Tighter inter-tile gap on the Projects list — part of the vertical
+   compaction (issue #212); horizontal rhythm is left alone. */
+.opt-group {
+  padding: 6px 14px 14px;
+  border-top: 1px solid var(--line);
+}
+/* Agent group headers read in the app font, normal case — the uppercase
+   spaced-caption treatment looked like a different typeface next to the
+   mixed-case option rows (issue #383). */
+.opt-group-title {
+  font-size: var(--font-label);
+  font-weight: 600;
+  color: var(--muted);
+  margin: 12px 0 10px;
+}
+.opt-hint {
+  font-size: var(--font-caption);
+  color: var(--muted);
+  margin: 8px 2px;
+  line-height: 1.45;
+}
+.opt-hint code {
+  background: var(--card-off);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+  font-size: var(--font-caption);
+}
+
+/* ---------- coding option rows ---------- */
+.opt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.opt-row .select-native { flex: 1; }
+.opt-name {
+  font-size: var(--font-caption);
+  color: var(--muted);
+  width: 56px;
+  flex-shrink: 0;
+}
+.segmented {
+  display: flex;
+  flex: 1;
+  background: var(--card-off);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 2px;
+}
+.segmented button {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  padding: 7px 4px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-caption);
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+}
+.segmented button.active { background: var(--card); color: var(--fg); }
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-bottom: 10px;
+}
+/* App-level composition around the vendored track. The component owns the
+   button's geometry; callers own the adjacent human-readable label. */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--row-sm);
+  font-size: var(--font-label);
+}
+.toggles .switch-row { flex: 1 1 180px; }
+/* The Visible agents list (issue #666) is a *list*, not a pair of related
+   switches like Verbose/Debug: one entry per line, name left and switch
+   pinned right, on the shared list-row divider. Wrapping three-to-a-line
+   (the default .toggles flow) made it ambiguous which switch belonged to
+   which agent, and the list grows with every new harness. */
+#agentVisibility.toggles { display: block; margin-bottom: 4px; }
+#agentVisibility .switch-row { display: flex; }
+#agentVisibility .switch-row + .switch-row { border-top: 1px solid var(--line-muted); }
+.flags-preview {
+  font-family: "SF Mono", "Fira Mono", monospace;
+  font-size: var(--font-caption);
+  color: var(--muted);
+  background: var(--card-off);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+/* ---------- card list ---------- */
+.card-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+/* Repeated list rows render flat (issue #365, generalizing the Board
+   backlog's #337/#339 pattern app-wide): no per-row box — a hairline
+   separator between rows is the row boundary, issue-tracker-list style.
+   The outer collapsible section containers (the vendored disclosure
+   component) keep their card look; only the rows inside them changed. */
+.app-item {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+}
+.app-item:last-child { border-bottom: none; }
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.launch-btn {
+  width: 100%;
+  padding: 16px 18px;
+  font-size: var(--font-body);
+  font-weight: 600;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  min-height: var(--row-lg);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+.launch-btn:active { background: var(--card-2); }
+.launch-btn .meta {
+  font-size: var(--font-caption);
+  color: var(--muted);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.launch-btn .kind-pill {
+  display: inline-block;
+  font-size: var(--font-caption);
+  color: var(--muted);
+  background: var(--card-off);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  margin-right: 6px;
+}
+.app-item .tunnel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 18px 10px;
+  border-top: 1px solid var(--line);
+  font-size: var(--font-caption);
+  color: var(--muted);
+}
+.app-item .tunnel-row a {
+  color: var(--accent);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.app-item .tray-autostart-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px 10px;
+  border-top: 1px solid var(--line);
+}
+.app-item .tray-autostart-row .meta {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-caption);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.app-item .row-actions {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  /* No border-left: the divider was part of the boxed-card look; flat
+     rows (issue #365) keep the action rail as plain glyphs. */
+}
+.app-item .row-actions .icon-btn {
+  flex: 1;
+  width: 52px;
+  /* Two stacked rail buttons fit one standard two-line row exactly. */
+  min-height: calc(var(--row-lg) / 2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-body);
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+.app-item .row-actions.session-actions .icon-btn {
+  min-height: var(--row-sm);
+}
+.app-item .row-actions .icon-btn + .icon-btn {
+  border-top: 1px solid var(--line);
+}
+.app-item .row-actions .icon-btn:active {
+  background: var(--card-2);
+  color: var(--fg);
+}
+.app-item .row-actions .icon-btn.danger:active { color: var(--danger); }
+.app-item .row-actions .action-stop-close:active {
+  background: rgb(from var(--danger) r g b / 0.2);
+  color: var(--danger);
+}
+/* Open button before its app has bound a port / with no tailnet_host */
+.app-item .row-actions .icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.app-item .health-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.app-item .health-dot.up { background: var(--success); }
+.app-item .health-dot.down { background: var(--danger); }
+.app-item .health-dot.stuck { background: var(--attention); }
+
+/* Jobs tab action rail (issue #232): job tiles use the shared .app-item
+   layout — info block on the left, a compact vertical action rail on the
+   right (▶ / ⏸ always, 🧪 / ✏️ / 🗑️ revealed only in edit mode). This
+   reclaims the full-width bottom button row that #69 spent on just ▶ / ⏸,
+   so more jobs fit on screen, and keeps the three tabs consistent. The
+   rail is sized by its icons; the tile height stays bound by the info
+   text. No Jobs-only flex override here — falling back to .app-item is
+   the layout. (Reverts #69's flex-column / horizontal-strip override; the
+   #66 two-line info layout below is unaffected.) */
+
+/* ---------- Jobs tab: two-line row layout (issue #66) ---------- */
+/* The row is two stacked lines: dot + name on top, then a compact
+   chip bar (kind, schedule, duration, sparkline) underneath. We let
+   the chip bar flex-wrap when the phone is too narrow for one line,
+   but pin every chip to nowrap so the contents never word-break into
+   a single-letter vertical stack — that was the v1 bug. */
+.job-item .job-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.job-item .job-row-head .name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+/* Alert-on-failure marker (issue #597) — a colored glyph beside the title,
+   not inside the status dot. */
+.job-item .job-alert-icon { color: var(--accent); display: inline-flex; flex: none; }
+/* Two sibling rows under the name, always rendered separately so the
+   eye lands in the same place across every job:
+     row 2 — type pill + schedule chip
+     row 3 — duration (load) chip + sparkline (recent dots) */
+.job-item .job-row-pills,
+.job-item .job-row-load {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 2px;
+}
+.job-item .job-row-pills .kind-pill,
+.job-item .job-row-load .kind-pill {
+  white-space: nowrap;
+  margin-right: 0;
+}
+/* Keep the load row visually distinct (slightly tighter) — its
+   contents are quantitative, not categorical. */
+.job-item .job-row-load { gap: 4px 8px; }
+.job-sparkline {
+  display: inline-flex;
+  gap: 1px;
+  letter-spacing: 0;
+  font-size: var(--font-caption);
+  line-height: 1;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.job-spark-dot {
+  /* A status dot is a CSS shape, not a glyph: it inherits the status colour. */
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  margin: 0 0.1em;
+  border-radius: 50%;
+  background: currentColor;
+  color: var(--muted);
+}
+.job-spark-dot.up { color: var(--success); }
+.job-spark-dot.down { color: var(--danger); }
+.job-spark-dot.live { color: var(--attention); }
+.job-spark-dot.unknown { color: var(--muted); }
+
+.job-duration-chip {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.jobs-kill-btn {
+  margin: 0 0 8px;
+  align-self: flex-start;
+  font-size: var(--font-caption);
+  padding: 4px 10px;
+}
+

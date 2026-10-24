@@ -30,8 +30,8 @@ always run and already cover backend Python):
                 suite drives Chromium exclusively, no WebKit/iPhone projection.
 
 CSS deliberately routes to ``full`` rather than a curated "layout subset":
-`styles.css` is global, so a hand-maintained subset would be both drift-prone
-and an under-testing risk — and under-testing must never be the outcome of
+the stylesheets are global (one cascade across `styles/*.css`), so a
+hand-maintained subset would be both drift-prone and an under-testing risk — and under-testing must never be the outcome of
 uncertainty (issue #568's first constraint).
 
 CLI: prints ``E2E_*=`` key/value lines (parsed by the gate) plus a human

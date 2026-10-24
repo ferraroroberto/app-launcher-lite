@@ -1,0 +1,128 @@
+/* ---------- settings ---------- */
+/* Settings is its own tab (issue #383): a plain card whose head mirrors
+   the disclosure summary's box (52px, 0 14px, divider) without the
+   collapse behavior — a dedicated pane has nothing to collapse. */
+.settings-card { padding: 0; }
+.settings-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  height: 52px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line-muted);
+}
+.settings-edit-row { min-height: 0; font-size: var(--font-caption); }
+/* API-tokens panel (issue #72) */
+.token-row { justify-content: space-between; }
+.token-meta { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+#tokenMintValue { flex: 1; min-width: 0; font-family: ui-monospace, monospace; }
+#tokenMintUrl { overflow-wrap: anywhere; }
+.settings-switch-row { margin: 4px 0 10px; }
+.settings-card .stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0;
+}
+.input-native, .select-native {
+  background: var(--card-off);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: var(--font-label);
+  min-height: var(--control-h);
+}
+/* .big-btn / .ghost-btn migrated to the vendored button-tint / button-ghost
+   tiers (issue #477, project-scaffolding's button/ component) — fill,
+   border, radius, cursor and the shared :disabled recipe now come from
+   _vendored/button/button.css. What's left here is app-launcher's own
+   layout/size/weight/press-feedback, kept as-is so this migration doesn't
+   restyle any existing button. */
+.button-tint {
+  width: 100%;
+  padding: 14px 18px;
+  font-size: var(--font-label);
+  font-weight: 600;
+  min-height: 44px;
+}
+.button-tint:active { filter: brightness(0.9); }
+.button-ghost {
+  padding: 8px 12px;
+}
+.button-ghost:active { color: var(--fg); }
+.button-ghost.accent-btn {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-border-soft);
+  font-weight: 600;
+}
+.button-ghost.accent-btn:active { color: var(--accent); filter: brightness(0.9); }
+.row { display: flex; gap: 8px; align-items: center; }
+.muted { color: var(--muted); }
+.small { font-size: var(--font-caption); }
+
+/* Status + build identity footer (issue #212): centred plain text at the
+   very bottom of the page, outside every card. */
+.page-foot {
+  margin: 16px 4px;
+  text-align: center;
+}
+.page-foot p { margin: 2px 0; }
+
+.listeners {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 10px 0;
+}
+/* Flat separator rows (issue #365) — same treatment as .app-item. */
+.listener-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: var(--row-md);
+  border-bottom: 1px solid var(--line);
+  padding: 6px 12px;
+  font-size: var(--font-caption);
+}
+.listener-row:last-child { border-bottom: none; }
+.listener-row > div { min-width: 0; }
+/* A helper service nested under its parent app's row (#224). */
+.listener-row.child {
+  margin-left: 18px;
+  border-left: 2px solid var(--accent);
+}
+.listener-row strong { word-break: break-word; }
+.listener-row .meta { color: var(--muted); font-size: var(--font-caption); }
+/* Parent row whose dependent children are collapsed behind a tap (#480). */
+.listener-row.expandable { cursor: pointer; }
+.listener-chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.listener-row[aria-expanded="true"] .listener-chevron { transform: rotate(90deg); }
+.listener-row button {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-caption);
+  min-height: var(--row-sm);
+}
+.listener-row button:active { background: rgb(from var(--danger) r g b / 0.15); }
+.launcher-note {
+  margin: 10px 2px 0;
+  font-size: var(--font-caption);
+  font-style: italic;
+  color: var(--muted);
+}
+
