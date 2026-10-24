@@ -46,17 +46,10 @@ async def _dry_run_check(job: Job, raw_params: Dict[str, Any]) -> Dict[str, Any]
         jobs_mod.new_run_dir, job.id, jobs_mod.new_run_id()
     )
     stamped = datetime.now().isoformat(timespec="seconds")
-    meta: Dict[str, Any] = dict(
-        run_id=run_dir.name,
-        job_id=job.id,
-        name=job.name,
-        trigger="manual",
-        script_path=job.script_path,
-        args=job.args,
-        started_at=stamped,
-        finished_at=stamped,
-        dry_run=True,
+    meta: Dict[str, Any] = jobs_mod.base_run_meta(
+        job, "manual", stamped, run_dir.name
     )
+    meta.update(finished_at=stamped, dry_run=True)
     if raw_params:
         meta["params"] = raw_params
     try:
@@ -100,17 +93,10 @@ async def _dry_run_execute(job: Job, raw_params: Dict[str, Any]) -> Dict[str, An
         jobs_mod.new_run_dir, job.id, jobs_mod.new_run_id()
     )
     started_at = datetime.now().isoformat(timespec="seconds")
-    base_meta: Dict[str, Any] = dict(
-        run_id=run_dir.name,
-        job_id=job.id,
-        name=job.name,
-        trigger="manual",
-        script_path=job.script_path,
-        args=job.args,
-        started_at=started_at,
-        status="pending",
-        dry_run=True,
+    base_meta: Dict[str, Any] = jobs_mod.base_run_meta(
+        job, "manual", started_at, run_dir.name
     )
+    base_meta.update(status="pending", dry_run=True)
     if raw_params:
         base_meta["params"] = raw_params
     jobs_mod.write_run_json(run_dir, **base_meta)
@@ -124,12 +110,7 @@ async def _dry_run_execute(job: Job, raw_params: Dict[str, Any]) -> Dict[str, An
             True,
         )
     except OSError as exc:
-        jobs_mod.write_run_json(
-            run_dir,
-            finished_at=datetime.now().isoformat(timespec="seconds"),
-            exit_code=-1,
-            status="failed",
-        )
+        jobs_mod.mark_run_failed(run_dir)
         raise HTTPException(status_code=500, detail=f"spawn failed: {exc}")
     return {"run_id": run_dir.name, "job_id": job.id, "dry_run": True}
 
@@ -187,14 +168,8 @@ async def _admit_and_spawn(
     if on_run_dir is not None:
         on_run_dir(run_dir)
     started_at = datetime.now().isoformat(timespec="seconds")
-    base_meta: Dict[str, Any] = dict(
-        run_id=run_dir.name,
-        job_id=job.id,
-        name=job.name,
-        trigger=trigger,
-        script_path=job.script_path,
-        args=job.args,
-        started_at=started_at,
+    base_meta: Dict[str, Any] = jobs_mod.base_run_meta(
+        job, trigger, started_at, run_dir.name
     )
     if raw_params:
         base_meta["params"] = raw_params
@@ -243,11 +218,6 @@ async def _admit_and_spawn(
     except OSError as exc:
         # Spawn failed → record the failure on the run we just created
         # so the UI surfaces it instead of a stuck "pending".
-        jobs_mod.write_run_json(
-            run_dir,
-            finished_at=datetime.now().isoformat(timespec="seconds"),
-            exit_code=-1,
-            status="failed",
-        )
+        jobs_mod.mark_run_failed(run_dir)
         raise HTTPException(status_code=500, detail=f"spawn failed: {exc}")
     return {"run_id": run_dir.name, "job_id": job.id}
