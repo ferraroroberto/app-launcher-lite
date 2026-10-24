@@ -19,9 +19,12 @@ import shutil
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional
 
 from src._json_io import atomic_write_json, file_lock
+
+if TYPE_CHECKING:
+    from src.jobs_config import Job
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +122,37 @@ def write_run_json(run_dir: Path, **fields: Any) -> None:
         sync_run(run_dir, existing)
     except Exception as exc:  # noqa: BLE001 — derived mirror never blocks canonical I/O
         logger.warning("⚠️ Jobs index sync failed for %s: %s", run_dir, exc)
+
+
+def base_run_meta(
+    job: "Job", trigger: str, started_at: str, run_id: str
+) -> Dict[str, Any]:
+    """The run-record header every writer (executor, routes, chain dispatcher)
+    starts from, so a new header field is added here and nowhere else."""
+    return dict(
+        run_id=run_id,
+        job_id=job.id,
+        name=job.name,
+        trigger=trigger,
+        script_path=job.script_path,
+        args=job.args,
+        started_at=started_at,
+    )
+
+
+def mark_run_failed(
+    run_dir: Path, *, finished_at: Optional[str] = None, **extra: Any
+) -> None:
+    """Finalise ``run_dir`` as a ``failed`` record that never produced an exit
+    code (``-1``): the spawn or pre-spawn step failed. ``extra`` merges in any
+    other fields (a ``note``, a full header) in the same write."""
+    write_run_json(
+        run_dir,
+        finished_at=finished_at or datetime.now().isoformat(timespec="seconds"),
+        exit_code=-1,
+        status="failed",
+        **extra,
+    )
 
 
 # Header names safe to persist verbatim alongside a webhook run — never the

@@ -46,6 +46,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from src import jobs_kinds
 from src.jobs import (
     MAX_RUNS_PER_JOB,
+    base_run_meta,
     consecutive_failed_runs,
     cooldown_check,
     delete_schtasks,
@@ -53,6 +54,7 @@ from src.jobs import (
     drain_mutex_queue,
     enqueue_mutex,
     invalidate_stats_cache,
+    mark_run_failed,
     mutex_collision,
     new_run_dir,
     new_run_id,
@@ -231,13 +233,7 @@ def _finalize_cooldown_skip(job: Job, args: argparse.Namespace) -> Optional[int]
     stamped = datetime.now().isoformat(timespec="seconds")
     write_run_json(
         skip_dir,
-        run_id=skip_dir.name,
-        job_id=job.id,
-        name=job.name,
-        trigger=args.trigger,
-        script_path=job.script_path,
-        args=job.args,
-        started_at=stamped,
+        **base_run_meta(job, args.trigger, stamped, skip_dir.name),
         finished_at=stamped,
         status="skipped",
         note="cooldown",
@@ -298,14 +294,13 @@ def _finalize_mutex_queue(
     run_dir = new_run_dir(job.id, new_run_id())
     write_run_json(
         run_dir,
-        run_id=run_dir.name,
-        job_id=job.id,
-        name=job.name,
-        trigger=args.trigger,
+        **base_run_meta(
+            job,
+            args.trigger,
+            datetime.now().isoformat(timespec="seconds"),
+            run_dir.name,
+        ),
         trigger_source="schtasks",
-        script_path=job.script_path,
-        args=job.args,
-        started_at=datetime.now().isoformat(timespec="seconds"),
         status="queued",
         mutex_group=job.mutex_group,
         mutex_blocked_by=holder.id,
@@ -342,19 +337,11 @@ def _record_failed_run(
     thing that differs between callers.
     """
     stamped = datetime.now().isoformat(timespec="seconds")
-    write_run_json(
+    mark_run_failed(
         run_dir,
-        run_id=run_dir.name,
-        job_id=job.id,
-        name=job.name,
-        trigger=args.trigger,
-        script_path=job.script_path,
-        args=job.args,
-        started_at=stamped,
         finished_at=stamped,
-        status="failed",
-        exit_code=-1,
         note=note,
+        **base_run_meta(job, args.trigger, stamped, run_dir.name),
     )
     prune_runs(job.id, keep=MAX_RUNS_PER_JOB)
     invalidate_stats_cache(job.id)
@@ -804,16 +791,10 @@ class RunJobCommand(BaseCommand):
 
         started_at = datetime.now().isoformat(timespec="seconds")
         dry_run = bool(getattr(args, "dry_run", False))
-        run_meta: Dict[str, Any] = dict(
-            run_id=run_dir.name,
-            job_id=job.id,
-            name=job.name,
-            trigger=args.trigger,
-            script_path=job.script_path,
-            args=job.args,
-            started_at=started_at,
-            status="running",
+        run_meta: Dict[str, Any] = base_run_meta(
+            job, args.trigger, started_at, run_dir.name
         )
+        run_meta["status"] = "running"
         # Persist the typed-parameter payload (issue #67) so the history
         # row can replay it and the meta line can show the values back.
         if values:

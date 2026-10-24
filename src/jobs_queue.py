@@ -24,7 +24,9 @@ from src._json_io import atomic_write_json, file_lock
 from src.jobs_config import Job
 from src.jobs_history import (
     JOBS_RUNS_DIR,
+    base_run_meta,
     latest_run,
+    mark_run_failed,
     new_run_dir,
     new_run_id,
     read_run,
@@ -184,16 +186,10 @@ def dispatch_chain_run(
     run_dir = new_run_dir(downstream.id, new_run_id())
     started_at = datetime.now().isoformat(timespec="seconds")
     trigger = chain_trigger(upstream_id)
-    meta: Dict[str, Any] = dict(
-        run_id=run_dir.name,
-        job_id=downstream.id,
-        name=downstream.name,
-        trigger=trigger,
-        script_path=downstream.script_path,
-        args=downstream.args,
-        started_at=started_at,
-        chained_from=upstream_id,
+    meta: Dict[str, Any] = base_run_meta(
+        downstream, trigger, started_at, run_dir.name
     )
+    meta["chained_from"] = upstream_id
     if holder is not None:
         meta["status"] = "queued"
         meta["mutex_group"] = downstream.mutex_group
@@ -219,13 +215,7 @@ def dispatch_chain_run(
     try:
         spawn_run_job_detached(downstream.id, run_dir.name, trigger, None)
     except OSError as exc:
-        write_run_json(
-            run_dir,
-            finished_at=datetime.now().isoformat(timespec="seconds"),
-            exit_code=-1,
-            status="failed",
-            chain_spawn_error=str(exc),
-        )
+        mark_run_failed(run_dir, chain_spawn_error=str(exc))
         logger.warning(
             f"⚠️  chain spawn failed {downstream.id}/{run_dir.name}: {exc}"
         )
