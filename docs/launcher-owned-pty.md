@@ -2,62 +2,60 @@
 
 The architecture, security model, and hard-won gotchas behind the launcher-owned ConPTY terminal — a full interactive terminal on the phone, and why each piece is shaped the way it is. Read this before extending the terminal feature.
 
-## 1. What we set out to do
+## 1. Goals and constraints
 
-Replace the fire-and-forget "detached CMD window the launcher can't see" model with **launcher-owned ConPTY sessions**, and put a **full interactive terminal on the phone** on top — live output, scrollback, typing, `Ctrl+C`, `/exit`, image paste. Non-negotiable: it had to be at least as safe as the existing cloud surface, ideally safer.
+The launcher owns its ConPTY sessions instead of spawning a detached CMD window it cannot see, and puts a **full interactive terminal on the phone** on top: live output, scrollback, typing, `Ctrl+C`, `/exit`, image paste. The constraint that shapes everything below: the terminal must be at least as safe as the cloud surface the app already exposes, ideally safer.
 
 ## 2. The architecture, and why each piece exists
 
-- **A separate `session-host` process owns the PTYs.** The obvious design is "the webapp owns the ConPTYs." It's wrong: every *Restart webapp* would kill every running agent session. Pulling the PTYs into their own long-lived process (loopback-only, port `8466`, owned by the tray like `cloudflared`) means the streaming layer can restart without touching the work. **Lesson: separate the thing that restarts often from the thing that must not die.**
-- **The webapp is the single auth choke point.** WebSockets *bypass HTTP middleware* — the bearer-token middleware never runs for a `ws://` upgrade. So every terminal-grade WS route re-applies the full gate (edge header, private network, bearer, passkey token) through one shared `middleware.ws_terminal_gate()`, called right after `accept()`. **Lesson: if you add an auth middleware, audit every protocol that skips it.**
-- **The session-host fans output to N subscribers.** Making it multi-subscriber from day one (ring buffer + per-client queues) is what later made the PC mirror window a 10-line change instead of a rewrite.
+- **A separate `session-host` process owns the PTYs.** The obvious design is "the webapp owns the ConPTYs." It's wrong: every *Restart webapp* would kill every running agent session. Keeping the PTYs in their own long-lived process (loopback-only, port `8466`, owned by the tray like `cloudflared`) lets the streaming layer restart without touching the work. **Rule: separate the thing that restarts often from the thing that must not die.**
+- **The webapp is the single auth choke point.** WebSockets *bypass HTTP middleware* — the bearer-token middleware never runs for a `ws://` upgrade. So every terminal-grade WS route re-applies the full gate (edge header, private network, bearer, passkey token) through one shared `middleware.ws_terminal_gate()`, called right after `accept()`. **Rule: when you add an auth middleware, audit every protocol that skips it.**
+- **The session-host fans output to N subscribers.** Output goes through a ring buffer plus per-client queues, so a second viewer such as the PC mirror window is just another subscriber rather than a special case.
 
 ## 3. Security: the model and the reasoning
 
-The user's own framing was the key insight: *"the risk is the same risk I already have — anyone on my tailnet could already RDP in."* That's true, and it's why **Tailscale-only** is the foundation, not an afterthought. But "no worse than today" isn't the bar for a surface that can run the agent with permission prompts disabled (Copilot's `--allow-all`) — so we layered:
+The threat model: the risk is the one already present — anyone on the tailnet could already RDP into the PC. That is why **Tailscale-only** is the foundation, not an afterthought. But "no worse than today" isn't the bar for a surface that can run the agent with permission prompts disabled (Copilot's `--allow-all`), so the gate is layered:
 
 1. **Tailscale-only** — reject the `Cf-Ray` / `Cf-Connecting-IP` headers (public Cloudflare tunnel) and require the client IP in the `100.64.0.0/10` CGNAT range, loopback, or an explicit allowlist.
 2. **Bearer token** — same as the rest of the app.
-3. **WebAuthn platform passkey (Face ID)** — an enrolled-device whitelist. A passkey assertion mints a short-lived (12 h) terminal token; the WS and image endpoints demand it.
+3. **WebAuthn platform passkey (device passkey, unlocked with the phone's screen lock or biometric)** — an enrolled-device whitelist. A passkey assertion mints a short-lived (12 h) terminal token; the WS and image endpoints demand it.
 4. **Audit log** — every session start/stop, WS open/close, input, image, plus a full per-session transcript.
 
-**Lesson: defense in depth means each layer assumes the others failed.** The passkey gate is worthless if the attacker is already on the tailnet *and* has the bearer token — but it's not *meant* to stop that; it's meant to stop the case where they have the token but not your phone.
+**Each layer assumes the others failed.** The passkey gate does not stop an attacker who is already on the tailnet *and* has the bearer token and the enrolled phone; it stops the case where they have the token but not the phone.
 
-**The deliberate exception:** loopback clients (the PC itself) skip the passkey — the iPhone's passkey isn't on the PC anyway, and loopback already implies you're at the machine. Scoped, documented, intentional. **Lesson: a bypass is fine if it's narrower than the thing it bypasses and you wrote down why.**
+**The deliberate exception:** loopback clients (the PC itself) skip the passkey — the phone's passkey isn't on the PC, and loopback already implies you're at the machine. The bypass is scoped to loopback, narrower than the gate it skips, and documented here on purpose.
 
-## 4. Gotchas, and what each one taught us
+## 4. Gotchas and the rule each one encodes
 
-### A correct security boundary that *looked* like a bug
+### A correct security boundary can look like a bug
 
-The phone showed a bare "Disconnected." The terminal was Tailscale-only and the phone was on the **public Cloudflare tunnel** — the gate worked *perfectly*. But the WS closed *before* `accept()`, so the browser only saw close code `1006` with no reason. **Two lessons:**
+A phone on the **public Cloudflare tunnel** hitting the Tailscale-only terminal is rejected correctly, but a WS closed *before* `accept()` shows the browser only close code `1006` with no reason — a bare "Disconnected." Two rules follow:
 
 - **Accept the WebSocket first, then close with a code + reason.** Closing before the handshake completes gives the client nothing to display.
-- **A correct rejection still needs a good error.** We added `/api/status` → `terminal.reachable/reason` and a pre-flight check so the UI explains *"open me over the Tailscale URL"* instead of failing mute. Security that the user experiences as a random bug erodes trust in the security.
+- **A correct rejection still needs a good error.** `/api/status` reports `terminal.reachable` and `terminal.reason`, and the UI runs a pre-flight check so it explains *"open me over the Tailscale URL"* instead of failing mute. Security that the user experiences as a random bug erodes trust in the security.
 
-### "It works when I run it, but not from the tray"
+### Behaviour that differs between the tray and a terminal
 
-The tray's Tailscale-URL lookup failed only when launched by the tray. Root cause chain: (1) the venv `pythonw.exe` is a **redirector stub** — every launch is one idle stub + one real process; (2) the real cause was the `tailscale` CLI **not being on `PATH`** (it lives in `C:\Program Files\Tailscale\`); (3) a 4 s subprocess timeout was too short under tray-startup load. **Lessons: never assume a CLI is on `PATH`** (probe Program Files), **give startup-path subprocesses generous timeouts**, and **when a process behaves differently by launcher, suspect the environment, not the code.** We also made it write a debug log and surface the failure reason in the notification — diagnosing this blind cost hours.
+The tray's Tailscale-URL lookup depends on three environment facts: (1) the venv `pythonw.exe` is a **redirector stub** — every launch is one idle stub plus one real process; (2) the `tailscale` CLI is **not necessarily on `PATH`** (it lives in `C:\Program Files\Tailscale\`), so the lookup probes Program Files; (3) startup-path subprocesses get generous timeouts, because a short one fails under tray-startup load. **Rules: never assume a CLI is on `PATH`; give startup-path subprocesses generous timeouts; when a process behaves differently by launcher, suspect the environment, not the code.** The lookup writes `webapp/tailscale_debug.log` and surfaces the failure reason in the notification, because diagnosing this blind is expensive.
 
 ### One PTY has exactly one size
 
-When the phone and the PC mirror both attach to the same ConPTY, they **cannot** each have their own layout — a pseudo-console has a single `rows × cols`. The last client to call `resize()` wins, so they fight. There is no clever fix; you **pick an authority**. We made the phone the sole size authority (the WS proxy tags each client `role=pc|phone`; the session-host honours `resize` only from `phone`) and the PC window *mirrors* whatever size the phone set. **Lesson: when a resource is fundamentally single-valued, don't simulate sharing — assign ownership.**
+When the phone and the PC mirror both attach to the same ConPTY, they **cannot** each have their own layout — a pseudo-console has a single `rows × cols`, and the last client to call `resize()` wins. There is no clever fix; you **pick an authority**. The phone is the sole size authority: the WS proxy tags each client `role=pc|phone`, the session-host honours `resize` only from `phone`, and the PC window *mirrors* whatever size the phone set. **Rule: when a resource is fundamentally single-valued, don't simulate sharing — assign ownership.**
 
-### Detached ≠ untracked
+### Detached is not untracked
 
-The original "remote" launch orphaned a CMD window the launcher kept no handle to. Re-adding it as a *mode*, we kept a kill switch *without* holding a child handle: the console is spawned through a transient PowerShell `Start-Process -PassThru` that **re-parents it out of the session-host's process tree** — so a `tray.bat --restart`, which tears the tray subtree down with `taskkill /T`, can't cascade into it (issue #130) — and the launcher keeps **only the PID** that `-PassThru` printed. That PID is enough to **list and kill** it (`taskkill /PID … /T /F`); liveness is a bare PID probe, not a `Popen`. **Lesson: "detached" and "untracked" are different choices — you can have the window's independence (it even survives a launcher restart) and still keep a kill switch.**
+A detached-mode session is a CMD window the launcher can still kill without holding a child handle. The console is spawned through a transient PowerShell `Start-Process -PassThru` that **re-parents it out of the session-host's process tree** — so a `tray.bat --restart`, which tears the tray subtree down with `taskkill /T`, can't cascade into it (issue #130) — and the launcher keeps **only the PID** that `-PassThru` printed. That PID is enough to **list and kill** it (`taskkill /PID … /T /F`); liveness is a bare PID probe, not a `Popen`. **Rule: "detached" and "untracked" are different choices — the window keeps its independence (it survives a launcher restart) and the launcher keeps a kill switch.**
 
 ### Self-signed certs and loopback
 
-The PC mirror window (an Edge/Chrome `--app` window over `https://127.0.0.1`) tripped the cert error: the cert's SAN is the `.ts.net` hostname, not `127.0.0.1`, and the CA isn't trusted on the PC. Fix: `--ignore-certificate-errors --test-type`, **safe specifically because that window only ever points at our own loopback origin**. **Lesson: "ignore cert errors" is a scoped tool, not a sin — the question is always *which* origin.**
+The PC mirror window (an Edge/Chrome `--app` window over `https://127.0.0.1`) hits a cert error: the cert's SAN is the `.ts.net` hostname, not `127.0.0.1`, and the CA isn't trusted on the PC. The window is launched with `--ignore-certificate-errors --test-type`, **safe specifically because it only ever points at our own loopback origin**. **Rule: "ignore cert errors" is a scoped tool — the question is always *which* origin.**
 
-## 5. Practices that held up
+## 5. Working practices
 
-- **Plan mode first, sharp questions before code.** The two `AskUserQuestion` rounds (terminal reachability scope, device-binding method, sizing authority) each prevented a rewrite. One good question beats a day of rework.
-- **Phased execution with verification gates.** Backend (5 files) → `py_compile` + import smoke test → frontend (4 files) → `node --check` + boot check. Each phase provably green before the next.
-- **Cheap gates, every time.** `py_compile`, `node --check`, an import-and-`create_app()` smoke test, `curl /healthz`. None take more than seconds; together they catch most "it doesn't even start" bugs.
-- **Cache-busting is automatic.** Static asset URLs carry a content hash (`?v=<hash>`) stamped at serve time, so any edit busts the phone's cache with no manual step — see `docs/cache-hygiene-asset-hashing.md` (and do **not** reintroduce hand-bumped `?v=N` query strings). Mobile Safari caches aggressively, so "the user is testing stale code" used to be a costly confusion; the content hash removes it.
-- **The reference doc lives next to the code.** `docs/` captures durable design rationale; updating it in the same change as the code keeps it honest.
-- **Diagnose from the audit log.** The "Disconnected" bug was solved by reading the client IP out of the audit log — `188.x` = public tunnel. The logging we built for security paid for itself as debugging.
+- **Cheap gates catch most "it doesn't even start" bugs.** `py_compile`, `node --check`, an import-and-`create_app()` smoke test and `curl /healthz` each take seconds; the pre-ship gate (`scripts/verify-before-ship.ps1`) runs the full set.
+- **Cache-busting is automatic.** Static asset URLs carry a content hash (`?v=<hash>`) stamped at serve time, so any edit busts the phone's cache with no manual step — see `docs/cache-hygiene-asset-hashing.md` (and do **not** reintroduce hand-bumped `?v=N` query strings). Mobile browsers cache aggressively, so a hand-bumped version makes "the user is testing stale code" a costly confusion; the content hash removes it.
+- **The reference doc lives next to the code.** `docs/` captures durable design rationale; update it in the same change as the code to keep it honest.
+- **Diagnose from the audit log.** The client IP in the audit log tells you which edge a client came through (a public IP means the Cloudflare tunnel), so the logging built for security doubles as the first debugging tool.
 
 ## 6. If you extend this
 
