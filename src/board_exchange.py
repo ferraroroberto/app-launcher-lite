@@ -39,6 +39,20 @@ _SATURATED_NAMED = frozenset({
 })
 _LEAD_BULLET_RE = re.compile(r"^[●⏺•◉○]\s+")
 _TOOL_CALL_RE = re.compile(r"^[●⏺•◉○]\s+[A-Z][A-Za-z0-9_-]*\(")
+# Colour channel spread (0-255) above which a bullet's hex foreground reads as a
+# saturated tool colour rather than a neutral grey/white reply bullet. An
+# unmeasured guess: neutral greys sit at spread ~0, tool colours well above it.
+_TOOL_COLOR_MIN_CHANNEL_SPREAD = 60
+# Unruled rows tolerated between two rule lines while walking up from the last
+# one to find the top of the composer box (rule, prompt text, optional status
+# rows, rule). An unmeasured guess at the box's height; a larger gap means the
+# earlier rule belongs to reply content, not the composer.
+_COMPOSER_MAX_RULE_GAP_ROWS = 4
+# Share of a line's non-space characters that must be box-drawing glyphs for it
+# to count as a rule line when it has no unbroken run of rule glyphs. An
+# unmeasured guess, tolerant of a few stray characters without matching prose
+# that merely contains a box glyph.
+_RULE_LINE_MIN_GLYPH_RATIO = 0.8
 _RULE_RUN_RE = re.compile(r"[─━═┄┅┈┉╌╍]{6,}")
 _RULE_CHARS_RE = re.compile(r"[─-▟│┄┅┈┉╌╍]")
 _TIMING_RE = re.compile(
@@ -201,7 +215,7 @@ def _is_tool_color(color: str) -> bool:
         return True
     if re.fullmatch(r"[0-9a-f]{6}", color):
         channels = [int(color[i:i + 2], 16) for i in (0, 2, 4)]
-        return max(channels) - min(channels) > 60
+        return max(channels) - min(channels) > _TOOL_COLOR_MIN_CHANNEL_SPREAD
     return False
 
 
@@ -253,7 +267,7 @@ def _drop_trailing_composer(rows: List[Tuple[str, str]]) -> List[Tuple[str, str]
     top = last_rule
     gap = 0
     for index in range(last_rule - 1, -1, -1):
-        if gap > 4:
+        if gap > _COMPOSER_MAX_RULE_GAP_ROWS:
             break
         if _is_rule_line(rows[index][0]):
             top = index
@@ -269,7 +283,8 @@ def _is_rule_line(line: str) -> bool:
     nonspace = re.sub(r"\s", "", line)
     if len(nonspace) < 8:
         return False
-    return len(_RULE_CHARS_RE.findall(nonspace)) / len(nonspace) >= 0.8
+    glyphs = len(_RULE_CHARS_RE.findall(nonspace))
+    return glyphs / len(nonspace) >= _RULE_LINE_MIN_GLYPH_RATIO
 
 
 def _last_submitted_input(path: Optional[Path]) -> str:
