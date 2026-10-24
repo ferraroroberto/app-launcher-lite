@@ -106,6 +106,16 @@ try {
     & $python -m scripts.instruction_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "instruction ratchet failed or NOT CONFIRMED: an instruction file has a new rule hit or passed its size cap, a file could not be read, or a baseline problem; see the output above and .instruction-ratchet-baseline.json." }
 
+    # Doc-refs ratchet (scaffold docs/doc-refs-ratchet.md): README.md, CLAUDE.md and
+    # docs/**/*.md may not name a repo path, python -m module, relative link or loopback
+    # port that does not exist beyond .doc-refs-ratchet-baseline.json. Whole tree, so
+    # never diff-routed: a code change can strand a doc reference without touching the
+    # doc. Same wrapper shape as the other ratchets: exit 3 (git or a doc could not be
+    # read) is NOT CONFIRMED and fails.
+    Phase "doc refs ratchet..."
+    & $python -m scripts.doc_refs_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "doc refs ratchet failed or NOT CONFIRMED: a doc names a path, module, link or port that does not exist, git or a doc could not be read, or a baseline problem; see the output above and .doc-refs-ratchet-baseline.json." }
+
     # Comment ratchet (scaffold docs/comment-ratchet.md): no file may carry more
     # issue references (#NNN) inside code comments than .comment-ratchet-baseline.json
     # records, and a new file may carry none. Whole tree, so never diff-routed. Same

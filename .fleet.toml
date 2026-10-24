@@ -32,6 +32,7 @@ docs_ratchet = { src = "scripts/docs_ratchet.py", sha = "fdb750461997c4a13eacea8
 structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "84d2b12ab416551762e4a615e4a706df91cea69f", dest = "scripts/structure_ratchet.py" }
 comment_ratchet = { src = "scripts/comment_ratchet.py", sha = "e56308e1c099712cf5a006557c94e3f9ae4fe8aa", dest = "scripts/comment_ratchet.py" }
 instruction_ratchet = { src = "scripts/instruction_ratchet.py", sha = "60fdd0350f18d28838428b2e773f7868f6381fbf", dest = "scripts/instruction_ratchet.py" }
+doc_refs_ratchet = { src = "scripts/doc_refs_ratchet.py", sha = "23dbefa46635c952d3c871bda4e80b740e7f2859", dest = "scripts/doc_refs_ratchet.py" }
 shot_capture = { src = "tests/e2e/_shot.py", sha = "6b1af3b71f6db16bdfcf32c9abddbe881c72c7b0", dest = "tests/e2e/_shot.py" }
 shot_baseline = { src = "scripts/shot_baseline.py", sha = "6b1af3b71f6db16bdfcf32c9abddbe881c72c7b0", dest = "scripts/shot_baseline.py" }
 
@@ -97,6 +98,20 @@ baseline = ".comment-ratchet-baseline.json"
 [instruction_ratchet]
 enabled  = true
 baseline = ".instruction-ratchet-baseline.json"
+
+# [doc_refs_ratchet] -- the scaffold's baseline-and-ratchet check on references in
+# README.md, CLAUDE.md and docs/**/*.md. The gate runs scripts/doc_refs_ratchet.py
+# through scripts/doc_refs_ratchet_gate.py: a repo path, `python -m` module, relative
+# link or loopback port named in those docs that does not exist, and is not in
+# .doc-refs-ratchet-baseline.json, fails. Exit 3 (git unusable, a file that is not
+# UTF-8, or a fence that never closes) fails as NOT CONFIRMED. Procedure + limits:
+# project-scaffolding docs/doc-refs-ratchet.md.
+# allow_refs: the session-host port. The docs name it on purpose and the app's own
+# `port` above is the webapp's :8465, the only port the ratchet resolves by itself.
+[doc_refs_ratchet]
+enabled    = true
+baseline   = ".doc-refs-ratchet-baseline.json"
+allow_refs = [":8466"]
 
 # [shot_baseline] -- the scaffold's screenshot baseline. The last stage of
 # scripts/verify-before-ship.ps1 runs scripts/shot_baseline.py, which compares the
