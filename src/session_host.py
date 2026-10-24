@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 # How much terminal output to keep per session for scrollback-on-reconnect.
 _RING_MAX_CHARS = 256 * 1024
 # After a hard ring truncation, advance the head to the next newline within
-# this window so a replay never starts mid-escape-sequence (#444) — a cut
+# this window so a replay never starts mid-escape-sequence — a cut
 # inside a CSI/OSC renders its tail as literal garbage at the top of the
 # replayed scrollback. One rendered line (with its SGR decoration) is far
 # shorter than this; if no newline appears in the window, keep the raw cut
@@ -60,31 +60,30 @@ _READ_CHUNK = 4096
 # Sentinel pushed to subscribers when the session ends.
 _EOF = object()
 
-# Chunk-and-pace thresholds for writes into the ConPTY input pipe (#64).
+# Chunk-and-pace thresholds for writes into the ConPTY input pipe.
 # A real-PTY readback harness (test_session_host_pty_realpty.py) showed the
 # write boundary itself delivers multi-KB payloads losslessly — pywinpty's
 # write into the input pipe is effectively blocking and does NOT drop the
-# tail. So chunking is not a truncation fix (the original #64 framing was
-# wrong); it is pacing, which keeps a multi-KB burst from overrunning the
+# tail. So chunking is not a truncation fix; it is pacing, which keeps a multi-KB burst from overrunning the
 # Windows console input queue that a busy TUI drains slowly. The agent-side
 # atomic-paste fix (bracketed-paste framing) lives client-side in
 # terminal.js (framePaste). We keep small writes one-shot and split larger
 # payloads into ~512 B chunks with a small pause; pywinpty's return value is
 # never interpreted as a bytes-accepted count — doing so amplified a single
-# keystroke into thousands (#13 revert).
+# keystroke into thousands.
 _WRITE_CHUNK_THRESHOLD = 512
 _WRITE_CHUNK_SIZE = 512
 _WRITE_CHUNK_PAUSE = 0.003
 
-# Settle-then-submit for bulk input (issue #611) — ported from
-# app/webapp/static/terminal-compose.js's sendSubmit/bulkSettle (#166/#499),
+# Settle-then-submit for bulk input — ported from
+# app/webapp/static/terminal-compose.js's sendSubmit/bulkSettle,
 # the WS/compose-bar path's fix for the same race the HTTP /input endpoint
 # lacked: a bulk (dictation-sized) paste's bracketed-paste ingest can outrun
 # a fixed delay under machine load, so a CR arriving too soon lands mid-ingest
 # and becomes a literal newline into the still-settling composer instead of
 # Submit, leaving the message stranded as an unsent "[Pasted text #N]" chip.
 # These four values are copied verbatim from terminal-compose.js so the two
-# paths cannot drift and quietly diverge again — see that file's #499 comment
+# paths cannot drift and quietly diverge again — see that file's bulk-settle comment
 # for the calibration data (echo-then-quiet was the only protocol that ran
 # clean 20/20 against a live ConPTY probe under synthetic load).
 _BULK_SUBMIT_THRESHOLD_CHARS = 500
@@ -95,7 +94,7 @@ _BULK_CAP_MS = 3000
 # 50ms setInterval terminal-compose.js polls at.
 _BULK_POLL_S = 0.05
 
-# First-prompt session title (issue #266). Not every agent emits a genuine
+# First-prompt session title. Not every agent emits a genuine
 # per-conversation OSC title; Copilot emits none, and other TUIs may emit
 # only the project folder, so for those agents we derive a human title from the
 # first submitted prompt. Cap how much un-submitted input we buffer (a line the
@@ -105,7 +104,7 @@ _PROMPT_TITLE_BUF_MAX = 400
 _PROMPT_TITLE_MAX_CHARS = 48
 _PROMPT_TITLE_MAX_WORDS = 6
 
-# Manual title override (issue #458): a launcher-native rename that wins over
+# Manual title override: a launcher-native rename that wins over
 # every auto-derived title (live_title/prompt_title/shared_name — see
 # sessions.js::sessionTitle) and, unlike those, also reaches a detached
 # RemoteSession — the one rename channel that works identically across all
@@ -120,7 +119,7 @@ STOP_QUIT = "quit"            # type the agent's quit command (Copilot: /exit)
 STOP_KILL = "kill"            # force-terminate the ConPTY
 
 # Graceful-stop grace window: how long STOP_QUIT waits for the agent to exit
-# on its own quit command before force-terminating as a fallback (issue #253).
+# on its own quit command before force-terminating as a fallback.
 # A clean /quit exits in ~0.7 s empirically; 5 s is generous headroom and
 # stays under the session-client stop timeout.
 _STOP_GRACE_SECONDS = 5.0
@@ -301,7 +300,7 @@ def _derive_prompt_title(text: str) -> str:
     return title
 
 
-# OSC colour query/reply leak (#270). Codex emits OSC 10/11/12 *queries*
+# OSC colour query/reply leak. Codex emits OSC 10/11/12 *queries*
 # (``ESC]10;?``) at startup; something answers them and the reply
 # (``ESC]10;rgb:…``) leaks as visible text on a fresh/dirty xterm. We strip
 # both the query and reply forms of OSC 10/11/12 from the output stream at the
@@ -314,8 +313,8 @@ def _derive_prompt_title(text: str) -> str:
 # capture of Codex startup): the ``rgb:``/``#`` *reply* always carries a BEL
 # (\x07) or ST (ESC \) terminator. The ``?`` *query*, however, is emitted by
 # Codex **unterminated and back-to-back** — ``ESC]10;?ESC]11;?`` — each query
-# implicitly ended by the next ESC, with no BEL/ST at all. The original #270
-# pattern required a terminator on every form, so it silently MISSED these
+# implicitly ended by the next ESC, with no BEL/ST at all. A pattern that
+# required a terminator on every form, so it silently MISSED these
 # bare queries: they reached xterm.js, which answered with ``ESC]10;rgb:…``,
 # and that reply leaked. So the terminator is OPTIONAL for the ``?`` query
 # (a bare ``ESC]1X;?`` is already a complete colour query) and stays REQUIRED
@@ -347,7 +346,7 @@ _OSC_COLOR_PARTIAL_RE = re.compile(
 # never wedge the stream.
 _OSC_CARRY_MAX = 64
 
-# Bracketed-paste mode tracking (DECSET 2004, issue #611). The client-side
+# Bracketed-paste mode tracking (DECSET 2004). The client-side
 # framePaste() in terminal-compose.js only wraps a WS-sent payload in
 # \x1b[200~ / \x1b[201~ when xterm's own term.modes.bracketedPasteMode is on
 # — sending the literal markers to an agent that never asked for them lands
@@ -447,7 +446,7 @@ class PtySession:
     _loop: asyncio.AbstractEventLoop
     _pty: "PtyProcess"  # type: ignore[name-defined]
     agent: str = DEFAULT_AGENT
-    # Free-form role tag set at create time (#245) so callers can find a
+    # Free-form role tag set at create time so callers can find a
     # purpose-built session deterministically; "" for normal ones.
     label: str = ""
     rows: int = 40
@@ -465,11 +464,11 @@ class PtySession:
     _color_osc_carry: str = ""
     _prompt_raw: str = ""
     _prompt_captured: bool = False
-    # Headless VT mirror for full-screen (ratatui) agents only (issue #432)
+    # Headless VT mirror for full-screen (ratatui) agents only
     # — Claude's raw-ring replay path never needs one. None for a
     # non-fullscreen agent, or before SessionManager wires it in.
     _vt: Optional["VtSnapshot"] = None
-    # Settle-then-submit state for server-initiated writes (issue #611).
+    # Settle-then-submit state for server-initiated writes.
     # _bracketed_paste_mode mirrors xterm's term.modes.bracketedPasteMode,
     # tracked off the PTY's own DECSET 2004 output (default False — matches
     # the client-side gate's own default before any signal has been seen).
@@ -514,7 +513,7 @@ class PtySession:
                     break
                 time.sleep(0.01)
                 continue
-            # Strip OSC 10/11/12 colour query/reply sequences (#270) at the
+            # Strip OSC 10/11/12 colour query/reply sequences at the
             # source — before scrollback + broadcast — so the leak never
             # reaches a fresh OR reconnecting client. Stateful: a sequence
             # split across two reads is held in _color_osc_carry.
@@ -526,7 +525,7 @@ class PtySession:
             self._last_output_at = time.time()
             # Track DECSET 2004 (bracketed-paste mode) off the raw output —
             # BEFORE any stripping below, since this must see exactly what a
-            # real terminal client would (issue #611).
+            # real terminal client would.
             paste_mode, self._decset_carry = _scan_bracketed_paste_mode(
                 chunk, self._decset_carry
             )
@@ -660,9 +659,9 @@ class PtySession:
                 return True
             # Long write (paste / large input): pace it in ~512 B chunks so
             # the burst doesn't overrun the console input queue a busy TUI
-            # drains slowly (#64). pywinpty's return value is deliberately
+            # drains slowly. pywinpty's return value is deliberately
             # ignored — interpreting it as a bytes-accepted count amplified a
-            # single keystroke into thousands (#13 revert).
+            # single keystroke into thousands.
             logger.debug(
                 f"PTY {self.session_id[:8]} chunked write "
                 f"({len(data)} chars / "
@@ -1085,7 +1084,7 @@ class SessionManager:
         #
         # APP_LAUNCHER_SESSION_ID/AGENT ride the child's environment
         # (``env=``), NOT a `set "VAR=val" && ...` chain baked into the
-        # command string (#537 root cause): PtyProcess.spawn() re-tokenizes a
+        # command string (the root cause of vars not landing): PtyProcess.spawn() re-tokenizes a
         # str argv via shlex.split() then rebuilds it with
         # subprocess.list2cmdline(), which backslash-escapes the quotes
         # around "VAR=val" — cmd.exe's own SET parser doesn't strip that

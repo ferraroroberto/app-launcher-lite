@@ -39,7 +39,7 @@ async def get_config(request: Request) -> Dict[str, Any]:
         "port": cfg.port,
         "projects_dir": cfg.projects_dir,
         "projects_ignore": cfg.projects_ignore,
-        # Coding-row buttons the user hid (issue #666) — agent ids plus the
+        # Coding-row buttons the user hid — agent ids plus the
         # pseudo-id `github`. The SPA filters the row strip on this.
         "coding_hidden_agents": cfg.coding_hidden_agents,
         "apps_scan_root": cfg.apps_scan_root,
@@ -53,7 +53,7 @@ async def get_config(request: Request) -> Dict[str, Any]:
         "terminal_history_lines_max": MAX_TERMINAL_HISTORY_LINES,
         "copilot": copilot_flags_payload(cfg),
         "auth_password_set": bool(cfg.auth_password),
-        # Boot-autostart toggle (issue #456): live-queried, not stored in
+        # Boot-autostart toggle: live-queried, not stored in
         # webapp_config.json — the Startup-folder wrapper bat's presence
         # *is* the state, so a stale cached bool can never drift from it.
         "boot_autostart_enabled": boot_autostart.is_enabled(),
@@ -88,7 +88,7 @@ async def patch_config(request: Request) -> Dict[str, Any]:
         patch["projects_ignore"] = [
             str(p).strip() for p in (raw or []) if str(p).strip()
         ]
-    # Same coercion for the hidden-button list (issue #666) — a stray scalar
+    # Same coercion for the hidden-button list — a stray scalar
     # must never reach the config as anything but a clean string list.
     if "coding_hidden_agents" in patch:
         raw = patch["coding_hidden_agents"]

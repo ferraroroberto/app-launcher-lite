@@ -1,7 +1,7 @@
-# Manually restart the app-launcher session-host on :8466 (issue #615).
+# Manually restart the app-launcher session-host on :8466.
 #
 # tray.bat --restart deliberately EXCLUDES :8466 to protect live PTY
-# sessions (project-scaffolding#35) -- so a change under src/session_host.py
+# sessions -- so a change under src/session_host.py
 # or app/session_host/ is not live until this process restarts, and nothing
 # else restarts it automatically. This script is the one supported,
 # documented way to do that: an explicit, operator-initiated action, never
@@ -56,7 +56,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Restarting the tray (also spawns a fresh session-host since none is left to adopt)..." -ForegroundColor Cyan
 & $trayBat --restart
 
-# Bounded poll of the same /api/version freshness check #615 added, so this
+# Bounded poll of the same /api/version freshness check, so this
 # script proves the restart actually worked instead of trusting silence.
 $deadline = (Get-Date).AddSeconds(30)
 $reported = $false

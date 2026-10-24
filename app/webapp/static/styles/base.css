@@ -4,7 +4,7 @@
 
 /* ============================================================ design tokens
    Fleet design system (~/.claude/design.md + design.dark.md, canonical spec
-   ferraroroberto/fleet-config#178; this app's migration: issue #355). Token
+   lives in the fleet-config repo). Token
    *names* are this app's; their *values* are the spec's. Light = :root,
    dark = [data-theme="dark"] (stamped pre-paint by the index.html boot
    script — localStorage override, prefers-color-scheme fallback). P3
@@ -24,7 +24,7 @@
   /* colors — accent + status (status colors signal state only) */
   --accent: #0969da;
   --accent-fg: #ffffff;      /* text/icon on an accent (or danger) fill */
-  /* fleet-config#963 roles the vendored button/nav/switch read: solid
+  /* Roles the vendored button/nav/switch read: solid
      primary fill, accent/danger TEXT on a tint, input/switch boundary. */
   --accent-fill: #0969da;
   --accent-text: #0550ae;
@@ -40,9 +40,9 @@
   /* chip / filter-pill / segmented-track fill (fg-muted at 16%, spec's neutral-soft) */
   --neutral-soft: color-mix(in srgb, var(--muted) 16%, transparent);
   /* Terminal screen: dark in both themes by default (ANSI output is
-     authored against dark), same model as home-automation's --video-matte
-     (#383). terminal.js reads these. The opt-in override after the dark
-     block (issue #359) flips them light when the user asks the terminal
+     authored against dark), same model as home-automation's --video-matte.
+terminal.js reads these. The opt-in override after the dark
+     block flips them light when the user asks the terminal
      to follow the app theme. */
   --term-bg: #0a0a0a;
   --term-fg: #f3f3f3;
@@ -59,13 +59,13 @@
      spec names no role for them. Both re-resolve lazily per theme. */
   /* Accent-ghost button recipe (home-automation's Net-tab .big-btn):
      soft accent tint + accent text + soft accent border — no solid fills
-     (issue #383 review round). Derived from --accent so both themes ride.
-     Values are design.md's verbatim strings (issue #10) — color-mix() has a
+     (ghost-style by design). Derived from --accent so both themes ride.
+     Values are design.md's verbatim strings — color-mix() has a
      wider browser-support floor than relative colour syntax. */
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --accent-border-soft: color-mix(in srgb, var(--accent) 24%, transparent);
   --accent-border-strong: color-mix(in srgb, var(--accent) 28%, transparent);
-  /* Vendored button.css's danger-tier token names (issue #477) — this app's
+  /* Vendored button.css's danger-tier token names — this app's
      equivalent status color is --danger, so alias rather than fork a second
      red. Percentages + recipe are _vendored/button/README.md's verbatim
      strings, same as the accent-soft trio above. */
@@ -96,14 +96,14 @@
   --font-caption: 0.75rem;
   /* shared inline-control height (select / input / compact buttons) */
   --control-h: 36px;
-  /* unified row-height scale for repeated list rows (issue #365): sm =
+  /* unified row-height scale for repeated list rows: sm =
      utility/action targets (iOS 44px tap minimum), md = single-line rows,
      lg = the standard two-line row (name + meta). Every list row height
      derives from these three — no more per-tab ad hoc values. */
   --row-sm: 44px;
   --row-md: 52px;
   --row-lg: 60px;
-  /* Action-cluster alignment (issue #8). A collapsible card's summary ends
+  /* Action-cluster alignment. A collapsible card's summary ends
      with the disclosure chevron, so its controls stop short of the content
      edge that the rows below run to. Reserving the same trailing column on
      both — chevron width plus the 6px .summary-actions gap — is what puts a
@@ -117,13 +117,13 @@
   --icon-inline: 16px;
   --icon-title: 18px;
   --icon-feature: 24px;
-  /* Vendored switch.css contract (project-scaffolding#120). --control-border
-     is the off-track fill (fleet-config#963); --toggle-track is no longer read. */
+  /* Vendored switch.css contract. --control-border
+     is the off-track fill; --toggle-track is no longer read. */
   --toggle-knob: #ffffff;
   --on: var(--success);
   color-scheme: light;
   /* --bottom-tabs-* geometry (height/margin/pill-height/padding/gap/icon/
-     label) is intentionally undefined here (issue #355) — nav-tabs.css's
+     label) is intentionally undefined here — nav-tabs.css's
      own canonical var(..., fallback) defaults (61/21/53/4/4/20/11px) are
      the fleet-standard floating-bar geometry, phone-validated on
      home-automation. Define one here only to deliberately diverge. */
@@ -139,7 +139,7 @@
   --muted: #7d8590;
   --line: #30363d;
   --line-muted: #21262d;
-  --input-bg: var(--line-muted); /* control fill for the vendored disabled button, not true black (fleet-config#1368) */
+  --input-bg: var(--line-muted); /* control fill for the vendored disabled button, not true black */
   --accent: #2f81f7;
   --accent-fg: #ffffff;
   --accent-fill: #1f6feb;
@@ -164,7 +164,7 @@
 }
 
 /* Light terminal screen: the terminal always follows the app theme
-   (issue #383; supersedes the #359 opt-in switch). The matching
+   (there is no opt-in switch). The matching
    ANSI palette rides terminal.js (xterm colors live in the renderer, not
    CSS). Values are the spec's colors.canvas / colors.fg. */
 :root:not([data-theme="dark"]) {
@@ -197,7 +197,7 @@
 button, input, select, textarea { font: inherit; }
 [hidden] { display: none !important; }
 
-/* Canonical focus-visible ring (design.md v2 focus contract, issue #355).
+/* Canonical focus-visible ring (design.md v2 focus contract).
    One tokenized rule covers every interactive element app-wide; without it
    keyboard focus falls to the browser default, which on Windows Chrome is
    themed off the OS accent, not this app's --accent. */
@@ -246,7 +246,7 @@ html, body {
   overscroll-behavior-y: contain;
   /* No system double-tap-to-zoom on the page itself — pairs with the
      viewport meta's maximum-scale=1/user-scalable=no zoom lock (design.md
-     Layout; fleet-config#296). Individual elements still opt into their own
+     Layout). Individual elements still opt into their own
      gesture handling (e.g. touch-action: pan-y on scrollable lists). */
   touch-action: manipulation;
   /* Reserve the scrollbar gutter so the centred .app container doesn't
@@ -264,7 +264,7 @@ html, body {
   padding-right: var(--gap);
 }
 /* Bottom padding is desktop/wide-only, deliberately split out of the rule
-   above (issue #355): the coarse-pointer + narrow breakpoint below is where
+   above: the coarse-pointer + narrow breakpoint below is where
    nav-tabs.css reserves .app's bottom padding for the floating tab bar (its
    own `.app { padding: ... }` in that same media condition) — a shorthand
    `padding` here would win the cascade (equal specificity, later in source
@@ -278,7 +278,7 @@ html, body {
 
 /* ---------- tabs ----------
    Nav geometry + the desktop segmented control / mobile floating pill are
-   now owned by the vendored _vendored/nav/nav-tabs.css (issue #355) — see
+   now owned by the vendored _vendored/nav/nav-tabs.css — see
    its <link> in index.html. `.tab.active`, `.tab-icon` sizing, the
    standalone fixed-inset .app shell, and the visualViewport pin all live
    there; do not re-add them here.
@@ -298,7 +298,7 @@ html, body {
   }
 
   /* In the standalone shell .app (not the document) is the real scroller
-     (home-automation#303, via nav-tabs.css). terminal.js's lockBodyScroll()
+     (via nav-tabs.css). terminal.js's lockBodyScroll()
      pins document.body during an overlay — a no-op there since body was
      never the scroller in standalone — so without this, .app's own content
      stays touch-scrollable behind a hand-rolled overlay. Mirrors
@@ -324,7 +324,7 @@ html, body {
    adds only the inter-card gutter. */
 .card { margin: 0 0 var(--gap); }
 /* Detached toggle — modelled on voice-transcriber's `.incognito-btn`: a
-   real button, role="switch" + aria-checked (issue #355). Opacity + accent
+   real button, role="switch" + aria-checked. Opacity + accent
    border flip on `[aria-checked="true"]` so it reads as on/off instead of
    a tick that everyone misses on a phone. */
 .detached-toggle {
@@ -349,8 +349,8 @@ html, body {
   border-color: var(--accent);
   background: rgb(from var(--accent) r g b / 0.18);
 }
-/* #540: Detached/Resume are icon-only now (the Coding + Team OS launch rows
-   gained a model combo and needed the room). Render the glyph at the app's
+/* Detached/Resume are icon-only (the Coding + Team OS launch rows
+   carry a model combo and need the room). Render the glyph at the app's
    standard --icon-title size in a square-ish tap target — matching the other
    icon buttons — while keeping the pill's opacity + accent-border on/off
    shading that marks them as toggles rather than one-shot actions. */
@@ -358,9 +358,8 @@ html, body {
 .detached-toggle { padding: 6px; min-width: var(--control-h); }
 .settings-actions { flex-wrap: wrap; gap: 8px; }
 
-/* Theme toggle (issue #355; #392 put it in the options summary, #496 moved
-   it into the vendored home-head card's .home-toggle slot — the same
-   position as the other fleet apps). The button's box now comes from
+/* Theme toggle (it lives in the vendored home-head card's .home-toggle slot — the same
+   position as the other fleet apps). The button's box comes from
    home-head.css; only the sun/moon glyph pair lives here. Shows the glyph
    for the ACTION: moon in light (tap → dark), sun in dark (tap → light). */
 .theme-toggle-icon {

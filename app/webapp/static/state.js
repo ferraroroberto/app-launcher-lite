@@ -29,11 +29,11 @@ export const RUNNING_APPS_POLL_MS = 4000; // refresh launcher-spawned apps
 export const JOBS_POLL_MS = 4000;         // refresh Jobs tab while it's visible
 export const BOARD_POLL_MS = 5000;        // refresh Board tab while it's visible
 export const WEBAUTHN_POLL_MS = 15000;
-// The header's CPU reading (#65): one poll for the page, foreground only; the
+// The header's CPU reading: one poll for the page, foreground only; the
 // server samples every 5 s. The retry covers the sampler's ~2 s first sample.
 export const SYSTEM_LOAD_POLL_MS = 10000;
 export const SYSTEM_LOAD_WARMING_RETRY_MS = 3000;
-// Git-status refresh (#496, reversing #115's tap-only contract): slow on
+// Git-status refresh (always-on, not tap-only): slow on
 // purpose — one git run per project per tick, gated to the tabs that show
 // the flags (Coding tiles, Board backlog) and to a foreground page.
 export const GIT_STATUS_POLL_MS = 45000;
@@ -46,27 +46,27 @@ export const state = {
   // keeps the Coding tab usable if that fetch fails: Copilot is the
   // launcher's core agent so it's assumed present. The fullscreen flag
   // mirrors src/agents.py so a terminal opened while the fetch is
-  // degraded still takes the pan-not-reflow path (#264/#430) — without
+  // degraded still takes the pan-not-reflow path — without
   // it a differential TUI would silently fall onto the inline reflow
   // path and replay-scroll on every keyboard toggle.
   agents: [
     { id: 'copilot', label: 'GitHub Copilot CLI', available: true, fullscreen: true },
   ],
   runningApps: [],
-  // Git flags for the Coding tiles + Board backlog (issue #115, always-on
-  // since #496). null only until the boot fetch lands; then a map of
+  // Git flags for the Coding tiles + Board backlog (always-on).
+  // null only until the boot fetch lands; then a map of
   // project id → { is_git, branch, default_branch, on_default_branch,
   // dirty }, refreshed by the GIT_STATUS_POLL_MS poll while the Coding or
   // Board tab is visible. Cached: the 4-5 s tab polls re-render from this
   // map but never re-run the git check themselves.
   gitStatus: null,
-  // Coding-tab favorites filter (issue #250). false = show all projects
+  // Coding-tab favorites filter. false = show all projects
   // (favorites pinned to the top); true = show only starred projects. A
   // client-side view toggle, persisted across reloads like editMode so the
   // 4 s apps poll re-renders without dropping it.
   codingFavFilter: localStorage.getItem('launcher.codingFavFilter') === '1',
   jobs: [],
-  // Jobs-list ordering (issue #229). 'next' = ascending by computed next
+  // Jobs-list ordering. 'next' = ascending by computed next
   // fire (imminent dailies above weeklies; manual/paused sink to the
   // bottom); 'name' = A–Z. Persisted across reloads like editMode.
   jobsSort: localStorage.getItem('launcher.jobsSort') === 'name' ? 'name' : 'next',
@@ -76,17 +76,17 @@ export const state = {
   expandedJob: null, // job_id currently expanded inline (history visible)
   selectedRun: null, // { jobId, runId } — which run's log is in the panel
   sessions: [],
-  // Board tab (issue #300 / #164): the /api/board payload, null until the
+  // Board tab: the /api/board payload, null until the
   // tab's first fetch. The 5 s poll self-gates on the tab being visible;
   // GitLab data inside it comes from the server-side glab cache and is only
   // refreshed on demand (the ↻ button / first activation), never per poll.
   board: null,
   // Which board column the phone carousel has in view.
   boardCol: 'your_turn',
-  // Session id whose drawer is open (#301). The board poll pauses while
+  // Session id whose drawer is open. The board poll pauses while
   // set, so a re-render can never wipe a reply being typed.
   boardExpanded: null,
-  // Team OS tab (issue #102): skills from /api/team-os/skills, plus the
+  // Team OS tab: skills from /api/team-os/skills, plus the
   // read-only content browser's current skill + loaded files.
   teamOsSkills: [],
   teamOsBrowser: null,   // { skillId, name, files } while the browser is open
@@ -95,8 +95,8 @@ export const state = {
   terminal: null,   // { sid, ws, term, fit, onWindowResize }
   status: null,     // /api/status payload (incl. terminal reachability)
   // True only when this page was opened as the launcher-spawned PC mirror
-  // window — i.e. via the ?terminal=<sid> deep-link (set at boot, issue
-  // #241). A human's own desktop browser over loopback is NOT a mirror, so
+  // window — i.e. via the ?terminal=<sid> deep-link (set at boot).
+  // A human's own desktop browser over loopback is NOT a mirror, so
   // the connection's loopback reason alone must never flip isMirror — that
   // mis-classification made Stop & Close window.close() the user's Chrome.
   isMirrorWindow: false,

@@ -1,4 +1,4 @@
-/* Settings-tab "API tokens" panel (issue #72).
+/* Settings-tab "API tokens" panel.
  *
  * Mint / list / revoke job-scoped bearer tokens against /api/tokens. The
  * raw token appears exactly once, in the mint response — the panel shows

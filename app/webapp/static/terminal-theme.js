@@ -1,4 +1,4 @@
-/* Terminal-screen theme resolution (issues #381, #383).
+/* Terminal-screen theme resolution.
  *
  * xterm owns its rendered colours, so the app's CSS theme tokens have to be
  * resolved into an xterm ITheme and pushed again whenever html[data-theme]

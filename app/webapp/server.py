@@ -96,9 +96,9 @@ _DAY_CACHE = "public, max-age=86400"
 _HASHED_SUFFIXES = {".js", ".css"}
 # Lightly cached (a day) — these change rarely but we don't want stale
 # icons surviving for a year if we ever do swap them. .svg (the brand
-# icons) is also ?v=-stamped client-side (issue #372), so the day cap
+# icons) is also ?v=-stamped client-side, so the day cap
 # only bounds an unstamped fetch; without it Safari's heuristic cache
-# held the pre-#361 icons past the deploy.
+# held stale icons past the deploy.
 _DAY_CACHE_SUFFIXES = {".webmanifest", ".png", ".ico", ".svg"}
 
 
@@ -209,7 +209,7 @@ async def _reconcile_orphan_mirror_windows(app: FastAPI) -> None:
         _log.info("🧹 reconciled %d orphaned mirror window(s) on startup", closed)
 
 
-# --- Jobs missed-fire coverage tick (issue #697) -------------------------
+# --- Jobs missed-fire coverage tick -------------------------
 # First scan is delayed so it never competes with boot; then one scan per
 # interval. The whole point of this tick is that it does NOT depend on the
 # Jobs tab being open — the two real incidents (`config-map` / `sota-watch`
@@ -264,7 +264,7 @@ async def _coverage_tick(app: FastAPI) -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     await _reconcile_orphan_mirror_windows(app)
-    # The header's CPU reading (#65): one shared sampler, awake only while a
+    # The header's CPU reading: one shared sampler, awake only while a
     # page polls /api/system/load, so every instance runs it.
     load_task = asyncio.create_task(system_load.tick_forever())
     coverage_task = None
@@ -308,7 +308,7 @@ def create_app() -> FastAPI:
         get_config=lambda: app.state.webapp_config,
     )
     # Added last → outermost, so the timing covers the whole stack including
-    # the auth middleware (issue #386).
+    # the auth middleware.
     app.add_middleware(SlowRequestLogMiddleware)
 
     app.state.app_config = app_config

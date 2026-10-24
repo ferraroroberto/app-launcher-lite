@@ -1,4 +1,4 @@
-/* Jobs tab: list registered jobs, fire run-now, view history (issue #47).
+/* Jobs tab: list registered jobs, fire run-now, view history.
  *
  * Expanded-panel model — runs list + one selected run's output:
  *   - Tap a job row → panel opens, defaults to the newest run selected.
@@ -8,7 +8,7 @@
  *   - Scroll position is preserved on update; auto-follow-bottom kicks
  *     in only when the user was already at the bottom (classic tail -f).
  *
- * This is the residual module after the audit #315/#408 splits: list
+ * This is the residual module after the module splits: list
  * orchestration + poller + the expanded run-history panel. Compact row
  * rendering and patching live in jobs-row.js; the edit/add and run-now
  * dialogs live in jobs-dialog.js; the foldable Schedule agenda panel lives
@@ -144,7 +144,7 @@ function openSearchMatch(match) {
 
 // ------------------------------------------------------------ sort + order
 //
-// Two orderings (issue #229). 'next' is the default and the point of the
+// Two orderings. 'next' is the default and the point of the
 // feature: ascending by the server-computed next_run_epoch, so imminent
 // daily jobs float above weekly ones and the eye lands on "what fires
 // next". Manual-only / paused jobs (no next fire) sink to the bottom,
@@ -259,7 +259,7 @@ function renderHistoryLi(job) {
   artifacts.hidden = true;
   body.appendChild(artifacts);
 
-  // Raw webhook payload (issue #73) — collapsed by default, only shown
+  // Raw webhook payload — collapsed by default, only shown
   // (and populated) for a run that was actually webhook-triggered.
   const webhookDetails = document.createElement('details');
   webhookDetails.className = 'jobs-webhook-payload';
@@ -284,7 +284,7 @@ function panelEl(jobId) {
   );
 }
 
-/* Provenance chip (issue #72): compact "who fired this" label from the
+/* Provenance chip: compact "who fired this" label from the
  * run's trigger_source (+ token label when a scoped token was used). Falls
  * back to the raw trigger string for pre-provenance records. */
 function triggerChip(r) {
@@ -301,7 +301,7 @@ function triggerChip(r) {
   return escapeHtml(r.trigger || '?');
 }
 
-/* "Who ended this run" chip (issue #695). A bare `failed` covers three
+/* "Who ended this run" chip. A bare `failed` covers three
  * genuinely different outcomes and the row used to render them
  * identically: the job exited non-zero on its own, an operator tapped
  * Kill (`killed`), or the executor's last-resort watchdog tore down a
@@ -336,13 +336,13 @@ function redrawRunsList(jobId, runs) {
     return;
   }
   // Look up the job's current params declaration to spot keys that have
-  // since been removed (used by the Re-run pre-fill flow, issue #67).
+  // since been removed (used by the Re-run pre-fill flow).
   const job = state.jobs.find(function (j) { return j.id === jobId; });
   const declaredNames = new Set(((job && job.params) || []).map(function (p) { return p.name; }));
 
   // Render the whole server response (already capped at MAX_RUNS_PER_JOB) —
   // a hardcoded 5-row slice hid older runs on high-cadence jobs, making their
-  // logs unreachable (#316).
+  // logs unreachable.
   runs.forEach(function (r) {
     const li = document.createElement('li');
     const btn = document.createElement('button');
@@ -388,7 +388,7 @@ function redrawRunsList(jobId, runs) {
     });
     li.appendChild(pin);
 
-    // Re-run button (issue #67) — only meaningful when the job declares
+    // Re-run button — only meaningful when the job declares
     // params now. Opens the run dialog pre-filled with this run's values.
     if (job && declaredNames.size && r.params && typeof r.params === 'object') {
       const rerun = document.createElement('button');
@@ -517,7 +517,7 @@ function renderArtifacts(jobId, runId, artifacts) {
   host.appendChild(list);
 }
 
-// Tap-to-copy (issue #97). One tap on the run's output pane drops the whole
+// Tap-to-copy. One tap on the run's output pane drops the whole
 // log on the clipboard so it can be pasted into an error report / chat. We
 // read textContent live, so the same handler always copies the currently
 // selected run. Guards: a non-empty manual selection inside the pane is left
@@ -587,8 +587,8 @@ async function refreshExpandedContent(jobId, opts) {
   }
   // If selection no longer exists (pruned), fall back to newest — but only on
   // an explicit/initial refresh, never on the 2 s poll. Snapping the poll back
-  // to the newest run yanked the user off an older run's log they were reading
-  // (#316); on the poll we leave a vanished selection alone.
+  // to the newest run yanked the user off an older run's log they were reading;
+  // on the poll we leave a vanished selection alone.
   if (!opts.poll && state.selectedRun && state.selectedRun.jobId === jobId &&
       !runs.find(function (r) { return r.run_id === state.selectedRun.runId; })) {
     state.selectedRun = runs.length ? { jobId: jobId, runId: runs[0].run_id } : null;
@@ -764,7 +764,7 @@ async function togglePause(job) {
 }
 
 export async function runJobNow(job, options) {
-  // Issue #67: jobs with declared params open a small typed form so the
+  // Jobs with declared params open a small typed form so the
   // user supplies values. Parameter-less jobs keep their one-tap fire.
   const params = (job && job.params) || [];
   const opts = options || {};
@@ -772,13 +772,13 @@ export async function runJobNow(job, options) {
     openRunDialog(job, opts.prefill || null, opts.staleKeys || null);
     return;
   }
-  // Body carries params (issue #67) and/or a dry_run mode (issue #69:
-  // "check" = resolve only, "execute" = spawn with JOB_DRY_RUN=1).
+  // Body carries params and/or a dry_run mode
+  // ("check" = resolve only, "execute" = spawn with JOB_DRY_RUN=1).
   const body = {};
   if (opts.params) body.params = opts.params;
   if (opts.dryRun) body.dry_run = opts.dryRun;
   const hasBody = Object.keys(body).length > 0;
-  // Confirm-on-fire (issue #69). A flagged job needs explicit
+  // Confirm-on-fire. A flagged job needs explicit
   // confirmation before a real fire; a dry-run "check" is exempt
   // (no side effects). The ?confirmed=1 keeps the server gate honest.
   const isCheck = opts.dryRun === 'check';
@@ -820,7 +820,7 @@ export async function runJobNow(job, options) {
     if (exc && exc.status === 429) {
       // FastAPI wraps our raise HTTPException(detail={...}) in its own
       // {"detail": ...} envelope, so the cooldown payload is nested one
-      // level deeper than a typical error body (#403).
+      // level deeper than a typical error body.
       const payload = exc.body && exc.body.detail;
       const detail = payload && payload.detail;
       const remaining = payload && Number(payload.retry_after_seconds);
@@ -867,7 +867,7 @@ export async function fetchJobs() {
   // in place — touching the row list would tear down the user's view.
   if (state.expandedJob) {
     // Poll path: refresh content in place without stealing the user's run
-    // selection (see the `opts.poll` guard in refreshExpandedContent, #316).
+    // selection (see the `opts.poll` guard in refreshExpandedContent).
     await refreshExpandedContent(state.expandedJob, { poll: true });
     return;
   }

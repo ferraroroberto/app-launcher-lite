@@ -41,7 +41,7 @@ _ONCE_AT_RE = _re_compile(
     r"^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)$"
 )
 
-# Bounded set of typed-parameter kinds (issue #67). Anything else fails
+# Bounded set of typed-parameter kinds. Anything else fails
 # validation. Mirrors the same closed-set discipline as SCHEDULE_TYPES.
 PARAM_KINDS = frozenset({"string", "int", "enum", "bool", "date"})
 
@@ -55,7 +55,7 @@ _PARAM_DATE_RE = _re_compile(r"^\d{4}-\d{2}-\d{2}$")
 # stack would render it confusingly.
 MAX_COOLDOWN_SECONDS = 86_400
 
-# Upper bound on either watchdog ceiling (issue #695) — a full week. The
+# Upper bound on either watchdog ceiling — a full week. The
 # watchdog is a last-resort backstop, so the ceiling is deliberately loose;
 # anything past a week is a units typo, not an intent.
 MAX_WATCHDOG_SECONDS = 7 * 86_400
@@ -380,13 +380,13 @@ class Job:
     # When True, a manual fire must carry explicit confirmation
     # (``?confirmed=1`` on the run route / a confirm dialog in the UI)
     # so a fat-fingered tap or stray Stream Deck press can't execute a
-    # destructive job by accident (issue #69).
+    # destructive job by accident.
     confirm: bool = False
     # When True, a failed run pushes a Telegram alert via the vendored
     # notifier (``src.notify``), independent of the global Pushover
     # ``notify_on_failure`` switch in webapp_config.json. Opt-in per job
     # (default off) so the shared Telegram chat isn't spammed by every
-    # job's failures — issue #597.
+    # job's failures.
     alert_on_failure: bool = False
     # When True, the job's scheduled Task Scheduler entry runs under
     # ``python.exe`` (a real console window in the logged-on session)
@@ -406,7 +406,7 @@ class Job:
     # and ``paused_schedule`` carries the *real* shape so resume can
     # restore it untouched. See pause_job/resume_job.
     paused_schedule: Optional[Schedule] = None
-    # Job-kind registry (issue #70). Empty ``kind`` is the back-compat
+    # Job-kind registry. Empty ``kind`` is the back-compat
     # default: dispatch infers the kind from ``script_path``'s suffix
     # (``.py``/``.bat``, exactly as before this field existed). An
     # explicit kind (``"powershell"``, ``"shell-wsl"``, ``"inline-shell"``,
@@ -418,19 +418,19 @@ class Job:
     # requires touching this dataclass again.
     kind: str = ""
     kind_config: Dict[str, Any] = field(default_factory=dict)
-    # Webhook trigger (issue #73): an external service (GitHub, Stripe, a
+    # Webhook trigger: an external service (GitHub, Stripe, a
     # generic POST) can fire this job over POST /api/jobs/<id>/hook, gated
     # by the provider signature instead of the bearer token. See
     # src.jobs_webhook for verification + payload-mapping.
     webhook: Optional[WebhookConfig] = None
-    # Per-job env-var overlay (issue #72): {NAME: value} merged into the
+    # Per-job env-var overlay: {NAME: value} merged into the
     # child's environment by the executor at fire time. Values are either
     # literal strings or "$secret:<key>" references resolved against
     # webapp_config.secrets (src.jobs_secrets) — so jobs.json carries only
     # opaque references, never a real credential. An unresolvable
     # reference finalises the run as failed with a clear note.
     env: Dict[str, str] = field(default_factory=dict)
-    # Executor watchdog ceilings (issue #695) — the last-resort backstop
+    # Executor watchdog ceilings — the last-resort backstop
     # that kills a wedged run no matter *why* it wedged. Both are
     # tri-state: ``None`` = "use the default" (a runtime ceiling derived
     # from this job's own duration history; the module no-output default

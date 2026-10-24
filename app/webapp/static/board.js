@@ -1,9 +1,9 @@
-/* Board tab (issues #300 / #301 / #164 / #399 / #608): the fleet
+/* Board tab: the fleet
  * kanban.
  *
  * Four computed columns from GET /api/board, each single-purpose — Backlog
  * (open issues), Bot's turn (sessions working/unknown/idle/idle-finished),
- * Your turn (stalled/awaiting-decision/awaiting-input sessions only — #608's
+ * Your turn (stalled/awaiting-decision/awaiting-input sessions only — the
  * split of the old undifferentiated needs-you), Done (closed issues today).
  * Phone-first: the columns container is a scroll-snap carousel (one column
  * per swipe) and the strip above it doubles as column switcher + counts.
@@ -13,7 +13,7 @@
  * refreshed via the ↻ button or on tab activation when the cache is older
  * than GL_STALE_MS — never on the 5 s poll, never while just looking at it.
  *
- * Act-from-the-card loop (#301): tapping a live session card opens an
+ * Act-from-the-card loop: tapping a live session card opens an
  * inline drawer with the last user↔assistant exchange (passkey-gated — it
  * is transcript text) and a reply box that writes straight into the PTY;
  * backlog cards of repos present in the projects folder carry ▶ Start /
@@ -54,17 +54,17 @@ function fmtAge(seconds) {
 }
 
 // The exact same title resolution as the Coding tab's Running-sessions list
-// (#396) — board cards carry the same field names (shared_name/
+// — board cards carry the same field names (shared_name/
 // shared_name_source, live_title, prompt_title, name, project) that
 // sessionTitle() reads, so a single shared function keeps both tabs
 // agreeing on one session's title instead of two independently-drifting
-// codepaths (#383 review round first duplicated a smaller version of this).
+// codepaths (a smaller duplicate of this would drift).
 function sessionLabel(card) {
   return sessionTitle(card) || card.project || 'session';
 }
 
 
-// #608: the hook-written needs-you is split server-side into four
+// The hook-written needs-you is split server-side into four
 // caller-actionable values (src/board_transcript.py::_refine_waiting_status)
 // — the raw "needs-you" string itself never reaches a card's status field.
 const STATUS_META = {
@@ -120,7 +120,7 @@ function renderSessionCard(card) {
   const top = shell.btn.querySelector('.board-card-top');
   top.insertBefore(agentIcon, top.firstChild);
   if (card.session_id) {
-    // Tap toggles the drill-down drawer (#301); the ⚡ button inside it is
+    // Tap toggles the drill-down drawer; the ⚡ button inside it is
     // the way into the full terminal now.
     shell.btn.addEventListener('click', function () {
       state.boardExpanded =
@@ -175,7 +175,7 @@ function buildDrawer(card) {
     });
     actions.appendChild(send);
   }
-  // Rename first, icon-only (#496 item 5 — was after Terminal, labelled).
+  // Rename first, icon-only, ahead of Terminal.
   // Same launcher-native override as the Coding tab's row rename button,
   // reachable for detached sessions too (no PTY needed). The drawer stays
   // open across a rename (unlike Terminal, which navigates away), so the
@@ -197,9 +197,9 @@ function buildDrawer(card) {
     });
     actions.appendChild(rename);
   }
-  // Stop (#496 item 5, ordered before Terminal in round 2): kill a live
+  // Stop (ordered before Terminal): kill a live
   // PTY session straight from the Board — the same unified stop path as
-  // the Coding tab (#253: the agent's own quit, force-fallback
+  // the Coding tab (the agent's own quit, force-fallback
   // server-side), one tap, no confirm. Detached consoles keep going
   // through the Coding tab's row button.
   if (card.alive && card.kind === 'pty') {
@@ -222,7 +222,7 @@ function buildDrawer(card) {
     });
     actions.appendChild(stop);
   }
-  // Terminal is deliberately the LAST button in the row (#496 round 2).
+  // Terminal is deliberately the LAST button in the row.
   if (card.alive && card.kind !== 'remote') {
     const open = document.createElement('button');
     open.type = 'button';
@@ -279,7 +279,7 @@ async function loadExchange(card, el) {
   }
 }
 
-// Optimistic move for sendReply() (#461): relocate a card from Your turn into
+// Optimistic move for sendReply(): relocate a card from Your turn into
 // Bot's turn client-side, ahead of the poll that will confirm it. A reply
 // just went into a live PTY sitting at its prompt, so there is no value in
 // making the Board visibly wait out the hook -> state-file -> poll round trip
@@ -314,7 +314,7 @@ async function sendReply(card, input, btn) {
     toast('Sent to ' + (card.project || 'session'), 'good', { icon: 'send-horizontal' });
     input.value = '';
     // Close the drawer and optimistically flip the card to Bot's turn
-    // right away. Deliberately no immediate fetchBoard() here (#461): the
+    // right away. Deliberately no immediate fetchBoard() here: the
     // hook that actually flips the server's status hasn't had time to run
     // yet, so an immediate re-poll almost always still sees the pre-reply
     // needs-you state and would revert this straight back — worse than the
@@ -339,7 +339,7 @@ function repoInProjects(repo) {
   });
 }
 
-// Git state for a backlog card's repo (#496 item 4), read from the SAME
+// Git state for a backlog card's repo, read from the SAME
 // client-side cache the Coding tiles use (state.gitStatus, keyed by the
 // scanner's project id — resolved here via the repo-name → project match
 // repoInProjects uses). Null until the boot git fetch lands, or when the
@@ -359,16 +359,16 @@ async function startIssue(card, mode, btn) {
   try {
     const tt = await ensureTerminalToken();
     // Carry the issue title so the server can auto-name the spawned session
-    // after it (#467) — display data, never reaches the command line.
+    // after it — display data, never reaches the command line.
     // The server always launches with the persisted Coding model.
     const payload = {
       repo: card.repo, number: card.number, mode: mode,
       title: card.title || '',
     };
-    // Desktop browsers get the PC mirror window, like every launch (#241).
+    // Desktop browsers get the PC mirror window, like every launch.
     // Phone launches carry the real terminal size so the PTY's early
-    // output is authored at the width the overlay will fit() to (issue
-    // #374); the route already accepts rows/cols.
+    // output is authored at the width the overlay will fit() to;
+    // the route already accepts rows/cols.
     applyLaunchSizePayload(payload);
     const body = await jsonApi('/api/board/issues/start', {
       method: 'POST',
@@ -391,7 +391,7 @@ async function startIssue(card, mode, btn) {
   }
 }
 
-// Backlog issue tiles (#337 follow-up, restyled #339): a flat separator
+// Backlog issue tiles: a flat separator
 // row — no card background/border, just a bottom-border divider between
 // rows (issue-tracker-list style) — with repo/# on one line and the title on
 // the line below, each independently truncated, and icon-only ▶/⚡ actions
@@ -414,7 +414,7 @@ function renderIssueCard(card) {
   meta.className = 'board-card-meta-inline';
   meta.textContent = [card.repo, '#' + card.number].filter(Boolean).join(' ');
   if (isInProgress) meta.textContent += ' · in progress';
-  // Repo-state colour (#496 item 4): red = dirty working tree, yellow =
+  // Repo-state colour: red = dirty working tree, yellow =
   // parked off the default branch — "don't start this issue right now".
   // Same precedence as the Coding tiles: red wins when both apply.
   const gs = repoGitStatus(card.repo);
@@ -440,7 +440,7 @@ function renderIssueCard(card) {
     });
   }
 
-  // One-tap start (#301) — only for repos the Coding tab could launch in.
+  // One-tap start — only for repos the Coding tab could launch in.
   if (card.number && repoInProjects(card.repo)) {
     const row = document.createElement('div');
     row.className = 'board-issue-actions board-issue-actions-compact';
@@ -465,7 +465,7 @@ function renderIssueCard(card) {
 }
 
 function renderDoneCard(card) {
-  // Done holds closed issues only (#399) — a merged MR that closed one is
+  // Done holds closed issues only — a merged MR that closed one is
   // already reflected here by the issue itself, so there's no MR/pairing
   // branch to render.
   const shell = cardShell(
@@ -548,14 +548,14 @@ export async function fetchBoard() {
   renderBoard();
 }
 
-// ?board=<sid> deep-link (#301): land on the Board with that card's drawer
+// ?board=<sid> deep-link: land on the Board with that card's drawer
 // open, carousel on the card's column. Called from main.js at boot. `sid` may
-// be a card's own session_id OR its state_sid (#307) — a Slack ping only ever
-// knows the hook's transcript UUID (fleet-config#242), which is the card's
+// be a card's own session_id OR its state_sid — a Slack ping only ever
+// knows the hook's transcript UUID, which is the card's
 // state_sid, not its session-host session_id.
 export async function openBoardCard(sid) {
   setTab('board');
-  // Distinguish a failed fetch from a genuinely-missing sid (#316): a transient
+  // Distinguish a failed fetch from a genuinely-missing sid: a transient
   // fetchBoard() failure (auth flip, gh cache warming, backend restart) leaves
   // columns empty, which must NOT read as "session gone". Retry once, then, if
   // still failing, surface a distinct "refresh failed" toast.
@@ -638,7 +638,7 @@ function showColumn(key, smooth) {
   if (wrap && col) {
     // Scroll only the carousel container. scrollIntoView also scrolls the
     // *page* vertically when the column overflows the viewport, yanking
-    // the whole tab upward on every strip tap (phone-verify bug, #300).
+    // the whole tab upward on every strip tap (seen on a phone).
     const left = col.getBoundingClientRect().left
       - wrap.getBoundingClientRect().left + wrap.scrollLeft;
     wrap.scrollTo({ left: left, behavior: smooth === false ? 'auto' : 'smooth' });

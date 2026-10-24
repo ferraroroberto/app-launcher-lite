@@ -73,7 +73,7 @@ AGENTS: Dict[str, Agent] = {
 
 # The loopback session-host accepts the Coding-tab agents plus commands used
 # by trusted sibling services. SSH is intentionally absent from ``AGENTS``:
-# it is a service integration, not a Coding-tab launch button (#558).
+# it is a service integration, not a Coding-tab launch button.
 SESSION_HOST_AGENTS: Dict[str, Agent] = {
     **AGENTS,
     "ssh": Agent(

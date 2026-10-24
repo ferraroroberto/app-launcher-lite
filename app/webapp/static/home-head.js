@@ -1,4 +1,4 @@
-/* Home-head summary line (#496): the one-line stats in the vendored
+/* Home-head summary line: the one-line stats in the vendored
  * home-head card at the top of the Coding tab — sessions, running apps,
  * and the git dirty/off-main aggregate. Pure render over shared state;
  * callers (sessions/apps/git refreshes) invoke it whenever their slice

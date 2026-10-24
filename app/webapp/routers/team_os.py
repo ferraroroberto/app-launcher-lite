@@ -69,7 +69,7 @@ _MAX_FILE_BYTES = 256 * 1024
 # Directory names never walked for the browser (VCS / caches).
 _BROWSE_SKIP_DIRS = frozenset({".git", "__pycache__", ".venv", "node_modules"})
 
-# --- weekly recap (issue #167) -----------------------------------------
+# --- weekly recap -----------------------------------------
 # The recap is the ``_recap`` infra skill; it is underscore-prefixed, so
 # ``scan_skills`` deliberately skips it and the normal skill-launch route
 # can't reach it. The Team OS tab surfaces it as a dedicated "Weekly recap"
@@ -215,11 +215,11 @@ async def _spawn_skill_session(
     (issue #159) identically and returns the common response fields. The caller
     prepends its own ``launched`` id.
     """
-    # The phone passes its real terminal size (issue #374): a skill streams
+    # The phone passes its real terminal size: a skill streams
     # output the moment the PTY spawns, so spawning at the legacy 40×120
     # poured 120-col text that re-wrapped into garble when the overlay's
     # first fit() shrank the PTY to phone width. Same contract as the
-    # Coding-tab launch route (issue #126); ignored for kind="remote".
+    # Coding-tab launch route; ignored for kind="remote".
     rows = int(body.get("rows") or 40)
     cols = int(body.get("cols") or 120)
     session = await spawn_session_or_400(
@@ -255,7 +255,7 @@ async def _spawn_skill_session(
     )
 
     # Mirror full-control sessions into a dedicated PC terminal window —
-    # identical to the Coding tab (issue #241, widened by #609): the default
+    # identical to the Coding tab: the default
     # for every caller, unless the launcher explicitly says it's rendering
     # in-page itself (see should_mirror_to_pc).
     if kind == "pty" and should_mirror_to_pc(
@@ -440,7 +440,7 @@ async def launch_skill(skill_id: str, request: Request) -> Dict[str, Any]:
         )
     name = skill.name
 
-    # Detached and Resume are orthogonal (issue #157, matching the Coding
+    # Detached and Resume are orthogonal (matching the Coding
     # tab): the requested mode decides where the session renders — a detached
     # console (remote) or a streamed PTY — independent of resume.
     kind = "remote" if mode == "remote" else "pty"
@@ -682,7 +682,7 @@ def _walk_files(
             parts = rel_name.parts
             if len(parts) > 1:
                 # Leading dir becomes the category — drop it from the label
-                # so the row doesn't echo its own section header (#118).
+                # so the row doesn't echo its own section header.
                 cat = parts[0]
                 name = str(Path(*parts[1:]))
             else:

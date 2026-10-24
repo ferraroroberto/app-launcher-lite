@@ -13,7 +13,7 @@ import { icon } from './_vendored/icons/icons.js';
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000];
 const RECONNECT_GIVE_UP_MS = 30000;
 
-// First-paint watchdog (issue #610): a session that opened on the phone
+// First-paint watchdog: a session that opened on the phone
 // during a heavy multi-worker run was observed painting nothing at all —
 // blank screen, no prompt, no scrollback, no status line — indistinguishable
 // from "still connecting" with no way to recover short of leaving and
@@ -43,11 +43,11 @@ function disarmPaintWatchdog(terminal) {
   terminal.paintWatchdog = null;
 }
 
-// Repaint batching for full-screen differential agents (#430). Empirical
+// Repaint batching for full-screen differential agents. Empirical
 // probe: a ratatui-style TUI re-emits its ENTIRE transcript on every winsize
 // change (~65 KB for a long conversation — same magnitude as a full
 // a resume attach). The session-host deliberately fires such a
-// change on every (re)connect (the #128 width-toggle nudge), and a real
+// change on every (re)connect (the width-toggle nudge), and a real
 // rotation fires one too. Written chunk-by-chunk into xterm that storm
 // renders as a visible scroll-through of the whole conversation. Instead,
 // buffer everything that arrives right after a (re)connect / resize and
@@ -70,14 +70,14 @@ export function beginRepaintBatch(terminal) {
   // happens to be in batchBuf at that moment — content from two different
   // connections mixed or clobbered together. Reported as a live-session
   // "conversation beginning visible, middle missing, latest lines visible"
-  // corruption (issue #435 follow-up).
+  // corruption.
   if (terminal.batchQuietTimer) {
     clearTimeout(terminal.batchQuietTimer);
     terminal.batchQuietTimer = null;
   }
   terminal.batchBuf = [];
   terminal.batchDeadline = Date.now() + REPAINT_BATCH_MAX_MS;
-  // Conceal the storm (#430 round 2): even flushed as ONE write, xterm
+  // Conceal the storm: even flushed as ONE write, xterm
   // parses large writes in per-animation-frame slices, so the transcript
   // still visibly scrolls through. Hide the canvas for the batch window
   // and reveal on flush — the user lands directly on the final frame.
@@ -121,7 +121,7 @@ export function flushRepaintBatch(terminal) {
   const buf = terminal.batchBuf;
   terminal.batchBuf = null;
   terminal.batchDeadline = 0;
-  // A stashed (hidden but warm, #430) terminal still gets its batch
+  // A stashed (hidden but warm) terminal still gets its batch
   // written — its buffer must stay current for the instant re-open. Only
   // a torn-down terminal is off-limits; disposeTerminal clears the batch
   // timers before term.dispose(), so this can't fire post-dispose. The
@@ -202,19 +202,19 @@ export function connectTerminalWs(terminal) {
       try { terminal.term.clear(); } catch (_) { /* best effort */ }
       // The session-host answers every fullscreen (re)connect with a
       // clear-frame + a headless-VT snapshot (bounded scrollback history
-      // + current frame, #432/#435) sent as a couple of WS messages —
+      // + current frame) sent as a couple of WS messages —
       // batch them into a single paint so xterm doesn't visibly crawl in.
       beginRepaintBatch(terminal);
     }
     if (terminal.applySize) terminal.applySize();
     if (terminal.term) terminal.term.focus();
-    // #610: arm after clearTerminalReconnect (which disarms any stale
+    // Arm after clearTerminalReconnect (which disarms any stale
     // watchdog from a superseded connection attempt) so this fresh one
     // isn't immediately wiped out by its own setup.
     armPaintWatchdog(terminal);
   };
   ws.onmessage = function (event) {
-    // #610: any frame at all — including a shutdown/close-mirror one —
+    // Any frame at all — including a shutdown/close-mirror one —
     // proves the pipe is alive and the "stuck, silently blank" state this
     // watchdog exists for cannot be it; a definitive close/shutdown gets
     // its own explicit status regardless.
@@ -226,11 +226,11 @@ export function connectTerminalWs(terminal) {
       return;
     }
     if (route === 'swallow' || !terminal.term) return;
-    // #499: stamp every PTY output frame so the compose bar's bulk-send
+    // Stamp every PTY output frame so the compose bar's bulk-send
     // settle watch (terminal-compose.js) can tell "the agent echoed the
     // paste and went quiet" from "the paste is still being ingested".
     terminal.lastOutputAt = Date.now();
-    // Active repaint batch (#430): buffer the burst, flush on the first
+    // Active repaint batch: buffer the burst, flush on the first
     // quiet gap or at the hard deadline — one write, one render.
     if (terminal.batchBuf) {
       terminal.batchBuf.push(event.data);
@@ -254,7 +254,7 @@ export function connectTerminalWs(terminal) {
   };
   ws.onerror = function () { /* onclose drives UI */ };
   ws.onclose = function (event) {
-    // #610: a close of any kind (clean or not) means the watchdog's own
+    // A close of any kind (clean or not) means the watchdog's own
     // "no response yet" message would be stale/wrong the moment it later
     // fires — every branch below sets its own definitive status instead.
     disarmPaintWatchdog(terminal);
@@ -347,7 +347,7 @@ function setTapToReconnect(terminal, label, opts) {
 export function clearTerminalReconnect(terminal) {
   if (!terminal) return;
   disarmPaintWatchdog(terminal);
-  // Drop any pending repaint batch without writing it (#430) — this runs
+  // Drop any pending repaint batch without writing it — this runs
   // on teardown and right before a fresh connect, where the next onopen
   // starts a new batch against a cleared screen anyway. Un-hide the
   // canvas so a give-up ("Tap to reconnect") never strands it invisible.

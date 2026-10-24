@@ -1,6 +1,6 @@
-/* ---------- Team OS tab (issue #102) ---------- */
+/* ---------- Team OS tab ---------- */
 /* The model combo + Detached/Resume controls live in the Skills card's
-   summary (#496 round 2 — no separate options card); the recap tile is the
+   summary (no separate options card); the recap tile is the
    only .card--row left on the tab. */
 /* Single-row (non-collapsible) cards inherit the disclosure closed-box:
    zero vertical padding, a 52px .card-head (vendored card.css) owns the
@@ -10,12 +10,12 @@
 /* Right-aligned toggle group: keeps a summary row's switches packed together
    as a single flex child so the row stays title-left / toggles-right. Without
    this the Coding row's three children space-between and Detached floats in the
-   center (issue #155). Shared by the Coding + Team OS option rows. */
+   center. Shared by the Coding + Team OS option rows. */
 .coding-toggles,
 .teamos-toggles { display: flex; gap: 6px; }
 .teamos-launch { font-size: var(--icon-title); }
 
-/* Weekly-recap tile (issue #167): title + a staleness badge on the left, the
+/* Weekly-recap tile: title + a staleness badge on the left, the
    🚀 review launch on the right. The badge is a coloured dot + label whose
    colour tracks how stale the recap ledger is — green/accent fresh, amber
    (--attention) past 7 days, red (--danger) past 14, muted when never run. Mirrors
@@ -62,8 +62,8 @@
    bar closes it back to the list). Inside the reused .terminal-overlay. */
 /* The Team OS browser reuses .terminal-overlay for its full-screen shell,
    but it is a READING surface, not a terminal screen — it follows the app
-   theme instead of the invariant --term-bg (issue #355 PR 3 on-device
-   review: dark background stuck in light theme). */
+   theme instead of the invariant --term-bg (which would otherwise stick dark in light
+   theme). */
 #teamOsBrowser.terminal-overlay { background: var(--bg); }
 
 .teamos-browser-body {

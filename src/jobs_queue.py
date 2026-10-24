@@ -154,8 +154,8 @@ def mutex_collision(jobs: List[Job], job: Job) -> Optional[Job]:
             continue
         if other.mutex_group != job.mutex_group:
             continue
-        # A stranded "running" record (executor died before finalising,
-        # issue #591) must not wedge the group forever — reconcile it
+        # A stranded "running" record (executor died before finalising)
+        # must not wedge the group forever — reconcile it
         # before treating it as a live collision.
         finalize_dead_runs(other)
         latest = latest_run(other.id)

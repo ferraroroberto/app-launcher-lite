@@ -1,16 +1,16 @@
-/* ---------- Coding tab tiles (issue #45) ---------- */
+/* ---------- Coding tab tiles ---------- */
 /* Bare folder name on the left, one icon button per coding agent on
    the right — sat side by side, not stacked. */
 .coding-item .app-main { justify-content: center; }
 .coding-name {
   /* Vertical padding trimmed (was 16px) so tiles take less height and more
-     projects fit per screen (issue #212). Horizontal padding is unchanged —
+     projects fit per screen. Horizontal padding is unchanged —
      the tiles still breathe sideways. */
   padding: 7px 18px;
   font-size: var(--font-body);
   font-weight: 600;
   color: var(--fg);
-  /* One line per project (issue #8) — the name never wraps, it truncates.
+  /* One line per project — the name never wraps, it truncates.
      The branch pill stacks UNDERNEATH rather than beside: sharing the line
      left it ~44px on a 390px phone, i.e. "fea…", which reads as noise. A
      project parked off its default branch is the minority case and worth
@@ -29,18 +29,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;   /* raw on-disk name — shown verbatim, cut if long */
 }
-/* ---------- Coding tab git-status flags (issue #115) ---------- */
+/* ---------- Coding tab git-status flags ---------- */
 /* On-demand only: tap the header button to annotate tiles. Yellow name
    = parked on a non-default branch; red name = uncommitted changes. */
 .sessions-header-actions {
-  position: relative;   /* anchors the off-main summary popover (issue #139) */
+  position: relative;   /* anchors the off-main summary popover */
   display: flex;
   align-items: center;
   gap: 6px;
 }
 .git-status-btn { font-size: var(--font-caption); padding: 6px 10px; }
 .git-status-btn.loading { opacity: 0.5; pointer-events: none; }
-/* Compact off-main summary popover (issue #139): anchored below the
+/* Compact off-main summary popover: anchored below the
    status button, right-aligned with the card edge. */
 .git-summary {
   position: absolute;
@@ -86,8 +86,8 @@
   vertical-align: middle;
   overflow-wrap: anywhere;
 }
-/* Inside a Coding tile the pill sits on its own line beneath the folder name
-   (issue #8), so it gets the tile's full text width instead of fighting the
+/* Inside a Coding tile the pill sits on its own line beneath the folder name,
+so it gets the tile's full text width instead of fighting the
    name for it — a realistic `fix/28-terminal-reconnect` fits uncut at 390px.
    It still truncates rather than wrapping when a branch name is genuinely
    longer than the tile; the full name stays in the pill's `title` (set by
@@ -120,9 +120,9 @@
 .git-swatch.dirty { background: var(--danger); }
 
 /* The agent icon strip (one button per registry agent + GitHub + star)
-   shares the row with the folder name (issue #120) — on every width now,
-   including the narrowest phone (issue #8: the tile used to stack into two
-   lines under 520px, doubling the scroll for a list of projects).
+   shares the row with the folder name — on every width now,
+   including the narrowest phone (stacking the tile into two
+   lines under 520px would double the scroll for a list of projects).
    The buttons read as discrete controls separated by a real gap, the same
    treatment as the Detached/Resume pair in the Projects summary
    (.coding-toggles, also gap 6px), rather than a flush segmented rail with
@@ -149,11 +149,11 @@
   border-top: 0;
 }
 .agent-icon {
-  width: 24px;                    /* icons.size feature step (issue #355) */
+  width: 24px;                    /* icons.size feature step */
   height: 24px;
   display: block;
   pointer-events: none;   /* clicks land on the button, not the img */
-  /* Brand-logo SVGs ship glyph-only (no baked tile, issue #361) — the chip
+  /* Brand-logo SVGs ship glyph-only (no baked tile) — the chip
      is CSS so it can be theme-aware; the internal glyph fill can't reach
      page CSS vars (separate <img> document), so glyphs needing recolor use
      a fixed mid-tone (#6e7781) that clears both --card-2 surfaces. */
@@ -164,14 +164,14 @@
   filter: grayscale(1);
 }
 
-/* ---------- Coding tab favorites (issue #250) ---------- */
+/* ---------- Coding tab favorites ---------- */
 /* Per-tile star toggle — rightmost in the agent-action strip, the vendored
    Lucide `star` glyph. Outline + muted colour when unstarred (like the
    other idle icons); the `.is-fav` rule below fills it gold when starred —
-   the sprite has one star symbol, not a filled/outline pair (#563). */
+   the sprite has one star symbol, not a filled/outline pair. */
 /* The star is an inline SVG while its neighbours are <img> brand logos, so
-   it needs the .agent-icon box restated to sit on the same grid (issue #8 —
-   it used to render 20px and chip-less beside two 24px chips, which read as
+   it needs the .agent-icon box restated to sit on the same grid (left
+   as-is it renders 20px and chip-less beside two 24px chips, which reads as
    haphazard). Same 24px box, same chip, same border-radius; the inner
    padding shrinks the drawn glyph to 16px so its visual weight matches the
    brand SVGs, which carry that clearance inside their own viewBox (gitlab.svg
@@ -198,13 +198,13 @@
    active (fill rule: `.fav-filter-btn.active .icon`, near `.opt-group`). */
 .fav-filter-btn { font-size: var(--font-caption); padding: 6px 10px; }
 .fav-filter-btn.active { color: var(--star); border-color: var(--star); }
-/* Icon-only on narrow phones (#496): the Projects summary also carries the
+/* Icon-only on narrow phones: the Projects summary also carries the
    Detached/Resume toggles now — four labelled controls overflow a 390px
    row (same compaction precedent as the Registered-jobs summary). */
 @media (max-width: 520px) {
   .fav-filter-btn .fav-filter-label { display: none; }
   /* ...which is also what makes the summary's three controls alignable with
-     the project rows' three buttons (issue #8): icon-only, they can take the
+     the project rows' three buttons: icon-only, they can take the
      rows' exact --row-sm box and 6px pitch. Above this width the filter
      carries its label and is deliberately wider, so no alignment is claimed
      there. The chevron column is fixed-width at every size (below) so the
@@ -236,6 +236,6 @@
   height: 18px;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
-  background: var(--card-2);      /* theme-aware brand chip, issue #361 */
+  background: var(--card-2);      /* theme-aware brand chip */
 }
 

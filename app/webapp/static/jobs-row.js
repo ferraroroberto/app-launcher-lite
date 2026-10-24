@@ -99,7 +99,7 @@ function renderDurationChip(job) {
   return chip;
 }
 
-/* Missed-fire coverage badge (issue #697): the schedule isn't firing at all —
+/* Missed-fire coverage badge: the schedule isn't firing at all —
  * a missing/disabled Task Scheduler entry, or an elapsed slot that produced no
  * run record. Only 'problem' renders; 'ok'/'exempt'/'unknown' stay silent, so
  * an unestablished fact never reads as an alert. */

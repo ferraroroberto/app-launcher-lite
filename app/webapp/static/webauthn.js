@@ -70,7 +70,7 @@ export function clearTerminalToken() {
 
 // ----------------------------------------------------------- webauthn flows
 // The Settings passkey section (status readout, device list, enroll
-// button) was removed in the #383 review round — the gate itself stays:
+// button) is not part of the Settings tab — the gate itself stays:
 // fetchWebauthnStatus still populates state.webauthn, which
 // ensureTerminalToken keys on. Enrollment now happens from the PC via the
 // tray's enrollment window (the /api/webauthn/enroll/* endpoints are

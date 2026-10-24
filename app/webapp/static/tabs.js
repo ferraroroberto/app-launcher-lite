@@ -1,13 +1,12 @@
 /* Six-tab switcher: Board | Code | Team | Apps | Jobs | Settings.
  *
- * Wraps the vendored _vendored/nav/nav-tabs.js (issue #355) — that file owns
+ * Wraps the vendored _vendored/nav/nav-tabs.js — that file owns
  * tab/pane discovery, ARIA + roving tabindex, the standalone-PWA fixed-inset
  * .app scroller reset, and the visualViewport pin (browser-tab toolbar only;
  * never a measured translate in standalone). This module only keeps
  * state.tab in sync (apps.js/board.js/jobs.js self-gate their polling on it)
  * and re-exports setTab for board.js's chained-job / ?board= deep-link calls.
- *
- * Jobs added by issue #47; Board by #300; Settings by #383. */
+ */
 
 import { state } from './state.js';
 import { initNavTabs } from './_vendored/nav/nav-tabs.js';

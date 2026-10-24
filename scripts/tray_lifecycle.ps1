@@ -15,7 +15,7 @@
 <#
     Canonical tray lifecycle helper.
 
-    THE ONE MACHINE-LOCAL COPY, owned here (fleet-config, project-scaffolding#153).
+    THE ONE MACHINE-LOCAL COPY, owned here (fleet-config, project-scaffolding).
     Every fleet tray.bat on this machine calls this exact file by path --
     `%USERPROFILE%/.claude/tray/tray_lifecycle.ps1`, exposed by this repo's
     install.ps1 junction -- instead of vendoring a byte-copy into each sister
@@ -26,11 +26,10 @@
     what keeps one file correct for every tray. `app/tray/single_instance.py`
     is a separate, still-vendored primitive (imported Python that ships with
     each app, not a shelled-to helper) -- it stays in project-scaffolding.
-    Full reasoning: project-scaffolding's docs/windows-tray.md +
-    project-scaffolding#29 / #36 / #54 / #153.
+    Full reasoning: project-scaffolding's docs/windows-tray.md.
 
-    Why a committed .ps1 instead of cmd-side lifecycle logic
-    (project-scaffolding#54): the old batch shape first embedded CIM/port logic
+    Why a committed .ps1 instead of cmd-side lifecycle logic:
+the old batch shape first embedded CIM/port logic
     in `powershell.exe -Command "..."`, then moved that logic to `-File` but
     still captured detect output through `for /f usebackq`. That cmd capture
     could return empty under non-interactive callers even when the helper worked
@@ -38,8 +37,8 @@
     the whole detect -> kill -> reclaim -> start -> verify sequence inside one
     PowerShell process, so tray.bat does not parse helper output at all.
 
-    A separate outer-shell hazard happens before this file can run
-    (fleet-config#385): Git Bash/MSYS rewrites `cmd.exe /c` to `cmd.exe C:/`.
+    A separate outer-shell hazard happens before this file can run:
+Git Bash/MSYS rewrites `cmd.exe /c` to `cmd.exe C:/`.
     That opens an interactive cmd prompt, so tray.bat and this helper are never
     entered. Automation must invoke tray.bat through a real PowerShell caller
     (or use the MSYS-safe `cmd.exe //c` spelling); the fleet Bash hook and issue
@@ -181,7 +180,7 @@ function Resolve-VersionUrls {
     # /admin/api/version). With none given, the app didn't declare a scheme, so
     # probe HTTPS *then* HTTP on the first owned port: fleet PWAs serve HTTPS
     # (Service Workers + Web Push are HTTPS-only), so http-first would fail every
-    # PWA's verify leg unless it overrode -VersionUrl (project-scaffolding#147).
+    # PWA's verify leg unless it overrode -VersionUrl.
     # Both candidates stay on 127.0.0.1 so an auth-gated endpoint takes its
     # loopback auth-bypass and the leaf-cert name-mismatch is handled below.
     if ($VersionUrl) { return @($VersionUrl) }
@@ -202,8 +201,8 @@ function Install-LoopbackCertBypass {
     # must skip validation, but ONLY for loopback, and Windows PowerShell 5.1
     # has no -SkipCertificateCheck. A PowerShell *scriptblock* callback throws
     # "no Runspace available" on .NET's TLS validation thread; a *compiled*
-    # delegate does not. So install a C# callback scoped to loopback hosts
-    # (project-scaffolding#147). A 127.0.0.1 probe can never match a public-name
+    # delegate does not. So install a C# callback scoped to loopback hosts.
+    # A 127.0.0.1 probe can never match a public-name
     # leaf and a MITM on loopback is out of the threat model; every other host
     # is still fully validated.
     if (-not ([System.Management.Automation.PSTypeName]'LoopbackCertBypass').Type) {

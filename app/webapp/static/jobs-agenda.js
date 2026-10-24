@@ -1,9 +1,9 @@
-/* Jobs tab: the foldable Schedule agenda panel (issue #230) — a mobile-
+/* Jobs tab: the foldable Schedule agenda panel — a mobile-
  * native, day-grouped list of upcoming fires (the deliberate alternative
  * to a 2D calendar grid). Backed by GET /api/jobs/agenda, fetched lazily
  * when the panel opens (see wireJobsAgenda in jobs.js).
  *
- * Split out of jobs.js (audit #315) — the agenda is its own lens over the
+ * Split out of jobs.js — the agenda is its own lens over the
  * job list with its own render + fetch cycle; tapping a row hands off to
  * jobs.js's revealJob() to jump the Registered-jobs list to that job.
  */

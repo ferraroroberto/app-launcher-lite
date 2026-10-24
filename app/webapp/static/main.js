@@ -42,7 +42,7 @@ function toggleEditMode() {
   renderJobs();
 }
 
-// Boot-autostart (issue #456 part 1/2) is its own dedicated endpoint, not a
+// Boot-autostart is its own dedicated endpoint, not a
 // patchConfig() field — enabling/disabling it writes/removes a Startup-folder
 // wrapper bat (a real filesystem side effect), so the click re-fetches
 // /api/config for the actual on-disk state rather than optimistically
@@ -104,9 +104,9 @@ function wireTheme() {
   // html[data-theme] (localStorage override, prefers-color-scheme
   // fallback); the button just flips it. The sun/moon glyph swap is pure
   // CSS keyed on the attribute, so there is nothing to re-render here —
-  // the terminal screen follows the app theme (issue #383) via
+  // the terminal screen follows the app theme via
   // terminal.js's own data-theme observer, which restyles any open
-  // terminal. The button lives in the home-head card's toggle slot (#496)
+  // terminal. The button lives in the home-head card's toggle slot
   // — no <summary> around it any more, so no stopPropagation needed.
   els.themeToggle.addEventListener('click', function () {
     const dark = document.documentElement.dataset.theme !== 'dark';
@@ -118,7 +118,7 @@ function wireTheme() {
 // --------------------------------------------------------- status readout
 // Appends a sprite-icon span + a trailing text node — data (tunnel_url,
 // etc.) always rides a text node, never innerHTML, even though it's
-// locally-sourced (issue #355 straggler fix).
+// locally-sourced.
 function appendStatusChunk(parts, iconName, text) {
   if (parts.length) parts.push(document.createTextNode(' \u00b7 '));
   if (iconName) {
@@ -170,7 +170,7 @@ async function boot() {
   const fromUrl = consumeUrlParam('token');
   if (fromUrl) writeToken(fromUrl);
   // A launcher-spawned PC mirror window on the ts.net URL carries a
-  // server-minted passkey terminal token (issue #356) — cache it like a
+  // server-minted passkey terminal token — cache it like a
   // ceremony-minted one. TTL mirrors the server's 12 h _TERMINAL_TOKEN_TTL.
   const ttFromUrl = consumeUrlParam('tt');
   if (ttFromUrl) writeTerminalToken(ttFromUrl, 12 * 3600);
@@ -178,8 +178,7 @@ async function boot() {
   // Only the launcher-spawned PC mirror window opens via the ?terminal=<sid>
   // deep-link; a human's own browser never does. Recording it here (before
   // the param is stripped from the URL) is what lets terminal.js tell a real
-  // mirror apart from a desktop browser that merely connects over loopback
-  // (issue #241).
+  // mirror apart from a desktop browser that merely connects over loopback.
   state.isMirrorWindow = !!deepLinkSid;
 
   try {
@@ -191,11 +190,11 @@ async function boot() {
   // Each remaining boot fetch fills one panel — none is load-bearing for
   // the rest of the app, so a single failure must not abort boot() and take
   // the deep-link branch below down with it: the PC mirror window's title
-  // marker + terminal connect depend on reaching it (issue #371).
+  // marker + terminal connect depend on reaching it.
   const safe = function (fn) { return fn().catch(function (exc) {
     console.warn('boot: non-critical fetch failed', exc);
   }); };
-  // The header's CPU reading (#65) fills alongside the rest of boot.
+  // The header's CPU reading fills alongside the rest of boot.
   const load = safe(fetchSystemLoad);
   await safe(fetchAgents);
   await safe(fetchApps);
@@ -206,7 +205,7 @@ async function boot() {
   await safe(fetchStatus);
   await safe(fetchVersion);
   await safe(fetchWebauthnStatus);
-  // Git flags fill without a tap (#496): one fetch at boot, then the slow
+  // Git flags fill without a tap: one fetch at boot, then the slow
   // poll below keeps them current while a git-reading tab is visible.
   await safe(function () { return refreshGitStatus({ quiet: true }); });
 
@@ -217,7 +216,7 @@ async function boot() {
     });
     openTerminal(found || { session_id: deepLinkSid, name: deepLinkSid });
   } else {
-    // ?board=<sid> (issue #301): a Slack ping lands on that session's
+    // ?board=<sid>: a Slack ping lands on that session's
     // Board card, drawer open. Mutually exclusive with ?terminal= by
     // construction (each link carries one param).
     const boardSid = consumeUrlParam('board');
@@ -256,7 +255,7 @@ async function boot() {
     }, SYSTEM_LOAD_POLL_MS);
   });
   setInterval(function () {
-    // Always-on git flags (#496): refresh only while a tab that shows them
+    // Always-on git flags: refresh only while a tab that shows them
     // is visible (Coding tiles / Board backlog) and the page is foreground —
     // a backgrounded PWA must not keep spawning git subprocesses.
     if (document.hidden) return;
