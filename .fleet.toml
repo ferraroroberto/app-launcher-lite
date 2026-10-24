@@ -86,7 +86,7 @@ baseline = ".comment-ratchet-baseline.json"
 
 # [shot_baseline] -- the scaffold's screenshot baseline. The last stage of
 # scripts/verify-before-ship.ps1 runs scripts/shot_baseline.py, which compares the
-# PNGs tests/e2e/test_screen_shots.py recaptures (the five work tabs at phone and
+# PNGs tests/e2e/screens/test_screen_shots.py recaptures (the five work tabs at phone and
 # desktop width, light and dark; fictional fixture data, Chromium only) with the ones
 # committed under `shots_dir`, fails on a visible change and restores the tree.
 # `capture` is the argv after the interpreter. Contract and re-baseline steps:
@@ -94,7 +94,7 @@ baseline = ".comment-ratchet-baseline.json"
 [shot_baseline]
 enabled   = true
 shots_dir = "tests/e2e/shots"
-capture   = ["-m", "pytest", "tests/e2e/test_screen_shots.py", "-q", "-p", "no:cacheprovider"]
+capture   = ["-m", "pytest", "tests/e2e/screens/test_screen_shots.py", "-q", "-p", "no:cacheprovider"]
 
 [[design.accepted]]
 check  = "vendored-tokens"

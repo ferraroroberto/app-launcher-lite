@@ -22,7 +22,7 @@ from tests.e2e._shot import PINNED_NOW, shot, variant_page, variants
 
 pytestmark = pytest.mark.smoke
 
-SHOTS_DIR = Path(__file__).resolve().parent / "shots"
+SHOTS_DIR = Path(__file__).resolve().parents[1] / "shots"
 NOW = int(PINNED_NOW.timestamp())
 STAMP = "2026-01-15T08:50:00Z"
 

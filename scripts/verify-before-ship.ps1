@@ -210,7 +210,7 @@ try {
                 # The vendored script spawns git without setting this itself.
                 $env:GIT_OPTIONAL_LOCKS = "0"
                 try {
-                    if (@("tests/e2e", "tests/e2e/test_screen_shots.py") -contains $e2eTarget) {
+                    if (@("tests/e2e", "tests/e2e/screens/test_screen_shots.py") -contains $e2eTarget) {
                         $since = $shotSince.ToString([Globalization.CultureInfo]::InvariantCulture)
                         Phase "shot baseline (compare)..."
                         & $python scripts/shot_baseline.py --check-tree --since $since
