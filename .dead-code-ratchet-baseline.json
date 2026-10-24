@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "entries": [
+    {"key": "tests/test_jobs.py", "names": ["TestChainValidation._two_jobs"]}
+  ]
+}

@@ -116,6 +116,16 @@ try {
     & $python -m scripts.doc_refs_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "doc refs ratchet failed or NOT CONFIRMED: a doc names a path, module, link or port that does not exist, git or a doc could not be read, or a baseline problem; see the output above and .doc-refs-ratchet-baseline.json." }
 
+    # Dead-code ratchet (scaffold docs/dead-code-ratchet.md): no new function, class or
+    # method that nothing in the tracked Python tree refers to, beyond
+    # .dead-code-ratchet-baseline.json. Whole tree, so never diff-routed: deleting the
+    # last caller in one file strands a definition in another. Same wrapper shape as the
+    # other ratchets: exit 3 (git unusable, or a .py file that cannot be read or parsed)
+    # is NOT CONFIRMED and fails.
+    Phase "dead code ratchet..."
+    & $python -m scripts.dead_code_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "dead code ratchet failed or NOT CONFIRMED: a function, class or method nothing references, git or a Python file could not be read or parsed, or a baseline problem; see the output above and .dead-code-ratchet-baseline.json." }
+
     # Comment ratchet (scaffold docs/comment-ratchet.md): no file may carry more
     # issue references (#NNN) inside code comments than .comment-ratchet-baseline.json
     # records, and a new file may carry none. Whole tree, so never diff-routed. Same

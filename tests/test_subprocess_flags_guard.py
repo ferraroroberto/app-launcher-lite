@@ -75,6 +75,10 @@ _VENDORED_VERBATIM_EXEMPT = {
         "The scaffold's doc-refs ratchet, vendored byte-for-byte and declared in "
         ".fleet.toml [vendored]; its git spawns use a locally derived _NO_WINDOW."
     ),
+    "scripts/dead_code_ratchet.py": (
+        "The scaffold's dead-code ratchet, vendored byte-for-byte and declared in "
+        ".fleet.toml [vendored]; its git spawns use a locally derived _NO_WINDOW."
+    ),
     "scripts/shot_baseline.py": (
         "The scaffold's screenshot baseline, vendored byte-for-byte and declared in "
         ".fleet.toml [vendored]; its git and capture spawns use a locally derived "
