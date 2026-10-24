@@ -21,20 +21,21 @@ SCANNED_DIRS = ("src", "app", "scripts")
 ALLOWED = {
     "src/git_run.py", "scripts/classify_e2e.py", "src/build_info.py",
     "scripts/docs_ratchet.py", "scripts/structure_ratchet.py", "scripts/comment_ratchet.py",
-    "scripts/instruction_ratchet.py", "scripts/shot_baseline.py",
+    "scripts/instruction_ratchet.py", "scripts/doc_refs_ratchet.py", "scripts/shot_baseline.py",
 }
 
 #: Allowlisted files that are the scaffold's verbatim copy and so cannot route
 #: through ``run_git`` (a byte-identical copy must stay self-contained). Their
 #: one spawn is a read-only ``rev-parse`` (build_info) or ``ls-files``
-#: (docs_ratchet, structure_ratchet, comment_ratchet and instruction_ratchet, which also set
-#: ``GIT_OPTIONAL_LOCKS=0`` inline). ``shot_baseline`` reads ``ls-files``/``show``/``diff --name-only`` and
+#: (docs_ratchet, structure_ratchet, comment_ratchet, instruction_ratchet and doc_refs_ratchet,
+#: which also set ``GIT_OPTIONAL_LOCKS=0`` inline). ``shot_baseline`` reads ``ls-files``/``show``/``diff --name-only`` and
 #: restores rewritten shots with ``checkout --``; it sets no env itself, so the
 #: pre-ship gate exports ``GIT_OPTIONAL_LOCKS=0`` around the stage that runs it.
 #: Each must be declared in ``.fleet.toml`` ``[vendored]``.
 VENDORED_VERBATIM = {
     "src/build_info.py", "scripts/docs_ratchet.py", "scripts/structure_ratchet.py",
-    "scripts/comment_ratchet.py", "scripts/instruction_ratchet.py", "scripts/shot_baseline.py",
+    "scripts/comment_ratchet.py", "scripts/instruction_ratchet.py", "scripts/doc_refs_ratchet.py",
+    "scripts/shot_baseline.py",
 }
 
 
