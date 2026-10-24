@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from src import api_tokens
 
 
@@ -114,18 +112,3 @@ class TestConstantTimeEquals:
         assert api_tokens.constant_time_equals("contraseña", "contraseña")
         assert not api_tokens.constant_time_equals("contraseña", "contrasena")
         assert not api_tokens.constant_time_equals("ö", "o")
-
-
-def test_no_raw_compare_digest_outside_the_helper():
-    """Structural guard: every secret comparison goes through
-    ``constant_time_equals`` — a raw ``hmac.compare_digest`` on ``str`` raises
-    on non-ASCII input."""
-    root = Path(__file__).resolve().parent.parent
-    offenders = [
-        path.relative_to(root).as_posix()
-        for folder in ("src", "app")
-        for path in (root / folder).rglob("*.py")
-        if "hmac.compare_digest(" in path.read_text(encoding="utf-8")
-        and path.name != "api_tokens.py"
-    ]
-    assert offenders == []

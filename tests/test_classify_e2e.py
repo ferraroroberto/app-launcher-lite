@@ -60,6 +60,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
         (".instruction-ratchet-baseline.json", Category.NONE),
         (".doc-refs-ratchet-baseline.json", Category.NONE),
         (".dead-code-ratchet-baseline.json", Category.NONE),
+        (".conventions-ratchet-baseline.json", Category.NONE),
         ("tray.bat", Category.NONE),
         # unrecognized -> fail-safe FULL
         ("some/weird/new_dir/thing.xyz", Category.FULL),

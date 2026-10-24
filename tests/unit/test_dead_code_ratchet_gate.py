@@ -31,7 +31,7 @@ def test_the_gate_runs_the_wrapper_once_right_after_the_doc_refs_ratchet() -> No
     assert stages.count("scripts.dead_code_ratchet_gate") == 1
     at = stages.index("scripts.dead_code_ratchet_gate")
     assert stages[at - 1] == "scripts.doc_refs_ratchet_gate"
-    assert stages[at + 1] == "scripts.comment_ratchet_gate"
+    assert stages[at + 1] == "scripts.conventions_ratchet_gate"
 
 
 def test_the_ratchet_is_enabled_with_a_baseline_and_a_vendored_script() -> None:

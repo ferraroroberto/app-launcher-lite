@@ -2,9 +2,11 @@
 #
 # Runs the full validation pipeline locally before a change is declared
 # "done": byte-compile, the non-e2e pytest suite, the static ratchet (no new
-# duplicate block / unused import beyond the committed baseline), the docs
+# duplicate block / unused import / likely bug or security finding beyond the
+# committed baseline), the docs
 # ratchet (no new history marker, README within its size budget), the structure
 # ratchet (no file/function/directory growth, root layout matches the shape), the
+# conventions ratchet (no fleet-convention rule count above the baseline), the
 # comment ratchet (no more issue references in code comments than the baseline),
 # then the Playwright e2e suite (Chromium — this app is Android-only) against a disposable
 # webapp the script boots itself on a free port, then the screenshot baseline
@@ -70,7 +72,8 @@ try {
     if ($LASTEXITCODE -ne 0) { Fail "non-e2e pytest suite failed." }
 
     # Static ratchet (scaffold docs/static-ratchet.md): no new duplicate block
-    # (jscpd via npx) or unused import/variable (ruff F401,F841) beyond
+    # (jscpd via npx), unused import/variable (ruff F401,F841) or likely bug /
+    # security finding (curated ruff B and S rules, S113 strict) beyond
     # .static-ratchet-baseline.json. Whole tree, so never diff-routed. Runs
     # through the wrapper, which fails exit 3 (a detector could not run) as
     # NOT CONFIRMED instead of letting it read as a pass.
@@ -125,6 +128,16 @@ try {
     Phase "dead code ratchet..."
     & $python -m scripts.dead_code_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "dead code ratchet failed or NOT CONFIRMED: a function, class or method nothing references, git or a Python file could not be read or parsed, or a baseline problem; see the output above and .dead-code-ratchet-baseline.json." }
+
+    # Conventions ratchet (scaffold docs/conventions-ratchet.md): fleet conventions held
+    # as ast rules (no-window, logging-not-print, no-drive-path, secret-compare,
+    # git-wrapper); no rule's per-file count may rise above
+    # .conventions-ratchet-baseline.json. Whole tree, so never diff-routed: a rule added
+    # to `rules` must see every file. Same wrapper shape as the other ratchets: exit 3
+    # (git unusable, or a .py file that cannot be read or parsed) is NOT CONFIRMED and fails.
+    Phase "conventions ratchet..."
+    & $python -m scripts.conventions_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "conventions ratchet failed or NOT CONFIRMED: a convention rule's count rose above its baseline, git or a Python file could not be read or parsed, or a baseline problem; see the output above and .conventions-ratchet-baseline.json." }
 
     # Comment ratchet (scaffold docs/comment-ratchet.md): no file may carry more
     # issue references (#NNN) inside code comments than .comment-ratchet-baseline.json
