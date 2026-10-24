@@ -54,6 +54,7 @@ import requests
 from playwright.sync_api import BrowserContext, Error as PlaywrightError, Page
 
 from src.scanner import dir_ignored
+from tests.e2e._shot import CHROMIUM_CAPTURE_ARGS
 
 logger = logging.getLogger(__name__)
 
@@ -588,6 +589,19 @@ def browser_context_args(
         # stand-in this used to be (issue #6).
         args = {**args, **playwright.devices["Pixel 8 Pro"]}
     return args
+
+
+@pytest.fixture(scope="session")
+def browser_type_launch_args(browser_type_launch_args: dict) -> dict:
+    """Accept the loopback self-signed cert for every context, and rasterise each frame whole.
+
+    The screenshot baseline opens its own contexts (``tests/e2e/_shot.py``), which
+    do not inherit ``browser_context_args``; the switch lets them load the
+    disposable webapp's HTTPS. ``CHROMIUM_CAPTURE_ARGS`` keeps one DOM painting
+    one set of pixels.
+    """
+    extra = list(browser_type_launch_args.get("args") or [])
+    return {**browser_type_launch_args, "args": extra + ["--ignore-certificate-errors", *CHROMIUM_CAPTURE_ARGS]}
 
 
 # Bound the default Playwright action + navigation timeout (issue #186).

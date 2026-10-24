@@ -128,6 +128,11 @@ def _classify_one(path: str) -> tuple[Category, str]:
     if path == "tests/conftest.py":
         return Category.FULL, "shared-conftest"
 
+    # The screenshot comparison is proven by a browser run, so it is a browser
+    # surface despite living under scripts/. Must precede the scripts/ rule.
+    if path == "scripts/shot_baseline.py":
+        return Category.FULL, "shot-baseline"
+
     # --- things with no browser impact -> NONE ------------------------------
     #   backend Python off the session-host path; non-e2e tests; docs; scripts;
     #   config; CI yaml; repo meta files.
