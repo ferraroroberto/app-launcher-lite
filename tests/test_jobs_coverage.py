@@ -306,11 +306,24 @@ class TestSchtasksStateParsing:
         assert jobs_schtasks_mod.registered_task_states() is None
         jobs_schtasks_mod.invalidate_next_run_cache()
 
-    def test_next_run_view_still_matches_legacy_shape(self):
-        out = jobs_schtasks_mod._parse_bulk_query(
-            "TaskName: \\AppLauncher\\a\nNext Run Time: 2026-08-02 09:00:00\n\n"
+    def test_next_run_view_matches_cached_bulk_snapshot(self, monkeypatch):
+        jobs_schtasks_mod.invalidate_next_run_cache()
+        monkeypatch.setattr(
+            jobs_schtasks_mod,
+            "_run_schtasks",
+            lambda argv: SimpleNamespace(
+                returncode=0,
+                stdout=(
+                    "TaskName: \\AppLauncher\\a\n"
+                    "Next Run Time: 2026-08-02 09:00:00\n\n"
+                ),
+                stderr="",
+            ),
         )
-        assert out == {"\\AppLauncher\\a": "2026-08-02 09:00:00"}
+        assert jobs_schtasks_mod._cached_bulk_next_runs() == {
+            "\\AppLauncher\\a": "2026-08-02 09:00:00"
+        }
+        jobs_schtasks_mod.invalidate_next_run_cache()
 
 
 # -------------------------------------------------------------- alerting

@@ -64,7 +64,6 @@ from src.jobs_queue import (
     mutex_collision,
     peek_mutex_queue,
     pop_mutex_entry,
-    remove_queue_entry,
 )
 from src.jobs_coverage import (
     coverage_for_job,
@@ -135,7 +134,6 @@ __all__ = [
     "enqueue_mutex",
     "pop_mutex_entry",
     "peek_mutex_queue",
-    "remove_queue_entry",
     "mutex_collision",
     "dispatch_chain_run",
     "drain_mutex_queue",

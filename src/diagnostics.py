@@ -1,4 +1,4 @@
-"""Runtime diagnostics — log capture and port-owner introspection.
+"""Runtime diagnostics — log capture and listening-port introspection.
 
 Two pieces, both pure data (no UI imports):
 
@@ -6,8 +6,9 @@ Two pieces, both pure data (no UI imports):
   memory so a UI surface can show what the app has been doing without
   parsing files. Attached once to the root logger from ``cli.main``.
 
-- ``port_owner`` answers "who is actually serving on port N?" using
-  psutil. Used by the smart-kill endpoint.
+- ``list_app_listeners`` answers "which app servers are actually
+  listening, and on what ports?" using psutil. Used by the smart-kill
+  endpoint.
 """
 
 from __future__ import annotations
@@ -103,52 +104,6 @@ class PortOwner:
 
     def cmdline_str(self) -> str:
         return " ".join(self.cmdline) if self.cmdline else ""
-
-
-def port_owner(port: int) -> Optional[PortOwner]:
-    """Best-effort lookup of the process LISTENing on ``port``.
-
-    Returns ``None`` when psutil is unavailable, the lookup is denied,
-    or no listener is found.
-    """
-    if psutil is None:
-        return None
-
-    try:
-        connections = psutil.net_connections(kind="inet")
-    except (psutil.AccessDenied, PermissionError, OSError) as exc:
-        logger.debug(f"port_owner: net_connections denied ({exc})")
-        return None
-
-    for conn in connections:
-        try:
-            if not conn.laddr or conn.laddr.port != port:
-                continue
-            if conn.status != psutil.CONN_LISTEN:
-                continue
-            if conn.pid is None:
-                continue
-        except AttributeError:
-            continue
-
-        owner = PortOwner(pid=int(conn.pid), port=port)
-        try:
-            proc = psutil.Process(conn.pid)
-            owner.name = proc.name() or ""
-            try:
-                owner.exe = proc.exe() or ""
-            except (psutil.AccessDenied, FileNotFoundError):
-                owner.exe = ""
-            try:
-                owner.cmdline = list(proc.cmdline() or [])
-            except (psutil.AccessDenied, FileNotFoundError):
-                owner.cmdline = []
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
-
-        return owner
-
-    return None
 
 
 def find_pids_on_port(port: int) -> List[int]:
@@ -248,7 +203,7 @@ _LOOPBACK_PREFIXES = ("127.", "::1")
 def list_app_listeners() -> List[PortOwner]:
     """Enumerate every LISTEN socket owned by an app-server-like process.
 
-    Unlike :func:`port_owner` (one fixed port) this walks all listeners
+    This walks all listeners
     and keeps the ones whose owning process looks like a Streamlit /
     FastAPI app, so the smart-kill panel finds apps wherever they bound.
     """
