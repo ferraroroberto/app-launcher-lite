@@ -67,6 +67,11 @@ _VENDORED_VERBATIM_EXEMPT = {
         "The scaffold's comment ratchet, vendored byte-for-byte and declared in "
         ".fleet.toml [vendored]; its git spawn uses a locally derived _NO_WINDOW."
     ),
+    "scripts/shot_baseline.py": (
+        "The scaffold's screenshot baseline, vendored byte-for-byte and declared in "
+        ".fleet.toml [vendored]; its git and capture spawns use a locally derived "
+        "_NO_WINDOW."
+    ),
 }
 _VENDORED_NO_WINDOW = "_NO_WINDOW"
 

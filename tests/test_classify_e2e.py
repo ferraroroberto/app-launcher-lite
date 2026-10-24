@@ -38,6 +38,8 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
         ("src/session_host_pty.py", Category.FULL),  # future split, not on disk yet
         ("src/session_client.py", Category.FULL),
         ("src/launcher.py", Category.FULL),
+        ("scripts/shot_baseline.py", Category.FULL),  # its proof is a browser run
+        ("tests/e2e/shots/coding-phone-light.png", Category.FULL),
         ("launcher.py", Category.FULL),
         ("tests/e2e/test_board_tab.py", Category.FULL),
         ("tests/conftest.py", Category.FULL),
