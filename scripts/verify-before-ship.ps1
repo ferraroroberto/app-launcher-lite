@@ -3,8 +3,9 @@
 # Runs the full validation pipeline locally before a change is declared
 # "done": byte-compile, the non-e2e pytest suite, the static ratchet (no new
 # duplicate block / unused import beyond the committed baseline), the docs
-# ratchet (no new history marker, README within its size budget), then the Playwright e2e
-# suite (Chromium — this app is Android-only, issue #6) against a disposable
+# ratchet (no new history marker, README within its size budget), the structure
+# ratchet (no file/function/directory growth, root layout matches the shape),
+# then the Playwright e2e suite (Chromium — this app is Android-only, issue #6) against a disposable
 # webapp the script boots itself on a free port.
 #
 # Usage:
@@ -83,6 +84,16 @@ try {
     Phase "docs ratchet..."
     & $python -m scripts.docs_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "docs ratchet failed or NOT CONFIRMED: a new history marker, a README past its size budget, a file that could not be read, or a baseline problem; see the output above and .docs-ratchet-baseline.json." }
+
+    # Structure ratchet (scaffold docs/structure-ratchet.md): no file past 1,000
+    # lines, function past 100, directory past 40 modules or src->app import
+    # beyond .structure-ratchet-baseline.json, and root folders matching the
+    # shape declared in .fleet.toml (docs/layout.md). Whole tree, so never
+    # diff-routed. Same wrapper shape as the other ratchets: exit 3 (part of the
+    # tree could not be measured) is NOT CONFIRMED and fails.
+    Phase "structure ratchet..."
+    & $python -m scripts.structure_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "structure ratchet failed or NOT CONFIRMED: a file, function or directory grew past its baseline, a new offender, a root folder outside the declared shape, a file that could not be measured, or a baseline problem; see the output above, docs/layout.md and .structure-ratchet-baseline.json." }
 
     # Diff-proportionate e2e routing (issue #568). Classify the branch's
     # changed files vs main and run an e2e slice proportionate to the diff:

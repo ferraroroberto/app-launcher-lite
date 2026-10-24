@@ -7,6 +7,12 @@ icon         = "🚀"
 port         = ":8465"
 display_name = "App Launcher Lite"
 description  = "Copilot + GitLab lite fork of app-launcher: the phone-first launcher hub."
+# Root layout (scripts/structure_ratchet.py): the webapp-tray preset lists app, src,
+# tests, docs, scripts, data, brand, assets and config; `webapp/` is the one declared
+# extra root: the tray-owned webapp's runtime-state folder, which also tracks two
+# sample files. Why: docs/layout.md.
+shape        = "webapp-tray"
+extra_roots  = ["webapp"]
 
 [vendored]
 switch = { src = "app/webapp/static/_vendored/switch", sha = "7e1433c70cac1bdcdbd160e874d3f486ba9e2a08", dest = "app/webapp/static/_vendored/switch" }
@@ -23,6 +29,7 @@ notify = { src = "src/notify", sha = "aa820f1215151087588433f290cd2ba55b34658d",
 build_info = { src = "src/build_info.py", sha = "c9e54e917fd3cbc96011d6c09f9d363af460b205", dest = "src/build_info.py" }
 static_ratchet = { src = "scripts/static_ratchet.py", sha = "f0e6f5449ecf64c9b188ed394c2a9fd8ff678406", dest = "scripts/static_ratchet.py" }
 docs_ratchet = { src = "scripts/docs_ratchet.py", sha = "fdb750461997c4a13eacea8091f115ff12bba564", dest = "scripts/docs_ratchet.py" }
+structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "84d2b12ab416551762e4a615e4a706df91cea69f", dest = "scripts/structure_ratchet.py" }
 
 # [static_ratchet] -- the scaffold's baseline-and-ratchet static analysis. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/static_ratchet_gate.py, which wraps
@@ -47,6 +54,19 @@ exclude  = ["**/_vendored/**"]
 [docs_ratchet]
 enabled  = true
 baseline = ".docs-ratchet-baseline.json"
+
+# [structure_ratchet] -- the scaffold's baseline-and-ratchet structure check. The gate
+# runs scripts/structure_ratchet.py through scripts/structure_ratchet_gate.py: a file
+# past 1,000 lines, a Python/JS function past 100, a directory past 40 modules or a
+# src -> app import that is not in .structure-ratchet-baseline.json (or that grew past
+# its baselined size) fails, and so does a root folder outside the `shape` above. Every
+# offender is baselined at its size today; nothing is excluded to shrink the baseline
+# (vendored copies are excluded by the script itself). Exit 3 (part of the tree could
+# not be measured) fails as NOT CONFIRMED. Procedure + limits: project-scaffolding
+# docs/structure-ratchet.md.
+[structure_ratchet]
+enabled  = true
+baseline = ".structure-ratchet-baseline.json"
 
 [[design.accepted]]
 check  = "vendored-tokens"
