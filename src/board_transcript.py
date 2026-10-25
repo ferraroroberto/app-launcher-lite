@@ -517,6 +517,21 @@ def _pending_background_dispatch_launched_at(transcript_path: Any) -> Optional[d
     lines, truncated = _tail_lines(transcript_path, _EXCHANGE_TAIL_BYTES)
     if truncated and lines:
         lines = lines[1:]
+    return _earliest_outstanding_stamp(*_scan_dispatch_ids(lines))
+
+
+_DispatchScan = Tuple[
+    Dict[str, Optional[datetime]],
+    "set[str]",
+    Dict[str, Optional[datetime]],
+    "set[str]",
+    Optional[int],
+]
+
+
+def _scan_dispatch_ids(lines: List[str]) -> _DispatchScan:
+    """Walk the tail once: launched/completed ids under both schemes, plus the
+    last ``turn_duration`` line's harness-native pending-dispatch count."""
     launched: Dict[str, Optional[datetime]] = {}
     completed: set = set()
     bash_launched: Dict[str, Optional[datetime]] = {}
@@ -555,6 +570,20 @@ def _pending_background_dispatch_launched_at(transcript_path: Any) -> Optional[d
             continue
         completed.update(_notified_background_ids(obj))
         bash_completed.update(_notified_bash_dispatch_ids(obj))
+    return (
+        launched, completed, bash_launched, bash_completed,
+        last_turn_pending_agent_count,
+    )
+
+
+def _earliest_outstanding_stamp(
+    launched: Dict[str, Optional[datetime]],
+    completed: "set[str]",
+    bash_launched: Dict[str, Optional[datetime]],
+    bash_completed: "set[str]",
+    last_turn_pending_agent_count: Optional[int],
+) -> Optional[datetime]:
+    """The earliest launch stamp still unresolved under either id scheme."""
     outstanding_stamps = [
         stamp for tid, stamp in launched.items() if tid not in completed
     ] + [

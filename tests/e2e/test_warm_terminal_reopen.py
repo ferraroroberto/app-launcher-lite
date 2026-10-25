@@ -63,6 +63,58 @@ _LIVE_MODULE = """
 """
 
 
+def _hide_overlay_and_inspect(page: Page) -> dict:
+    """Hide the overlay via the SPA module; report the stashed xterm and WS state."""
+    # Close the overlay — must stash, not dispose (#430): element stays in
+    # the DOM (hidden) and the WS stays OPEN.
+    page.evaluate(
+        "async () => (await import(("
+        + _LIVE_MODULE
+        + ")('terminal.js'))).hideTerminal()"
+    )
+    expect(page.locator("#terminalOverlay")).to_be_hidden()
+    return page.evaluate(
+        """() => {
+          const el = document.querySelector('#terminalHost .xterm');
+          return {
+            tag: el ? el.dataset.warm : null,
+            hidden: el ? el.style.display : null,
+            wsCount: window.__wsInstances.length,
+            wsState: window.__wsInstances[0].readyState,
+          };
+        }"""
+    )
+
+
+def _reopen_session_and_inspect(page: Page, sid: str) -> dict:
+    """Re-open the session via the SPA module; report the resumed xterm and WS state."""
+    # Re-open the same session: same element, same socket, no new WS.
+    page.evaluate(
+        """async (sid) => {
+          const live = """ + _LIVE_MODULE + """;
+          const term = await import(live('terminal.js'));
+          const { state } = await import(live('state.js'));
+          const s = (state.sessions || []).find(
+            (x) => x.session_id === sid
+          ) || { session_id: sid, name: 'warm-reopen' };
+          await term.openTerminal(s);
+        }""",
+        sid,
+    )
+    expect(page.locator("#terminalOverlay")).to_be_visible()
+    return page.evaluate(
+        """() => {
+          const el = document.querySelector('#terminalHost .xterm');
+          return {
+            tag: el ? el.dataset.warm : null,
+            display: el ? el.style.display : null,
+            wsCount: window.__wsInstances.length,
+            wsState: window.__wsInstances.at(-1).readyState,
+          };
+        }"""
+    )
+
+
 def test_warm_reopen_reuses_terminal_and_ws(
     authed_page: Page,
     base_url: str,
@@ -87,25 +139,7 @@ def test_warm_reopen_reuses_terminal_and_ws(
         "document.querySelector('#terminalHost .xterm').dataset.warm = 'tagged'"
     )
 
-    # Close the overlay — must stash, not dispose (#430): element stays in
-    # the DOM (hidden) and the WS stays OPEN.
-    authed_page.evaluate(
-        "async () => (await import(("
-        + _LIVE_MODULE
-        + ")('terminal.js'))).hideTerminal()"
-    )
-    expect(authed_page.locator("#terminalOverlay")).to_be_hidden()
-    kept = authed_page.evaluate(
-        """() => {
-          const el = document.querySelector('#terminalHost .xterm');
-          return {
-            tag: el ? el.dataset.warm : null,
-            hidden: el ? el.style.display : null,
-            wsCount: window.__wsInstances.length,
-            wsState: window.__wsInstances[0].readyState,
-          };
-        }"""
-    )
+    kept = _hide_overlay_and_inspect(authed_page)
     assert kept["tag"] == "tagged", (
         "hiding the overlay destroyed the xterm element — the warm cache "
         "(#430) is gone and every re-open will replay the transcript"
@@ -119,31 +153,7 @@ def test_warm_reopen_reuses_terminal_and_ws(
         f"count={kept['wsCount']} state={kept['wsState']}"
     )
 
-    # Re-open the same session: same element, same socket, no new WS.
-    authed_page.evaluate(
-        """async (sid) => {
-          const live = """ + _LIVE_MODULE + """;
-          const term = await import(live('terminal.js'));
-          const { state } = await import(live('state.js'));
-          const s = (state.sessions || []).find(
-            (x) => x.session_id === sid
-          ) || { session_id: sid, name: 'warm-reopen' };
-          await term.openTerminal(s);
-        }""",
-        sid,
-    )
-    expect(authed_page.locator("#terminalOverlay")).to_be_visible()
-    reopened = authed_page.evaluate(
-        """() => {
-          const el = document.querySelector('#terminalHost .xterm');
-          return {
-            tag: el ? el.dataset.warm : null,
-            display: el ? el.style.display : null,
-            wsCount: window.__wsInstances.length,
-            wsState: window.__wsInstances.at(-1).readyState,
-          };
-        }"""
-    )
+    reopened = _reopen_session_and_inspect(authed_page, sid)
     assert reopened["tag"] == "tagged", (
         "re-open built a fresh xterm instead of resuming the cached one — "
         "the re-subscribe fires the server repaint nudge the cache exists "

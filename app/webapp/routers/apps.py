@@ -168,18 +168,43 @@ async def delete_app(app_id: str) -> Dict[str, Any]:
     return {"removed": removed.id}
 
 
-@router.post("/api/apps/{app_id}/launch")
-async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
-    cfg: WebappConfig = request.app.state.webapp_config
-    registry = load_registry()
-    # coding rows aren't persisted — resolve them against the live
-    # directory scan first; bat-based rows come from the registry.
-    entry = next(
-        (e for e in _coding_entries(cfg) if e.id == app_id), None
-    ) or get_by_id(registry, app_id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail=f"unknown app {app_id}")
+async def _launch_remote_session(
+    entry: AppEntry, cfg: WebappConfig, request: Request, flags: str, agent: str
+) -> Dict[str, Any]:
+    """Spawn a detached console agent session the session-host only tracks."""
+    session = await spawn_session_or_400(
+        spawn_agent_session,
+        Path(entry.project_dir),
+        entry.name,
+        flags,
+        cfg.session_host_port,
+        "remote",
+        agent,
+    )
+    sid = str(session.get("session_id") or "")
+    await audit_off_loop(
+        audit.audit_event,
+        "remote_launch",
+        session=sid,
+        agent=agent,
+        name=entry.name,
+        project=entry.project_dir,
+        client=client_ip(request),
+    )
+    return {
+        "launched": entry.id,
+        "name": entry.name,
+        "kind": entry.kind,
+        "agent": agent,
+        "mode": "remote",
+        "session": session,
+    }
 
+
+async def _launch_coding_entry(
+    entry: AppEntry, cfg: WebappConfig, request: Request
+) -> Dict[str, Any]:
+    """Spawn a Coding-tab row as a PTY or detached-console agent session."""
     # coding (the Coding tab): two launch modes (chosen by the
     # request body's `mode`) and one of the registered coding agents
     # (`agent`). "pty" (default) = a launcher-owned PTY session streamed
@@ -187,109 +212,84 @@ async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
     # on the PC the session-host only tracks (listed + killable but not
     # streamed). `agent` must be a key in `agents.AGENTS` (see
     # `src/agents.py` for the full set).
-    if entry.kind == KIND_CODING:
-        if not entry.project_dir:
-            raise HTTPException(
-                status_code=400,
-                detail=f"coding entry {entry.id} has no project_dir",
-            )
-        body = await maybe_json(request)
-        mode = str(body.get("mode") or "pty").strip().lower()
-        agent = str(body.get("agent") or agents.DEFAULT_AGENT).strip().lower()
-        # Resume: reopen the agent's own native session picker.
-        # It swaps the normal flags for the agent's resume invocation but
-        # honours the requested `mode`: with Detached on, the
-        # picker renders in the detached console window; with Detached off it
-        # streams to the phone over a PTY. Resume no longer forces a PTY.
-        resume = bool(body.get("resume"))
-        # Phone's real terminal size: a pty session spawns at
-        # these dimensions so a ratatui TUI's first frame isn't cut. Absent
-        # (older client, or remote mode) → the legacy 40×120 default.
-        rows = int(body.get("rows") or 40)
-        cols = int(body.get("cols") or 120)
-        if agent not in agents.AGENTS:
-            raise HTTPException(
-                status_code=400, detail=f"unknown agent: {agent}"
-            )
-        # Server-side install check, as defence-in-depth behind the Coding
-        # tab's already-disabled button — a clean 400 "copilot CLI not
-        # found" beats a dead PTY. Applies to the default agent too: there
-        # is no unguarded core agent in the lite fork.
-        if not agents.is_installed(agent):
-            raise HTTPException(
-                status_code=400,
-                detail=f"{agents.AGENTS[agent].label} is not installed",
-            )
-        # Copilot's flags: the config-driven model / autopilot / context /
-        # effort knobs plus the allow-all toggle.
-        flag_builders = {
-            "copilot": build_copilot_flags,
-        }
-        if resume:
-            # Swap the normal flags for the agent's resume invocation; the
-            # requested `mode` decides where its picker renders — a detached
-            # console (mode="remote") or a streamed PTY.
-            flags = build_resume_flags(cfg, agent)
-        else:
-            flags = flag_builders[agent](cfg)
-
-        if mode == "remote":
-            session = await spawn_session_or_400(
-                spawn_agent_session,
-                Path(entry.project_dir),
-                entry.name,
-                flags,
-                cfg.session_host_port,
-                "remote",
-                agent,
-            )
-            sid = str(session.get("session_id") or "")
-            await audit_off_loop(
-                audit.audit_event,
-                "remote_launch",
-                session=sid,
-                agent=agent,
-                name=entry.name,
-                project=entry.project_dir,
-                client=client_ip(request),
-            )
-            return {
-                "launched": entry.id,
-                "name": entry.name,
-                "kind": entry.kind,
-                "agent": agent,
-                "mode": "remote",
-                "session": session,
-            }
-
-        session = await spawn_session_or_400(
-            spawn_agent_session,
-            Path(entry.project_dir),
-            entry.name,
-            flags,
-            cfg.session_host_port,
-            "pty",
-            agent,
-            rows,
-            cols,
-            history_lines=cfg.terminal_history_lines,
+    if not entry.project_dir:
+        raise HTTPException(
+            status_code=400,
+            detail=f"coding entry {entry.id} has no project_dir",
         )
-        sid = str(session.get("session_id") or "")
-        await audit_session_start_and_maybe_mirror(
-            cfg, request, body,
-            sid=sid, agent=agent, name=entry.name, project=entry.project_dir,
-            resume=resume, audit_mod=audit, mirror_fn=open_local_terminal_window,
+    body = await maybe_json(request)
+    mode = str(body.get("mode") or "pty").strip().lower()
+    agent = str(body.get("agent") or agents.DEFAULT_AGENT).strip().lower()
+    # Resume: reopen the agent's own native session picker.
+    # It swaps the normal flags for the agent's resume invocation but
+    # honours the requested `mode`: with Detached on, the
+    # picker renders in the detached console window; with Detached off it
+    # streams to the phone over a PTY. Resume no longer forces a PTY.
+    resume = bool(body.get("resume"))
+    # Phone's real terminal size: a pty session spawns at
+    # these dimensions so a ratatui TUI's first frame isn't cut. Absent
+    # (older client, or remote mode) → the legacy 40×120 default.
+    rows = int(body.get("rows") or 40)
+    cols = int(body.get("cols") or 120)
+    if agent not in agents.AGENTS:
+        raise HTTPException(
+            status_code=400, detail=f"unknown agent: {agent}"
         )
-        return {
-            "launched": entry.id,
-            "name": entry.name,
-            "kind": entry.kind,
-            "agent": agent,
-            "mode": "pty",
-            "session": session,
-        }
+    # Server-side install check, as defence-in-depth behind the Coding
+    # tab's already-disabled button — a clean 400 "copilot CLI not
+    # found" beats a dead PTY. Applies to the default agent too: there
+    # is no unguarded core agent in the lite fork.
+    if not agents.is_installed(agent):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{agents.AGENTS[agent].label} is not installed",
+        )
+    # Copilot's flags: the config-driven model / autopilot / context /
+    # effort knobs plus the allow-all toggle.
+    flag_builders = {
+        "copilot": build_copilot_flags,
+    }
+    if resume:
+        # Swap the normal flags for the agent's resume invocation; the
+        # requested `mode` decides where its picker renders — a detached
+        # console (mode="remote") or a streamed PTY.
+        flags = build_resume_flags(cfg, agent)
+    else:
+        flags = flag_builders[agent](cfg)
 
-    # everything else: a fresh visible CMD window running the bat.
+    if mode == "remote":
+        return await _launch_remote_session(entry, cfg, request, flags, agent)
+
+    session = await spawn_session_or_400(
+        spawn_agent_session,
+        Path(entry.project_dir),
+        entry.name,
+        flags,
+        cfg.session_host_port,
+        "pty",
+        agent,
+        rows,
+        cols,
+        history_lines=cfg.terminal_history_lines,
+    )
+    sid = str(session.get("session_id") or "")
+    await audit_session_start_and_maybe_mirror(
+        cfg, request, body,
+        sid=sid, agent=agent, name=entry.name, project=entry.project_dir,
+        resume=resume, audit_mod=audit, mirror_fn=open_local_terminal_window,
+    )
+    return {
+        "launched": entry.id,
+        "name": entry.name,
+        "kind": entry.kind,
+        "agent": agent,
+        "mode": "pty",
+        "session": session,
+    }
+
+
+def _launch_bat_entry(entry: AppEntry) -> Dict[str, Any]:
+    """Run an Apps-tab row's bat in a fresh visible CMD window."""
     if not entry.bat_path:
         raise HTTPException(
             status_code=400, detail=f"app entry {entry.id} has no bat_path"
@@ -310,6 +310,22 @@ async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
     if entry.kind != KIND_TRAY:
         app_runtime.record_spawn(entry.id, entry.name, entry.kind, pid)
     return {"launched": entry.id, "name": entry.name, "kind": entry.kind}
+
+
+@router.post("/api/apps/{app_id}/launch")
+async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
+    cfg: WebappConfig = request.app.state.webapp_config
+    registry = load_registry()
+    # coding rows aren't persisted — resolve them against the live
+    # directory scan first; bat-based rows come from the registry.
+    entry = next(
+        (e for e in _coding_entries(cfg) if e.id == app_id), None
+    ) or get_by_id(registry, app_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"unknown app {app_id}")
+    if entry.kind == KIND_CODING:
+        return await _launch_coding_entry(entry, cfg, request)
+    return _launch_bat_entry(entry)
 
 
 @router.get("/api/apps/running")

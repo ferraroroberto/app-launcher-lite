@@ -146,19 +146,8 @@ def sample_webapp_config() -> dict:
     )
 
 
-@pytest.fixture
-def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
-    """Build a fresh launcher webapp wired to temp dirs + mocked deps.
-
-    Yields ``(client, app, overrides)``:
-      - ``client`` — fastapi.testclient.TestClient
-      - ``app`` — the FastAPI instance (so tests can mutate ``app.state``)
-      - ``overrides`` — dict of the mocks, so tests can configure return
-        values / assert call args.
-
-    Auth is disabled by default (``auth_token = ""``, ``auth_password = ""``).
-    Auth tests opt back in by setting these on ``app.state.webapp_config``.
-    """
+def _isolate_configs(tmp_path: Path, monkeypatch) -> dict:
+    """Redirect every on-disk config the app reads at startup into tmp_path."""
     # The two on-disk configs the app reads on startup. Point both at temp
     # paths so a stray real config can never affect the test.
     tmp_apps_root = tmp_path / "scan_root"
@@ -216,10 +205,18 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     from src import app_config as app_cfg_mod
     if hasattr(app_cfg_mod, "DEFAULT_CONFIG_PATH"):
         monkeypatch.setattr(app_cfg_mod, "DEFAULT_CONFIG_PATH", tmp_app_cfg)
+    return {
+        "tmp_apps_root": tmp_apps_root,
+        "tmp_projects_dir": tmp_projects_dir,
+        "tmp_webapp_cfg": tmp_webapp_cfg,
+        "tmp_registry": tmp_registry,
+        "tmp_jobs_cfg": tmp_jobs_cfg,
+        "tmp_jobs_runs": tmp_jobs_runs,
+    }
 
-    # Now import the server + routers. Important: import after monkeypatching
-    # the config paths, but before patching session_client / audit (which are
-    # module-level references inside each router that talks to them).
+
+def _mock_session_client(monkeypatch) -> MagicMock:
+    """Replace every router's session-host client with one shared mock."""
     from app.webapp import server as server_mod
     from app.webapp.routers import apps as apps_router
     from app.webapp.routers import board as board_router
@@ -254,20 +251,58 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     # module-level reference since the #691 split.
     monkeypatch.setattr(board_spawn_router, "session_client", session_mock)
     monkeypatch.setattr(misc_router, "session_client", session_mock)
+    return session_mock
+
+
+def _mock_audit(monkeypatch) -> MagicMock:
+    """Stub the audit writer in every router that imports it."""
+    from app.webapp.routers import apps as apps_router
+    from app.webapp.routers import board as board_router
+    from app.webapp.routers import desktop_screen as desktop_screen_router
+    from app.webapp.routers import sessions as sessions_router
+    from app.webapp.routers import team_os as team_os_router
+    from app.webapp.routers import webauthn as webauthn_router
 
     # Audit log writer — stub so no files land in webapp/sessions/ during
     # tests. The real audit module opens log files lazily. The `audit`
     # import lives in routers/apps.py, routers/sessions.py, and
     # routers/webauthn.py — patch all three.
     audit_mock = MagicMock()
-    from app.webapp.routers import desktop_screen as desktop_screen_router
-    from app.webapp.routers import webauthn as webauthn_router
     monkeypatch.setattr(apps_router, "audit", audit_mock)
     monkeypatch.setattr(desktop_screen_router, "audit", audit_mock)
     monkeypatch.setattr(sessions_router, "audit", audit_mock)
     monkeypatch.setattr(webauthn_router, "audit", audit_mock)
     monkeypatch.setattr(team_os_router, "audit", audit_mock)
     monkeypatch.setattr(board_router, "audit", audit_mock)
+    return audit_mock
+
+
+@pytest.fixture
+def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
+    """Build a fresh launcher webapp wired to temp dirs + mocked deps.
+
+    Yields ``(client, app, overrides)``:
+      - ``client`` — fastapi.testclient.TestClient
+      - ``app`` — the FastAPI instance (so tests can mutate ``app.state``)
+      - ``overrides`` — dict of the mocks, so tests can configure return
+        values / assert call args.
+
+    Auth is disabled by default (``auth_token = ""``, ``auth_password = ""``).
+    Auth tests opt back in by setting these on ``app.state.webapp_config``.
+    """
+    cfg_paths = _isolate_configs(tmp_path, monkeypatch)
+    tmp_apps_root = cfg_paths["tmp_apps_root"]
+    tmp_projects_dir = cfg_paths["tmp_projects_dir"]
+    tmp_webapp_cfg = cfg_paths["tmp_webapp_cfg"]
+    tmp_registry = cfg_paths["tmp_registry"]
+    tmp_jobs_cfg = cfg_paths["tmp_jobs_cfg"]
+    tmp_jobs_runs = cfg_paths["tmp_jobs_runs"]
+
+    # Import the server after the config paths are redirected and the routers
+    # are patched, so create_app() sees only the mocks.
+    session_mock = _mock_session_client(monkeypatch)
+    audit_mock = _mock_audit(monkeypatch)
+    from app.webapp import server as server_mod
 
     # WebAuthnGate doesn't touch disk until configured (rp_id + origin set)
     # so default tests are safe. We still stub it for the few endpoints that

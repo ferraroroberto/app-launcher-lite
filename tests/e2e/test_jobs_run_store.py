@@ -11,67 +11,68 @@ from playwright.sync_api import Page, expect
 pytestmark = pytest.mark.smoke
 
 
-def test_search_jump_artifact_link_and_pin_toggle(
-    authed_page: Page, base_url: str
-) -> None:
-    fake_job = {
-        "id": "demo",
-        "name": "Demo artifact job",
-        "target_kind": "python",
-        "schedule": {"type": "none"},
-        "schedule_chip": "",
-        "next_run": None,
-        "next_run_epoch": None,
-        "running": False,
-        "stuck": False,
-        "queue_depth": 0,
-        "run_count": 21,
-        "pinned_count": 1,
-        "last_run": {
-            "run_id": "r1",
-            "status": "success",
-            "started_at": "2026-07-16T09:00:00",
-            "duration_seconds": 2.5,
-        },
-        "stats": {
-            "p50": 2.5,
-            "p95": 3.0,
-            "success_rate_30d": 1.0,
-            "completed_count": 21,
-            "last7": [{"run_id": "r1", "status": "success"}],
-        },
-        "params": [],
-    }
-    fake_run = {
+_FAKE_JOB = {
+    "id": "demo",
+    "name": "Demo artifact job",
+    "target_kind": "python",
+    "schedule": {"type": "none"},
+    "schedule_chip": "",
+    "next_run": None,
+    "next_run_epoch": None,
+    "running": False,
+    "stuck": False,
+    "queue_depth": 0,
+    "run_count": 21,
+    "pinned_count": 1,
+    "last_run": {
         "run_id": "r1",
         "status": "success",
         "started_at": "2026-07-16T09:00:00",
-        "trigger": "manual",
-        "exit_code": 0,
-        "pinned": True,
+        "duration_seconds": 2.5,
+    },
+    "stats": {
+        "p50": 2.5,
+        "p95": 3.0,
+        "success_rate_30d": 1.0,
+        "completed_count": 21,
+        "last7": [{"run_id": "r1", "status": "success"}],
+    },
+    "params": [],
+}
+_FAKE_RUN = {
+    "run_id": "r1",
+    "status": "success",
+    "started_at": "2026-07-16T09:00:00",
+    "trigger": "manual",
+    "exit_code": 0,
+    "pinned": True,
+}
+_RUN_DETAIL = {
+    "run": {
+        **_FAKE_RUN,
+        "duration_seconds": 2.5,
+        "output_tail": "unique-needle\nreport complete\n",
+        "artifacts": [
+            {"name": "report.csv", "size": 42, "mtime": "2026-07-16T09:00:03"}
+        ],
+        "webhook_payload": None,
     }
-    detail = {
-        "run": {
-            **fake_run,
-            "duration_seconds": 2.5,
-            "output_tail": "unique-needle\nreport complete\n",
-            "artifacts": [
-                {"name": "report.csv", "size": 42, "mtime": "2026-07-16T09:00:03"}
-            ],
-            "webhook_payload": None,
-        }
-    }
+}
+
+
+def _mock_jobs_routes(page: Page) -> list[dict]:
+    """Route-mock the Jobs API; return the list collecting pin PUT payloads."""
     pin_payloads: list[dict] = []
 
-    authed_page.route(
+    page.route(
         re.compile(r".*/api/jobs(\?.*)?$"),
         lambda route: route.fulfill(
             status=200,
             content_type="application/json",
-            body=json.dumps({"jobs": [fake_job]}),
+            body=json.dumps({"jobs": [_FAKE_JOB]}),
         ),
     )
-    authed_page.route(
+    page.route(
         re.compile(r".*/api/jobs/runs/search.*"),
         lambda route: route.fulfill(
             status=200,
@@ -91,12 +92,12 @@ def test_search_jump_artifact_link_and_pin_toggle(
             ),
         ),
     )
-    authed_page.route(
+    page.route(
         re.compile(r".*/api/jobs/demo/runs$"),
         lambda route: route.fulfill(
             status=200,
             content_type="application/json",
-            body=json.dumps({"runs": [fake_run]}),
+            body=json.dumps({"runs": [_FAKE_RUN]}),
         ),
     )
 
@@ -107,14 +108,21 @@ def test_search_jump_artifact_link_and_pin_toggle(
             route.fulfill(
                 status=200,
                 content_type="application/json",
-                body=json.dumps({"run": {**fake_run, **payload}}),
+                body=json.dumps({"run": {**_FAKE_RUN, **payload}}),
             )
             return
         route.fulfill(
-            status=200, content_type="application/json", body=json.dumps(detail)
+            status=200, content_type="application/json", body=json.dumps(_RUN_DETAIL)
         )
 
-    authed_page.route(re.compile(r".*/api/jobs/demo/runs/r1$"), _run_detail)
+    page.route(re.compile(r".*/api/jobs/demo/runs/r1$"), _run_detail)
+    return pin_payloads
+
+
+def test_search_jump_artifact_link_and_pin_toggle(
+    authed_page: Page, base_url: str
+) -> None:
+    pin_payloads = _mock_jobs_routes(authed_page)
 
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     authed_page.locator("#tabJobs").click()
