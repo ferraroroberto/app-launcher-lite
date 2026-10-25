@@ -107,7 +107,7 @@ def test_mixed_static_and_js_routes_to_full() -> None:
 
 
 def test_backend_python_only_skips_browser() -> None:
-    r = classify(["src/board.py", "tests/test_board.py"])
+    r = classify(["src/board.py", "tests/unit/board/test_board_merge.py"])
     assert r.tier == "skip"
     assert r.pytest_target == ""
 
