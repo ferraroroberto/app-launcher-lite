@@ -10,7 +10,8 @@ import { apiFailToast, consumeUrlParam, jsonApi, toast, wireLoginForm, writeToke
 import { wireTabs } from './tabs.js';
 import { fetchConfig, patchConfig, wireCopilotOptions } from './copilot-options.js';
 import { fetchSessions, wireSessions } from './sessions.js';
-import { fetchAgents, fetchApps, fetchListeners, fetchRunningApps, refreshGitStatus, wireApps } from './apps.js';
+import { fetchAgents, fetchApps, fetchRunningApps, refreshGitStatus, wireApps } from './apps.js';
+import { fetchListeners } from './listeners.js';
 import { fetchJobs, renderJobs, wireJobs } from './jobs.js';
 import { fetchSkills, wireTeamOs } from './team-os.js';
 import { fetchBoard, openBoardCard, wireBoard } from './board.js';
