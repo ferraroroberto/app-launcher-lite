@@ -14,7 +14,7 @@ from pathlib import Path
 from src import session_host_paths
 from src.subprocess_flags import NO_WINDOW
 
-_CLAUDE_MD = Path(__file__).resolve().parent.parent / "CLAUDE.md"
+_CLAUDE_MD = Path(__file__).resolve().parent.parent.parent.parent / "CLAUDE.md"
 
 
 class TestDeclaredSessionHostPaths:

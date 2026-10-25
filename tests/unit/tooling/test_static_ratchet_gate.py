@@ -17,7 +17,7 @@ import pytest
 
 from scripts import static_ratchet_gate as gate
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _fake_script(tmp_path: Path, code: int, message: str = "") -> Path:

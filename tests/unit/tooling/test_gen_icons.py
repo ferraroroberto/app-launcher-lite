@@ -13,7 +13,7 @@ import pathlib
 
 from scripts import gen_icons
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 
 
 def _fake_upstream(root: pathlib.Path) -> pathlib.Path:

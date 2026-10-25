@@ -3,7 +3,7 @@
 Pure ``validate()``/``build_argv()`` checks per kind, plus the registry's
 resolution rule — no subprocess, no webapp. Executor-level end-to-end
 fires (does the run actually spawn and produce the right run.json /
-output.log) live in ``tests/test_run_job_kinds.py``.
+output.log) live in ``tests/unit/run_job/test_run_job_kinds.py``.
 """
 
 from __future__ import annotations

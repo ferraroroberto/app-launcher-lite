@@ -51,7 +51,7 @@ def _gl_issue(repo: str, iid: int, title: str, *, closed: bool = False,
               closed_at: str | None = None, labels: list | None = None,
               updated_at: str = "2026-07-01T10:00:00.000Z") -> dict:
     """A GitLab group-issues row, in the real API shape (see
-    tests/test_gitlab_client.py for the client's own fixture coverage)."""
+    tests/unit/board/test_gitlab_client.py for the client's own fixture coverage)."""
     return {
         "iid": iid, "project_id": 1, "title": title,
         "state": "closed" if closed else "opened",

@@ -9,7 +9,7 @@ Browser-side contract for the mint/list/revoke panel:
   * Revoke DELETEs by id and the list re-renders without the row.
 
 Backend contracts (hashing, scope enforcement over real HTTP, show-once
-persistence) are covered by ``tests/test_webapp_api_tokens.py``; this
+persistence) are covered by ``tests/unit/webapp/test_webapp_api_tokens.py``; this
 file pins the panel wiring with deterministic route mocks — same
 "mock non-deterministic fetches before goto()" convention as the other
 Jobs-surface e2e tests (the disposable webapp reads the REAL

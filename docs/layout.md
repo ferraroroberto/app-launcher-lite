@@ -43,7 +43,7 @@ Beside them sit the entry points (`launcher.py`, `tray.bat`, `webapp.bat`, `weba
 
 ## `tests/`
 
-Flat `test_<module>.py` files mirror the module they test. `tests/` is past the 40-module limit too, so a new test goes in a subfolder (`tests/unit/<domain>/`), not beside the old ones. `tests/e2e/` holds the Playwright suite and is also past the limit; a new browser test goes in a subfolder of it.
+The pytest suite sits in `tests/unit/<domain>/`, one `test_<module>.py` per module under test, grouped by domain: `board`, `jobs`, `run_job` (the executor), `session_host`, `webapp` (routers, config, server), `platform` (scanner, agents, tray, diagnostics, notifications) and `tooling` (the ratchet, e2e-routing and guard tests). `tests/conftest.py` holds the shared fixtures; a folder's own `conftest.py` and `_helpers` modules hold what its tests share. `tests/e2e/` holds the Playwright suite: the cross-cutting tests sit beside `conftest.py`, the Jobs, Coding and terminal tests in `tests/e2e/jobs/`, `coding/` and `terminal/`, and the screenshot capture in `tests/e2e/screens/`. A new test goes in the matching domain folder, never beside `conftest.py`.
 
 ## Where new code goes
 

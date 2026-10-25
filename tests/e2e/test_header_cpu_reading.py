@@ -6,7 +6,7 @@ when the server could not read it (never "0%"). One tap opens a sheet with
 total CPU, memory and the busiest processes. The poll is one per page and
 stops while the page is hidden.
 
-The level is the server's (tests/test_system_load.py pins the rules); this
+The level is the server's (tests/unit/platform/test_system_load.py pins the rules); this
 pins what the header draws for each, the sheet, and the hidden-page gate.
 ``/api/system/load`` is route-mocked with invented data before ``goto()``.
 A foreground return (visibilitychange) reads at once, so the tests drive the

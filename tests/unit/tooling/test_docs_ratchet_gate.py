@@ -19,9 +19,9 @@ from pathlib import Path
 import pytest
 
 from scripts import docs_ratchet_gate as gate
-from tests.test_static_ratchet_gate import _fake_script
+from tests.unit.tooling.test_static_ratchet_gate import _fake_script
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_only_exit_zero_passes_and_exit_three_is_never_a_skip() -> None:

@@ -14,7 +14,7 @@ ordinary terminal output still writes through. This pins that routing
 *decision* deterministically (no live PTY, so it runs on CI too, unlike the
 ``launched_pty_session``-gated ``test_edge_mirror_close.py``); the actual OS
 window close is the manual / e2e acceptance step, and the server half (the
-frame being sent) is pinned by ``tests/test_session_host_pty_stop.py``.
+frame being sent) is pinned by ``tests/unit/session_host/test_session_host_pty_stop.py``.
 """
 
 from __future__ import annotations

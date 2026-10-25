@@ -54,7 +54,7 @@ from typing import List, Sequence
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # Run standalone (`python scripts/classify_e2e.py`) sys.path[0] is scripts/,
 # not the repo root, so `src` is unimportable without this. Harmless when the
-# module is imported as `scripts.classify_e2e` (tests/test_classify_e2e.py).
+# module is imported as `scripts.classify_e2e` (tests/unit/tooling/test_classify_e2e.py).
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.subprocess_flags import NO_WINDOW  # noqa: E402

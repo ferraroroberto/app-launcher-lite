@@ -2,7 +2,7 @@
 
 Real ``RunJobCommand.execute()`` runs — a real child process spawns, real
 ``run.json``/``output.log`` land on disk — same harness pattern as
-``tests/test_run_job_dry_run.py``. ``inline-shell`` uses a ``.bat`` body
+``tests/unit/run_job/test_run_job_dry_run.py``. ``inline-shell`` uses a ``.bat`` body
 (no PowerShell-path assumption needed). ``http-check`` hits a real local
 ``http.server`` on loopback (deterministic, fully offline) rather than
 mocking ``httpx`` inside a separate process the test can't reach.

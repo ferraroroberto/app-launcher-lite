@@ -5,7 +5,7 @@ mirror window on the PC. The fix has two halves:
 
   * Python (already covered): launcher.py polls EnumWindows for a top-
     level window whose title contains a unique marker, then PostMessage
-    WM_CLOSE on Stop. Verified by ``tests/test_launcher_mirror_hwnd.py``
+    WM_CLOSE on Stop. Verified by ``tests/unit/platform/test_launcher_mirror_hwnd.py``
     (16 tests with mocked win32gui).
   * JS (this test): ``terminal.js`` keeps the ``app-launcher-mirror-<sid>``
     marker in ``document.title`` when the page is in mirror mode, so

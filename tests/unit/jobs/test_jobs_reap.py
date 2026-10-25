@@ -31,7 +31,7 @@ from src.jobs_config import Job
 def isolated_jobs(tmp_path, monkeypatch):
     # JOBS_RUNS_DIR / JOBS_QUEUE_PATH are owned by src.jobs_history /
     # src.jobs_queue respectively (issue #315 split) — patch there, not on
-    # the src.jobs facade, mirroring tests/test_run_job_mutex.py.
+    # the src.jobs facade, mirroring tests/unit/run_job/test_run_job_mutex.py.
     monkeypatch.setattr(jobs_history_mod, "JOBS_RUNS_DIR", tmp_path)
     monkeypatch.setattr(jobs_queue_mod, "JOBS_QUEUE_PATH", tmp_path / "_queue.json")
     return tmp_path

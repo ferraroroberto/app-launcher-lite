@@ -12,12 +12,12 @@ from __future__ import annotations
 import ast
 import pathlib
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 SCANNED_DIRS = ("src", "app", "scripts")
 
 #: Repo-relative paths allowed to spawn git themselves. ``git_run`` is the
 #: contract; ``classify_e2e`` runs outside the app's import path and sets the
-#: same env inline (pinned in tests/test_classify_e2e.py).
+#: same env inline (pinned in tests/unit/tooling/test_classify_e2e.py).
 ALLOWED = {
     "src/git_run.py", "scripts/classify_e2e.py", "src/build_info.py",
     "scripts/docs_ratchet.py", "scripts/structure_ratchet.py", "scripts/comment_ratchet.py",

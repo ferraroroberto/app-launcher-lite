@@ -22,7 +22,7 @@ import ast
 from pathlib import Path
 from typing import Dict, List, Optional
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 #: Trees whose Python is runtime code — reachable from the console-less tray.
 _SCAN_DIRS = ("src", "app", "scripts")
