@@ -150,108 +150,121 @@ function renderCodingList(host, items) {
   }
 
   ordered.forEach(function (a) {
-    const li = document.createElement('li');
-    li.className = 'app-item coding-item';
-    li.dataset.id = a.id;
-
-    const main = document.createElement('div');
-    main.className = 'app-main';
-    const name = document.createElement('div');
-    name.className = 'coding-name';
-    // The folder name rides its own span, not a bare text node, so it can
-    // ellipsis-truncate independently of the branch pill beside it (one
-    // line per project). `title` keeps the full name reachable
-    // when it is cut, mirroring the pill's own tooltip.
-    const nameText = document.createElement('span');
-    nameText.className = 'coding-name-text';
-    nameText.textContent = a.name;   // raw folder name, exactly as on disk
-    nameText.title = a.name;
-    name.appendChild(nameText);
-    annotateGitStatus(name, a.id);
-    main.appendChild(name);
-    li.appendChild(main);
-
-    const actions = document.createElement('div');
-    actions.className = 'row-actions agent-actions';
-
-    // Buttons the user hid in the options card. Re-derived on
-    // every render (like syncFavFilterBtn) so the ~4 s poll can't resurrect
-    // a hidden button.
-    const hidden = hiddenButtons();
-
-    // Order is Repository · Star · agents. The agent launch is the
-    // row's primary action, so it sits rightmost — the far side of the strip
-    // is the easiest thumb reach on a phone, and it cannot go any further
-    // right than this: the strip already ends at the list's content edge.
-    // Repo icon — opens the repo's issues page in a new browser tab. The
-    // URL is precomputed server-side (a.repo_issues_url — GitHub `/issues`
-    // vs GitLab `/-/issues`, registry.py owns the host check) and used
-    // verbatim here. Spawns no process and creates no session. Disabled
-    // with a hover hint when the project has no parseable git remote.
-    // Hideable under the same pseudo-id as the agents.
-    if (!hidden.has(REPO_BUTTON_ID)) {
-      const repoBtn = document.createElement('button');
-      repoBtn.type = 'button';
-      repoBtn.className = 'icon-btn agent-btn';
-      const repoIcon = document.createElement('img');
-      repoIcon.className = 'agent-icon';
-      repoIcon.src = iconUrl(REPO_BUTTON_ICON);
-      repoIcon.alt = 'GitLab';
-      repoBtn.appendChild(repoIcon);
-      if (a.repo_issues_url) {
-        repoBtn.title = REPO_BUTTON_LABEL;
-        repoBtn.setAttribute('aria-label', REPO_BUTTON_LABEL);
-        repoBtn.addEventListener('click', function () {
-          window.open(a.repo_issues_url, '_blank', 'noopener,noreferrer');
-        });
-      } else {
-        repoBtn.disabled = true;
-        repoBtn.title = 'No git remote';
-        repoBtn.setAttribute('aria-label', 'No git remote');
-      }
-      actions.appendChild(repoBtn);
-    }
-
-    // Favorite star — a toggle, kept between the repo link and the agent
-    // launch so the two "opens something" buttons don't sit side by side.
-    // Filled when starred, outline otherwise (see .star-btn.is-fav).
-    const starBtn = document.createElement('button');
-    starBtn.type = 'button';
-    starBtn.className = 'icon-btn agent-btn star-btn' + (a.is_favorite ? ' is-fav' : '');
-    starBtn.innerHTML = icon('star');
-    starBtn.title = a.is_favorite ? 'Unstar (remove from favorites)' : 'Star (add to favorites)';
-    starBtn.setAttribute('aria-label', starBtn.title);
-    starBtn.setAttribute('aria-pressed', a.is_favorite ? 'true' : 'false');
-    starBtn.addEventListener('click', function () { toggleFavorite(a); });
-    actions.appendChild(starBtn);
-
-    // Agent launch buttons last — see the ordering note above.
-    state.agents.forEach(function (agent) {
-      if (hidden.has(agent.id)) return;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'icon-btn agent-btn';
-      btn.dataset.agent = agent.id;
-      const icon = document.createElement('img');
-      icon.className = 'agent-icon';
-      icon.src = iconUrl(agent.id);
-      icon.alt = agent.label;
-      btn.appendChild(icon);
-      if (agent.available) {
-        btn.title = 'Launch ' + agent.label;
-        btn.setAttribute('aria-label', 'Launch ' + agent.label);
-        btn.addEventListener('click', function () { launchApp(a, agent.id); });
-      } else {
-        btn.disabled = true;
-        btn.title = agent.label + ' is not installed';
-        btn.setAttribute('aria-label', agent.label + ' is not installed');
-      }
-      actions.appendChild(btn);
-    });
-
-    li.appendChild(actions);
-    host.appendChild(li);
+    host.appendChild(buildCodingRow(a));
   });
+}
+
+function buildCodingRow(a) {
+  const li = document.createElement('li');
+  li.className = 'app-item coding-item';
+  li.dataset.id = a.id;
+
+  const main = document.createElement('div');
+  main.className = 'app-main';
+  const name = document.createElement('div');
+  name.className = 'coding-name';
+  // The folder name rides its own span, not a bare text node, so it can
+  // ellipsis-truncate independently of the branch pill beside it (one
+  // line per project). `title` keeps the full name reachable
+  // when it is cut, mirroring the pill's own tooltip.
+  const nameText = document.createElement('span');
+  nameText.className = 'coding-name-text';
+  nameText.textContent = a.name;   // raw folder name, exactly as on disk
+  nameText.title = a.name;
+  name.appendChild(nameText);
+  annotateGitStatus(name, a.id);
+  main.appendChild(name);
+  li.appendChild(main);
+
+  const actions = document.createElement('div');
+  actions.className = 'row-actions agent-actions';
+
+  // Buttons the user hid in the options card. Re-derived on
+  // every render (like syncFavFilterBtn) so the ~4 s poll can't resurrect
+  // a hidden button.
+  const hidden = hiddenButtons();
+
+  // Order is Repository · Star · agents. The agent launch is the
+  // row's primary action, so it sits rightmost — the far side of the strip
+  // is the easiest thumb reach on a phone, and it cannot go any further
+  // right than this: the strip already ends at the list's content edge.
+  if (!hidden.has(REPO_BUTTON_ID)) actions.appendChild(buildRepoButton(a));
+  actions.appendChild(buildStarButton(a));
+
+  // Agent launch buttons last — see the ordering note above.
+  state.agents.forEach(function (agent) {
+    if (hidden.has(agent.id)) return;
+    actions.appendChild(buildAgentButton(a, agent));
+  });
+
+  li.appendChild(actions);
+  return li;
+}
+
+// Repo icon — opens the repo's issues page in a new browser tab. The
+// URL is precomputed server-side (a.repo_issues_url — GitHub `/issues`
+// vs GitLab `/-/issues`, registry.py owns the host check) and used
+// verbatim here. Spawns no process and creates no session. Disabled
+// with a hover hint when the project has no parseable git remote.
+// Hideable under the same pseudo-id as the agents.
+function buildRepoButton(a) {
+  const repoBtn = document.createElement('button');
+  repoBtn.type = 'button';
+  repoBtn.className = 'icon-btn agent-btn';
+  const repoIcon = document.createElement('img');
+  repoIcon.className = 'agent-icon';
+  repoIcon.src = iconUrl(REPO_BUTTON_ICON);
+  repoIcon.alt = 'GitLab';
+  repoBtn.appendChild(repoIcon);
+  if (a.repo_issues_url) {
+    repoBtn.title = REPO_BUTTON_LABEL;
+    repoBtn.setAttribute('aria-label', REPO_BUTTON_LABEL);
+    repoBtn.addEventListener('click', function () {
+      window.open(a.repo_issues_url, '_blank', 'noopener,noreferrer');
+    });
+  } else {
+    repoBtn.disabled = true;
+    repoBtn.title = 'No git remote';
+    repoBtn.setAttribute('aria-label', 'No git remote');
+  }
+  return repoBtn;
+}
+
+// Favorite star — a toggle, kept between the repo link and the agent
+// launch so the two "opens something" buttons don't sit side by side.
+// Filled when starred, outline otherwise (see .star-btn.is-fav).
+function buildStarButton(a) {
+  const starBtn = document.createElement('button');
+  starBtn.type = 'button';
+  starBtn.className = 'icon-btn agent-btn star-btn' + (a.is_favorite ? ' is-fav' : '');
+  starBtn.innerHTML = icon('star');
+  starBtn.title = a.is_favorite ? 'Unstar (remove from favorites)' : 'Star (add to favorites)';
+  starBtn.setAttribute('aria-label', starBtn.title);
+  starBtn.setAttribute('aria-pressed', a.is_favorite ? 'true' : 'false');
+  starBtn.addEventListener('click', function () { toggleFavorite(a); });
+  return starBtn;
+}
+
+function buildAgentButton(a, agent) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'icon-btn agent-btn';
+  btn.dataset.agent = agent.id;
+  const agentIcon = document.createElement('img');
+  agentIcon.className = 'agent-icon';
+  agentIcon.src = iconUrl(agent.id);
+  agentIcon.alt = agent.label;
+  btn.appendChild(agentIcon);
+  if (agent.available) {
+    btn.title = 'Launch ' + agent.label;
+    btn.setAttribute('aria-label', 'Launch ' + agent.label);
+    btn.addEventListener('click', function () { launchApp(a, agent.id); });
+  } else {
+    btn.disabled = true;
+    btn.title = agent.label + ' is not installed';
+    btn.setAttribute('aria-label', agent.label + ' is not installed');
+  }
+  return btn;
 }
 
 // Star / unstar a coding project. Persists server-side, then
@@ -433,120 +446,129 @@ function openGitSummary() {
 function renderList(host, items) {
   host.innerHTML = '';
   items.forEach(function (a) {
-    const li = document.createElement('li');
-    li.className = 'app-item';
-    li.dataset.id = a.id;
-
-    const main = document.createElement('div');
-    main.className = 'app-main';
-
-    const launch = document.createElement('button');
-    launch.type = 'button';
-    launch.className = 'launch-btn';
-
-    const top = document.createElement('div');
-    const dot = document.createElement('span');
-    dot.className = 'health-dot';
-    // Health is only known for tunnel apps (probed server-side).
-    if (a.health === 'up') dot.classList.add('up');
-    else if (a.health === 'down') dot.classList.add('down');
-    top.appendChild(dot);
-
-    const pill = document.createElement('span');
-    pill.className = 'kind-pill';
-    pill.textContent = a.kind;
-    top.appendChild(pill);
-
-    const name = document.createElement('span');
-    name.textContent = a.name;
-    top.appendChild(name);
-    launch.appendChild(top);
-
-    const meta = document.createElement('span');
-    meta.className = 'meta';
-    meta.textContent = a.bat_path || a.project_dir || '';
-    // Tray rows show the path inline with the autostart toggle below
-    // instead — .launch-btn is a <button>, so the toggle can't nest
-    // inside it, and the path moves out to sit alongside it.
-    if (a.kind !== 'tray') launch.appendChild(meta);
-
-    launch.addEventListener('click', function () { launchApp(a); });
-    main.appendChild(launch);
-
-    if (a.kind === 'tunnel') {
-      const tr = document.createElement('div');
-      tr.className = 'tunnel-row';
-      if (a.tunnel_url) {
-        const link = document.createElement('a');
-        link.href = a.tunnel_url;
-        link.target = '_blank';
-        link.rel = 'noopener';
-        link.innerHTML = icon('satellite-dish') + ' ' + escapeHtml(a.tunnel_url);
-        tr.appendChild(link);
-      } else {
-        const span = document.createElement('span');
-        span.innerHTML = icon('satellite-dish') + ' Tunnel not running';
-        tr.appendChild(span);
-      }
-      main.appendChild(tr);
-    }
-
-    // Autostart switch — persists
-    // via the same PATCH /api/apps/{id} the rename dialog uses, just with
-    // `autostart` instead of `name`. The switch is a sibling of the launch
-    // button, so its compact 44px target remains independent of launching.
-    // Shares a row with the path text (moved out of .launch-btn above) —
-    // the panel title already says "autostart", so no per-row label.
-    if (a.kind === 'tray') {
-      const row = document.createElement('div');
-      row.className = 'tray-autostart-row';
-      row.appendChild(meta);
-      const toggleBtn = switchEl(!!a.autostart, {
-        label: 'Autostart ' + a.name + ' at boot',
-        onToggle: function (next, btn) {
-          btn.disabled = true;
-          toggleTrayAutostart(a, next).finally(function () {
-            btn.disabled = false;
-          });
-        },
-      });
-      row.appendChild(toggleBtn);
-      main.appendChild(row);
-    }
-
-    li.appendChild(main);
-
-    // Rename + remove are gated behind Settings → Edit mode, so the
-    // lists stay icon-free in normal use (no per-row icon inflation).
-    // Only the Apps tab's bat-based rows reach renderList — Coding-tab
-    // rows render via renderCodingList instead.
-    if (state.editMode) {
-      const actions = document.createElement('div');
-      actions.className = 'row-actions';
-
-      const renameBtn = document.createElement('button');
-      renameBtn.type = 'button';
-      renameBtn.className = 'icon-btn';
-      renameBtn.innerHTML = icon('pencil');
-      renameBtn.title = 'Rename';
-      renameBtn.setAttribute('aria-label', 'Rename');
-      renameBtn.addEventListener('click', function () { openRename(a); });
-      actions.appendChild(renameBtn);
-
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'icon-btn danger';
-      removeBtn.innerHTML = icon('trash-2');
-      removeBtn.title = 'Remove';
-      removeBtn.setAttribute('aria-label', 'Remove');
-      removeBtn.addEventListener('click', function () { removeApp(a); });
-      actions.appendChild(removeBtn);
-
-      li.appendChild(actions);
-    }
-
-    host.appendChild(li);
+    host.appendChild(buildAppRow(a));
   });
+}
+
+function buildAppRow(a) {
+  const li = document.createElement('li');
+  li.className = 'app-item';
+  li.dataset.id = a.id;
+
+  const main = document.createElement('div');
+  main.className = 'app-main';
+
+  const launch = document.createElement('button');
+  launch.type = 'button';
+  launch.className = 'launch-btn';
+
+  const top = document.createElement('div');
+  const dot = document.createElement('span');
+  dot.className = 'health-dot';
+  // Health is only known for tunnel apps (probed server-side).
+  if (a.health === 'up') dot.classList.add('up');
+  else if (a.health === 'down') dot.classList.add('down');
+  top.appendChild(dot);
+
+  const pill = document.createElement('span');
+  pill.className = 'kind-pill';
+  pill.textContent = a.kind;
+  top.appendChild(pill);
+
+  const name = document.createElement('span');
+  name.textContent = a.name;
+  top.appendChild(name);
+  launch.appendChild(top);
+
+  const meta = document.createElement('span');
+  meta.className = 'meta';
+  meta.textContent = a.bat_path || a.project_dir || '';
+  // Tray rows show the path inline with the autostart toggle below
+  // instead — .launch-btn is a <button>, so the toggle can't nest
+  // inside it, and the path moves out to sit alongside it.
+  if (a.kind !== 'tray') launch.appendChild(meta);
+
+  launch.addEventListener('click', function () { launchApp(a); });
+  main.appendChild(launch);
+
+  if (a.kind === 'tunnel') main.appendChild(buildTunnelRow(a));
+  if (a.kind === 'tray') main.appendChild(buildTrayAutostartRow(a, meta));
+
+  li.appendChild(main);
+
+  // Rename + remove are gated behind Settings → Edit mode, so the
+  // lists stay icon-free in normal use (no per-row icon inflation).
+  // Only the Apps tab's bat-based rows reach renderList — Coding-tab
+  // rows render via renderCodingList instead.
+  if (state.editMode) li.appendChild(buildEditActions(a));
+
+  return li;
+}
+
+function buildTunnelRow(a) {
+  const tr = document.createElement('div');
+  tr.className = 'tunnel-row';
+  if (a.tunnel_url) {
+    const link = document.createElement('a');
+    link.href = a.tunnel_url;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.innerHTML = icon('satellite-dish') + ' ' + escapeHtml(a.tunnel_url);
+    tr.appendChild(link);
+  } else {
+    const span = document.createElement('span');
+    span.innerHTML = icon('satellite-dish') + ' Tunnel not running';
+    tr.appendChild(span);
+  }
+  return tr;
+}
+
+// Autostart switch — persists
+// via the same PATCH /api/apps/{id} the rename dialog uses, just with
+// `autostart` instead of `name`. The switch is a sibling of the launch
+// button, so its compact 44px target remains independent of launching.
+// Shares a row with the path text (moved out of .launch-btn above) —
+// the panel title already says "autostart", so no per-row label.
+function buildTrayAutostartRow(a, meta) {
+  const row = document.createElement('div');
+  row.className = 'tray-autostart-row';
+  row.appendChild(meta);
+  const toggleBtn = switchEl(!!a.autostart, {
+    label: 'Autostart ' + a.name + ' at boot',
+    onToggle: function (next, btn) {
+      btn.disabled = true;
+      toggleTrayAutostart(a, next).finally(function () {
+        btn.disabled = false;
+      });
+    },
+  });
+  row.appendChild(toggleBtn);
+  return row;
+}
+
+function buildEditActions(a) {
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+
+  const renameBtn = document.createElement('button');
+  renameBtn.type = 'button';
+  renameBtn.className = 'icon-btn';
+  renameBtn.innerHTML = icon('pencil');
+  renameBtn.title = 'Rename';
+  renameBtn.setAttribute('aria-label', 'Rename');
+  renameBtn.addEventListener('click', function () { openRename(a); });
+  actions.appendChild(renameBtn);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'icon-btn danger';
+  removeBtn.innerHTML = icon('trash-2');
+  removeBtn.title = 'Remove';
+  removeBtn.setAttribute('aria-label', 'Remove');
+  removeBtn.addEventListener('click', function () { removeApp(a); });
+  actions.appendChild(removeBtn);
+
+  return actions;
 }
 
 // Coding-tab launch mode is the ☁️ Detached toggle in the options
@@ -889,111 +911,6 @@ function wireScanDialog() {
       apiFailToast('Save failed', exc);
     }
   });
-}
-
-// ----------------------------------------------------------- listeners panel (Apps tab)
-// Parent rows with dependent children keep them collapsed behind a tap.
-// Module-level so the expand state survives the poll's re-renders.
-const expandedListenerPorts = new Set();
-let lastListenerItems = [];
-
-export async function fetchListeners() {
-  try {
-    const body = await jsonApi('/api/ports/probe');
-    renderListeners(body.listeners || []);
-  } catch (exc) {
-    // Best-effort poll — don't spam toasts.
-    logPollFailure('listeners fetch failed', exc);
-  }
-}
-
-function renderListeners(items) {
-  lastListenerItems = items;
-  const host = els.listenersList;
-  host.innerHTML = '';
-  els.listenersEmpty.hidden = items.length !== 0;
-
-  // Group helper services (parent_port set, parent present) under their
-  // parent app's row so one app reads as one top-level entry.
-  const byPort = {};
-  items.forEach(function (l) { byPort[l.port] = l; });
-  const childrenOf = {};
-  const topLevel = [];
-  items.forEach(function (l) {
-    if (l.parent_port != null && byPort[l.parent_port]) {
-      (childrenOf[l.parent_port] = childrenOf[l.parent_port] || []).push(l);
-    } else {
-      topLevel.push(l);
-    }
-  });
-
-  topLevel.forEach(function (l) {
-    const kids = childrenOf[l.port] || [];
-    host.appendChild(buildListenerRow(l, false, kids.length > 0));
-    if (expandedListenerPorts.has(l.port)) {
-      kids.forEach(function (c) {
-        host.appendChild(buildListenerRow(c, true, false));
-      });
-    }
-  });
-}
-
-function buildListenerRow(l, isChild, hasChildren) {
-  const row = document.createElement('div');
-  row.className = isChild ? 'listener-row child' : 'listener-row';
-
-  const meta = document.createElement('div');
-  const strong = document.createElement('strong');
-  if (isChild) {
-    const branch = document.createElement('span');
-    branch.className = 'inline-icon';
-    branch.innerHTML = icon('corner-down-right');
-    strong.append(branch, ' ' + (l.service || l.name || ('port ' + l.port)));
-  } else {
-    strong.textContent = l.app || l.name || ('port ' + l.port);
-  }
-  const sub = document.createElement('span');
-  sub.className = 'meta';
-  sub.textContent = ' :' + l.port + ' · pid ' + l.pid + ' · ' + (l.name || '?');
-  meta.appendChild(strong);
-  meta.appendChild(sub);
-  row.appendChild(meta);
-
-  if (hasChildren) {
-    // Collapsed by default: the whole parent row is the tap target;
-    // the chevron rotates open like the panel-level disclosure idiom.
-    row.classList.add('expandable');
-    row.setAttribute('aria-expanded', expandedListenerPorts.has(l.port) ? 'true' : 'false');
-    const chev = document.createElement('span');
-    chev.className = 'listener-chevron';
-    chev.setAttribute('aria-hidden', 'true');
-    chev.textContent = '›';
-    row.appendChild(chev);
-    row.addEventListener('click', function () {
-      if (expandedListenerPorts.has(l.port)) expandedListenerPorts.delete(l.port);
-      else expandedListenerPorts.add(l.port);
-      renderListeners(lastListenerItems);
-    });
-  }
-
-  const kill = document.createElement('button');
-  kill.type = 'button';
-  kill.innerHTML = icon('octagon-x') + ' Kill';
-  kill.addEventListener('click', async function (ev) {
-    // Kill on a parent row must never toggle the collapse.
-    ev.stopPropagation();
-    const label = (isChild ? l.service : l.app) || ('port ' + l.port);
-    if (!confirm('Kill ' + label + '?\n\npid ' + l.pid + ' on :' + l.port)) return;
-    try {
-      const r = await jsonApi('/api/ports/' + l.port + '/kill', { method: 'POST' });
-      toast('Killed ' + (r.killed || []).length + ' pid(s) on :' + l.port + '.', 'good');
-      fetchListeners();
-    } catch (exc) {
-      apiFailToast('Kill failed', exc);
-    }
-  });
-  row.appendChild(kill);
-  return row;
 }
 
 export function wireApps() {

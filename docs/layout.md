@@ -55,7 +55,7 @@ Flat `test_<module>.py` files mirror the module they test. `tests/` is past the 
 ## Declared exceptions
 
 - **`webapp/`** is the tray-owned webapp's runtime-state folder (certificates, logs, briefs, the pid and tunnel files, all gitignored). It also tracks two sample files, `cloudflared.sample.yml` and `terminal-themes.sample.json`, which sit next to the real copies they template. It is listed in `extra_roots` because the tray and the webapp read and write it at that path.
-- **Baselined offenders.** `.structure-ratchet-baseline.json` records each file, function and directory already over a limit at its size when the ratchet was adopted. They may not grow; they are split in their own changes, not hidden. The largest are `tests/test_webapp_api_jobs.py`, `tests/test_board.py`, `src/session_host.py` and `app/webapp/static/index.html`; the longest functions are `openTerminal` in `terminal.js` and `renderJobRow` in `jobs-row.js`.
+- **Baselined offenders.** `.structure-ratchet-baseline.json` records each file, function and directory already over a limit at its size when the ratchet was adopted. They may not grow; they are split in their own changes, not hidden. The largest are `tests/test_webapp_api_jobs.py`, `tests/test_board.py`, `src/session_host.py` and `app/webapp/static/index.html`.
 
 ## Stylesheets
 

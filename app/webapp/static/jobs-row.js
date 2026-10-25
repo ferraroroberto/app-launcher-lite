@@ -176,39 +176,7 @@ function setRunBtnState(button, job) {
   button.disabled = !!job.running;
 }
 
-export function renderJobRow(job, options) {
-  const handlers = options || {};
-  const li = document.createElement('li');
-  li.className = 'app-item job-item';
-  li.dataset.id = job.id;
-
-  const main = document.createElement('div');
-  main.className = 'app-main';
-  const info = document.createElement('button');
-  info.type = 'button';
-  info.className = 'launch-btn session-open';
-
-  const head = document.createElement('div');
-  head.className = 'session-head job-row-head';
-  const dot = document.createElement('span');
-  dot.className = 'health-dot ' + statusClass(job);
-  dot.dataset.role = 'status-dot';
-  head.appendChild(dot);
-  const name = document.createElement('span');
-  name.className = 'name';
-  name.textContent = job.name;
-  head.appendChild(name);
-  if (job.alert_on_failure) {
-    const alertIcon = document.createElement('span');
-    alertIcon.className = 'job-alert-icon';
-    alertIcon.dataset.role = 'alert-icon';
-    alertIcon.innerHTML = icon('bell');
-    alertIcon.title = 'Alerts to Telegram on failure';
-    alertIcon.setAttribute('aria-label', 'Alerts to Telegram on failure');
-    head.appendChild(alertIcon);
-  }
-  info.appendChild(head);
-
+function buildJobPills(job) {
   const pills = document.createElement('div');
   pills.className = 'job-row-pills';
   pills.dataset.role = 'job-pills';
@@ -259,36 +227,10 @@ export function renderJobRow(job, options) {
   const coverage = renderCoveragePill(job);
   if (coverage) coverage.dataset.role = 'coverage-chip';
   if (coverage) pills.appendChild(coverage);
-  info.appendChild(pills);
+  return { pills: pills, countdown: countdown, coverage: coverage };
+}
 
-  const load = document.createElement('div');
-  load.className = 'job-row-load';
-  load.dataset.role = 'job-load';
-  const duration = renderDurationChip(job);
-  if (duration) {
-    duration.dataset.role = 'duration-chip';
-    load.appendChild(duration);
-  }
-  const spark = renderSparkline(job);
-  if (spark) {
-    spark.dataset.role = 'sparkline';
-    load.appendChild(spark);
-  }
-  info.appendChild(load);
-
-  const meta = document.createElement('span');
-  meta.className = 'meta';
-  meta.dataset.role = 'meta';
-  meta.innerHTML = describeLastRun(job);
-  info.appendChild(meta);
-  info.title = 'View run history for ' + job.name;
-  info.setAttribute('aria-label', 'View run history for ' + job.name);
-  info.addEventListener('click', function () {
-    if (handlers.onToggle) handlers.onToggle(job);
-  });
-  main.appendChild(info);
-  li.appendChild(main);
-
+function buildJobActions(job, handlers) {
   const actions = document.createElement('div');
   actions.className = 'row-actions session-actions';
   let run = null;
@@ -363,6 +305,74 @@ export function renderJobRow(job, options) {
     });
     actions.appendChild(remove);
   }
+  return { actions: actions, run: run };
+}
+
+export function renderJobRow(job, options) {
+  const handlers = options || {};
+  const li = document.createElement('li');
+  li.className = 'app-item job-item';
+  li.dataset.id = job.id;
+
+  const main = document.createElement('div');
+  main.className = 'app-main';
+  const info = document.createElement('button');
+  info.type = 'button';
+  info.className = 'launch-btn session-open';
+
+  const head = document.createElement('div');
+  head.className = 'session-head job-row-head';
+  const dot = document.createElement('span');
+  dot.className = 'health-dot ' + statusClass(job);
+  dot.dataset.role = 'status-dot';
+  head.appendChild(dot);
+  const name = document.createElement('span');
+  name.className = 'name';
+  name.textContent = job.name;
+  head.appendChild(name);
+  if (job.alert_on_failure) {
+    const alertIcon = document.createElement('span');
+    alertIcon.className = 'job-alert-icon';
+    alertIcon.dataset.role = 'alert-icon';
+    alertIcon.innerHTML = icon('bell');
+    alertIcon.title = 'Alerts to Telegram on failure';
+    alertIcon.setAttribute('aria-label', 'Alerts to Telegram on failure');
+    head.appendChild(alertIcon);
+  }
+  info.appendChild(head);
+
+  const { pills, countdown, coverage } = buildJobPills(job);
+  info.appendChild(pills);
+
+  const load = document.createElement('div');
+  load.className = 'job-row-load';
+  load.dataset.role = 'job-load';
+  const duration = renderDurationChip(job);
+  if (duration) {
+    duration.dataset.role = 'duration-chip';
+    load.appendChild(duration);
+  }
+  const spark = renderSparkline(job);
+  if (spark) {
+    spark.dataset.role = 'sparkline';
+    load.appendChild(spark);
+  }
+  info.appendChild(load);
+
+  const meta = document.createElement('span');
+  meta.className = 'meta';
+  meta.dataset.role = 'meta';
+  meta.innerHTML = describeLastRun(job);
+  info.appendChild(meta);
+  info.title = 'View run history for ' + job.name;
+  info.setAttribute('aria-label', 'View run history for ' + job.name);
+  info.addEventListener('click', function () {
+    if (handlers.onToggle) handlers.onToggle(job);
+  });
+  main.appendChild(info);
+  li.appendChild(main);
+
+  const { actions, run } = buildJobActions(job, handlers);
   if (actions.childElementCount) li.appendChild(actions);
 
   const nodes = {

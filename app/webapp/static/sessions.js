@@ -92,104 +92,115 @@ export function renderSessions() {
   renderHomeHead();
 
   state.sessions.forEach(function (s) {
-    const li = document.createElement('li');
-    li.className = 'app-item session-item';
-    // Stable hook so a test (or any consumer) can target a specific
-    // session's row by id rather than position — e.g. the kill regression
-    // must act on the session it launched, never ".first".
-    li.dataset.sessionId = s.session_id;
-
-    const main = document.createElement('div');
-    main.className = 'app-main';
-
-    const remote = s.kind === 'remote';
-    // Full-control rows open the live terminal on tap. Detached rows
-    // can't be streamed, so the row is inert — it's still killable
-    // from the ⏹️ button.
-    const open = document.createElement(remote ? 'div' : 'button');
-    open.className = 'launch-btn session-open' + (remote ? ' inert' : '');
-    if (!remote) open.type = 'button';
-
-    // Title on its own full-width line at the top of the card, so a long
-    // project title wraps across the whole card instead of being squeezed
-    // into the narrow space beside the badges.
-    const name = document.createElement('span');
-    name.className = 'name';
-    name.appendChild(document.createTextNode(sessionTitle(s)));
-    open.appendChild(name);
-
-    const head = document.createElement('div');
-    head.className = 'session-head';
-    const dot = document.createElement('span');
-    dot.className = 'health-dot ' + (s.alive === false ? 'down' : 'up');
-    head.appendChild(dot);
-    // Which coding agent this session is running. Resolved
-    // against the agent registry (state.agents) so a new agent's icon +
-    // label flow through without touching this file; falls back to
-    // Copilot for an unrecognised id.
-    const known = state.agents.find(function (a) { return a.id === s.agent; });
-    const agentId = known ? known.id : 'copilot';
-    const agentIcon = document.createElement('img');
-    agentIcon.className = 'session-agent-icon';
-    agentIcon.src = iconUrl(agentId);
-    agentIcon.alt = known ? known.label : 'GitHub Copilot CLI';
-    agentIcon.title = agentIcon.alt;
-    head.appendChild(agentIcon);
-    const kindTag = document.createElement('span');
-    kindTag.className = 'session-kind ' + (remote ? 'remote' : 'pty');
-    kindTag.innerHTML = remote ? icon('cloud') + ' detached' : icon('zap') + ' full control';
-    head.appendChild(kindTag);
-    if (!remote) {
-      const chev = document.createElement('span');
-      chev.className = 'session-chevron';
-      chev.textContent = '›';
-      head.appendChild(chev);
-    }
-    open.appendChild(head);
-
-    const meta = document.createElement('span');
-    meta.className = 'meta';
-    const ago = fmtAgo(s.started_at);
-    meta.textContent = (ago ? 'up ' + ago + ' · ' : '') + s.project_dir;
-    open.appendChild(meta);
-    if (!remote) {
-      open.addEventListener('click', function () { openSession(s); });
-    }
-    main.appendChild(open);
-    li.appendChild(main);
-
-    const actions = document.createElement('div');
-    actions.className = 'row-actions session-actions';
-
-    // Rename — a launcher-native override that always wins in
-    // sessionTitle()'s precedence, for both kinds. Submitting a blank title
-    // clears it, reverting to the automatic precedence.
-    const renameBtn = document.createElement('button');
-    renameBtn.type = 'button';
-    renameBtn.className = 'icon-btn';
-    renameBtn.innerHTML = icon('pencil');
-    renameBtn.title = 'Rename';
-    renameBtn.setAttribute('aria-label', 'Rename session');
-    renameBtn.addEventListener('click', function () { openSessionRename(s); });
-    actions.appendChild(renameBtn);
-
-    // Single Stop-and-kill button per row, both kinds. The
-    // session-host quits gracefully then force-falls-back; the window
-    // always closes. A plain ✕ glyph (not a loud 🛑 emoji) inherits the
-    // theme — muted by default via `action-stop-close`, danger-red on press.
-    const stopBtn = document.createElement('button');
-    stopBtn.type = 'button';
-    stopBtn.className = 'icon-btn action-stop-close';
-    stopBtn.innerHTML = icon('x');
-    stopBtn.title = 'Stop and kill';
-    stopBtn.setAttribute('aria-label', 'Stop and kill session');
-    stopBtn.addEventListener('click', function () { stopSession(s); });
-    actions.appendChild(stopBtn);
-
-    li.appendChild(actions);
-
-    host.appendChild(li);
+    host.appendChild(buildSessionRow(s));
   });
+}
+
+function buildSessionRow(s) {
+  const li = document.createElement('li');
+  li.className = 'app-item session-item';
+  // Stable hook so a test (or any consumer) can target a specific
+  // session's row by id rather than position — e.g. the kill regression
+  // must act on the session it launched, never ".first".
+  li.dataset.sessionId = s.session_id;
+
+  const main = document.createElement('div');
+  main.className = 'app-main';
+
+  const remote = s.kind === 'remote';
+  // Full-control rows open the live terminal on tap. Detached rows
+  // can't be streamed, so the row is inert — it's still killable
+  // from the ⏹️ button.
+  const open = document.createElement(remote ? 'div' : 'button');
+  open.className = 'launch-btn session-open' + (remote ? ' inert' : '');
+  if (!remote) open.type = 'button';
+
+  // Title on its own full-width line at the top of the card, so a long
+  // project title wraps across the whole card instead of being squeezed
+  // into the narrow space beside the badges.
+  const name = document.createElement('span');
+  name.className = 'name';
+  name.appendChild(document.createTextNode(sessionTitle(s)));
+  open.appendChild(name);
+
+  open.appendChild(buildSessionHead(s, remote));
+
+  const meta = document.createElement('span');
+  meta.className = 'meta';
+  const ago = fmtAgo(s.started_at);
+  meta.textContent = (ago ? 'up ' + ago + ' · ' : '') + s.project_dir;
+  open.appendChild(meta);
+  if (!remote) {
+    open.addEventListener('click', function () { openSession(s); });
+  }
+  main.appendChild(open);
+  li.appendChild(main);
+
+  li.appendChild(buildSessionActions(s));
+  return li;
+}
+
+function buildSessionHead(s, remote) {
+  const head = document.createElement('div');
+  head.className = 'session-head';
+  const dot = document.createElement('span');
+  dot.className = 'health-dot ' + (s.alive === false ? 'down' : 'up');
+  head.appendChild(dot);
+  // Which coding agent this session is running. Resolved
+  // against the agent registry (state.agents) so a new agent's icon +
+  // label flow through without touching this file; falls back to
+  // Copilot for an unrecognised id.
+  const known = state.agents.find(function (a) { return a.id === s.agent; });
+  const agentId = known ? known.id : 'copilot';
+  const agentIcon = document.createElement('img');
+  agentIcon.className = 'session-agent-icon';
+  agentIcon.src = iconUrl(agentId);
+  agentIcon.alt = known ? known.label : 'GitHub Copilot CLI';
+  agentIcon.title = agentIcon.alt;
+  head.appendChild(agentIcon);
+  const kindTag = document.createElement('span');
+  kindTag.className = 'session-kind ' + (remote ? 'remote' : 'pty');
+  kindTag.innerHTML = remote ? icon('cloud') + ' detached' : icon('zap') + ' full control';
+  head.appendChild(kindTag);
+  if (!remote) {
+    const chev = document.createElement('span');
+    chev.className = 'session-chevron';
+    chev.textContent = '›';
+    head.appendChild(chev);
+  }
+  return head;
+}
+
+function buildSessionActions(s) {
+  const actions = document.createElement('div');
+  actions.className = 'row-actions session-actions';
+
+  // Rename — a launcher-native override that always wins in
+  // sessionTitle()'s precedence, for both kinds. Submitting a blank title
+  // clears it, reverting to the automatic precedence.
+  const renameBtn = document.createElement('button');
+  renameBtn.type = 'button';
+  renameBtn.className = 'icon-btn';
+  renameBtn.innerHTML = icon('pencil');
+  renameBtn.title = 'Rename';
+  renameBtn.setAttribute('aria-label', 'Rename session');
+  renameBtn.addEventListener('click', function () { openSessionRename(s); });
+  actions.appendChild(renameBtn);
+
+  // Single Stop-and-kill button per row, both kinds. The
+  // session-host quits gracefully then force-falls-back; the window
+  // always closes. A plain ✕ glyph (not a loud 🛑 emoji) inherits the
+  // theme — muted by default via `action-stop-close`, danger-red on press.
+  const stopBtn = document.createElement('button');
+  stopBtn.type = 'button';
+  stopBtn.className = 'icon-btn action-stop-close';
+  stopBtn.innerHTML = icon('x');
+  stopBtn.title = 'Stop and kill';
+  stopBtn.setAttribute('aria-label', 'Stop and kill session');
+  stopBtn.addEventListener('click', function () { stopSession(s); });
+  actions.appendChild(stopBtn);
+
+  return actions;
 }
 
 // Open a full-control session when its row is tapped. On a desktop browser
