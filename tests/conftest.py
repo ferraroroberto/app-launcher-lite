@@ -217,11 +217,8 @@ def _isolate_configs(tmp_path: Path, monkeypatch) -> dict:
 
 def _mock_session_client(monkeypatch) -> MagicMock:
     """Replace every router's session-host client with one shared mock."""
-    from app.webapp import server as server_mod
-    from app.webapp.routers import apps as apps_router
     from app.webapp.routers import board as board_router
     from app.webapp.routers import board_spawn as board_spawn_router
-    from app.webapp.routers import team_os as team_os_router
     from app.webapp.routers import misc as misc_router
     from app.webapp.routers import sessions as sessions_router
 
