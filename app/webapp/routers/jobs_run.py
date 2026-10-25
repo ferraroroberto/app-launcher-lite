@@ -114,6 +114,62 @@ async def _dry_run_execute(job: Job, raw_params: Dict[str, Any]) -> Dict[str, An
     return {"run_id": run_dir.name, "job_id": job.id, "dry_run": True}
 
 
+async def _raise_if_cooled_down(job: Job) -> None:
+    # Cooldown admission gate. Runs before we pre-create the run dir so a
+    # cooled-down mash-fire produces no on-disk record (the dir would
+    # otherwise be orphaned with status=pending). See jobs.cooldown_check
+    # for the anchor semantics — skipped records do not extend the window.
+    cooldown_state = await asyncio.to_thread(jobs_mod.cooldown_check, job)
+    if cooldown_state is not None:
+        remaining, cooldown_seconds, _anchor_id = cooldown_state
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "detail": "cooldown",
+                "retry_after_seconds": remaining,
+                "cooldown_seconds": cooldown_seconds,
+            },
+            headers={"Retry-After": str(remaining)},
+        )
+
+
+async def _queue_behind(
+    job: Job,
+    run_dir: Any,
+    base_meta: Dict[str, Any],
+    holder: Job,
+    trigger: str,
+    raw_params: Dict[str, Any],
+) -> Dict[str, Any]:
+    # Queue it. status=queued does not feed stats / streaks; the
+    # finalising executor of the holder job will flip it to running.
+    base_meta["status"] = "queued"
+    base_meta["mutex_group"] = job.mutex_group
+    base_meta["mutex_blocked_by"] = holder.id
+    jobs_mod.write_run_json(run_dir, **base_meta)
+    await asyncio.to_thread(
+        jobs_mod.enqueue_mutex,
+        job.mutex_group,
+        {
+            "job_id": job.id,
+            "run_id": run_dir.name,
+            "trigger": trigger,
+            "params": raw_params or None,
+        },
+    )
+    logger.info(
+        f"🪢 queued {job.id}/{run_dir.name} behind {holder.id} "
+        f"(mutex_group={job.mutex_group!r})"
+    )
+    return {
+        "run_id": run_dir.name,
+        "job_id": job.id,
+        "status": "queued",
+        "mutex_group": job.mutex_group,
+        "mutex_blocked_by": holder.id,
+    }
+
+
 async def _admit_and_spawn(
     job: Job,
     cfg: JobsConfig,
@@ -134,22 +190,7 @@ async def _admit_and_spawn(
     (e.g. ``_webhook.json``) alongside ``run.json`` regardless of which
     branch this fire takes.
     """
-    # Cooldown admission gate. Runs before we pre-create the run dir so a
-    # cooled-down mash-fire produces no on-disk record (the dir would
-    # otherwise be orphaned with status=pending). See jobs.cooldown_check
-    # for the anchor semantics — skipped records do not extend the window.
-    cooldown_state = await asyncio.to_thread(jobs_mod.cooldown_check, job)
-    if cooldown_state is not None:
-        remaining, cooldown_seconds, _anchor_id = cooldown_state
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "detail": "cooldown",
-                "retry_after_seconds": remaining,
-                "cooldown_seconds": cooldown_seconds,
-            },
-            headers={"Retry-After": str(remaining)},
-        )
+    await _raise_if_cooled_down(job)
 
     # Mutex-group admission. If another job in the same group is running
     # or pending, this fire is QUEUED (not rejected — that's cooldown's
@@ -176,33 +217,7 @@ async def _admit_and_spawn(
         base_meta.update(extra_run_meta)
 
     if holder is not None:
-        # Queue it. status=queued does not feed stats / streaks; the
-        # finalising executor of the holder job will flip it to running.
-        base_meta["status"] = "queued"
-        base_meta["mutex_group"] = job.mutex_group
-        base_meta["mutex_blocked_by"] = holder.id
-        jobs_mod.write_run_json(run_dir, **base_meta)
-        await asyncio.to_thread(
-            jobs_mod.enqueue_mutex,
-            job.mutex_group,
-            {
-                "job_id": job.id,
-                "run_id": run_dir.name,
-                "trigger": trigger,
-                "params": raw_params or None,
-            },
-        )
-        logger.info(
-            f"🪢 queued {job.id}/{run_dir.name} behind {holder.id} "
-            f"(mutex_group={job.mutex_group!r})"
-        )
-        return {
-            "run_id": run_dir.name,
-            "job_id": job.id,
-            "status": "queued",
-            "mutex_group": job.mutex_group,
-            "mutex_blocked_by": holder.id,
-        }
+        return await _queue_behind(job, run_dir, base_meta, holder, trigger, raw_params)
 
     base_meta["status"] = "pending"
     jobs_mod.write_run_json(run_dir, **base_meta)

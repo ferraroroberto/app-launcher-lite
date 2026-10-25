@@ -47,7 +47,7 @@ import sys
 import time
 import urllib3
 from pathlib import Path
-from typing import Callable, IO, Iterator, List, Optional
+from typing import Callable, IO, Iterator, List, Optional, Tuple
 
 import pytest
 import requests
@@ -328,38 +328,8 @@ def _write_copilot_shim(shim_dir: Path) -> None:
     (shim_dir / "copilot.cmd").write_text(shim, encoding="ascii")
 
 
-@pytest.fixture(scope="session")
-def _autoboot_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
-    """Spawn a disposable webapp (+ session-host) and yield its base URL.
-
-    A hard failure (`pytest.fail`) — never a skip — if anything doesn't come
-    up: under the pre-ship gate a missing server must not pass silently.
-    """
-    from app.webapp.event_loop import LOOP_FACTORY
-    from app.webapp.manager import cert_paths
-    from src import boot_autostart
-
-    logs_dir = _REPO_ROOT / "webapp"  # gitignored runtime dir
-    logs_dir.mkdir(parents=True, exist_ok=True)
-    handles: List[IO[str]] = []
-    sh_proc: Optional[subprocess.Popen] = None
-    wa_proc: Optional[subprocess.Popen] = None
-
-    def _open_log(name: str) -> IO[str]:
-        handle = (logs_dir / name).open("w", encoding="utf-8", errors="replace")
-        handles.append(handle)
-        return handle
-
-    def _teardown() -> None:
-        _terminate(wa_proc)
-        if sh_proc is not None:  # always ours now (never an adopted tray)
-            _terminate(sh_proc)
-        for handle in handles:
-            try:
-                handle.close()
-            except Exception:  # pragma: no cover
-                pass
-
+def _prepare_config_copy(logs_dir: Path) -> Tuple[Path, Optional[bytes]]:
+    """Copy the real webapp config into logs_dir; return (copy, real bytes)."""
     # Config isolation (issue #441): the disposable webapp gets a temp COPY
     # of the real config — realistic values (projects_dir, auth_token, …)
     # without write access to the real file. Any e2e test that Saves settings
@@ -385,6 +355,138 @@ def _autoboot_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         keep=(_LAUNCH_TARGET_ID,),
     )
     cfg_copy.write_text(json.dumps(pinned, indent=2), encoding="utf-8")
+    return cfg_copy, real_cfg_bytes
+
+
+def _webapp_cmd(port: int, certs: Optional[Tuple[Path, Path]]) -> List[str]:
+    """The uvicorn command line for the disposable webapp."""
+    from app.webapp.event_loop import LOOP_FACTORY
+
+    wa_cmd = [
+        sys.executable,
+        "-m",
+        "uvicorn",
+        "app.webapp.server:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
+        "--log-level",
+        "warning",
+        "--loop",
+        LOOP_FACTORY,
+    ]
+    if certs:
+        cert, key = certs
+        wa_cmd += ["--ssl-keyfile", str(key), "--ssl-certfile", str(cert)]
+    return wa_cmd
+
+
+def _assert_isolation_intact(
+    cfg_copy: Path,
+    real_cfg_bytes: Optional[bytes],
+    real_wrapper_bat: Path,
+    real_wrapper_bytes: Optional[bytes],
+    startup_dir: Path,
+) -> None:
+    """Raise if the run wrote to the real config or the real Startup folder."""
+    # Isolation regression check (issue #441): the real config must be
+    # byte-identical to the pre-run snapshot. A mismatch means some path
+    # wrote to the real file during the gate — the exact class of bug
+    # that corrupted session_host_port in #438 — or, rarely, that the
+    # user saved settings on the LIVE tray mid-run. Loud either way.
+    current = (
+        _WEBAPP_CONFIG.read_bytes() if _WEBAPP_CONFIG.exists() else None
+    )
+    if current != real_cfg_bytes:
+        raise RuntimeError(
+            f"e2e autoboot isolation breach: {_WEBAPP_CONFIG} changed "
+            "during the run. The disposable webapp must only ever write "
+            f"its temp copy ({cfg_copy}). If you changed settings on the "
+            "live tray while the gate ran, rerun the gate; otherwise a "
+            "test wrote to the real config — fix that before shipping."
+        )
+    # Startup-folder isolation regression check (issue #698): the real
+    # wrapper bat must be byte-identical to the pre-run snapshot. A
+    # mismatch means some path wrote to the real Startup folder during
+    # the gate instead of the temp startup_dir — the owner boots the
+    # launcher from this file.
+    current_wrapper_bytes = (
+        real_wrapper_bat.read_bytes() if real_wrapper_bat.is_file() else None
+    )
+    if current_wrapper_bytes != real_wrapper_bytes:
+        raise RuntimeError(
+            f"e2e autoboot isolation breach: {real_wrapper_bat} changed "
+            "during the run. The disposable webapp must only ever write "
+            f"the temp Startup dir ({startup_dir}) — a test wrote to the "
+            "real Startup folder instead. Fix that before shipping."
+        )
+
+
+def _spawn_disposable_session_host(
+    tmp_path_factory: pytest.TempPathFactory, log: IO[str]
+) -> Tuple[subprocess.Popen, int]:
+    """Start the e2e run's own session-host on a free port; return (proc, port)."""
+    # Session-host: ALWAYS spawn our own on a free port — never adopt a
+    # host already listening on the live :8466, which on a dev box owns
+    # the user's real PTY/Claude sessions (issue #260). A free, disposable
+    # host starts empty, so the destructive e2e tests can only ever touch
+    # sessions this run launched. The disposable webapp is pointed at it
+    # via LAUNCHER_SESSION_HOST_PORT below.
+    sh_port = _free_tcp_port()
+    sh_cmd = [
+        sys.executable,
+        str(_REPO_ROOT / "launcher.py"),
+        "session-host",
+        "--port",
+        str(sh_port),
+    ]
+    # Lightweight-child shim (issue #534): only the DISPOSABLE
+    # session-host gets the shim on PATH — the pytest process and the
+    # live tray keep the real resolution, so `shutil.which("copilot")`
+    # in the fixtures below still faithfully predicts the real CLI.
+    shim_dir = tmp_path_factory.mktemp("copilot-shim")
+    _write_copilot_shim(shim_dir)
+    sh_proc = _spawn(
+        sh_cmd,
+        log,
+        extra_env={"PATH": f"{shim_dir}{os.pathsep}{os.environ.get('PATH', '')}"},
+    )
+    return sh_proc, sh_port
+
+
+@pytest.fixture(scope="session")
+def _autoboot_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
+    """Spawn a disposable webapp (+ session-host) and yield its base URL.
+
+    A hard failure (`pytest.fail`) — never a skip — if anything doesn't come
+    up: under the pre-ship gate a missing server must not pass silently.
+    """
+    from app.webapp.manager import cert_paths
+    from src import boot_autostart
+
+    logs_dir = _REPO_ROOT / "webapp"  # gitignored runtime dir
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    handles: List[IO[str]] = []
+    sh_proc: Optional[subprocess.Popen] = None
+    wa_proc: Optional[subprocess.Popen] = None
+
+    def _open_log(name: str) -> IO[str]:
+        handle = (logs_dir / name).open("w", encoding="utf-8", errors="replace")
+        handles.append(handle)
+        return handle
+
+    def _teardown() -> None:
+        _terminate(wa_proc)
+        if sh_proc is not None:  # always ours now (never an adopted tray)
+            _terminate(sh_proc)
+        for handle in handles:
+            try:
+                handle.close()
+            except Exception:  # pragma: no cover
+                pass
+
+    cfg_copy, real_cfg_bytes = _prepare_config_copy(logs_dir)
 
     # Startup-folder isolation (issue #698): give the disposable webapp its
     # own temp Startup dir so `src.boot_autostart.enable()/disable()` (called
@@ -401,30 +503,8 @@ def _autoboot_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     )
 
     try:
-        # Session-host: ALWAYS spawn our own on a free port — never adopt a
-        # host already listening on the live :8466, which on a dev box owns
-        # the user's real PTY/Claude sessions (issue #260). A free, disposable
-        # host starts empty, so the destructive e2e tests can only ever touch
-        # sessions this run launched. The disposable webapp is pointed at it
-        # via LAUNCHER_SESSION_HOST_PORT below.
-        sh_port = _free_tcp_port()
-        sh_cmd = [
-            sys.executable,
-            str(_REPO_ROOT / "launcher.py"),
-            "session-host",
-            "--port",
-            str(sh_port),
-        ]
-        # Lightweight-child shim (issue #534): only the DISPOSABLE
-        # session-host gets the shim on PATH — the pytest process and the
-        # live tray keep the real resolution, so `shutil.which("copilot")`
-        # in the fixtures below still faithfully predicts the real CLI.
-        shim_dir = tmp_path_factory.mktemp("copilot-shim")
-        _write_copilot_shim(shim_dir)
-        sh_proc = _spawn(
-            sh_cmd,
-            _open_log("e2e-autoboot-session-host.log"),
-            extra_env={"PATH": f"{shim_dir}{os.pathsep}{os.environ.get('PATH', '')}"},
+        sh_proc, sh_port = _spawn_disposable_session_host(
+            tmp_path_factory, _open_log("e2e-autoboot-session-host.log")
         )
         _AUTOBOOT_STATE["session_host_port"] = sh_port
         if not _wait_port(sh_port, timeout=15):
@@ -440,23 +520,7 @@ def _autoboot_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         port = _free_tcp_port()
         certs = cert_paths()
         scheme = "https" if certs else "http"
-        wa_cmd = [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "app.webapp.server:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-            "--log-level",
-            "warning",
-            "--loop",
-            LOOP_FACTORY,
-        ]
-        if certs:
-            cert, key = certs
-            wa_cmd += ["--ssl-keyfile", str(key), "--ssl-certfile", str(cert)]
+        wa_cmd = _webapp_cmd(port, certs)
         # Point the disposable webapp at our disposable session-host, not the
         # config's :8466, and at the temp config copy, not the real file —
         # the two env injections that isolate the gate (issues #260, #441).
@@ -481,37 +545,10 @@ def _autoboot_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         yield base
     finally:
         _teardown()
-        # Isolation regression check (issue #441): the real config must be
-        # byte-identical to the pre-run snapshot. A mismatch means some path
-        # wrote to the real file during the gate — the exact class of bug
-        # that corrupted session_host_port in #438 — or, rarely, that the
-        # user saved settings on the LIVE tray mid-run. Loud either way.
-        current = (
-            _WEBAPP_CONFIG.read_bytes() if _WEBAPP_CONFIG.exists() else None
+        _assert_isolation_intact(
+            cfg_copy, real_cfg_bytes, real_wrapper_bat, real_wrapper_bytes,
+            startup_dir,
         )
-        if current != real_cfg_bytes:
-            raise RuntimeError(
-                f"e2e autoboot isolation breach: {_WEBAPP_CONFIG} changed "
-                "during the run. The disposable webapp must only ever write "
-                f"its temp copy ({cfg_copy}). If you changed settings on the "
-                "live tray while the gate ran, rerun the gate; otherwise a "
-                "test wrote to the real config — fix that before shipping."
-            )
-        # Startup-folder isolation regression check (issue #698): the real
-        # wrapper bat must be byte-identical to the pre-run snapshot. A
-        # mismatch means some path wrote to the real Startup folder during
-        # the gate instead of the temp startup_dir — the owner boots the
-        # launcher from this file.
-        current_wrapper_bytes = (
-            real_wrapper_bat.read_bytes() if real_wrapper_bat.is_file() else None
-        )
-        if current_wrapper_bytes != real_wrapper_bytes:
-            raise RuntimeError(
-                f"e2e autoboot isolation breach: {real_wrapper_bat} changed "
-                "during the run. The disposable webapp must only ever write "
-                f"the temp Startup dir ({startup_dir}) — a test wrote to the "
-                "real Startup folder instead. Fix that before shipping."
-            )
 
 
 @pytest.fixture(scope="session")

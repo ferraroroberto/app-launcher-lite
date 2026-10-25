@@ -144,6 +144,31 @@ async def _create_and_attach(
     }
 
 
+async def _ticker(tick_gaps: list[float], stop_ticking: asyncio.Event) -> None:
+    """Measures how badly the burst starves the shared event loop."""
+    last = time.perf_counter()
+    while not stop_ticking.is_set():
+        await asyncio.sleep(_TICK_INTERVAL_S)
+        now = time.perf_counter()
+        tick_gaps.append(now - last)
+        last = now
+
+
+def _diagnosis(results: list[dict[str, Any]], tick_gaps: list[float]) -> str:
+    """One line naming the worst loop stall and each session's spawn/paint time."""
+    worst_gap = max(tick_gaps) if tick_gaps else 0.0
+    return (
+        f"worst event-loop tick gap during the burst: {worst_gap * 1000:.0f} ms "
+        f"(interval {_TICK_INTERVAL_S * 1000:.0f} ms); "
+        "per-session spawn/paint: "
+        + ", ".join(
+            f"#{r['index']} spawn={r['spawn_s'] * 1000:.0f}ms paint="
+            + ("never" if r["paint_s"] is None else f"{r['paint_s'] * 1000:.0f}ms")
+            for r in results
+        )
+    )
+
+
 async def test_five_concurrent_sessions_each_paint_their_own_first_frame(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -176,17 +201,7 @@ async def test_five_concurrent_sessions_each_paint_their_own_first_frame(
 
     tick_gaps: list[float] = []
     stop_ticking = asyncio.Event()
-
-    async def ticker() -> None:
-        """Measures how badly the burst starves the shared event loop."""
-        last = time.perf_counter()
-        while not stop_ticking.is_set():
-            await asyncio.sleep(_TICK_INTERVAL_S)
-            now = time.perf_counter()
-            tick_gaps.append(now - last)
-            last = now
-
-    tick_task = asyncio.create_task(ticker())
+    tick_task = asyncio.create_task(_ticker(tick_gaps, stop_ticking))
     results: list[dict[str, Any]] = []
     try:
         for _ in range(400):
@@ -219,17 +234,7 @@ async def test_five_concurrent_sessions_each_paint_their_own_first_frame(
         with contextlib.suppress(asyncio.TimeoutError, TimeoutError):
             await asyncio.wait_for(serve_task, timeout=30)
 
-    worst_gap = max(tick_gaps) if tick_gaps else 0.0
-    diagnosis = (
-        f"worst event-loop tick gap during the burst: {worst_gap * 1000:.0f} ms "
-        f"(interval {_TICK_INTERVAL_S * 1000:.0f} ms); "
-        "per-session spawn/paint: "
-        + ", ".join(
-            f"#{r['index']} spawn={r['spawn_s'] * 1000:.0f}ms paint="
-            + ("never" if r["paint_s"] is None else f"{r['paint_s'] * 1000:.0f}ms")
-            for r in results
-        )
-    )
+    diagnosis = _diagnosis(results, tick_gaps)
 
     # The measurement is the point of this test, not a side effect: AC1 asks
     # for what a five-session load actually does, so the numbers go to stdout

@@ -676,6 +676,75 @@ def _trigger_arg(value: str) -> str:
     return value
 
 
+def _resolve_run_params(
+    job: Job, args: argparse.Namespace
+) -> Tuple[Dict[str, Any], Optional[int]]:
+    """Decode and validate the run's typed parameters from the CLI args."""
+    # Older test scaffolding builds the args namespace by hand and may
+    # not set --params; getattr keeps that path working without forcing
+    # every caller to fake the new field.
+    params_raw = getattr(args, "params", None)
+    params_token = getattr(args, "params_b64", None)
+    if params_token:
+        try:
+            params_raw = decode_params_token(params_token)
+        except ValueError as exc:
+            logger.error(f"❌ run-job {job.id}: --params-b64 is invalid ({exc})")
+            return {}, 2
+    return _parse_run_params(job, params_raw)
+
+
+def _write_running_record(
+    job: Job,
+    args: argparse.Namespace,
+    run_dir: Path,
+    values: Dict[str, Any],
+    dry_run: bool,
+) -> None:
+    """Flip the run to "running" in run.json before the child spawns."""
+    started_at = datetime.now().isoformat(timespec="seconds")
+    run_meta: Dict[str, Any] = base_run_meta(
+        job, args.trigger, started_at, run_dir.name
+    )
+    run_meta["status"] = "running"
+    # Persist the typed-parameter payload so the history
+    # row can replay it and the meta line can show the values back.
+    if values:
+        run_meta["params"] = values
+    # Provenance: a Task Scheduler fire reaches this
+    # executor directly, so it stamps its own source here; API fires
+    # carry trigger_source="api" (+ip/ua/token id) pre-written by the
+    # route into the run dir this executor merges into.
+    if args.trigger == "scheduled":
+        run_meta["trigger_source"] = "schtasks"
+    # Dry-run 'execute' mode: the child still spawns, but
+    # JOB_DRY_RUN=1 lets an opted-in script no-op its side effects.
+    # The flag is stamped so history shows the 🧪 chip.
+    if dry_run:
+        run_meta["dry_run"] = True
+    write_run_json(run_dir, **run_meta)
+    logger.info(f"🚀 run-job {job.id} → {run_dir.name} (trigger={args.trigger})")
+
+
+def _build_child_env(
+    job_env: Dict[str, str],
+    extra_env: Dict[str, str],
+    run_dir: Path,
+    dry_run: bool,
+) -> Dict[str, str]:
+    env = os.environ.copy()
+    # Job env overlay first, then the invocation's own extra_env (typed
+    # params + kind env) so a per-run param can override a static value.
+    env.update(job_env)
+    env.update(extra_env)
+    artifact_dir = run_dir / "artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    env["JOB_ARTIFACT_DIR"] = str(artifact_dir.resolve())
+    if dry_run:
+        env["JOB_DRY_RUN"] = "1"
+    return env
+
+
 class RunJobCommand(BaseCommand):
     """Argparse subcommand: ``launcher.py run-job <id>``."""
 
@@ -739,18 +808,7 @@ class RunJobCommand(BaseCommand):
             logger.error(f"❌ unknown job id: {args.job_id!r}")
             return 2
 
-        # Older test scaffolding builds the args namespace by hand and may
-        # not set --params; getattr keeps that path working without forcing
-        # every caller to fake the new field.
-        params_raw = getattr(args, "params", None)
-        params_token = getattr(args, "params_b64", None)
-        if params_token:
-            try:
-                params_raw = decode_params_token(params_token)
-            except ValueError as exc:
-                logger.error(f"❌ run-job {job.id}: --params-b64 is invalid ({exc})")
-                return 2
-        values, params_error = _parse_run_params(job, params_raw)
+        values, params_error = _resolve_run_params(job, args)
         if params_error is not None:
             return params_error
 
@@ -789,42 +847,9 @@ class RunJobCommand(BaseCommand):
         if job_env is None:
             return 2
 
-        started_at = datetime.now().isoformat(timespec="seconds")
         dry_run = bool(getattr(args, "dry_run", False))
-        run_meta: Dict[str, Any] = base_run_meta(
-            job, args.trigger, started_at, run_dir.name
-        )
-        run_meta["status"] = "running"
-        # Persist the typed-parameter payload so the history
-        # row can replay it and the meta line can show the values back.
-        if values:
-            run_meta["params"] = values
-        # Provenance: a Task Scheduler fire reaches this
-        # executor directly, so it stamps its own source here; API fires
-        # carry trigger_source="api" (+ip/ua/token id) pre-written by the
-        # route into the run dir this executor merges into.
-        if args.trigger == "scheduled":
-            run_meta["trigger_source"] = "schtasks"
-        # Dry-run 'execute' mode: the child still spawns, but
-        # JOB_DRY_RUN=1 lets an opted-in script no-op its side effects.
-        # The flag is stamped so history shows the 🧪 chip.
-        if dry_run:
-            run_meta["dry_run"] = True
-        write_run_json(run_dir, **run_meta)
-        logger.info(
-            f"🚀 run-job {job.id} → {run_dir.name} (trigger={args.trigger})"
-        )
-
-        env = os.environ.copy()
-        # Job env overlay first, then the invocation's own extra_env (typed
-        # params + kind env) so a per-run param can override a static value.
-        env.update(job_env)
-        env.update(extra_env)
-        artifact_dir = run_dir / "artifacts"
-        artifact_dir.mkdir(parents=True, exist_ok=True)
-        env["JOB_ARTIFACT_DIR"] = str(artifact_dir.resolve())
-        if dry_run:
-            env["JOB_DRY_RUN"] = "1"
+        _write_running_record(job, args, run_dir, values, dry_run)
+        env = _build_child_env(job_env, extra_env, run_dir, dry_run)
         spawn_started = time.monotonic()
         exit_code, status, sampler, watchdog = _spawn_and_wait(
             job, argv, cwd, env, run_dir
