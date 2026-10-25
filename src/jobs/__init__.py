@@ -5,16 +5,16 @@ public surface of four focused modules so existing callers
 (``from src.jobs import X`` / ``from src import jobs as jobs_mod;
 jobs_mod.X(...)``) keep working unchanged:
 
-* :mod:`src.jobs_schtasks` — Windows Task Scheduler sync + spawn helpers,
+* :mod:`src.jobs.schtasks` — Windows Task Scheduler sync + spawn helpers,
   and the deterministic next-fire arithmetic.
-* :mod:`src.jobs_history` — run-history file storage (``run.json`` /
+* :mod:`src.jobs.history` — run-history file storage (``run.json`` /
   ``output.log`` under ``webapp/jobs/<job_id>/<run_id>/``).
-* :mod:`src.jobs_queue` — the cross-job mutex queue + chain dispatch.
-* :mod:`src.jobs_stats` — run-duration percentiles, health, stuck-run
+* :mod:`src.jobs.queue` — the cross-job mutex queue + chain dispatch.
+* :mod:`src.jobs.stats` — run-duration percentiles, health, stuck-run
   detection.
-* :mod:`src.jobs_reap` — reconciles a run record stranded ``running`` by an
+* :mod:`src.jobs.reap` — reconciles a run record stranded ``running`` by an
   executor that died before finalising it.
-* :mod:`src.jobs_coverage` — missed-fire coverage: a scheduled job whose
+* :mod:`src.jobs.coverage` — missed-fire coverage: a scheduled job whose
   Task Scheduler entry vanished, or whose slot passed with no run record.
 
 New code should generally import directly from the module that actually
@@ -25,7 +25,7 @@ above (e.g. the webapp's jobs router).
 Tests that need to patch module-internal state (e.g. ``JOBS_RUNS_DIR``,
 ``_run_schtasks``, ``spawn_run_job_detached`` as the mutex queue's default
 spawn callable) must monkeypatch the module that actually *owns* that
-state — ``src.jobs_history``, ``src.jobs_schtasks``, or ``src.jobs_queue``
+state — ``src.jobs.history``, ``src.jobs.schtasks``, or ``src.jobs.queue``
 respectively — not this facade. Patching a name re-exported here only
 rebinds the facade's copy of the reference; it has no effect on the
 owning module's own globals, which is what the real code reads.
@@ -39,7 +39,7 @@ returns the new ``run_id`` immediately.
 
 from __future__ import annotations
 
-from src.jobs_history import (
+from src.jobs.history import (
     JOBS_RUNS_DIR,
     MAX_RUNS_PER_JOB,
     base_run_meta,
@@ -58,7 +58,7 @@ from src.jobs_history import (
     write_run_json,
     write_webhook_payload,
 )
-from src.jobs_queue import (
+from src.jobs.queue import (
     JOBS_QUEUE_PATH,
     dispatch_chain_run,
     drain_mutex_queue,
@@ -67,13 +67,13 @@ from src.jobs_queue import (
     peek_mutex_queue,
     pop_mutex_entry,
 )
-from src.jobs_coverage import (
+from src.jobs.coverage import (
     coverage_for_job,
     invalidate_coverage_cache,
     scan_coverage,
 )
-from src.jobs_reap import reap_stranded_runs
-from src.jobs_schtasks import (
+from src.jobs.reap import reap_stranded_runs
+from src.jobs.schtasks import (
     FREQUENT_SCHEDULE_TYPES,
     TASK_FOLDER_PREFIX,
     TASK_NAMESPACE,
@@ -91,7 +91,7 @@ from src.jobs_schtasks import (
     task_run_command,
     upcoming_fires,
 )
-from src.jobs_stats import (
+from src.jobs.stats import (
     consecutive_failed_runs,
     cooldown_check,
     derived_runtime_ceiling_seconds,

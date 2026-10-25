@@ -9,7 +9,7 @@ real credential. Two consumers:
   literals or ``$secret:`` references, resolved by the executor at fire
   time and merged into the child's environment.
 * ``webhook.secret`` (issue #73, which landed first as the in-line
-  analogue of this mechanism): :func:`src.jobs_webhook.resolve_secret`
+  analogue of this mechanism): :func:`src.jobs.webhook.resolve_secret`
   delegates here.
 
 Deliberately a leaf module — no imports from the jobs/webapp packages —

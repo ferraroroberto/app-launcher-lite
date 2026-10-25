@@ -32,7 +32,7 @@ import json
 import re
 from typing import Any, Dict, List, Tuple
 
-from src.jobs_config import Job, Param
+from src.jobs.config import Job, Param
 
 _INT_RE = re.compile(r"^-?\d+$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")

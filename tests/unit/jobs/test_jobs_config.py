@@ -7,9 +7,9 @@ import json
 import pytest
 
 from src import jobs as jobs_mod
-from src import jobs_history as jobs_history_mod
-from src import jobs_queue as jobs_queue_mod
-from src.jobs_config import (
+from src.jobs import history as jobs_history_mod
+from src.jobs import queue as jobs_queue_mod
+from src.jobs.config import (
     Job,
     JobsConfig,
     Schedule,
@@ -179,7 +179,7 @@ class TestCooldownValidation:
 
 
 class TestMutexGroupValidation:
-    """``mutex_group`` shape — see :func:`src.jobs_config._validate_mutex_group`."""
+    """``mutex_group`` shape — see :func:`src.jobs.config._validate_mutex_group`."""
 
     def test_default_is_none(self):
         job = job_from_dict(
@@ -296,10 +296,10 @@ class TestPauseResume:
     """``paused_schedule`` round-trip + helpers (#68 PR #4)."""
 
     def _seed(self, tmp_path, monkeypatch):
-        from src import jobs_config as jc
+        from src.jobs import config as jc
         monkeypatch.setattr(jc, "DEFAULT_JOBS_PATH", tmp_path / "jobs.json")
         cfg = JobsConfig(jobs=[])
-        from src.jobs_config import pause_job, resume_job
+        from src.jobs.config import pause_job, resume_job
         return cfg, pause_job, resume_job
 
     def test_pause_parks_schedule(self, tmp_path, monkeypatch):
@@ -355,7 +355,7 @@ class TestPauseResume:
                 raise
 
     def test_paused_round_trips_through_load(self, tmp_path, monkeypatch):
-        from src import jobs_config as jc
+        from src.jobs import config as jc
         cfgpath = tmp_path / "jobs.json"
         monkeypatch.setattr(jc, "DEFAULT_JOBS_PATH", cfgpath)
         cfg = JobsConfig(jobs=[])
@@ -363,7 +363,7 @@ class TestPauseResume:
             "id": "x", "name": "X", "script_path": "C:\\x.py",
             "schedule": {"type": "daily", "at": "06:00"},
         }))
-        from src.jobs_config import load_jobs, pause_job
+        from src.jobs.config import load_jobs, pause_job
         pause_job(cfg, "x")
         # Reload from disk.
         cfg2 = load_jobs()
@@ -404,7 +404,7 @@ class TestChainValidation:
             )
 
     def test_unknown_downstream_rejected_on_add(self, tmp_path, monkeypatch):
-        from src import jobs_config as jc
+        from src.jobs import config as jc
         monkeypatch.setattr(jc, "DEFAULT_JOBS_PATH", tmp_path / "jobs.json")
         cfg = JobsConfig(jobs=[])
         good = job_from_dict(
@@ -417,7 +417,7 @@ class TestChainValidation:
         assert cfg.jobs == []
 
     def test_self_chain_rejected(self, tmp_path, monkeypatch):
-        from src import jobs_config as jc
+        from src.jobs import config as jc
         monkeypatch.setattr(jc, "DEFAULT_JOBS_PATH", tmp_path / "jobs.json")
         cfg = JobsConfig(jobs=[])
         bad = job_from_dict(
@@ -428,7 +428,7 @@ class TestChainValidation:
             add_job(cfg, bad)
 
     def test_two_node_cycle_rejected_on_update(self, tmp_path, monkeypatch):
-        from src import jobs_config as jc
+        from src.jobs import config as jc
         monkeypatch.setattr(jc, "DEFAULT_JOBS_PATH", tmp_path / "jobs.json")
         cfg = JobsConfig(jobs=[])
         a = job_from_dict({"id": "a", "name": "A", "script_path": "C:\\a.py"})
@@ -453,7 +453,7 @@ class TestChainValidation:
             job_from_dict({"id": "c", "name": "C", "script_path": "C:\\c.py",
                            "on_success": ["a"]}),
         ])
-        from src.jobs_config import detect_chain_cycle
+        from src.jobs.config import detect_chain_cycle
         cycle = detect_chain_cycle(cfg)
         assert cycle is not None
         # Cycle must form a closed walk.
@@ -463,7 +463,7 @@ class TestChainValidation:
     def test_cascade_remove_strips_dangling_chains(
         self, tmp_path, monkeypatch
     ):
-        from src import jobs_config as jc
+        from src.jobs import config as jc
         monkeypatch.setattr(jc, "DEFAULT_JOBS_PATH", tmp_path / "jobs.json")
         cfg = JobsConfig(jobs=[])
         add_job(cfg, job_from_dict({"id": "a", "name": "A",
@@ -647,7 +647,7 @@ class TestJobsConfigPersistence:
 class TestMutations:
     def test_add_rejects_duplicate(self, tmp_path, monkeypatch):
         path = tmp_path / "jobs.json"
-        monkeypatch.setattr("src.jobs_config.DEFAULT_JOBS_PATH", path)
+        monkeypatch.setattr("src.jobs.config.DEFAULT_JOBS_PATH", path)
         cfg = JobsConfig()
         job = Job(
             id="demo", name="Demo", script_path="C:\\stub\\demo.py"
@@ -658,7 +658,7 @@ class TestMutations:
 
     def test_update_changes_fields(self, tmp_path, monkeypatch):
         path = tmp_path / "jobs.json"
-        monkeypatch.setattr("src.jobs_config.DEFAULT_JOBS_PATH", path)
+        monkeypatch.setattr("src.jobs.config.DEFAULT_JOBS_PATH", path)
         cfg = JobsConfig()
         add_job(cfg, Job(id="demo", name="Demo", script_path="C:\\stub\\demo.py"))
         updated = update_job(
@@ -671,7 +671,7 @@ class TestMutations:
 
     def test_remove_returns_entry(self, tmp_path, monkeypatch):
         path = tmp_path / "jobs.json"
-        monkeypatch.setattr("src.jobs_config.DEFAULT_JOBS_PATH", path)
+        monkeypatch.setattr("src.jobs.config.DEFAULT_JOBS_PATH", path)
         cfg = JobsConfig()
         add_job(cfg, Job(id="demo", name="Demo", script_path="C:\\stub\\demo.py"))
         removed = remove_by_id(cfg, "demo")

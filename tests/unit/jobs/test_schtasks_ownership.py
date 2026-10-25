@@ -7,8 +7,8 @@ import subprocess
 from typing import List
 
 from src import jobs as jobs_mod
-from src import jobs_schtasks
-from src.jobs_config import make_job_id
+from src.jobs import schtasks as jobs_schtasks
+from src.jobs.config import make_job_id
 
 _FOLDER = "\\AppLauncher\\"
 

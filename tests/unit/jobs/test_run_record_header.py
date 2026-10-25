@@ -5,8 +5,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from src import jobs_history
-from src.jobs_config import Job
+from src.jobs import history as jobs_history
+from src.jobs.config import Job
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 # A header field set no writer may spell out by hand: the helper owns it.
@@ -59,7 +59,7 @@ def test_mark_run_failed_keeps_a_caller_supplied_finish_time(tmp_path, monkeypat
 def test_no_writer_spells_the_run_header_by_hand():
     """A new header field is added in ``base_run_meta`` only; a call that
     passes both header keywords inline is a hand-built copy of it."""
-    owner = REPO_ROOT / "src" / "jobs_history.py"
+    owner = REPO_ROOT / "src" / "jobs" / "history.py"
     offenders = []
     for root in ("src", "app"):
         for path in (REPO_ROOT / root).rglob("*.py"):

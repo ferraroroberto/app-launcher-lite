@@ -23,9 +23,9 @@ from src.session_host import (
     _BULK_FLOOR_MS,
     _BULK_QUIET_MS,
     _BULK_SUBMIT_THRESHOLD_CHARS,
-    _scan_bracketed_paste_mode,
     PtySession,
 )
+from src.session_host_text import scan_bracketed_paste_mode
 from src import session_host as session_host_module
 
 
@@ -245,38 +245,38 @@ def test_returns_false_when_already_exited(clock):
 
 
 def test_scan_detects_enable():
-    latest, carry = _scan_bracketed_paste_mode("\x1b[?2004h", "")
+    latest, carry = scan_bracketed_paste_mode("\x1b[?2004h", "")
     assert latest is True
     assert carry == ""
 
 
 def test_scan_detects_disable():
-    latest, carry = _scan_bracketed_paste_mode("\x1b[?2004l", "")
+    latest, carry = scan_bracketed_paste_mode("\x1b[?2004l", "")
     assert latest is False
     assert carry == ""
 
 
 def test_scan_ignores_unrelated_escape_sequences():
-    latest, carry = _scan_bracketed_paste_mode("\x1b[2J\x1b[1;1H", "")
+    latest, carry = scan_bracketed_paste_mode("\x1b[2J\x1b[1;1H", "")
     assert latest is None
     assert carry == ""
 
 
 def test_scan_returns_latest_when_multiple_in_one_chunk():
-    latest, _ = _scan_bracketed_paste_mode("\x1b[?2004h...\x1b[?2004l", "")
+    latest, _ = scan_bracketed_paste_mode("\x1b[?2004h...\x1b[?2004l", "")
     assert latest is False
 
 
 def test_scan_handles_sequence_split_across_reads():
-    latest1, carry = _scan_bracketed_paste_mode("hello\x1b[?20", "")
+    latest1, carry = scan_bracketed_paste_mode("hello\x1b[?20", "")
     assert latest1 is None
     assert carry == "\x1b[?20"
-    latest2, carry2 = _scan_bracketed_paste_mode("04h world", carry)
+    latest2, carry2 = scan_bracketed_paste_mode("04h world", carry)
     assert latest2 is True
     assert carry2 == ""
 
 
 def test_scan_fast_path_no_escape_no_carry():
-    latest, carry = _scan_bracketed_paste_mode("plain output, no escapes", "")
+    latest, carry = scan_bracketed_paste_mode("plain output, no escapes", "")
     assert latest is None
     assert carry == ""

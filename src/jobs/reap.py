@@ -26,7 +26,7 @@ Two entry points, split so a caller mid-way through an admission decision
 never triggers a re-entrant mutex-queue spawn off stale information:
 
 - :func:`finalize_dead_runs` — pid-liveness check + terminal write only.
-  Used by ``src.jobs_queue.mutex_collision``, which is itself in the middle
+  Used by ``src.jobs.queue.mutex_collision``, which is itself in the middle
   of deciding whether a *different* job may fire; draining the queue from
   there could spawn a sibling before the rest of that same collision sweep
   has re-checked it.
@@ -46,9 +46,9 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from src.diagnostics import is_pid_alive
-from src.jobs_config import Job
-from src.jobs_history import list_runs, read_run, runs_dir, write_run_json
-from src.jobs_stats import invalidate_stats_cache
+from src.jobs.config import Job
+from src.jobs.history import list_runs, read_run, runs_dir, write_run_json
+from src.jobs.stats import invalidate_stats_cache
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ def reap_stranded_runs(job: Job) -> List[Dict[str, Any]]:
         # Local import avoids a jobs_queue <-> jobs_reap import cycle
         # (jobs_queue.mutex_collision imports finalize_dead_runs from here)
         # — same pattern as write_run_json's local jobs_index import.
-        from src.jobs_queue import drain_mutex_queue
+        from src.jobs.queue import drain_mutex_queue
 
         drain_mutex_queue(job.mutex_group)
     return reaped

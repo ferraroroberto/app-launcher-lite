@@ -12,9 +12,9 @@ from unittest.mock import MagicMock
 
 from app.cli.commands import run_job_cmd as rjc
 from src import jobs as jobs_mod
-from src import jobs_config as jc
-from src import jobs_history as jobs_history_mod
-from src.jobs_config import Job, JobsConfig, job_from_dict, save_jobs, update_job
+from src.jobs import config as jc
+from src.jobs import history as jobs_history_mod
+from src.jobs.config import Job, JobsConfig, job_from_dict, save_jobs, update_job
 
 
 class TestAlertOnFailureRoundTrip:

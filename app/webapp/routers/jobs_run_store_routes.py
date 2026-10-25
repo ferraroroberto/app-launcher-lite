@@ -14,7 +14,7 @@ from app.webapp.middleware import LOOPBACK_HOSTS
 from app.webapp.routers._helpers import maybe_json
 from src import jobs as jobs_mod
 from src.api_tokens import constant_time_equals
-from src.jobs_config import get_by_id, load_jobs
+from src.jobs.config import get_by_id, load_jobs
 
 router = APIRouter()
 

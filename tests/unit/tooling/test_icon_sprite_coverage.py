@@ -8,11 +8,12 @@ regression net the issue asked for.
 
 Two things this test must get right, both of which it originally got wrong:
 
-1. The sprite scanned is the *inline* one in index.html, not the vendored
-   template. `<use href="#i-NAME">` resolves in-document only (deliberately —
-   iOS Safari will not follow an external `<use href="file.svg#id">`), so
-   index.html's per-app trim is the only sprite the page ever sees. Checking
-   the 86-symbol upstream template instead is a guaranteed false green.
+1. The sprite scanned is the one the page route inlines into index.html
+   (icon-sprite.html), not the vendored template. `<use href="#i-NAME">`
+   resolves in-document only (deliberately — iOS Safari will not follow an
+   external `<use href="file.svg#id">`), so the per-app trim spliced into
+   index.html is the only sprite the page ever sees. Checking the 86-symbol
+   upstream template instead is a guaranteed false green.
 2. The reference scan must see the `{icon: 'NAME'}` property form, not just
    literal `icon('NAME')` calls — `toast()` funnels `opts.icon` straight into
    `icon()` (api.js), and the Jobs/Board status tables carry glyph names the
@@ -27,7 +28,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _STATIC_DIR = _REPO_ROOT / "app" / "webapp" / "static"
 # The served source of truth: the inline sprite <use> resolves against.
-_SPRITE_PATH = _STATIC_DIR / "index.html"
+_SPRITE_PATH = _STATIC_DIR / "icon-sprite.html"
 
 _ICON_REFERENCE_RE = re.compile(
     r"icon\(\s*['\"]([\w-]+)['\"]"  # icon('NAME')

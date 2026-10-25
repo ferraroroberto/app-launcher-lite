@@ -150,6 +150,23 @@ def rewrite_js_imports(body: str, hashes: Dict[str, str], from_dir: str = "") ->
     return _JS_IMPORT_RE.sub(_sub, body)
 
 
+_INCLUDE_RE = re.compile(r"<!--#include ([\w.-]+)-->")
+
+
+def inline_includes(body: str, static_dir: Path) -> str:
+    """Splice each ``<!--#include NAME-->`` marker with ``static_dir/NAME``.
+
+    Lets a large inline block (the icon sprite) live in its own file while
+    the served document still carries it inline. ``NAME`` is a bare file
+    name, so an include can never reach outside ``static_dir``; a missing
+    file raises rather than serving a page without it.
+    """
+    return _INCLUDE_RE.sub(
+        lambda m: (static_dir / m.group(1)).read_text(encoding="utf-8").rstrip("\n"),
+        body,
+    )
+
+
 def rewrite_index_html(body: str, hashes: Dict[str, str]) -> str:
     """Stamp ``?v=<hash>`` onto every ``/static/<relpath>.(css|js)`` href/src.
 

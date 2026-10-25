@@ -7,8 +7,8 @@ detached. Queue file lives at :data:`JOBS_QUEUE_PATH` (one JSON document,
 keyed by group → FIFO list of pending entries).
 
 Split out of :mod:`src.jobs` (issue #315) — run-history file storage lives
-in :mod:`src.jobs_history`, schtasks sync + spawn helpers in
-:mod:`src.jobs_schtasks`, and percentiles/health in :mod:`src.jobs_stats`.
+in :mod:`src.jobs.history`, schtasks sync + spawn helpers in
+:mod:`src.jobs.schtasks`, and percentiles/health in :mod:`src.jobs.stats`.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from threading import Lock
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from src._json_io import atomic_write_json, file_lock
-from src.jobs_config import Job
-from src.jobs_history import (
+from src.jobs.config import Job
+from src.jobs.history import (
     JOBS_RUNS_DIR,
     base_run_meta,
     latest_run,
@@ -33,8 +33,8 @@ from src.jobs_history import (
     runs_dir,
     write_run_json,
 )
-from src.jobs_schtasks import spawn_run_job_detached
-from src.jobs_trigger import chain_trigger
+from src.jobs.schtasks import spawn_run_job_detached
+from src.jobs.trigger import chain_trigger
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def _queue_file_lock() -> Iterator[None]:
     reading the same pre-write state and one clobbering the other's
     ``os.replace`` (issue #409). Thin wrapper around the shared
     :func:`src._json_io.file_lock` (same sidecar-lock pattern as
-    ``src.jobs_history._run_json_lock``).
+    ``src.jobs.history._run_json_lock``).
 
     Resolves the lock path from the current :data:`JOBS_QUEUE_PATH` value
     on every call (rather than caching it at import time) so tests that
@@ -147,7 +147,7 @@ def mutex_collision(jobs: List[Job], job: Job) -> Optional[Job]:
     # mutex-queue drain: we're still mid-sweep deciding admission for
     # `job` itself, and draining here could spawn a queued sibling before
     # the rest of this same loop has re-checked it against that spawn.
-    from src.jobs_reap import finalize_dead_runs
+    from src.jobs.reap import finalize_dead_runs
 
     for other in jobs:
         if other.id == job.id:

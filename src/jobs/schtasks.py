@@ -1,6 +1,6 @@
 """Windows Task Scheduler sync + spawn helpers for the Jobs tab.
 
-Every :class:`~src.jobs_config.Job` with a non-``none`` schedule
+Every :class:`~src.jobs.config.Job` with a non-``none`` schedule
 materialises as one or more entries under the ``\\AppLauncher\\`` Task
 Scheduler folder. ``daily_times`` jobs fan out into
 ``\\AppLauncher\\<id>-1``, ``…-2``, … so a single schedule with three
@@ -23,8 +23,8 @@ calls it with ``pythonw launcher.py run-job <id>``; the webapp's
 returns the new ``run_id`` immediately.
 
 Split out of :mod:`src.jobs` (issue #315) — run-history file storage lives
-in :mod:`src.jobs_history`, the mutex queue in :mod:`src.jobs_queue`, and
-percentiles/health in :mod:`src.jobs_stats`.
+in :mod:`src.jobs.history`, the mutex queue in :mod:`src.jobs.queue`, and
+percentiles/health in :mod:`src.jobs.stats`.
 """
 
 from __future__ import annotations
@@ -38,13 +38,13 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
-from src.jobs_argv import encode_params_token
-from src.jobs_config import Job, Schedule
+from src.jobs.argv import encode_params_token
+from src.jobs.config import Job, Schedule
 from src.subprocess_flags import NO_WINDOW
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 TASK_NAMESPACE = "AppLauncher"
 TASK_FOLDER_PREFIX = f"\\{TASK_NAMESPACE}\\"
@@ -73,7 +73,7 @@ def resolve_venv_python(script_path: Path) -> Optional[Path]:
     Returns the resolved interpreter path, or ``None`` when no ancestor
     directory contains a ``.venv``. The walk stops at the filesystem root.
     Shared by the executor (``build_invocation``) and the save-time
-    pre-flight (``src.jobs_preflight``).
+    pre-flight (``src.jobs.preflight``).
     """
     try:
         cur = script_path.parent.resolve()
@@ -142,7 +142,7 @@ def spawn_run_job_detached(
 
     Used by the webapp's ``POST /api/jobs/<id>/run`` route to fire a job
     without blocking the request, plus the mutex-queue drain and DAG chain
-    dispatch (``src/jobs_queue.py``). Returns the spawned PID — kept only
+    dispatch (``src/jobs/queue.py``). Returns the spawned PID — kept only
     for diagnostics; the run record is tracked via the filesystem.
 
     Re-parented via ``cmd /c start`` (issue #416) rather than
@@ -158,7 +158,7 @@ def spawn_run_job_detached(
 
     ``params`` (issue #67) is the validated ``{name: value}`` payload from
     the run-now dialog. When present, it rides argv as
-    ``--params-b64 <token>`` (:func:`src.jobs_argv.encode_params_token`):
+    ``--params-b64 <token>`` (:func:`src.jobs.argv.encode_params_token`):
     cmd.exe re-reads this command line, and only a base64url token is
     guaranteed to reach the executor (which re-validates) byte-for-byte.
     Schedule + Stream-Deck callers omit the arg entirely.
@@ -283,7 +283,7 @@ def _other_job_ids(job_id: str) -> List[str]:
     slot grammar alone.
     """
     try:
-        from src.jobs_config import load_jobs  # local: avoids an import cycle
+        from src.jobs.config import load_jobs  # local: avoids an import cycle
 
         return [j.id for j in load_jobs().jobs if j.id != job_id]
     except Exception:  # noqa: BLE001 — a config read must not block a sync
@@ -495,7 +495,7 @@ def _bulk_records(
 
     ``None`` when the query itself failed — distinct from ``{}`` ("the
     query worked and there are no AppLauncher tasks"). The coverage check
-    (:mod:`src.jobs_coverage`) needs that distinction: without it, one
+    (:mod:`src.jobs.coverage`) needs that distinction: without it, one
     failed query would flag every scheduled job as missing its task.
     """
     runner = runner or _run_schtasks
@@ -554,7 +554,7 @@ def invalidate_next_run_cache() -> None:
     Called after ``sync_schtasks`` / ``delete_schtasks`` so a Task
     Scheduler edit shows up on the next ``/api/jobs`` poll instead of
     waiting out the TTL. The derived missed-fire/coverage cache
-    (:mod:`src.jobs_coverage`) is dropped with it — it reads this same
+    (:mod:`src.jobs.coverage`) is dropped with it — it reads this same
     snapshot, so a stale one would keep a just-fixed job flagged.
     """
     global _next_run_cache
@@ -562,7 +562,7 @@ def invalidate_next_run_cache() -> None:
         _next_run_cache = None
     # Local import breaks the jobs_coverage -> jobs_schtasks module cycle,
     # same pattern as jobs_reap's local jobs_queue import.
-    from src.jobs_coverage import invalidate_coverage_cache
+    from src.jobs.coverage import invalidate_coverage_cache
 
     invalidate_coverage_cache()
 
@@ -605,7 +605,7 @@ def query_next_run(
 # The schtasks "Next Run Time" string above is a locale-formatted, lexically
 # sorted best-effort value — fine to *display*, useless to *sort by* or to
 # turn into a countdown. The schedule definition, however, is a small
-# deterministic set (see src.jobs_config), so we compute the next wall-clock
+# deterministic set (see src.jobs.config), so we compute the next wall-clock
 # fire ourselves. This is the field the UI sorts on and renders "in 3h" from.
 
 # Day-name → datetime.weekday() index (Mon=0 .. Sun=6).

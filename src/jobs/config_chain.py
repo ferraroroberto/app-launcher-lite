@@ -1,10 +1,10 @@
-"""Chain-cycle graph algorithm for the jobs registry (split off ``src.jobs_config``).
+"""Chain-cycle graph algorithm for the jobs registry (split off ``src.jobs.config``).
 
 ``on_success`` / ``on_failure`` edges between jobs form a DAG dispatch
 graph (issue #68). This module owns the graph-shaped checks — cycle
 detection and unknown-reference validation — that ``add_job`` /
 ``update_job`` run before ever writing a chain edit to disk. See
-:mod:`src.jobs_config_models` for the ``Job``/``JobsConfig`` dataclasses
+:mod:`src.jobs.config_models` for the ``Job``/``JobsConfig`` dataclasses
 these functions read.
 """
 
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from src.jobs_config_models import JobsConfig
+from src.jobs.config_models import JobsConfig
 
 
 def detect_chain_cycle(cfg: JobsConfig) -> Optional[List[str]]:

@@ -239,11 +239,11 @@ async def _coverage_tick(app: FastAPI) -> None:
     the mirror-window sweep above is): a throwaway instance pointed at a
     scratch config must never push a real alert to the user's phone.
 
-    Every scan is wrapped by :func:`src.jobs_coverage.check_and_alert`, which
+    Every scan is wrapped by :func:`src.jobs.coverage.check_and_alert`, which
     never raises — a wedged Task Scheduler or an unreachable Telegram must
     not take the webapp's lifespan down.
     """
-    from src import jobs_coverage
+    from src.jobs import coverage as jobs_coverage
 
     cfg = getattr(app.state, "webapp_config", None)
     if cfg is None:

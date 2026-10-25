@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from src.jobs_config import Job
+from src.jobs.config import Job
 from src.jobs_kinds.base import Problem, require_script
 
 # A ``.venv\Scripts\python(w).exe`` (or ``activate``) reference embedded in
@@ -26,7 +26,7 @@ _BAT_VENV_RE = re.compile(
 # a tail value containing one of these can break out of its argv slot and
 # have cmd.exe run additional commands. A webhook-triggered
 # job can map an unsanitized payload field straight into a string param
-# value (src.jobs_webhook.resolve_mapping), so this has to be enforced
+# value (src.jobs.webhook.resolve_mapping), so this has to be enforced
 # here, not just at the UI layer.
 _CMD_INJECTION_CHARS = frozenset('"&|^<>')
 

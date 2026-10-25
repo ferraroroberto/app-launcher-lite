@@ -6,8 +6,8 @@ import asyncio
 
 from app.webapp.routers import jobs as jobs_router
 from src import jobs as jobs_mod
-from src import jobs_history
-from src.jobs_config import Job, JobsConfig
+from src.jobs import history as jobs_history
+from src.jobs.config import Job, JobsConfig
 
 
 def test_marks_killed_before_killing_the_tree(tmp_path, monkeypatch):

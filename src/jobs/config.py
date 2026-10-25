@@ -39,16 +39,16 @@ Schedule types are a bounded set — no raw cron expressions:
 This module owns registry *storage* (load/save the JSON file) and CRUD
 (add/update/pause/resume/remove). The ``Schedule``/``Param``/``Job``/
 ``JobsConfig`` dataclasses and their ``*_from_dict``/``validate_*``
-helpers live in :mod:`src.jobs_config_models`; the chain-cycle graph
-algorithm lives in :mod:`src.jobs_config_chain`. Both are re-exported
-here so existing callers (``from src.jobs_config import X``) keep
+helpers live in :mod:`src.jobs.config_models`; the chain-cycle graph
+algorithm lives in :mod:`src.jobs.config_chain`. Both are re-exported
+here so existing callers (``from src.jobs.config import X``) keep
 working unchanged — same facade pattern as the earlier ``src.jobs``
 split (issue #315).
 
 ``DEFAULT_JOBS_PATH``/``load_jobs``/``save_jobs`` stay defined in *this*
 module rather than moving to a storage-only submodule: tests across the
-suite monkeypatch ``src.jobs_config.DEFAULT_JOBS_PATH`` (and, in one
-case, ``src.jobs_config.load_jobs`` itself) directly, and a monkeypatch
+suite monkeypatch ``src.jobs.config.DEFAULT_JOBS_PATH`` (and, in one
+case, ``src.jobs.config.load_jobs`` itself) directly, and a monkeypatch
 only takes effect on the module that owns the name being patched — see
 ``src/jobs.py``'s docstring for the same gotcha on the ``src.jobs``
 split.
@@ -63,11 +63,11 @@ from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple
 
 from src._json_io import atomic_write_json
-from src.jobs_config_chain import (
+from src.jobs.config_chain import (
     _validate_chain_consistency,
     detect_chain_cycle,
 )
-from src.jobs_config_models import (
+from src.jobs.config_models import (
     MAX_COOLDOWN_SECONDS,
     MAX_MUTEX_GROUP_LEN,
     MAX_WATCHDOG_SECONDS,
@@ -92,10 +92,10 @@ from src.jobs_config_models import (
     schedule_from_dict,
     validate_kind_shape,
 )
-from src.jobs_webhook import webhook_from_dict
+from src.jobs.webhook import webhook_from_dict
 
 __all__ = [
-    # models (src.jobs_config_models)
+    # models (src.jobs.config_models)
     "SCHEDULE_TYPES",
     "WEEKLY_DAYS",
     "PARAM_KINDS",
@@ -114,7 +114,7 @@ __all__ = [
     "kind_config_from_dict",
     "validate_kind_shape",
     "JobsConfig",
-    # chain (src.jobs_config_chain)
+    # chain (src.jobs.config_chain)
     "detect_chain_cycle",
     # storage + CRUD (this module)
     "PROJECT_ROOT",
@@ -131,7 +131,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_JOBS_PATH = PROJECT_ROOT / "config" / "jobs.json"
 
 
