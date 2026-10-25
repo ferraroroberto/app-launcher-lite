@@ -14,7 +14,7 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from src import jobs_history
+from src.jobs import history as jobs_history
 
 logger = logging.getLogger(__name__)
 

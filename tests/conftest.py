@@ -93,10 +93,12 @@ def project_root() -> Path:
 def isolated_jobs(tmp_path, monkeypatch):
     """Point the jobs run history, queue and registry at ``tmp_path``.
 
-    JOBS_RUNS_DIR / JOBS_QUEUE_PATH are owned by ``src.jobs_history`` /
-    ``src.jobs_queue`` (not the ``src.jobs`` facade), so they are patched there.
+    JOBS_RUNS_DIR / JOBS_QUEUE_PATH are owned by ``src.jobs.history`` /
+    ``src.jobs.queue`` (not the ``src.jobs`` facade), so they are patched there.
     """
-    from src import jobs_config, jobs_history, jobs_queue
+    from src.jobs import config as jobs_config
+    from src.jobs import history as jobs_history
+    from src.jobs import queue as jobs_queue
 
     monkeypatch.setattr(jobs_history, "JOBS_RUNS_DIR", tmp_path)
     monkeypatch.setattr(jobs_queue, "JOBS_QUEUE_PATH", tmp_path / "_queue.json")
@@ -189,10 +191,10 @@ def _isolate_configs(tmp_path: Path, monkeypatch) -> dict:
     # DEFAULT_JOBS_PATH and writes run records under JOBS_RUNS_DIR.
     tmp_jobs_cfg = tmp_path / "jobs.json"
     tmp_jobs_runs = tmp_path / "jobs_runs"
-    from src import jobs_config as jobs_cfg_mod
-    from src import jobs_history as jobs_history_mod
+    from src.jobs import config as jobs_cfg_mod
+    from src.jobs import history as jobs_history_mod
     monkeypatch.setattr(jobs_cfg_mod, "DEFAULT_JOBS_PATH", tmp_jobs_cfg)
-    # JOBS_RUNS_DIR is owned by src.jobs_history (issue #315 split) — patch
+    # JOBS_RUNS_DIR is owned by src.jobs.history (issue #315 split) — patch
     # it there, not on the src.jobs facade, so runs_dir()/list_runs()/etc.
     # (which read their own module's global, not the facade's copy) see it.
     monkeypatch.setattr(jobs_history_mod, "JOBS_RUNS_DIR", tmp_jobs_runs)

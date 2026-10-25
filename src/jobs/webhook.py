@@ -6,13 +6,13 @@ bearer-gated ``POST /api/jobs/<id>/run``. The hook route trusts **only** the
 provider-specific signature computed here — never the SPA bearer token — so
 the hook URL itself is safe to hand to a third party in plaintext.
 
-Deliberately a leaf module — no import of :mod:`src.jobs_config` — so
+Deliberately a leaf module — no import of :mod:`src.jobs.config` — so
 ``jobs_config`` can import :class:`WebhookConfig` from here without a cycle
 (same pattern as ``src.jobs_kinds.base``).
 
 Secrets: a job's ``webhook.secret`` is either a literal string or a
 ``$secret:<key>`` reference resolved against ``webapp_config.secrets`` at
-fire time (via :mod:`src.jobs_secrets`, generalized by issue #72 from the
+fire time (via :mod:`src.jobs.secrets`, generalized by issue #72 from the
 in-line mechanism this module introduced) — so a rotated secret lives in
 one gitignored place instead of ``jobs.json``.
 """
@@ -27,7 +27,7 @@ from hashlib import sha256
 from typing import Any, Dict, List, Optional
 
 from src.api_tokens import constant_time_equals
-from src.jobs_secrets import resolve_secret_value
+from src.jobs.secrets import resolve_secret_value
 
 PROVIDERS = frozenset({"github", "stripe", "generic"})
 
@@ -41,7 +41,7 @@ class WebhookConfig:
 
     ``mapping`` keys must match the job's declared ``Param.name`` entries —
     resolution just produces the same ``{name: value}`` shape
-    ``src.jobs_argv.compose_argv`` already turns into argv/env for a manual
+    ``src.jobs.argv.compose_argv`` already turns into argv/env for a manual
     run, so no new argv-composition logic is needed for a webhook fire.
     """
 
@@ -64,7 +64,7 @@ def webhook_from_dict(raw: Any) -> Optional[WebhookConfig]:
     """Parse a job's ``webhook`` block. ``None`` / missing → ``None``.
 
     Raises ``ValueError`` on a malformed shape — the same contract as
-    ``schedule_from_dict`` / ``param_from_dict`` in ``src.jobs_config``.
+    ``schedule_from_dict`` / ``param_from_dict`` in ``src.jobs.config``.
     """
     if raw is None:
         return None
@@ -120,7 +120,7 @@ def resolve_secret(secret_ref: str, webapp_config: Any) -> str:
 
     ``$secret:<key>`` is looked up in ``webapp_config.secrets`` (raises
     ``ValueError`` when the key is unknown); anything else is used as-is.
-    Thin wrapper around :func:`src.jobs_secrets.resolve_secret_value` so
+    Thin wrapper around :func:`src.jobs.secrets.resolve_secret_value` so
     webhook callers keep passing the whole config object.
     """
     return resolve_secret_value(

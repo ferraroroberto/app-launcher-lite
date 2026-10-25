@@ -66,7 +66,7 @@ A job's `kind` field selects the module. **`kind` is optional** — when absent,
 | `inline-shell` | must be empty | `{script_body, ext}` | body written to `webapp/jobs/<id>/<run>/_inline<ext>`, then dispatched through whichever of the three shapes above matches `ext` (`.ps1`/`.bat`/`.sh`) | matches the delegated kind |
 | `http-check` | must be empty | `{url, method?, expect_status?, timeout?}` | `python -m src.jobs_kinds.http_check_probe --url … --method … --expect-status … --timeout …` — a tiny built-in probe, no external script | project root |
 
-`python`'s venv walk-up (`src.jobs_schtasks.resolve_venv_python`) starts from `script_path.parent` and falls back to `sys.executable` if no ancestor `.venv\Scripts\python.exe` is found — the PYTHONPATH bit fixes the "out-of-tree script imports project packages" gotcha (see global CLAUDE.md). `shell-wsl` is opt-in: pre-flight surfaces a warning (not a blocking error) when `wsl.exe` isn't resolvable on PATH.
+`python`'s venv walk-up (`src.jobs.schtasks.resolve_venv_python`) starts from `script_path.parent` and falls back to `sys.executable` if no ancestor `.venv\Scripts\python.exe` is found — the PYTHONPATH bit fixes the "out-of-tree script imports project packages" gotcha (see global CLAUDE.md). `shell-wsl` is opt-in: pre-flight surfaces a warning (not a blocking error) when `wsl.exe` isn't resolvable on PATH.
 
 `args` is split on whitespace and appended to every kind's argv tail except `http-check` (its probe takes fixed flags only). If you need an argument containing spaces, put it inside the script/wrapper rather than relying on shell quoting.
 
@@ -258,7 +258,7 @@ A job can declare a `mutex_group` — a free-form lowercase identifier (alnum + 
 }
 ```
 
-- **Admission points.** Every fire is gated before it runs, on whichever side of the process boundary it arrives: manual / webhook / API fires at `_admit_and_spawn` (`app/webapp/routers/jobs_run.py`), chain fires at `dispatch_chain_run` (`src/jobs_queue.py`), and **schtasks fires in the executor itself** (`_finalize_mutex_queue`, `app/cli/commands/run_job_cmd.py`) — Task Scheduler launches `run-job` directly and never touches the webapp, so without that third gate the weekly fleet chain, the main reason the feature exists, ran unserialized. The executor gate is scoped to `trigger == "scheduled"` **with no `--run-id`**: every already-admitted path pre-creates its run dir and passes `--run-id`, so the discriminator is what stops a drained entry (which replays its original `trigger="scheduled"`) being pushed straight back onto the queue it was just released from. Mirrors the `scheduled`-only cooldown gate next to it, and runs *after* it — a cooled-down fire is a no-op and shouldn't occupy a queue slot.
+- **Admission points.** Every fire is gated before it runs, on whichever side of the process boundary it arrives: manual / webhook / API fires at `_admit_and_spawn` (`app/webapp/routers/jobs_run.py`), chain fires at `dispatch_chain_run` (`src/jobs/queue.py`), and **schtasks fires in the executor itself** (`_finalize_mutex_queue`, `app/cli/commands/run_job_cmd.py`) — Task Scheduler launches `run-job` directly and never touches the webapp, so without that third gate the weekly fleet chain, the main reason the feature exists, ran unserialized. The executor gate is scoped to `trigger == "scheduled"` **with no `--run-id`**: every already-admitted path pre-creates its run dir and passes `--run-id`, so the discriminator is what stops a drained entry (which replays its original `trigger="scheduled"`) being pushed straight back onto the queue it was just released from. Mirrors the `scheduled`-only cooldown gate next to it, and runs *after* it — a cooled-down fire is a no-op and shouldn't occupy a queue slot.
 - **Queue file.** `webapp/jobs/_queue.json` — one JSON document, keyed by group → FIFO list of `{job_id, run_id, trigger, params}`. Mutations go through `os.replace` so the file is always a complete document. Empty groups are pruned out so the file stays tidy.
 - **`status: "queued"`.** Queued runs land in history with `status="queued"`, `mutex_group`, and `mutex_blocked_by` (the id of the job currently holding the group). Queued runs do **not** contribute to p50/p95/success-rate stats and do **not** count toward the failure-streak gate. The route returns `{run_id, job_id, status: "queued", mutex_group, mutex_blocked_by}` so the UI can render a queue toast.
 - **Drain triggers.** The mutex queue drains in two places: (1) the executor's finalisation block, after the head's `run.json` flips to `success`/`failed`; (2) the kill endpoint, after a stuck head is signalled (otherwise killing the head would wedge the queue with no finaliser to drain it).
@@ -399,7 +399,7 @@ Two worked examples:
 `config/webapp_config.json` carries a `secrets: {key: value}` dict (gitignored,
 alongside the existing `pushover_*` secrets). `$secret:<key>` in a job's
 `webhook.secret` — and in any `Job.env` value, see "Per-job secrets & env"
-below — resolves against it at fire time (`src.jobs_secrets`). A literal string
+below — resolves against it at fire time (`src.jobs.secrets`). A literal string
 works too — `jobs.json` is already gitignored — but `$secret:` keeps the
 secret in one place instead of duplicated across every job that shares it, and
 lets it rotate without touching `jobs.json`. The older block under the
@@ -501,11 +501,11 @@ Unpinned history is pruned to the most recent **20 runs per job** by the executo
 | `note` | str | executor | Human one-liner for a non-obvious finalisation — `"cooldown"` on a skipped fire, an invocation error, or `"watchdog: no output for 68min"` |
 | `pinned` | bool | run update endpoint | Keep-forever flag; omitted/false for normal retention |
 
-Plain files remain the canonical store — same pattern as session transcripts and audit logs. A future LLM/human can `cat` a run record without any tooling. `webapp/jobs/_index.sqlite` is only a derived mirror: `runs` stores queryable metadata and `output_fts` maps FTS5 rowids to run rowids for cross-run grep. `src/jobs_index.py` rebuilds it from every `run.json` / `output.log` pair when the file is missing, corrupt, or carries an older `PRAGMA user_version`; deleting it and reloading the Jobs tab is the supported repair path. Canonical writes update the mirror after the atomic JSON swap, and finalization captures the completed output plus artifact presence.
+Plain files remain the canonical store — same pattern as session transcripts and audit logs. A future LLM/human can `cat` a run record without any tooling. `webapp/jobs/_index.sqlite` is only a derived mirror: `runs` stores queryable metadata and `output_fts` maps FTS5 rowids to run rowids for cross-run grep. `src/jobs/index.py` rebuilds it from every `run.json` / `output.log` pair when the file is missing, corrupt, or carries an older `PRAGMA user_version`; deleting it and reloading the Jobs tab is the supported repair path. Canonical writes update the mirror after the atomic JSON swap, and finalization captures the completed output plus artifact presence.
 
 ## Authoring safety — pre-flight on save
 
-Adding a job used to be a leap of faith: the first scheduled fire was when you found out the path was wrong or the venv didn't walk up. `src/jobs_preflight.py::preflight(job)` front-loads those checks at save time so the dialog can surface problems *before* the schedule starts ticking. It is a **pure function** (no subprocess, no globals) — both so it is trivially unit-testable and so a request handler never shells out to `schtasks.exe`.
+Adding a job used to be a leap of faith: the first scheduled fire was when you found out the path was wrong or the venv didn't walk up. `src/jobs/preflight.py::preflight(job)` front-loads those checks at save time so the dialog can surface problems *before* the schedule starts ticking. It is a **pure function** (no subprocess, no globals) — both so it is trivially unit-testable and so a request handler never shells out to `schtasks.exe`.
 
 Two severities:
 
@@ -649,7 +649,7 @@ Either breach calls `src.diagnostics.kill_process_tree` on the child's whole tre
 **Defaults.**
 
 - `no_output_seconds` → 1 hour (`WATCHDOG_DEFAULT_NO_OUTPUT_SECONDS`). Generous on purpose: a job that prints nothing until it finishes is common and must not be killed for being quiet.
-- `max_runtime_seconds` → `src.jobs_stats.derived_runtime_ceiling_seconds(job_id)`, the same `max(p95 × 3, 300 s)` heuristic behind the ⚠️ stuck badge (`stuck_threshold_seconds`, now the single definition both read). **But only once the job has at least `WATCHDOG_MIN_COMPLETED_RUNS` (5) completed runs on record** — below that it returns `None` and the run gets *no* runtime ceiling. A false ⚠️ costs a glance; a false auto-kill of a healthy first-ever run is not recoverable, so thin history is reported as unknown rather than collapsed onto the 300 s floor. Give such a job a ceiling by setting `max_runtime_seconds` explicitly.
+- `max_runtime_seconds` → `src.jobs.stats.derived_runtime_ceiling_seconds(job_id)`, the same `max(p95 × 3, 300 s)` heuristic behind the ⚠️ stuck badge (`stuck_threshold_seconds`, now the single definition both read). **But only once the job has at least `WATCHDOG_MIN_COMPLETED_RUNS` (5) completed runs on record** — below that it returns `None` and the run gets *no* runtime ceiling. A false ⚠️ costs a glance; a false auto-kill of a healthy first-ever run is not recoverable, so thin history is reported as unknown rather than collapsed onto the 300 s floor. Give such a job a ceiling by setting `max_runtime_seconds` explicitly.
 
 **Discipline inside the thread.** Both ceilings are resolved on the *main* thread before it starts (`resolve_watchdog_limits`), so the loop itself touches nothing but `Path.stat`, `Popen.poll`, and a bounded `Event.wait` — no config load, no run-history read, no notifier. It does not log inline either: the root logger writes to `stderr`, which for a `visible` job is the same console a wedge may already have jammed, so the kill happens **first** and the breadcrumb goes out afterwards on a throwaway daemon thread (`_log_off_thread`). That ordering follows from the rule that a stall watchdog must never block on its own log line before it kills. A child that exited on its own a moment before a breach is caught by a `poll()` check and is never reported as watchdog-killed.
 
@@ -657,9 +657,9 @@ Either breach calls `src.diagnostics.kill_process_tree` on the child's whole tre
 
 ### Stranded-run reap
 
-If the **executor itself** dies before it reaches its own finalise (interrupt, reboot, OOM, a parent shell killing its process tree) — not just the child it's tracking — nothing ever writes a terminal status, and the record stays `running` forever even after the recorded pid is long gone. `src/jobs_reap.py` automates the same reconciliation the kill route already does by hand for that exact case:
+If the **executor itself** dies before it reaches its own finalise (interrupt, reboot, OOM, a parent shell killing its process tree) — not just the child it's tracking — nothing ever writes a terminal status, and the record stays `running` forever even after the recorded pid is long gone. `src/jobs/reap.py` automates the same reconciliation the kill route already does by hand for that exact case:
 
-- **Where it runs.** Opportunistically on read, not a background sweep — every `GET /api/jobs` poll (`app/webapp/routers/jobs.py::_decorate_job`) and every `Board` "stuck" sweep (`src.board.jobs_attention`) call `reap_stranded_runs(job)` before deciding what to show. `src.jobs_queue.mutex_collision` calls the drain-less `finalize_dead_runs(job)` for the same reason mid-admission-check (draining there could spawn a queued sibling before the rest of that same collision sweep re-checks it).
+- **Where it runs.** Opportunistically on read, not a background sweep — every `GET /api/jobs` poll (`app/webapp/routers/jobs.py::_decorate_job`) and every `Board` "stuck" sweep (`src.board.jobs_attention`) call `reap_stranded_runs(job)` before deciding what to show. `src.jobs.queue.mutex_collision` calls the drain-less `finalize_dead_runs(job)` for the same reason mid-admission-check (draining there could spawn a queued sibling before the rest of that same collision sweep re-checks it).
 - **What counts as "provably dead".** Only a recorded `pid` that `psutil` confirms is gone (or has been recycled by Windows — a `pid_create_time` persisted alongside `pid` at spawn, and compared against the live process's actual `create_time()` within 1 s, rules out reuse). No `pid` yet, or a pid that's alive and unverifiable against a create-time hint, is left alone — a genuinely long-running job is never reconciled out from under itself.
 - **What gets swept.** Every non-terminal record in the job's history, not just the latest — an older `running` record superseded by a newer run is invisible to every behavioural consumer (mutex/streak/run-button all read only the latest), but still a lie if a user opens that specific historical run's detail view.
 - **What a reap does.** Writes `status: "failed"`, `finished_at`, `duration_seconds` (mirroring the kill route) plus `reaped: true` — distinct from `killed: true`, since this was never killed, just lost track of — invalidates the stats cache, and drains the job's mutex group once if anything was reaped.
@@ -670,7 +670,7 @@ If the **executor itself** dies before it reaches its own finalise (interrupt, r
 The original v1 issued one `schtasks /Query` per job per `/api/jobs` poll — N+1 fork+exec on Windows. The decoration layer now reads `next_run` out of a single process-local snapshot:
 
 - One bulk `schtasks /Query /FO LIST /V` populates `{task_name: {next_run, enabled}}` for every entry under `\AppLauncher\` — `next_run` backs the countdown, `enabled` backs the [missed-fire coverage](#missed-fire-coverage-issue-697) structural check, so both read one query.
-- The snapshot is cached for **30 s** (`_NEXT_RUN_TTL_SECONDS` in `src/jobs_schtasks.py`).
+- The snapshot is cached for **30 s** (`_NEXT_RUN_TTL_SECONDS` in `src/jobs/schtasks.py`).
 - A *failed* query caches as `None`, distinct from `{}` ("the query worked and there are no `\AppLauncher\` tasks") — without that distinction one failed query would flag every scheduled job as missing its entry.
 - `sync_schtasks` and `delete_schtasks` call `invalidate_next_run_cache()` at the end so user edits show up on the next poll without waiting out the TTL. That also drops the derived coverage scan, which reads this same snapshot.
 
@@ -721,7 +721,7 @@ The message is short and job-scoped: `❌ <job name> failed` as the title, `<tim
 
 ## Missed-fire coverage
 
-Failure alerting covers a run that **failed**; the ⚠️ stuck marker covers one that never **ended**. `src/jobs_coverage.py` covers the third case — a run that never **started**. A job whose Task Scheduler entry is missing, disabled, or was never created simply doesn't fire, and the absence is otherwise invisible: the row keeps showing its old stats and nothing alerts. This is not hypothetical — `config-map` and `sota-watch` shipped launchers plus "runs weekly unattended" docs with *no registered task at all* for weeks, found only by a manual coherence review.
+Failure alerting covers a run that **failed**; the ⚠️ stuck marker covers one that never **ended**. `src/jobs/coverage.py` covers the third case — a run that never **started**. A job whose Task Scheduler entry is missing, disabled, or was never created simply doesn't fire, and the absence is otherwise invisible: the row keeps showing its old stats and nothing alerts. This is not hypothetical — `config-map` and `sota-watch` shipped launchers plus "runs weekly unattended" docs with *no registered task at all* for weeks, found only by a manual coherence review.
 
 Two halves, both answered from data the tab already reads:
 

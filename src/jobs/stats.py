@@ -1,8 +1,8 @@
 """Run-duration percentiles, health, and stuck-run detection for the Jobs tab.
 
 Split out of :mod:`src.jobs` (issue #315) — run-history file storage lives
-in :mod:`src.jobs_history`, schtasks sync + spawn helpers in
-:mod:`src.jobs_schtasks`, and the mutex queue in :mod:`src.jobs_queue`.
+in :mod:`src.jobs.history`, schtasks sync + spawn helpers in
+:mod:`src.jobs.schtasks`, and the mutex queue in :mod:`src.jobs.queue`.
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from datetime import datetime, timedelta
 from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.jobs_config import Job
-from src.jobs_history import latest_run, list_runs
+from src.jobs.config import Job
+from src.jobs.history import latest_run, list_runs
 
 # Process-local TTL cache. Reset per job by `invalidate_stats_cache` once a
 # run finalises so the row updates promptly without waiting out the TTL.

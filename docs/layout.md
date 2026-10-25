@@ -32,14 +32,15 @@ Beside them sit the entry points (`launcher.py`, `tray.bat`, `webapp.bat`, `weba
 
 ## `src/`
 
-`src/` is a flat directory of domain-prefixed modules. By domain: `app_config.py`, `webapp_config.py` and `registry.py` (config and the apps registry); `agents.py` and `launch_flags.py` (the Copilot agent and its flags); `session_host*.py`, `session_client.py`, `vt_snapshot.py` and `launcher.py` (PTY sessions); `board*.py` and `gitlab_client.py` (the Board and its GitLab reads); `jobs*.py` (the Jobs backend); `webauthn_gate.py`, `api_tokens.py` and `audit.py` (auth and audit); the rest are small shared helpers (`subprocess_flags.py`, `git_run.py`, `env_path.py`, `build_info.py`).
+`src/` is a flat directory of domain-prefixed modules. By domain: `app_config.py`, `webapp_config.py` and `registry.py` (config and the apps registry); `agents.py` and `launch_flags.py` (the Copilot agent and its flags); `session_host*.py`, `session_client.py`, `vt_snapshot.py` and `launcher.py` (PTY sessions); `board*.py` and `gitlab_client.py` (the Board and its GitLab reads); `jobs/` and `jobs_kinds/` (the Jobs backend); `webauthn_gate.py`, `api_tokens.py` and `audit.py` (auth and audit); the rest are small shared helpers (`subprocess_flags.py`, `git_run.py`, `env_path.py`, `build_info.py`).
 
 | Subpackage | Holds |
 | --- | --- |
+| `src/jobs/` | The Jobs backend: `__init__.py` is the facade the routers import; `config`, `schtasks`, `queue`, `history`, `index`, `stats`, `reap`, `coverage`, `preflight`, `argv`, `trigger`, `secrets`, `webhook` and `config_models` hold the pieces. |
 | `src/jobs_kinds/` | One executor per job kind (batch, http_check, inline_shell, powershell, python, shell_wsl). |
 | `src/notify/` | Notification providers behind `notifications.py`. |
 
-`src/` is past the 40-module limit, so it takes no new module: new logic goes in a `src/<domain>/` subpackage.
+`src/` sits just under the 40-module limit, so a new module goes in a `src/<domain>/` subpackage, not beside the flat ones. `session_host_text.py` holds the session host's pure terminal-text helpers (OSC titles, prompt titles, ring trimming); `session_host.py` keeps the session lifecycle.
 
 ## `tests/`
 
@@ -55,7 +56,7 @@ The pytest suite sits in `tests/unit/<domain>/`, one `test_<module>.py` per modu
 ## Declared exceptions
 
 - **`webapp/`** is the tray-owned webapp's runtime-state folder (certificates, logs, briefs, the pid and tunnel files, all gitignored). It also tracks two sample files, `cloudflared.sample.yml` and `terminal-themes.sample.json`, which sit next to the real copies they template. It is listed in `extra_roots` because the tray and the webapp read and write it at that path.
-- **Baselined offenders.** `.structure-ratchet-baseline.json` records each file, function and directory already over a limit at its size when the ratchet was adopted. They may not grow; they are split in their own changes, not hidden. The largest are `src/session_host.py` and `app/webapp/static/index.html`.
+- **Baselined offenders.** `.structure-ratchet-baseline.json` records each file, function and directory already over a limit at its size when the ratchet was adopted. They may not grow; they are split in their own changes, not hidden. The baseline is empty today: no file, function or directory is over a limit.
 
 ## Stylesheets
 
@@ -65,4 +66,4 @@ The pytest suite sits in `tests/unit/<domain>/`, one `test_<module>.py` per modu
 - **A view's rules go in that view's file**: `code.css` (Coding tiles, git flags, favorites), `jobs.css`, `settings.css`, `terminal.css` (running sessions and the terminal overlay), `team-os.css` and `board.css`. Rules several views share go in `shared.css` (empty state, toast), `dialogs.css` or `lists.css` (collapsible cards, option rows, card lists).
 - **A rule that overrides another stays after it.** A new file goes where its rules must win, not alphabetically.
 - **A file that would pass 1,000 lines splits at a section comment**, never inside a block, and its link goes right after the file it was cut from.
-- **Cache-busting is automatic**: `src/static_versioning.py` stamps every `href="/static/styles/*.css"` with the fleet hash, so a new file needs only its `<link>`. `index.html` is itself at its baselined size, so a new link is paid for by trimming elsewhere in the page.
+- **Cache-busting is automatic**: `src/static_versioning.py` stamps every `href="/static/styles/*.css"` with the fleet hash, so a new file needs only its `<link>`. `index.html` sits under the 1,000-line file limit; the icon sprite lives in `icon-sprite.html`, which the page route splices into the served document at the `<!--#include icon-sprite.html-->` marker, so the sprite stays inline for iOS Safari.

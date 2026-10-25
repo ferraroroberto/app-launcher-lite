@@ -1,6 +1,6 @@
 """Unit tests for :func:`src.jobs.next_fire` (issue #229).
 
-Computes the next wall-clock fire from a :class:`~src.jobs_config.Schedule`
+Computes the next wall-clock fire from a :class:`~src.jobs.config.Schedule`
 definition — deterministic, no schtasks. ``now`` is injected so every case
 is reproducible. This is the field the Jobs tab sorts on and renders the
 "in 3h" countdown from.
@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from src.jobs import next_fire
-from src.jobs_config import Schedule
+from src.jobs.config import Schedule
 
 
 # A fixed reference: Tuesday 2026-06-16 10:00:00 (weekday()==1).

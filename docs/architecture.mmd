@@ -72,23 +72,25 @@ flowchart TB
 
   subgraph srclib["src/ — shared library"]
     SESSHOST["session_host.py\nPtySession + SessionManager\nConPTY via winpty (Windows-only)"]
+    SESSTEXT["session_host_text.py
+OSC titles, prompt titles, ring trim"]
     VTSNAP["vt_snapshot.py\nheadless pyte VT mirror per\nfullscreen session — reconnect snapshot"]
     AGENTS["agents.py\nagent registry: copilot (+ ssh, loopback-only)"]
     SESSCLIENT["session_client.py\nHTTP client → session-host over loopback"]
     REGISTRY["registry.py\nconfig/apps.json load/save/scan"]
     SCANNER["scanner.py\nfs scan: project dirs + *.bat classify"]
-    JOBSFACADE["jobs.py (facade)"]
-    JOBSCFG["jobs_config.py"]
-    JOBSSCHTASKS["jobs_schtasks.py\nWindows Task Scheduler sync"]
-    JOBSQUEUE["jobs_queue.py\ncross-job mutex queue"]
-    JOBSHISTORY["jobs_history.py\nrun.json / output.log per run"]
-    JOBSINDEX["jobs_index.py\nderived SQLite + FTS5 run mirror"]
-    JOBSSTATS["jobs_stats.py\npercentiles, health, stuck detection"]
-    JOBSCOVERAGE["jobs_coverage.py\nmissed-fire coverage (#697)"]
+    JOBSFACADE["jobs/__init__.py (facade)"]
+    JOBSCFG["jobs/config.py"]
+    JOBSSCHTASKS["jobs/schtasks.py\nWindows Task Scheduler sync"]
+    JOBSQUEUE["jobs/queue.py\ncross-job mutex queue"]
+    JOBSHISTORY["jobs/history.py\nrun.json / output.log per run"]
+    JOBSINDEX["jobs/index.py\nderived SQLite + FTS5 run mirror"]
+    JOBSSTATS["jobs/stats.py\npercentiles, health, stuck detection"]
+    JOBSCOVERAGE["jobs/coverage.py\nmissed-fire coverage (#697)"]
     SYSLOAD["system_load.py\nheader CPU reading: one shared sampler,\none-syscall process snapshot,\ncached behind /api/system/load (#65)"]
-    JOBSPREFLIGHT["jobs_preflight.py"]
-    JOBSARGV["jobs_argv.py"]
-    JOBSTRIGGER["jobs_trigger.py\n--trigger vocabulary (scheduled/manual/webhook/chain:)"]
+    JOBSPREFLIGHT["jobs/preflight.py"]
+    JOBSARGV["jobs/argv.py"]
+    JOBSTRIGGER["jobs/trigger.py\n--trigger vocabulary (scheduled/manual/webhook/chain:)"]
     RUNSUPERVISION["run_supervision.py\nlive-child supervision: console tee,\nresource sampler, run watchdog (#695)"]
     BOARD["board.py\npure assembly: sessions + GitLab"]
     GLCLIENT["gitlab_client.py\nglab CLI reads, cached snapshot"]
@@ -96,7 +98,7 @@ flowchart TB
     WEBAPPCFG["webapp_config.py\nconfig/webapp_config.json"]
     LAUNCHFLAGS["launch_flags.py\nper-agent CLI flag builders"]
     APITOKENS["api_tokens.py\nscoped-token mint/hash/scope (#72)"]
-    JOBSSECRETS["jobs_secrets.py\n$secret: reference resolution (#72/#73)"]
+    JOBSSECRETS["jobs/secrets.py\n$secret: reference resolution (#72/#73)"]
     APPCFG["app_config.py\nconfig/config.json"]
     WEBAUTHNGATE["webauthn_gate.py"]
     STATICVER["static_versioning.py\nasset content-hash stamping"]
@@ -113,6 +115,7 @@ flowchart TB
   R_AUTH --> LOGFILES
 
   HOSTSERVER --> SESSHOST
+  SESSHOST --> SESSTEXT
   SESSHOST --> VTSNAP
   SESSHOST --> AGENTS
   R_SESS --> SESSCLIENT

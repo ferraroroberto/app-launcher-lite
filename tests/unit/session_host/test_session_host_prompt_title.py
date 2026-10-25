@@ -13,13 +13,13 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock
 
-from src.session_host import (
-    _PROMPT_TITLE_BUF_MAX,
-    _PROMPT_TITLE_MAX_CHARS,
-    _PROMPT_TITLE_MAX_WORDS,
-    PtySession,
-    _cook_input_line,
-    _derive_prompt_title,
+from src.session_host import PtySession
+from src.session_host_text import (
+    PROMPT_TITLE_BUF_MAX,
+    PROMPT_TITLE_MAX_CHARS,
+    PROMPT_TITLE_MAX_WORDS,
+    cook_input_line,
+    derive_prompt_title,
 )
 
 
@@ -35,46 +35,46 @@ def _make_session() -> PtySession:
     )
 
 
-# ------------------------------------------------------ _derive_prompt_title
+# ------------------------------------------------------ derive_prompt_title
 
 def test_derive_collapses_whitespace_and_trims():
-    assert _derive_prompt_title("  fix   the\tlogin   bug ") == "fix the login bug"
+    assert derive_prompt_title("  fix   the\tlogin   bug ") == "fix the login bug"
 
 
 def test_derive_caps_word_count():
-    title = _derive_prompt_title("one two three four five six seven eight")
-    assert len(title.split(" ")) == _PROMPT_TITLE_MAX_WORDS
+    title = derive_prompt_title("one two three four five six seven eight")
+    assert len(title.split(" ")) == PROMPT_TITLE_MAX_WORDS
     assert title == "one two three four five six"
 
 
 def test_derive_caps_char_length():
-    title = _derive_prompt_title("supercalifragilisticexpialidocious " * 4)
-    assert len(title) <= _PROMPT_TITLE_MAX_CHARS
+    title = derive_prompt_title("supercalifragilisticexpialidocious " * 4)
+    assert len(title) <= PROMPT_TITLE_MAX_CHARS
 
 
 def test_derive_empty_returns_empty():
-    assert _derive_prompt_title("   ") == ""
-    assert _derive_prompt_title("\x00\x01\x02") == ""
+    assert derive_prompt_title("   ") == ""
+    assert derive_prompt_title("\x00\x01\x02") == ""
 
 
-# --------------------------------------------------------- _cook_input_line
+# --------------------------------------------------------- cook_input_line
 
 def test_cook_applies_backspace():
-    assert _cook_input_line("helo\x7flo") == "hello"   # DEL
-    assert _cook_input_line("abc\x08\x08x") == "ax"     # BS x2
+    assert cook_input_line("helo\x7flo") == "hello"   # DEL
+    assert cook_input_line("abc\x08\x08x") == "ax"     # BS x2
 
 
 def test_cook_strips_arrow_key_escape():
     # ESC[D is left-arrow — a CSI sequence that must not leak into the title.
-    assert _cook_input_line("ab\x1b[Dc") == "abc"
+    assert cook_input_line("ab\x1b[Dc") == "abc"
 
 
 def test_cook_strips_bracketed_paste_markers():
-    assert _cook_input_line("\x1b[200~pasted text\x1b[201~") == "pasted text"
+    assert cook_input_line("\x1b[200~pasted text\x1b[201~") == "pasted text"
 
 
 def test_cook_strips_osc_sequence():
-    assert _cook_input_line("a\x1b]0;window title\x07b") == "ab"
+    assert cook_input_line("a\x1b]0;window title\x07b") == "ab"
 
 
 # -------------------------------------------------- first-prompt capture path
@@ -140,7 +140,7 @@ def test_unsubmitted_overlong_input_finalizes_at_cap():
     """A user who types past the buffer cap without ever pressing Enter still
     gets a title rather than an unbounded buffer."""
     s = _make_session()
-    s.write("word " * (_PROMPT_TITLE_BUF_MAX // 4))   # > cap, no newline
+    s.write("word " * (PROMPT_TITLE_BUF_MAX // 4))   # > cap, no newline
     assert s._prompt_captured
     assert s.prompt_title.startswith("word word")
 

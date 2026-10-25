@@ -3,7 +3,7 @@
 Schtasks + the detached executor spawn are mocked at the router-module
 level (via the shared ``mocked_jobs_side_effects`` fixture) so no real
 schtasks or subprocess runs. Signature verification uses real HMAC — no
-mocking of ``src.jobs_webhook`` — so these tests exercise the actual
+mocking of ``src.jobs.webhook`` — so these tests exercise the actual
 crypto, not a stub.
 """
 

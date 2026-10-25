@@ -34,11 +34,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from src import jobs as jobs_mod
-from src import jobs_index
+from src.jobs import index as jobs_index
 from src.diagnostics import kill_process_tree
-from src.jobs_argv import compose_argv
-from src.jobs_preflight import has_errors, preflight
-from src.jobs_config import (
+from src.jobs.argv import compose_argv
+from src.jobs.preflight import has_errors, preflight
+from src.jobs.config import (
     Job,
     add_job,
     get_by_id,

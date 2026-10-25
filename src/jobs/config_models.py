@@ -1,4 +1,4 @@
-"""Jobs registry dataclasses + validation (split off ``src.jobs_config``).
+"""Jobs registry dataclasses + validation (split off ``src.jobs.config``).
 
 ``Schedule`` / ``Param`` / ``Job`` are the shape of one row in
 ``config/jobs.json``, plus every ``*_from_dict`` / ``validate_*`` helper
@@ -6,9 +6,9 @@ that turns raw JSON into a validated dataclass (or raises ``ValueError``
 on malformed input). ``JobsConfig`` is the whole-file container.
 
 This module owns *shape*, not *storage* or *graph* concerns — see
-:mod:`src.jobs_config` (load/save/CRUD, the registry facade) and
-:mod:`src.jobs_config_chain` (the chain-cycle graph algorithm). Import
-from ``src.jobs_config`` in new code; it re-exports this module's public
+:mod:`src.jobs.config` (load/save/CRUD, the registry facade) and
+:mod:`src.jobs.config_chain` (the chain-cycle graph algorithm). Import
+from ``src.jobs.config`` in new code; it re-exports this module's public
 surface for backward compatibility, same pattern as the earlier
 ``src.jobs`` facade split (issue #315).
 """
@@ -20,7 +20,7 @@ from pathlib import Path
 from re import compile as _re_compile
 from typing import Any, Dict, List, Optional, Union
 
-from src.jobs_webhook import WebhookConfig, webhook_from_dict
+from src.jobs.webhook import WebhookConfig, webhook_from_dict
 from src.scanner import slugify
 
 # Bounded set of schedule types. Anything else fails validation.
@@ -176,7 +176,7 @@ def schedule_from_dict(raw: Any) -> Schedule:
 class Param:
     """One typed input declaration for a job (issue #67).
 
-    Used by ``src.jobs_argv.compose_argv`` at run-time to validate user
+    Used by ``src.jobs.argv.compose_argv`` at run-time to validate user
     input and project it into argv/env. Kind is closed (see
     :data:`PARAM_KINDS`); the editor / run-now dialog renders inputs
     from these declarations.
@@ -400,7 +400,7 @@ class Job:
     # ``/RL HIGHEST`` (Task Scheduler's silent elevation — no interactive
     # UAC prompt, unlike ``Start-Process``), for a script that needs admin
     # rights to do its work (e.g. restarting an app whose manifest requires
-    # elevation). See ``src.jobs_schtasks.sync_schtasks``.
+    # elevation). See ``src.jobs.schtasks.sync_schtasks``.
     elevated: bool = False
     # When non-None, ``schedule`` is the placeholder ``Schedule(type="none")``
     # and ``paused_schedule`` carries the *real* shape so resume can
@@ -421,12 +421,12 @@ class Job:
     # Webhook trigger: an external service (GitHub, Stripe, a
     # generic POST) can fire this job over POST /api/jobs/<id>/hook, gated
     # by the provider signature instead of the bearer token. See
-    # src.jobs_webhook for verification + payload-mapping.
+    # src.jobs.webhook for verification + payload-mapping.
     webhook: Optional[WebhookConfig] = None
     # Per-job env-var overlay: {NAME: value} merged into the
     # child's environment by the executor at fire time. Values are either
     # literal strings or "$secret:<key>" references resolved against
-    # webapp_config.secrets (src.jobs_secrets) — so jobs.json carries only
+    # webapp_config.secrets (src.jobs.secrets) — so jobs.json carries only
     # opaque references, never a real credential. An unresolvable
     # reference finalises the run as failed with a clear note.
     env: Dict[str, str] = field(default_factory=dict)
@@ -579,7 +579,7 @@ def _validate_chain_list(field_name: str, raw: Any) -> List[str]:
     Returns a defensively-copied list of strings. Missing / ``None`` /
     empty → ``[]``. Each entry must be a non-empty string; the
     cross-config cycle + reference checks live in
-    :func:`src.jobs_config_chain._validate_chain_consistency` because
+    :func:`src.jobs.config_chain._validate_chain_consistency` because
     they need the full registry to evaluate.
     """
     if raw is None or raw == []:
@@ -671,7 +671,7 @@ def validate_kind_shape(
     """Raise ``ValueError`` unless ``(kind, script_path, kind_config)`` is a
     structurally valid combination (issue #70's job-kind registry).
 
-    Shared by :func:`job_from_dict`, :func:`src.jobs_config.update_job`, and
+    Shared by :func:`job_from_dict`, :func:`src.jobs.config.update_job`, and
     the webapp's ``PUT /api/jobs/<id>`` route so the three call sites can't
     drift.
 
@@ -773,7 +773,7 @@ def make_job_id(name: str, existing_ids: Optional[List[str]] = None) -> str:
     """Slugify ``name`` into a job id, suffixing to avoid collisions.
 
     The suffix is ``-dup<N>``, never ``-<digits>``: that shape is the Task
-    Scheduler slot suffix of a ``daily_times`` job (``src.jobs_schtasks``), so
+    Scheduler slot suffix of a ``daily_times`` job (``src.jobs.schtasks``), so
     a ``-<digits>`` id could collide with a sibling job's slot task.
     """
     base = slugify(name) or "job"

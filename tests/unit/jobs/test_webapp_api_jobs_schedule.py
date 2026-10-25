@@ -90,7 +90,7 @@ class TestElevatedJobsSkipTaskScheduler:
         from unittest.mock import MagicMock
 
         from app.webapp.routers import jobs as jobs_router
-        from src import jobs_schtasks
+        from src.jobs import schtasks as jobs_schtasks
 
         runner = MagicMock(
             return_value=subprocess.CompletedProcess(
@@ -253,10 +253,10 @@ class TestMutexGroups:
 
     def _isolate_queue(self, overrides, monkeypatch):
         """Point the queue file at the fixture's tmp jobs root."""
-        # JOBS_QUEUE_PATH is owned by src.jobs_queue (issue #315 split) —
+        # JOBS_QUEUE_PATH is owned by src.jobs.queue (issue #315 split) —
         # enqueue_mutex/pop_mutex_entry/etc. resolve it as their own
         # module global, not through the src.jobs facade.
-        from src import jobs_queue as jobs_queue_mod
+        from src.jobs import queue as jobs_queue_mod
         monkeypatch.setattr(
             jobs_queue_mod, "JOBS_QUEUE_PATH",
             overrides["tmp_jobs_runs_dir"] / "_queue.json",

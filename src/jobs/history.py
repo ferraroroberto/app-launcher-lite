@@ -6,8 +6,8 @@ Mirrors the audit pattern in :mod:`src.audit`. Pruned to
 :data:`MAX_RUNS_PER_JOB` per job.
 
 Split out of :mod:`src.jobs` (issue #315) — the schtasks sync layer lives in
-:mod:`src.jobs_schtasks`, the mutex queue in :mod:`src.jobs_queue`, and
-percentiles/health in :mod:`src.jobs_stats`; all three read run history
+:mod:`src.jobs.schtasks`, the mutex queue in :mod:`src.jobs.queue`, and
+percentiles/health in :mod:`src.jobs.stats`; all three read run history
 through this module.
 """
 
@@ -24,11 +24,11 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional
 from src._json_io import atomic_write_json, file_lock
 
 if TYPE_CHECKING:
-    from src.jobs_config import Job
+    from src.jobs.config import Job
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 JOBS_RUNS_DIR = PROJECT_ROOT / "webapp" / "jobs"
 MAX_RUNS_PER_JOB = 20
@@ -80,7 +80,7 @@ def _run_json_lock(run_dir: Path) -> Iterator[None]:
     The two writers (the executor's finalise and the webapp's Kill endpoint)
     live in different processes, so a thread lock is not enough. Thin wrapper
     around the shared :func:`src._json_io.file_lock` (same
-    ``msvcrt.locking``-on-a-sidecar pattern as ``src.jobs_queue._queue_file_lock``)
+    ``msvcrt.locking``-on-a-sidecar pattern as ``src.jobs.queue._queue_file_lock``)
     on a dedicated ``run.json.lock`` file (never on ``run.json`` itself, which
     ``os.replace`` swaps out from under any held handle).
     """
@@ -117,7 +117,7 @@ def write_run_json(run_dir: Path, **fields: Any) -> None:
     # The index is derived and deliberately updated after the canonical file
     # swap. A local import avoids a jobs_history <-> jobs_index import cycle.
     try:
-        from src.jobs_index import sync_run
+        from src.jobs.index import sync_run
 
         sync_run(run_dir, existing)
     except Exception as exc:  # noqa: BLE001 — derived mirror never blocks canonical I/O
@@ -256,7 +256,7 @@ def prune_runs(job_id: str, keep: int = MAX_RUNS_PER_JOB) -> int:
             shutil.rmtree(child)
             removed += 1
             try:
-                from src.jobs_index import remove_run
+                from src.jobs.index import remove_run
 
                 remove_run(job_id, child.name)
             except Exception as exc:  # noqa: BLE001 — derived mirror is best-effort

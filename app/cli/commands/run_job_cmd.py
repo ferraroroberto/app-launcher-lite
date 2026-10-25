@@ -64,10 +64,10 @@ from src.jobs import (
     runs_dir,
     write_run_json,
 )
-from src.jobs_argv import compose_argv, decode_params_token
-from src.jobs_config import Job, get_by_id, load_jobs
-from src.jobs_secrets import resolve_env_overlay
-from src.jobs_trigger import TRIGGER_SYNTAX, is_valid_trigger
+from src.jobs.argv import compose_argv, decode_params_token
+from src.jobs.config import Job, get_by_id, load_jobs
+from src.jobs.secrets import resolve_env_overlay
+from src.jobs.trigger import TRIGGER_SYNTAX, is_valid_trigger
 from src.notifications import (
     Notifier,
     NoopNotifier,
@@ -272,14 +272,14 @@ def _finalize_mutex_queue(
     Scoped to fires that have not already been through an admission gate:
 
     * ``trigger != "scheduled"`` — manual / webhook / API fires are admitted
-      at the route, chain fires at :func:`~src.jobs_queue.dispatch_chain_run`.
+      at the route, chain fires at :func:`~src.jobs.queue.dispatch_chain_run`.
       A second gate here would re-queue a fire the caller was already told
       would run. (Same shape as the ``scheduled``-only cooldown gate in
       :func:`_finalize_cooldown_skip`.)
     * ``args.run_id`` set — the run dir was pre-created by whoever admitted
       it. Task Scheduler is the only caller that arrives without one
-      (``src.jobs_schtasks.task_run_command``); every admitted path
-      (route + :func:`~src.jobs_queue.drain_mutex_queue`) passes
+      (``src.jobs.schtasks.task_run_command``); every admitted path
+      (route + :func:`~src.jobs.queue.drain_mutex_queue`) passes
       ``--run-id``. This is what stops a *drained* queue entry — which
       replays its original ``trigger="scheduled"`` — from being pushed
       back onto the tail of the very queue it was just released from.
@@ -437,7 +437,7 @@ def _spawn_and_wait(
             # even if the executor itself crashes before wait() returns.
             # pid_create_time (captured immediately, mirroring
             # src.app_runtime.record_spawn) lets a later reap check
-            # (src.jobs_reap) tell "still this process" apart from "a
+            # (src.jobs.reap) tell "still this process" apart from "a
             # since-recycled pid" — Windows reuses pids, so a bare
             # pid_exists() isn't enough.
             write_run_json(run_dir, pid=proc.pid, pid_create_time=time.time())
@@ -593,7 +593,7 @@ def _cleanup_once_schedule(job: Job, args: argparse.Namespace) -> None:
         delete_schtasks(job.id)
         # Mutate the registry so the row stops showing "once …"
         # and surfaces as a plain manual job.
-        from src.jobs_config import (  # local import to avoid cycles
+        from src.jobs.config import (  # local import to avoid cycles
             Schedule,
             save_jobs,
         )
@@ -665,7 +665,7 @@ def _trigger_arg(value: str) -> str:
     silently rejected the two values the code itself constructs —
     ``chain:<id>`` and ``webhook`` — killing every chained and every
     webhook fire in argparse before the executor ran (issue #687). The
-    vocabulary lives in :mod:`src.jobs_trigger`; this only adapts it to
+    vocabulary lives in :mod:`src.jobs.trigger`; this only adapts it to
     argparse's error protocol, so an unknown value still fails loudly
     rather than being accepted as free text.
     """
@@ -779,7 +779,7 @@ class RunJobCommand(BaseCommand):
             help=(
                 "JSON-encoded {name: value} payload from the run-now "
                 "dialog (issue #67). Composed into argv/env via "
-                "src.jobs_argv.compose_argv. Omit for parameter-less runs."
+                "src.jobs.argv.compose_argv. Omit for parameter-less runs."
             ),
         )
         p.add_argument(
@@ -788,7 +788,7 @@ class RunJobCommand(BaseCommand):
             help=(
                 "The same payload as --params, base64url-encoded — how the "
                 "webapp's detached spawn passes it (see "
-                "src.jobs_argv.encode_params_token)."
+                "src.jobs.argv.encode_params_token)."
             ),
         )
         p.add_argument(

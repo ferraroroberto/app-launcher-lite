@@ -3,7 +3,7 @@
 A saturated ring used to be cut at an arbitrary character
 (``self._ring[-_RING_MAX_CHARS:]``), so a reconnect replay could start
 mid-escape-sequence and render the tail of a CSI/OSC as literal garbage at
-the top of the replayed scrollback. ``_trim_ring_head`` advances the cut to
+the top of the replayed scrollback. ``trim_ring_head`` advances the cut to
 the next newline boundary (bounded scan) so the replay head is always a
 whole line.
 """
@@ -13,26 +13,22 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock
 
-from src.session_host import (
-    _RING_MAX_CHARS,
-    _RING_TRIM_SCAN,
-    PtySession,
-    _trim_ring_head,
-)
+from src.session_host import _RING_MAX_CHARS, PtySession
+from src.session_host_text import RING_TRIM_SCAN, trim_ring_head
 
 
 def test_trim_ring_head_skips_partial_first_line():
     # A hard cut landed inside an SGR sequence — the leftover "9;41m…"
     # would render as literal text. The trim resumes at the next line.
     ring = "9;41m tail of a cut escape\nSECOND LINE\nTHIRD LINE\n"
-    assert _trim_ring_head(ring) == "SECOND LINE\nTHIRD LINE\n"
+    assert trim_ring_head(ring) == "SECOND LINE\nTHIRD LINE\n"
 
 
 def test_trim_ring_head_keeps_raw_cut_when_no_newline_in_window():
     # One enormous unbroken line: better an approximate head than
     # discarding more history than the cap already did.
-    ring = "x" * (_RING_TRIM_SCAN + 100) + "\nrest\n"
-    assert _trim_ring_head(ring) == ring
+    ring = "x" * (RING_TRIM_SCAN + 100) + "\nrest\n"
+    assert trim_ring_head(ring) == ring
 
 
 class _OneShotPty:

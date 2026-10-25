@@ -15,9 +15,9 @@ from types import SimpleNamespace
 from typing import List
 
 from src import jobs as jobs_mod
-from src import jobs_config as jc
+from src.jobs import config as jc
 from src import run_supervision
-from src.jobs_config import (
+from src.jobs.config import (
     Job,
     JobsConfig,
     Schedule,

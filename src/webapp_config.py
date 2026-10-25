@@ -233,7 +233,7 @@ class WebappConfig:
     # --- Job secrets ----------------------------------
     # One gitignored place for secret values, referenced from jobs.json by
     # opaque "$secret:<key>" strings resolved at fire time
-    # (src.jobs_secrets): a job's webhook.secret and every
+    # (src.jobs.secrets): a job's webhook.secret and every
     # Job.env value both draw from this dict, so a rotated
     # credential lives here and never in jobs.json. Loaded from the
     # "secrets" key, falling back to the legacy "webhook_secrets" key this

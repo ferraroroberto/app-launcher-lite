@@ -11,6 +11,7 @@ from pathlib import Path
 
 from src.static_versioning import (
     compute_asset_hashes,
+    inline_includes,
     rewrite_index_html,
     rewrite_js_imports,
 )
@@ -98,3 +99,15 @@ def test_unknown_import_passes_through_unchanged(tmp_path: Path) -> None:
     hashes = compute_asset_hashes(static_dir)
     body = "import { foo } from './not-on-disk.js';\n"
     assert rewrite_js_imports(body, hashes, from_dir="") == body
+
+
+def test_inline_includes_splices_the_named_static_file(tmp_path: Path) -> None:
+    (tmp_path / "part.html").write_text("<svg>sprite</svg>\n", encoding="utf-8")
+    body = "<body>\n<!--#include part.html-->\n<main></main></body>"
+    assert inline_includes(body, tmp_path) == (
+        "<body>\n<svg>sprite</svg>\n<main></main></body>"
+    )
+
+
+def test_inline_includes_leaves_a_page_without_markers_alone(tmp_path: Path) -> None:
+    assert inline_includes("<p>plain</p>", tmp_path) == "<p>plain</p>"

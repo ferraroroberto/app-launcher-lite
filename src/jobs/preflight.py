@@ -37,7 +37,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
-from src.jobs_config import Job
+from src.jobs.config import Job
 from src.jobs_kinds import FILE_KINDS, KINDS, resolve_kind
 from src.jobs_kinds.base import Problem  # re-exported for back-compat
 
@@ -45,8 +45,8 @@ from src.jobs_kinds.base import Problem  # re-exported for back-compat
 def preflight(job: Job) -> List[Problem]:
     """Return the list of pre-flight problems for ``job`` (empty == clean).
 
-    ``job`` is assumed to already have passed :func:`~src.jobs_config.job_from_dict`
-    / :func:`~src.jobs_config.validate_kind_shape` (structurally valid kind +
+    ``job`` is assumed to already have passed :func:`~src.jobs.config.job_from_dict`
+    / :func:`~src.jobs.config.validate_kind_shape` (structurally valid kind +
     script_path/kind_config combination); pre-flight checks the things that
     validation can't, because they depend on the filesystem or environment.
     """

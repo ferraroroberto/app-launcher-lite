@@ -1,6 +1,6 @@
 """Missed-fire coverage for scheduled jobs (issue #697).
 
-``alert_on_failure`` catches a run that *fails*; ``src.jobs_stats.is_stuck``
+``alert_on_failure`` catches a run that *fails*; ``src.jobs.stats.is_stuck``
 catches a run that never *ends*. Nothing caught a run that never **starts** —
 a job whose Task Scheduler entry is missing, mangled, disabled, or was never
 created simply doesn't fire, and the absence was invisible: the row kept
@@ -14,7 +14,7 @@ Two independent halves, both answered from data the Jobs tab already reads:
   ``sota-watch`` shipped launchers + "runs weekly unattended" docs with no
   registered task at all, for weeks), and it fires the moment the entry
   disappears — no waiting for the missed slot itself. Backed by
-  :func:`src.jobs_schtasks.registered_task_states`, i.e. the *same* 30 s
+  :func:`src.jobs.schtasks.registered_task_states`, i.e. the *same* 30 s
   cached bulk ``schtasks /Query`` the "next run" column already pays for:
   one batched query per cycle, never an N+1 shell-out storm.
 * **Behavioural** — expand the schedule across a recent window and check
@@ -25,7 +25,7 @@ normal week"), all enforced in :func:`missed_fires` / :func:`coverage_for`:
 
 * Paused jobs and ``schedule: none`` jobs are **exempt** — no state at all.
 * ``minutes``/``hourly`` jobs skip the behavioural half: their cadence is too
-  dense to enumerate (:data:`~src.jobs_schtasks.FREQUENT_SCHEDULE_TYPES`,
+  dense to enumerate (:data:`~src.jobs.schtasks.FREQUENT_SCHEDULE_TYPES`,
   same reason the agenda summarises them). The structural half still covers
   them, which is what actually detects a deleted entry.
 * A slot only counts as missed once it is ``MISSED_FIRE_GRACE_SECONDS`` past
@@ -57,10 +57,10 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List, Optional
 
-from src import jobs_history
+from src.jobs import history as jobs_history
 from src._json_io import atomic_write_json
-from src.jobs_config import Job, load_jobs
-from src.jobs_schtasks import (
+from src.jobs.config import Job, load_jobs
+from src.jobs.schtasks import (
     FREQUENT_SCHEDULE_TYPES,
     registered_task_states,
     task_names_for,
@@ -84,7 +84,7 @@ MISSED_FIRE_EARLY_TOLERANCE_SECONDS = 90.0
 # shows a count and the newest few, not an unbounded list.
 MAX_REPORTED_MISSED_FIRES = 5
 
-# Process-local TTL cache, mirroring src.jobs_stats' 30 s stats cache. The
+# Process-local TTL cache, mirroring src.jobs.stats' 30 s stats cache. The
 # check itself is cheap (one cached schtasks read + the run-history walk
 # `/api/jobs` already does), but it is called once per job per poll.
 _COVERAGE_TTL_SECONDS = 60.0
@@ -115,9 +115,9 @@ _MISSING = object()
 def coverage_alerts_path() -> Path:
     """Where the alert de-duplication state file lives.
 
-    Resolved through :data:`src.jobs_history.JOBS_RUNS_DIR` at call time (not
+    Resolved through :data:`src.jobs.history.JOBS_RUNS_DIR` at call time (not
     import time) so a test monkeypatching that directory redirects this too —
-    same module-attribute access :mod:`src.jobs_index` uses for its own
+    same module-attribute access :mod:`src.jobs.index` uses for its own
     sibling file in that directory.
     """
     return jobs_history.JOBS_RUNS_DIR / COVERAGE_ALERTS_FILENAME
@@ -167,11 +167,11 @@ def missed_fires(
     """Expected fires of ``job`` in the recent window with no run record.
 
     Oldest first. Empty for the dense
-    :data:`~src.jobs_schtasks.FREQUENT_SCHEDULE_TYPES`, for a schedule with
+    :data:`~src.jobs.schtasks.FREQUENT_SCHEDULE_TYPES`, for a schedule with
     no computable fires, and whenever the usable window collapses (see the
     module docstring's never-flag rules — the window is clamped by
     ``added_at`` and by the oldest retained run once history is at its
-    :data:`~src.jobs_history.MAX_RUNS_PER_JOB` cap).
+    :data:`~src.jobs.history.MAX_RUNS_PER_JOB` cap).
     """
     if job.schedule.type in FREQUENT_SCHEDULE_TYPES:
         return []
@@ -218,7 +218,7 @@ def coverage_for(
 ) -> Dict[str, Any]:
     """Coverage verdict for one job.
 
-    ``task_states`` is :func:`src.jobs_schtasks.registered_task_states`'
+    ``task_states`` is :func:`src.jobs.schtasks.registered_task_states`'
     output — ``None`` when the query failed, in which case the structural
     half reports ``unknown`` instead of inventing missing tasks. A per-task
     ``None`` value means "registered, enabled-state unreadable": not a
