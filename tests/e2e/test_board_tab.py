@@ -8,7 +8,7 @@ one-column-per-viewport carousel while desktop gets the four-column grid.
 Hermetic — the board API is route-mocked like the Jobs / Team OS e2e tests.
 
 Server-side logic (cwd join, glab cache/degradation, issue-start) is covered
-by the in-process suite in tests/unit/board/ + tests/test_board_drilldown.py.
+by the in-process suite in tests/unit/board/ + tests/unit/board/test_board_drilldown.py.
 """
 
 from __future__ import annotations

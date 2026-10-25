@@ -404,7 +404,7 @@ def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
     # no hand-maintained payload dict to fall out of sync when a knob is
     # added (a hand-written dict drifts exactly that way). Keep every field
     # JSON-serializable and this stays exhaustive by construction;
-    # tests/test_webapp_config_persistence.py locks it.
+    # tests/unit/webapp/test_webapp_config_persistence.py locks it.
     atomic_write_json(target, asdict(cfg))
     logger.info(f"💾 Saved webapp_config to {target}")
     return target

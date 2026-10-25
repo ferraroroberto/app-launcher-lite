@@ -54,7 +54,7 @@ STARTUP_BAT_NAME = "AppLauncherLite.bat"
 # SESSION_HOST_PORT_ENV / WEBAPP_CONFIG_PATH_ENV isolation pattern in
 # src/webapp_config.py. Not a user-facing knob; intentionally undocumented in
 # the config sample. Only consulted when a caller doesn't already pass an
-# explicit `startup_dir` — unit tests in tests/test_boot_autostart.py always
+# explicit `startup_dir` — unit tests in tests/unit/platform/test_boot_autostart.py always
 # do, so they're unaffected.
 STARTUP_DIR_ENV = "LAUNCHER_STARTUP_DIR"
 

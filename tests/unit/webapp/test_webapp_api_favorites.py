@@ -3,7 +3,7 @@
 Covers the Coding-tab favorites backend: a project's favorite state toggles
 idempotently, persists to webapp_config, and surfaces on the live coding
 rows of /api/apps. The frontend partition/filter is pinned separately by the
-e2e suite (tests/e2e/test_coding_favorites.py)."""
+e2e suite (tests/e2e/coding/test_coding_favorites.py)."""
 
 from __future__ import annotations
 

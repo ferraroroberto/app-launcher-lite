@@ -7,7 +7,7 @@ combo/toggle state — proving the bare ``/skill`` launch path is reached with
 the right model/mode. Hermetic via route-mocks, like the Jobs e2e tests.
 
 The server-side security (Cloudflare refusal, Tailscale gate, path-jail)
-is covered by the in-process pytest API suite (tests/test_webapp_api_team_os.py),
+is covered by the in-process pytest API suite (tests/unit/webapp/test_webapp_api_team_os.py),
 which can set client headers/host directly — over loopback the e2e
 browser bypasses the gate entirely, so those checks belong there.
 """

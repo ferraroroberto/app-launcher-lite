@@ -24,7 +24,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _STATIC_DIR = _REPO_ROOT / "app" / "webapp" / "static"
 # The served source of truth: the inline sprite <use> resolves against.
 _SPRITE_PATH = _STATIC_DIR / "index.html"

@@ -20,7 +20,7 @@ import pytest
 from app.webapp.event_loop import LOOP_FACTORY, selector_loop_factory
 from app.webapp.manager import WebappManager, WebappManagerConfig
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
 def test_selector_loop_factory_returns_selector_instance_on_win32(monkeypatch):

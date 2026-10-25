@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from scripts import comment_ratchet_gate as gate
-from tests.test_static_ratchet_gate import _fake_script
+from tests.unit.tooling.test_static_ratchet_gate import _fake_script
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GATE_PS1 = REPO_ROOT / "scripts" / "verify-before-ship.ps1"

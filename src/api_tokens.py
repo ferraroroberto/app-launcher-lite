@@ -129,7 +129,7 @@ def constant_time_equals(presented: str, expected: str) -> bool:
     non-ASCII characters, which would turn a hostile or merely accented
     credential into a 500 (or lock out a non-ASCII password). Comparing the
     UTF-8 bytes is safe for any input. Every secret comparison goes through
-    here; ``tests/test_api_tokens.py`` bans the raw call elsewhere.
+    here; ``tests/unit/webapp/test_api_tokens.py`` bans the raw call elsewhere.
     """
     return hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8"))
 

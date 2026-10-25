@@ -29,7 +29,7 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
-from .conftest import stable_read
+from tests.e2e.conftest import stable_read
 
 pytestmark = pytest.mark.smoke
 

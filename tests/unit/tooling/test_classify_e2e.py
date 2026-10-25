@@ -13,7 +13,7 @@ import pytest
 
 from scripts.classify_e2e import Category, _classify_one, classify
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 
 
 # ------------------------------------------------------- per-file categories
@@ -46,8 +46,8 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
         # no browser impact -> NONE
         ("src/board.py", Category.NONE),
         ("src/jobs.py", Category.NONE),
-        ("tests/test_classify_e2e.py", Category.NONE),
-        ("tests/test_icon_sprite_coverage.py", Category.NONE),
+        ("tests/unit/tooling/test_classify_e2e.py", Category.NONE),
+        ("tests/unit/tooling/test_icon_sprite_coverage.py", Category.NONE),
         ("docs/architecture.mmd", Category.NONE),
         ("README.md", Category.NONE),
         ("scripts/verify-before-ship.ps1", Category.NONE),
@@ -77,7 +77,7 @@ def test_static_only_routes_to_chromium_smoke() -> None:
     """The #565 diff: vendored sprite + one pure-Python unit test."""
     r = classify([
         "app/webapp/static/_vendored/icons/icons-sprite.html",
-        "tests/test_icon_sprite_coverage.py",
+        "tests/unit/tooling/test_icon_sprite_coverage.py",
     ])
     assert r.tier == "static"
     assert r.browsers == ["chromium"]
