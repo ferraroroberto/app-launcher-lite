@@ -2,12 +2,9 @@
   "version": 1,
   "entries": [
     {"key": "dir:src", "modules": 50},
-    {"key": "dir:tests", "modules": 105},
+    {"key": "dir:tests", "modules": 102},
     {"key": "dir:tests/e2e", "modules": 54},
     {"key": "size:app/webapp/static/index.html", "lines": 1280},
-    {"key": "size:src/session_host.py", "lines": 1255},
-    {"key": "size:tests/test_board.py", "lines": 1645},
-    {"key": "size:tests/test_jobs.py", "lines": 1169},
-    {"key": "size:tests/test_webapp_api_jobs.py", "lines": 1702}
+    {"key": "size:src/session_host.py", "lines": 1255}
   ]
 }
