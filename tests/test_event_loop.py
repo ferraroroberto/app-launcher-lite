@@ -85,7 +85,7 @@ def test_e2e_autoboot_wires_loop_factory():
     that its wa_cmd references the same shim is enough to catch drift."""
     src = (_REPO_ROOT / "tests" / "e2e" / "conftest.py").read_text(encoding="utf-8")
     assert "from app.webapp.event_loop import LOOP_FACTORY" in src
-    assert '"--loop",\n            LOOP_FACTORY,' in src
+    assert '"--loop",\n        LOOP_FACTORY,' in src
 
 
 def test_webapp_bat_wires_loop_factory():
