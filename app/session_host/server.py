@@ -333,9 +333,41 @@ async def session_ws(websocket: WebSocket, sid: str) -> None:
         session.unsubscribe(queue)
 
 
+class _RefuseBrowserRequests:
+    """Refuse any HTTP request or WebSocket handshake that carries ``Origin``.
+
+    The only legitimate callers are local processes (the webapp's proxy and
+    sibling scripts), and their HTTP and WebSocket clients send no
+    ``Origin``. A browser always sends one on a POST and on every WebSocket
+    handshake, so a page open on this PC is turned away before any route
+    runs.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Dict[str, Any], receive: Any, send: Any) -> None:
+        if scope["type"] in ("http", "websocket") and any(
+            name == b"origin" for name, _ in scope.get("headers") or ()
+        ):
+            logger.info(f"ℹ️ session-host refused a {scope['type']} request to {scope.get('path')}")
+            if scope["type"] == "websocket":
+                await send({"type": "websocket.close", "code": 4403})
+                return
+            await send({
+                "type": "http.response.start",
+                "status": 403,
+                "headers": [(b"content-type", b"application/json")],
+            })
+            await send({"type": "http.response.body", "body": b'{"detail":"forbidden"}'})
+            return
+        await self.app(scope, receive, send)
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="App Launcher Lite session-host", version="0.1.0", lifespan=_lifespan)
     app.include_router(router)
+    app.add_middleware(_RefuseBrowserRequests)
     return app
 
 

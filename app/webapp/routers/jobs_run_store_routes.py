@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse
@@ -12,6 +12,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.webapp.middleware import LOOPBACK_HOSTS
 from app.webapp.routers._helpers import maybe_json
+from src import api_tokens
 from src import jobs as jobs_mod
 from src.api_tokens import constant_time_equals
 from src.jobs.config import get_by_id, load_jobs
@@ -25,6 +26,22 @@ def _known_run_dir(job_id: str, run_id: str) -> Optional[Path]:
         return None
     run_dir = jobs_mod.runs_dir(job_id) / run_id
     return run_dir if run_dir.is_dir() else None
+
+
+def _stream_credential_ok(cfg: Any, presented: str) -> bool:
+    """The HTTP middleware's credential rule, for this WebSocket it never sees.
+
+    Open only when neither the legacy ``auth_token`` nor any minted token is
+    configured; otherwise the legacy token or a full-scope minted token.
+    """
+    expected = (cfg.auth_token or "").strip()
+    minted = getattr(cfg, "api_tokens", None) or []
+    if not expected and not minted:
+        return True
+    if presented and expected and constant_time_equals(presented, expected):
+        return True
+    match = api_tokens.find_match(presented, minted)
+    return match is not None and api_tokens.scoped_job_ids(match) is None
 
 
 @router.put("/api/jobs/{job_id}/runs/{run_id}")
@@ -69,13 +86,11 @@ async def stream_job_run(websocket: WebSocket, job_id: str, run_id: str) -> None
     await websocket.accept()
     cfg = websocket.app.state.webapp_config
     client_host = websocket.client.host if websocket.client else ""
-    if client_host not in LOOPBACK_HOSTS:
-        expected = (cfg.auth_token or "").strip()
-        if expected:
-            presented = websocket.query_params.get("token", "").strip()
-            if not (presented and constant_time_equals(presented, expected)):
-                await websocket.close(code=4401, reason="missing or invalid bearer token")
-                return
+    if client_host not in LOOPBACK_HOSTS and not _stream_credential_ok(
+        cfg, websocket.query_params.get("token", "").strip()
+    ):
+        await websocket.close(code=4401, reason="missing or invalid bearer token")
+        return
     run_dir = _known_run_dir(job_id, run_id)
     if run_dir is None:
         await websocket.close(code=4404, reason="unknown job or run")
