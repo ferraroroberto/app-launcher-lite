@@ -109,6 +109,38 @@ class TestRunHistory:
             final = websocket.receive_json()
             assert final == {"type": "status", "status": "success"}
 
+    def test_live_stream_honours_minted_tokens(
+        self, webapp_client, mocked_jobs_side_effects
+    ):
+        import pytest
+        from starlette.websockets import WebSocketDisconnect
+
+        from src import api_tokens
+        from src import jobs as jobs_mod
+
+        client, app, _ = webapp_client
+        created = _seed_one_job(client, name="Stream").json()["job"]
+        run_id = client.post(f"/api/jobs/{created['id']}/run").json()["run_id"]
+        full_record, full_raw = api_tokens.mint_token("full", "*")
+        scoped_record, scoped_raw = api_tokens.mint_token(
+            "scoped", {"jobs": [created["id"]]}
+        )
+        app.state.webapp_config.auth_token = ""
+        app.state.webapp_config.api_tokens = [full_record, scoped_record]
+        path = f"/api/jobs/{created['id']}/runs/{run_id}/stream"
+
+        for suffix in ("", "?token=" + scoped_raw, "?token=wrong"):
+            with pytest.raises(WebSocketDisconnect) as closed:
+                with client.websocket_connect(path + suffix) as websocket:
+                    websocket.receive_json()
+            assert closed.value.code == 4401
+
+        run_dir = jobs_mod.runs_dir(created["id"]) / run_id
+        with client.websocket_connect(path + "?token=" + full_raw) as websocket:
+            assert websocket.receive_json()["type"] == "snapshot"
+            jobs_mod.write_run_json(run_dir, status="success", exit_code=0)
+            assert websocket.receive_json() == {"type": "status", "status": "success"}
+
     def test_cross_run_search_returns_snippet_and_filters_job(
         self, webapp_client, mocked_jobs_side_effects
     ):
