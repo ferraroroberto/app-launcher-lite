@@ -24,10 +24,10 @@
  */
 
 import { els, state } from './state.js';
-import { apiFailToast, authHeaders, escapeHtml, isDesktopClient, jsonApi, toast } from './api.js';
+import { apiFailToast, authHeaders, escapeHtml, jsonApi, toast } from './api.js';
 import { setTab } from './tabs.js';
 import { openSessionRename, sessionTitle, stopSession } from './sessions.js';
-import { applyLaunchSizePayload, openTerminal } from './terminal.js';
+import { applyLaunchSizePayload, handleLaunchResponse, openTerminal } from './terminal.js';
 import { icon } from './_vendored/icons/icons.js';
 import { ensureTerminalToken } from './webauthn.js';
 import { iconUrl } from './dom-utils.js';
@@ -381,9 +381,7 @@ async function startIssue(card, mode, btn) {
       'good',
       { icon: mode === 'yolo' ? 'zap' : 'play' }
     );
-    if (body.session && body.session.kind !== 'remote' && !isDesktopClient()) {
-      openTerminal(body.session);
-    }
+    handleLaunchResponse(body.session);
   } catch (exc) {
     apiFailToast('Issue start failed', exc);
   } finally {

@@ -774,10 +774,13 @@ export function wireTerminal() {
   els.terminalKill.addEventListener('click', function () {
     const t = state.terminal;
     if (!t) return;
+    // A session launched from the Board is not in state.sessions yet (the
+    // sessions poll is paused while a terminal is open), so fall back to
+    // the open terminal's own identity; stopSession only needs the id.
     const s = (state.sessions || []).find(function (x) {
       return x.session_id === t.sid;
-    });
-    if (s) stopSession(s);
+    }) || { session_id: t.sid, name: t.name || 'session' };
+    stopSession(s);
   });
   wireKeysPopover();
   wireCompose();

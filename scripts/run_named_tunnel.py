@@ -34,6 +34,7 @@ logger = logging.getLogger("run_named_tunnel")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.webapp.event_loop import LOOP_FACTORY  # noqa: E402
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP  # noqa: E402
 from src.tls.certs import cert_paths  # noqa: E402
 
@@ -86,6 +87,10 @@ def _spawn_uvicorn(port: int) -> subprocess.Popen:
         str(port),
         "--log-level",
         "warning",
+        # The selector loop keeps the listener alive after an aborted client
+        # connection; the default proactor loop drops it (event_loop.py).
+        "--loop",
+        LOOP_FACTORY,
     ]
     if certs is not None:
         cert, key = certs

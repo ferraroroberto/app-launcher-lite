@@ -215,3 +215,20 @@ class TestWaitForTrayReady:
 
         monkeypatch.setattr(rt_mod.time, "sleep", fake_sleep)
         assert rt_mod._wait_for_tray_ready(tmp_path) is False
+
+
+def test_tray_session_host_port_follows_the_config_knob(monkeypatch) -> None:
+    """The tray adopts, spawns and stops the session-host by the configured
+    port, not a hardcoded one."""
+    from types import SimpleNamespace
+
+    from app.tray import tray
+
+    monkeypatch.setattr(
+        tray, "load_webapp_config", lambda: SimpleNamespace(session_host_port=8470)
+    )
+    assert tray._session_host_port() == 8470
+    monkeypatch.setattr(
+        tray, "load_webapp_config", lambda: SimpleNamespace(session_host_port=0)
+    )
+    assert tray._session_host_port() == 8466

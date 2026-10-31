@@ -240,7 +240,7 @@ async function boot() {
   }, RUNNING_APPS_POLL_MS);
   setInterval(function () {
     // fetchJobs() self-gates: only polls while the Jobs tab is visible.
-    fetchJobs().catch(function () {});
+    fetchJobs({ poll: true }).catch(function () {});
   }, JOBS_POLL_MS);
   setInterval(function () {
     // fetchBoard() self-gates: only polls while the Board tab is visible.

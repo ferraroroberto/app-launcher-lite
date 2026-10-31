@@ -217,11 +217,15 @@ def _finalize_cooldown_skip(job: Job, args: argparse.Namespace) -> Optional[int]
     Manual fires are already 429'd at the route — by the time we get here
     on the manual path either there was no overlap or the caller
     deliberately bypassed the gate, so those are let through (``None``).
+    A fire carrying ``--run-id`` was admitted already (a drained mutex-queue
+    entry, which replays ``trigger="scheduled"``): its pre-created run record
+    is the newest non-skipped run, so re-checking would anchor the cooldown on
+    the fire itself and skip it. Only Task Scheduler arrives without a run id.
     Returns ``0`` when the run was skipped and finalised; ``None`` when
     there's no cooldown to apply and the caller should proceed with a
     real invocation.
     """
-    if args.trigger != "scheduled":
+    if args.trigger != "scheduled" or args.run_id:
         return None
     cooldown_state = cooldown_check(job)
     if cooldown_state is None:

@@ -228,6 +228,10 @@ _SIMPLE_UPDATE_FIELDS: Tuple[Tuple[str, Callable[[Any], Any], bool], ...] = (
 )
 
 
+def _stamp_schedule_change(job: Job) -> None:
+    job.schedule_changed_at = datetime.now().isoformat(timespec="seconds")
+
+
 def update_job(cfg: JobsConfig, job_id: str, **fields: Any) -> Optional[Job]:
     """In-place edit. Accepts ``name``, ``script_path``, ``args``, ``schedule``, ``params``,
     ``kind``, ``kind_config``.
@@ -242,7 +246,10 @@ def update_job(cfg: JobsConfig, job_id: str, **fields: Any) -> Optional[Job]:
         raw = fields[attr]
         if only_if_truthy and not raw:
             continue
-        setattr(job, attr, transform(raw))
+        value = transform(raw)
+        if attr == "schedule" and value != job.schedule:
+            _stamp_schedule_change(job)
+        setattr(job, attr, value)
 
     # kind / script_path / kind_config are validated together as the
     # *effective* post-edit shape — an edit to any one of the
@@ -325,6 +332,7 @@ def resume_job(cfg: JobsConfig, job_id: str) -> Optional[Job]:
         return job
     job.schedule = job.paused_schedule
     job.paused_schedule = None
+    _stamp_schedule_change(job)
     save_jobs(cfg)
     return job
 

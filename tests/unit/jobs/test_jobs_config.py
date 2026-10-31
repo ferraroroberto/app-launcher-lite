@@ -340,6 +340,30 @@ class TestPauseResume:
         assert job.schedule.day == "MON"
         assert job.schedule.at == "06:00"
 
+    def test_resume_and_schedule_edit_stamp_schedule_changed_at(
+        self, tmp_path, monkeypatch
+    ):
+        from src.jobs.config import update_job
+
+        cfg, pause, resume = self._seed(tmp_path, monkeypatch)
+        add_job(cfg, job_from_dict({
+            "id": "x", "name": "X", "script_path": "C:\\x.py",
+            "schedule": {"type": "daily", "at": "06:00"},
+        }))
+        assert cfg.jobs[0].schedule_changed_at == ""
+        pause(cfg, "x")
+        assert resume(cfg, "x").schedule_changed_at != ""
+
+        cfg.jobs[0].schedule_changed_at = ""
+        # Re-saving the same schedule is not a change; a new one is.
+        update_job(cfg, "x", schedule={"type": "daily", "at": "06:00"})
+        assert cfg.jobs[0].schedule_changed_at == ""
+        update_job(cfg, "x", schedule={"type": "daily", "at": "09:00"})
+        assert cfg.jobs[0].schedule_changed_at != ""
+        assert job_from_dict(cfg.jobs[0].to_dict()).schedule_changed_at == (
+            cfg.jobs[0].schedule_changed_at
+        )
+
     def test_cannot_pause_manual_only(self, tmp_path, monkeypatch):
         cfg, pause, resume = self._seed(tmp_path, monkeypatch)
         add_job(cfg, job_from_dict({

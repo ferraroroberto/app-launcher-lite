@@ -736,7 +736,7 @@ The never-flag rules are the load-bearing half — a coverage check that cries w
 | `minutes` / `hourly` skip the behavioural half | Too dense to enumerate (same `FREQUENT_SCHEDULE_TYPES` the agenda summarises). The structural half still covers them, and that is what detects a deleted entry |
 | A slot counts as missed only once it is 15 min past (`MISSED_FIRE_GRACE_SECONDS`) | Task Scheduler starts late; a machine waking from sleep starts very late |
 | **Any** run record near the slot counts as a fire | Including `skipped` — a cooldown no-op *did* fire, it just declined to do work — and a manual run that happened to cover the slot |
-| The window never reaches past `added_at`, nor past the oldest retained run when history is at its 20-run cap | A pruned record is not evidence of a missed fire |
+| The window never reaches past `added_at` or `schedule_changed_at` (the last schedule edit or resume), nor past the oldest retained run when history is at its 20-run cap | A pruned record is not evidence of a missed fire, and earlier days ran under another schedule or none |
 | A failed `schtasks` query reports `unknown`, never "missing" | One bad query must not flag every job. An unestablished fact gets its own state and is never folded into the passing *or* the failing one |
 
 **Surfaces.** `GET /api/jobs` decorates each row with a `coverage` object — `{state, detail, problems, missing_tasks, disabled_tasks, missed_count, missed_fires}`, where `state` is `ok` / `problem` / `unknown` / `exempt`. Only `problem` renders: a red **⚠ not firing** pill on the row's chip line, titled with the detail.
