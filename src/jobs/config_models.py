@@ -440,6 +440,10 @@ class Job:
     # watchdog, "off" and "use the default" are opposite instructions.
     max_runtime_seconds: Optional[int] = None
     no_output_seconds: Optional[int] = None
+    # When the live schedule last took effect (added, edited, resumed). The
+    # missed-fire check never replays the current schedule before it, because
+    # earlier days ran under a different (or no) schedule.
+    schedule_changed_at: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -474,6 +478,8 @@ class Job:
             payload["elevated"] = True
         if self.paused_schedule is not None:
             payload["paused_schedule"] = self.paused_schedule.to_dict()
+        if self.schedule_changed_at:
+            payload["schedule_changed_at"] = self.schedule_changed_at
         # kind / kind_config: omit when unset so legacy rows (and every
         # explicit-.py/.bat row saved before this feature shipped) stay
         # byte-for-byte after a load → save round-trip.
@@ -761,6 +767,7 @@ def job_from_dict(raw: Dict[str, Any]) -> Job:
         env=env_from_dict(raw.get("env")),
         max_runtime_seconds=_validate_max_runtime(raw.get("max_runtime_seconds")),
         no_output_seconds=_validate_no_output(raw.get("no_output_seconds")),
+        schedule_changed_at=str(raw.get("schedule_changed_at") or ""),
     )
     if not job.id:
         raise ValueError("job id is required")

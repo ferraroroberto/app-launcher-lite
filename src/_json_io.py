@@ -23,6 +23,14 @@ except ImportError:  # pragma: no cover - non-Windows fallback
 
 logger = logging.getLogger(__name__)
 
+# How many times ``file_lock`` calls ``msvcrt.locking(LK_LOCK)`` before it
+# gives up and lets the caller write unlocked. ``LK_LOCK`` already retries
+# internally (10 attempts, 1 s apart, ~10 s) before raising ``OSError``, so
+# the true worst case is ``_LOCK_ATTEMPTS`` x ~10 s = ~30 s of blocking: long
+# enough to ride out a slow sibling process finishing its write, short enough
+# that a wedged holder never hangs the webapp's kill and queue paths for good.
+_LOCK_ATTEMPTS = 3
+
 
 def atomic_write_json(target: Path, payload: Any, *, indent: int = 2) -> None:
     """Write ``payload`` as JSON to ``target`` atomically.
@@ -49,7 +57,8 @@ def file_lock(lock_path: Path, *, label: str) -> Iterator[None]:
     file, never on the JSON document itself (which ``os.replace`` swaps out
     from under any held handle). Retries a few times before giving up and
     proceeding unlocked — logged via ``label`` — since losing serialization
-    is far better than wedging the caller's operation forever.
+    is far better than wedging the caller's operation forever. The worst-case
+    wait is about 30 s (see ``_LOCK_ATTEMPTS``).
 
     Callers resolve ``lock_path`` themselves (rather than this helper
     caching it) so tests that monkeypatch the underlying JSON path redirect
@@ -62,14 +71,14 @@ def file_lock(lock_path: Path, *, label: str) -> Iterator[None]:
     handle = open(lock_path, "a+b")
     locked = False
     try:
-        for attempt in range(3):
+        for attempt in range(_LOCK_ATTEMPTS):
             try:
                 handle.seek(0)
                 msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
                 locked = True
                 break
             except OSError:
-                if attempt == 2:
+                if attempt == _LOCK_ATTEMPTS - 1:
                     logger.warning(
                         "⚠️  %s lock contended — writing unlocked", label
                     )

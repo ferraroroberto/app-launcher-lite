@@ -212,6 +212,14 @@ class TestMissedFires:
         job = _daily_job(added_at="2026-08-01T11:00:00")
         assert cov.missed_fires(job, now=NOW) == []
 
+    def test_window_clamped_by_schedule_change(self, runs_root):
+        """A job resumed (or rescheduled) this morning is not charged for the
+        days it ran under another schedule or none at all."""
+        job = _daily_job(schedule_changed_at="2026-08-01T11:00:00")
+        assert cov.missed_fires(job, now=NOW) == []
+        # Control: without the stamp the same job replays the past window.
+        assert cov.missed_fires(_daily_job(), now=NOW) != []
+
     def test_window_clamped_by_pruned_history(self, runs_root):
         """A full 20-run history proves nothing about older slots.
 

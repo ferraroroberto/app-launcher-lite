@@ -237,3 +237,38 @@ class TestScheduledSkip:
             (latest / "run.json").read_text(encoding="utf-8")
         )
         assert record["status"] == "success"
+
+
+class TestDrainedQueueEntry:
+    def test_drained_scheduled_fire_is_not_skipped_by_its_own_queued_record(
+        self, isolated_runs_dir, tmp_path, monkeypatch
+    ):
+        """A mutex-queued fire is re-spawned as ``--trigger scheduled
+        --run-id <id>``; its own ``queued`` record is the newest non-skipped
+        run, so the cooldown gate must not treat it as the anchor."""
+        now = datetime.now().replace(microsecond=0)
+        _seed_run(
+            isolated_runs_dir, "demo", "20260101T000000",
+            started_at=(now - timedelta(seconds=2)).isoformat(timespec="seconds"),
+            status="queued",
+        )
+        script = tmp_path / "ok.py"
+        script.write_text("import sys; sys.exit(0)\n", encoding="utf-8")
+        job = Job(
+            id="demo", name="Demo", script_path=str(script), args="",
+            cooldown_seconds=60,
+        )
+        _stub_load_jobs(monkeypatch, job)
+        _silence_notifier(monkeypatch)
+
+        cmd = rjc.RunJobCommand(AppConfig())
+        args = SimpleNamespace(
+            job_id="demo", trigger="scheduled", run_id="20260101T000000",
+            params=None,
+        )
+        assert cmd.execute(args) == 0
+        record = json.loads(
+            (isolated_runs_dir / "demo" / "20260101T000000" / "run.json")
+            .read_text(encoding="utf-8")
+        )
+        assert record["status"] == "success"

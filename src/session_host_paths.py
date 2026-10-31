@@ -84,10 +84,10 @@ def paths_touched_between(
         )
         return None
     changed = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
-    return _touched_by(changed, paths)
+    return touched_by(changed, paths)
 
 
-def _touched_by(changed_files: List[str], path_tokens: List[str]) -> bool:
+def touched_by(changed_files: List[str], path_tokens: List[str]) -> bool:
     norm_changed = [f.replace("\\", "/") for f in changed_files]
     for f in norm_changed:
         for tok in path_tokens:

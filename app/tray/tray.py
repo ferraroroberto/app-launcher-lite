@@ -40,7 +40,11 @@ import yaml
 
 from src import AppConfig
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
-from src.webapp_config import append_auth_token, load_webapp_config
+from src.webapp_config import (
+    DEFAULT_SESSION_HOST_PORT,
+    append_auth_token,
+    load_webapp_config,
+)
 
 from app.tray import registered_trays, tailscale
 from app.tray.single_instance import SingleInstance
@@ -66,9 +70,14 @@ WATCHDOG_LOG = PROJECT_ROOT / "webapp" / "watchdog.log"
 # The loopback PTY session-host. It is a *linked-but-independent* child:
 # it hosts the user's Coding PTYs and MUST survive a
 # `tray.bat --restart`. So it is spawned detached (re-parented out of the tray
-# subtree) and adopted on start by this port, and :8466 is excluded from
+# subtree) and adopted on start by its port, and that port is excluded from
 # tray.bat's reclaim sweep.
-SESSION_HOST_PORT = 8466
+
+
+def _session_host_port() -> int:
+    """The session-host port, from the same ``webapp_config.json`` knob that
+    ``launcher.py session-host`` and every router honour."""
+    return load_webapp_config().session_host_port or DEFAULT_SESSION_HOST_PORT
 
 
 def _read_tunnel_hostname(config_path: Path) -> Optional[str]:
@@ -205,8 +214,9 @@ class TrayApp:
         session-host is managed by port identity (adopt on start, reclaim on
         Quit), not by parentage.
         """
-        if registered_trays.port_listening(SESSION_HOST_PORT):
-            logger.info(f"🔗 Adopting running session-host on :{SESSION_HOST_PORT}")
+        port = _session_host_port()
+        if registered_trays.port_listening(port):
+            logger.info(f"🔗 Adopting running session-host on :{port}")
             return
         # `start` launches the child and cmd exits, orphaning it out of this
         # tray's subtree; /b keeps it windowless (the pythonw child is windowless
@@ -227,7 +237,7 @@ class TrayApp:
             logger.warning(f"⚠️  session-host failed to launch: {exc}")
             _notify("Session host", f"Failed to start: {exc}")
             return
-        logger.info(f"🧩 session-host spawned detached on :{SESSION_HOST_PORT}")
+        logger.info(f"🧩 session-host spawned detached on :{port}")
 
     def _stop_session_host(self) -> None:
         """Stop the session-host on an explicit Quit. It is detached (no Popen
@@ -241,29 +251,30 @@ class TrayApp:
         Same resolved path as tray.bat's TRAY_PS (#433: this used to point at
         a nonexistent repo-local path and silently no-op).
         """
-        if not registered_trays.port_listening(SESSION_HOST_PORT):
+        port = _session_host_port()
+        if not registered_trays.port_listening(port):
             return
         tray_ps = PROJECT_ROOT / "scripts" / "tray_lifecycle.ps1"
         if not tray_ps.exists():
-            msg = f"missing tray helper {tray_ps} — session-host on :{SESSION_HOST_PORT} left running"
+            msg = f"missing tray helper {tray_ps} — session-host on :{port} left running"
             logger.warning(f"⚠️  {msg}")
             _notify("Session host stop failed", msg)
             return
         try:
-            logger.info(f"🛑 Stopping session-host on :{SESSION_HOST_PORT}")
+            logger.info(f"🛑 Stopping session-host on :{port}")
             result = subprocess.run(
                 [r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
                  "-NoProfile", "-NonInteractive", "-File",
                  str(tray_ps),
                  "reclaim",
                  "-VenvDir", str(PROJECT_ROOT / ".venv"),
-                 "-Ports", str(SESSION_HOST_PORT)],
+                 "-Ports", str(port)],
                 creationflags=NO_WINDOW,
                 timeout=10,
                 check=False,
             )
             if result.returncode != 0:
-                msg = f"tray_lifecycle.ps1 reclaim exited {result.returncode} — session-host on :{SESSION_HOST_PORT} may still be running"
+                msg = f"tray_lifecycle.ps1 reclaim exited {result.returncode} — session-host on :{port} may still be running"
                 logger.warning(f"⚠️  {msg}")
                 _notify("Session host stop failed", msg)
         except Exception as exc:  # noqa: BLE001

@@ -283,3 +283,38 @@ class TestBulkParser:
         out = jobs_schtasks_mod._parse_bulk_records(stdout)
         assert out["\\AppLauncher\\demo-1"]["next_run"] is None
         assert out["\\AppLauncher\\demo-2"]["next_run"] is None
+
+
+class TestDeleteSchtasksQueryOutcomes:
+    """A failed query and an empty-but-successful one are different facts."""
+
+    @staticmethod
+    def _runner(query_rc, query_stdout, deletes):
+        def runner(argv):
+            if argv[:2] == ["schtasks", "/Query"]:
+                return _mk_completed(stdout=query_stdout, rc=query_rc)
+            if argv[:2] == ["schtasks", "/Delete"]:
+                deletes.append(argv[4])
+            return _mk_completed(rc=0)
+
+        return runner
+
+    def test_failed_query_is_unknown_not_empty(self):
+        runner = self._runner(1, "", [])
+        assert jobs_mod.list_known_tasks(runner=runner) is None
+
+    def test_successful_query_with_no_app_tasks_deletes_nothing(self):
+        deletes: List[str] = []
+        runner = self._runner(0, '"\\Microsoft\\Other","ready"\n', deletes)
+        assert jobs_mod.list_known_tasks(runner=runner) == []
+        assert jobs_mod.delete_schtasks("backup", runner=runner, other_job_ids=[]) == []
+        assert deletes == []
+
+    def test_blind_fallback_spares_a_sibling_jobs_task(self):
+        # Query fails; job "backup" is edited while sibling "backup-2" exists.
+        deletes: List[str] = []
+        runner = self._runner(1, "", deletes)
+        jobs_mod.delete_schtasks("backup", runner=runner, other_job_ids=["backup-2"])
+        assert "\\AppLauncher\\backup" in deletes
+        assert "\\AppLauncher\\backup-1" in deletes
+        assert "\\AppLauncher\\backup-2" not in deletes

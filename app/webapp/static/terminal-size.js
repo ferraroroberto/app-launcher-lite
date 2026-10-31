@@ -139,9 +139,9 @@ export function applyTerminalSize(t, session) {
   // ENTIRE transcript on any winsize change — rows or cols, either
   // direction (~65 KB on a long conversation) — so a single stray
   // SIGWINCH replays the whole conversation through the phone terminal.
-  // iOS supports neither the manifest `orientation` member nor
-  // `ScreenOrientation.lock()`, so rotation can't be blocked at the
-  // platform level — pinning cols makes it harmless instead: landscape
+  // This app declares no manifest `orientation` member and never calls
+  // `ScreenOrientation.lock()`, so rotation isn't blocked at the platform
+  // level — pinning cols makes it harmless instead: landscape
   // just shows the same portrait-width canvas letterboxed (xterm sizes
   // its own canvas off `cols`, not the host box, so no extra CSS is
   // needed). The host is overflow:hidden, so panned-off top rows clip

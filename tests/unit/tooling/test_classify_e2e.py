@@ -191,3 +191,14 @@ def test_run_git_disables_optional_index_lock(monkeypatch):
     monkeypatch.setenv("GIT_OPTIONAL_LOCKS", "1")
     assert classify_e2e._run_git(["diff", "--name-only"]) == ["a.py"]
     assert seen["env"]["GIT_OPTIONAL_LOCKS"] == "0"
+
+
+# ------------------------------------------------ session-host touched warning
+def test_session_host_touched_reads_the_declared_list() -> None:
+    """`src/vt_snapshot.py` routes to no browser tier yet is loaded by the
+    session-host, so the gate's "not live after restart" warning must fire."""
+    from scripts.classify_e2e import session_host_touched
+
+    assert classify(["src/vt_snapshot.py"]).tier == "skip"
+    assert session_host_touched(["src/vt_snapshot.py"]) == "yes"
+    assert session_host_touched(["src/board.py", "README.md"]) == "no"

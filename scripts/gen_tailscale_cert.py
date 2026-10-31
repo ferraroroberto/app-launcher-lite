@@ -29,12 +29,12 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.subprocess_flags import NO_WINDOW  # noqa: E402
+from src.tls.certs import tailscale_hostname_from_cert  # noqa: E402
 
 CERT_DIR = PROJECT_ROOT / "webapp" / "certificates"
 RENEW_WITHIN_DAYS = 30
@@ -54,33 +54,6 @@ def _tailscale_hostname() -> str:
     if not name:
         raise SystemExit("Could not detect Tailscale hostname from 'tailscale status'.")
     return name
-
-
-def _tailscale_hostname_from_cert(cert_path: Path) -> Optional[str]:
-    """Return the .ts.net DNS SAN from the cert, or None if not a Tailscale cert.
-
-    Keyed on the ISSUER (Let's Encrypt), not the SAN alone: a legacy
-    self-signed leaf (the retired gen_ssl_cert.py) also carried the ts.net
-    hostname in its SAN, and a SAN-only test would make --check silently
-    replace an expiring self-signed cert with a ts.net-only LE cert.
-    """
-    try:
-        from cryptography import x509
-        from cryptography.x509.oid import NameOID
-        cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
-        issuer_orgs = [
-            attr.value
-            for attr in cert.issuer.get_attributes_for_oid(NameOID.ORGANIZATION_NAME)
-        ]
-        if not any("let's encrypt" in str(org).lower() for org in issuer_orgs):
-            return None  # self-signed / local-CA cert; not ours to renew
-        san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
-        for name in san.value.get_values_for_type(x509.DNSName):
-            if ".ts.net" in name:
-                return name
-    except Exception:
-        pass
-    return None
 
 
 def _expiring_within(cert_path: Path, days: int) -> bool:
@@ -134,7 +107,7 @@ def _check_and_renew() -> None:
     if not cert_path.exists():
         return
 
-    hostname = _tailscale_hostname_from_cert(cert_path)
+    hostname = tailscale_hostname_from_cert(cert_path)
     if hostname is None:
         return  # self-signed cert; leave it alone
 

@@ -253,17 +253,18 @@ def schedule_argv_parts(sched: Schedule) -> List[List[str]]:
 
 def list_known_tasks(
     runner: Optional[Callable[[List[str]], subprocess.CompletedProcess]] = None,
-) -> List[str]:
-    """All task names currently under ``\\AppLauncher\\``. Best-effort.
+) -> Optional[List[str]]:
+    """All task names currently under ``\\AppLauncher\\``, or ``None``.
 
-    A failed query (Task Scheduler service down, no permission) returns
-    an empty list — the sync layer then falls back to blind deletes so
-    a single read failure can't strand stale tasks forever.
+    ``None`` means the query failed (Task Scheduler service down, no
+    permission, empty output): "unknown", distinct from a successful query
+    that found no tasks (``[]``). The sync layer then falls back to blind
+    deletes so a single read failure can't strand stale tasks forever.
     """
     runner = runner or _run_schtasks
     proc = runner(["schtasks", "/Query", "/FO", "CSV", "/NH"])
     if proc.returncode != 0 or not proc.stdout:
-        return []
+        return None
     names: List[str] = []
     for line in proc.stdout.splitlines():
         line = line.strip()
@@ -313,25 +314,25 @@ def delete_schtasks(
 ) -> List[str]:
     """Delete every ``\\AppLauncher\\<job_id>`` and ``…-N`` variant.
 
-    Tries a directed query first; on query failure, falls back to a
+    Tries a directed query first (an empty but successful result deletes
+    nothing); only when the query itself fails does it fall back to a
     blind delete of the bare name plus ``-1..-N`` so a transient query
-    failure can't leave stale tasks behind. Returns the list of task
-    names actually deleted (best-effort — schtasks errors are swallowed).
+    failure can't leave stale tasks behind. Both paths go through
+    :func:`owns_task`, so a sibling job whose id looks like a slot
+    (``backup-2`` next to ``backup``) is never deleted. Returns the list
+    of task names actually deleted (best-effort; schtasks errors are
+    swallowed).
     """
     runner = runner or _run_schtasks
-    targets: List[str] = []
     base = TASK_FOLDER_PREFIX + job_id
     known = list_known_tasks(runner=runner)
-    if known:
-        others = (
-            _other_job_ids(job_id) if other_job_ids is None else list(other_job_ids)
-        )
-        targets = [n for n in known if owns_task(n, job_id, others)]
-    else:
-        # Blind fallback — covers the bare task + every daily_times slot.
-        targets = [base] + [
+    others = _other_job_ids(job_id) if other_job_ids is None else list(other_job_ids)
+    if known is None:
+        # Blind fallback: the bare task + every daily_times slot.
+        known = [base] + [
             f"{base}-{i}" for i in range(1, _MAX_DAILY_TIMES_VARIANTS + 1)
         ]
+    targets = [n for n in known if owns_task(n, job_id, others)]
     deleted: List[str] = []
     for name in targets:
         proc = runner(["schtasks", "/Delete", "/F", "/TN", name])

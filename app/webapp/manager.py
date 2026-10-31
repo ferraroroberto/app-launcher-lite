@@ -26,6 +26,7 @@ import requests
 from app.tray.single_instance import cross_process_lock
 from app.webapp.event_loop import LOOP_FACTORY
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
+from src.tls.certs import cert_paths
 
 logger = logging.getLogger(__name__)
 
@@ -68,15 +69,6 @@ def load_config(raw: Optional[Dict[str, Any]] = None) -> WebappManagerConfig:
         request_timeout_seconds=float(raw.get("request_timeout_seconds", 1.0)),
         poll_interval_seconds=float(raw.get("poll_interval_seconds", 0.4)),
     )
-
-
-def cert_paths(project_root: Optional[Path] = None) -> Optional[tuple[Path, Path]]:
-    root = project_root or PROJECT_ROOT
-    cert = root / "webapp" / "certificates" / "cert.pem"
-    key = root / "webapp" / "certificates" / "key.pem"
-    if cert.exists() and key.exists():
-        return cert, key
-    return None
 
 
 def _probe_url(scheme: str, host: str, port: int) -> str:

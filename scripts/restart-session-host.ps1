@@ -27,7 +27,7 @@ $trayBat = Join-Path $repoRoot "tray.bat"
 $psExe = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
 if (-not $Confirm) {
-    Write-Host "This restarts the app-launcher session-host (:8466)." -ForegroundColor Yellow
+    Write-Host "This restarts the app-launcher session-host (default :8466)." -ForegroundColor Yellow
     Write-Host "It KILLS EVERY LIVE PTY SESSION ON THIS MACHINE." -ForegroundColor Red
     Write-Host "There is no drain and no idle check. Only proceed at a clean boundary." -ForegroundColor Red
     Write-Host ""
@@ -45,9 +45,25 @@ if (-not (Test-Path $trayBat)) {
     exit 1
 }
 
-Write-Host "Reclaiming :8466 (this kills every live PTY now)..." -ForegroundColor Cyan
+# The session-host port is the webapp_config.json `session_host_port` knob (the
+# tray, the CLI and every router read it); 8466 only when that read fails.
+$sessionHostPort = 8466
+$venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
+Push-Location $repoRoot
+try {
+    $configured = & $venvPython -c "from src.webapp_config import load_webapp_config; print(load_webapp_config().session_host_port)"
+    if ($LASTEXITCODE -eq 0 -and "$configured" -match '^\d+$') {
+        $sessionHostPort = [int]$configured
+    } else {
+        Write-Host "Could not read session_host_port from the config -- assuming :8466." -ForegroundColor Yellow
+    }
+} finally {
+    Pop-Location
+}
+
+Write-Host "Reclaiming :$sessionHostPort (this kills every live PTY now)..." -ForegroundColor Cyan
 & $psExe -NoProfile -NonInteractive -File $trayPs reclaim `
-    -VenvDir (Join-Path $repoRoot ".venv") -Ports 8466
+    -VenvDir (Join-Path $repoRoot ".venv") -Ports $sessionHostPort
 if ($LASTEXITCODE -ne 0) {
     Write-Host "tray_lifecycle.ps1 reclaim exited $LASTEXITCODE -- session-host may still be running." -ForegroundColor Red
     exit $LASTEXITCODE

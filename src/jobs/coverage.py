@@ -33,8 +33,9 @@ normal week"), all enforced in :func:`missed_fires` / :func:`coverage_for`:
 * **Any** run record near the slot counts as a fire, whatever its status —
   including ``skipped`` (a cooldown no-op *did* fire, it just declined to do
   work) and a manual run that happened to cover the slot.
-* The window never reaches back past the job's ``added_at``, nor past the
-  oldest retained run when history is at its :data:`MAX_RUNS_PER_JOB` cap —
+* The window never reaches back past the job's ``added_at`` or the moment its
+  current schedule took effect (``schedule_changed_at``: an edit or a resume),
+  nor past the oldest retained run when history is at its :data:`MAX_RUNS_PER_JOB` cap —
   a pruned record is not evidence of a missed fire.
 * A failed ``schtasks`` query yields ``unknown``, never "missing". An
   unestablished fact gets its own state and is never folded into the
@@ -170,7 +171,7 @@ def missed_fires(
     :data:`~src.jobs.schtasks.FREQUENT_SCHEDULE_TYPES`, for a schedule with
     no computable fires, and whenever the usable window collapses (see the
     module docstring's never-flag rules — the window is clamped by
-    ``added_at`` and by the oldest retained run once history is at its
+    ``added_at``, ``schedule_changed_at`` and by the oldest retained run once history is at its
     :data:`~src.jobs.history.MAX_RUNS_PER_JOB` cap).
     """
     if job.schedule.type in FREQUENT_SCHEDULE_TYPES:
@@ -179,9 +180,13 @@ def missed_fires(
     deadline = now - timedelta(seconds=grace_seconds)
     window_start = now - timedelta(days=window_days)
 
-    added = _parse_iso(job.added_at)
-    if added is not None and added > window_start:
-        window_start = added
+    # Clamp to the later of when the job was added and when its current
+    # schedule took effect (edit / resume): earlier days ran under another
+    # schedule, so replaying this one against them invents missed fires.
+    for stamp in (job.added_at, job.schedule_changed_at):
+        began = _parse_iso(stamp)
+        if began is not None and began > window_start:
+            window_start = began
 
     runs = jobs_history.list_runs(job.id)  # newest first
     starts: List[datetime] = []

@@ -857,9 +857,13 @@ function patchRowsInPlace() {
 
 // ------------------------------------------------------------ fetch + wire
 
-export async function fetchJobs() {
+export async function fetchJobs(opts) {
   if (state.tab !== 'jobs') return;
   if (state.jobsSearchQuery) {
+    // The poll must not re-run the server-side run-output search: it would
+    // swap the results for the "Searching" placeholder (losing scroll) and
+    // re-scan the stored outputs every tick. Explicit refreshes still search.
+    if (opts && opts.poll) return;
     await runJobsSearch();
     return;
   }
