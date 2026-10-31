@@ -57,6 +57,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # module is imported as `scripts.classify_e2e` (tests/unit/tooling/test_classify_e2e.py).
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.session_host_paths import declared_session_host_paths, touched_by  # noqa: E402
 from src.subprocess_flags import NO_WINDOW  # noqa: E402
 
 
@@ -254,6 +255,21 @@ def changed_files() -> List[str]:
     return sorted(files)
 
 
+def session_host_touched(paths: Sequence[str]) -> str:
+    """``yes`` / ``no`` / ``unknown``: did ``paths`` touch anything the
+    session-host loads, per CLAUDE.md's ``## session-host`` block.
+
+    Separate from :func:`classify`: the e2e tier follows the browser surface,
+    while "not live after a tray restart" follows the session-host's declared
+    import list (the same one ``/api/version``'s ``stale_relevant`` reads), so
+    a change to e.g. ``src/vt_snapshot.py`` warns without forcing a browser run.
+    """
+    declared = declared_session_host_paths(PROJECT_ROOT / "CLAUDE.md")
+    if not declared:
+        return "unknown"
+    return "yes" if touched_by([p.strip() for p in paths], declared) else "no"
+
+
 def main(argv: List[str]) -> int:
     paths = argv[1:] if len(argv) > 1 else changed_files()
     routing = classify(paths)
@@ -263,6 +279,7 @@ def main(argv: List[str]) -> int:
     print(f"E2E_BROWSERS={','.join(routing.browsers)}")
     print(f"E2E_PYTEST_TARGET={routing.pytest_target}")
     print(f"E2E_REASON={' | '.join(routing.reasons) if routing.reasons else '(none)'}")
+    print(f"E2E_SESSION_HOST_TOUCHED={session_host_touched(paths)}")
 
     # Human summary (ignored by the gate parser).
     print("", file=sys.stderr)

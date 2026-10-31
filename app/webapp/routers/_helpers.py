@@ -13,6 +13,7 @@ from fastapi import HTTPException, Request, WebSocket
 
 from src.launch_flags import build_copilot_flags
 from src.session_client import SessionHostError
+from src.tls.certs import cert_paths, tailscale_hostname_from_cert
 from src.webapp_config import (
     VALID_COPILOT_CONTEXTS,
     VALID_COPILOT_EFFORTS,
@@ -84,10 +85,7 @@ async def maybe_json(request: Request) -> Dict[str, Any]:
 
 
 def cert_present() -> bool:
-    return (
-        (PROJECT_ROOT / "webapp" / "certificates" / "cert.pem").exists()
-        and (PROJECT_ROOT / "webapp" / "certificates" / "key.pem").exists()
-    )
+    return cert_paths(PROJECT_ROOT) is not None
 
 
 # (mtime, hostname-or-None) of the last classified cert.pem — the cert only
@@ -101,8 +99,8 @@ def tsnet_host_from_cert(cert_path: Optional[Path] = None) -> Optional[str]:
     Returns a hostname only for a genuine ``tailscale cert`` leaf — keyed on
     the ISSUER (Let's Encrypt), because a legacy self-signed leaf (the
     retired gen_ssl_cert.py) also carried the ts.net name in its SAN and
-    must keep routing mirrors over loopback (same discriminator as
-    scripts/gen_tailscale_cert.py, issue #354).
+    must keep routing mirrors over loopback (the discriminator is shared with
+    scripts/gen_tailscale_cert.py via ``src.tls.certs``).
     """
     global _TSNET_CACHE
     path = cert_path or (PROJECT_ROOT / "webapp" / "certificates" / "cert.pem")
@@ -112,24 +110,7 @@ def tsnet_host_from_cert(cert_path: Optional[Path] = None) -> Optional[str]:
         return None
     if cert_path is None and _TSNET_CACHE is not None and _TSNET_CACHE[0] == mtime:
         return _TSNET_CACHE[1]
-    host: Optional[str] = None
-    try:
-        from cryptography import x509
-        from cryptography.x509.oid import NameOID
-
-        cert = x509.load_pem_x509_certificate(path.read_bytes())
-        issuer_orgs = [
-            attr.value
-            for attr in cert.issuer.get_attributes_for_oid(NameOID.ORGANIZATION_NAME)
-        ]
-        if any("let's encrypt" in str(org).lower() for org in issuer_orgs):
-            san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
-            for name in san.value.get_values_for_type(x509.DNSName):
-                if ".ts.net" in name:
-                    host = name
-                    break
-    except Exception:
-        host = None
+    host = tailscale_hostname_from_cert(path)
     if cert_path is None:
         _TSNET_CACHE = (mtime, host)
     return host
@@ -254,16 +235,21 @@ async def audit_session_start_and_maybe_mirror(
     mirror_fn: Callable[[str, str], Any],
     resume: Optional[bool] = None,
     skill: Optional[str] = None,
+    event: str = "session_start",
+    mirror: bool = True,
 ) -> None:
-    """Audit a freshly spawned PTY session, then mirror it to a PC terminal
-    window if appropriate (issue #241) — the shared tail every PTY-launch
-    call site (Coding tab ``apps.py``, Board issue-start
-    ``board.py``) needs right after ``spawn_agent_session`` (issue #334).
+    """Audit a freshly spawned session, then mirror it to a PC terminal
+    window if appropriate — the shared tail every launch call site (Coding
+    tab ``apps.py``, Board issue-start ``board.py``, Team OS skill launch
+    ``team_os.py``) needs right after ``spawn_agent_session``.
 
-    Team OS (``routers/team_os.py``) already has its own
-    ``_spawn_skill_session`` covering this same tail plus the "remote" kind
-    and response-shaping, so it isn't routed through here — this helper only
-    dedupes the three PTY call sites that don't have an equivalent.
+    Both audit writes go through :func:`audit_off_loop`: the webapp runs a
+    single uvicorn loop, so a synchronous write here would stall every live
+    session's WS output.
+
+    ``event`` is the cross-session audit event name (``remote_launch`` for a
+    Team OS remote-control session); ``mirror=False`` skips the PC window for
+    sessions that have no PTY to mirror.
 
     ``audit_mod`` / ``mirror_fn`` must be the *caller's own* module-level
     ``audit`` / ``open_local_terminal_window`` references (not this module's)
@@ -272,8 +258,9 @@ async def audit_session_start_and_maybe_mirror(
     real windows or writing real audit logs — still take effect when this
     helper runs on the caller's behalf.
     """
-    audit_mod.audit_event(
-        "session_start",
+    await audit_off_loop(
+        audit_mod.audit_event,
+        event,
         session=sid,
         agent=agent,
         skill=skill,
@@ -282,7 +269,8 @@ async def audit_session_start_and_maybe_mirror(
         resume=resume,
         client=client_ip(request),
     )
-    audit_mod.session_log(
+    await audit_off_loop(
+        audit_mod.session_log,
         sid, "start", agent=agent, skill=skill, name=name, project=project,
     )
     # Mirror the session into a dedicated interactive terminal window on the
@@ -290,7 +278,7 @@ async def audit_session_start_and_maybe_mirror(
     # an explicit in-page loopback browser skips it (see should_mirror_to_pc).
     # mirror_url picks loopback (auth-bypass) or the ts.net URL with explicit
     # credentials, keyed on the active cert.
-    if should_mirror_to_pc(cfg.show_local_window, request, body):
+    if mirror and should_mirror_to_pc(cfg.show_local_window, request, body):
         # Pass sid so launcher tracks the mirror window's HWND for Stop &
         # Close to dismiss it later.
         asyncio.create_task(

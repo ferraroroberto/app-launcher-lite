@@ -158,6 +158,7 @@ try {
     # rules live in scripts/classify_e2e.py (one reviewable place). On CI the
     # full suite always runs -- the local gate is where routing is proven first.
     $tier = "full"; $e2eTarget = "tests/e2e"; $e2eBrowsers = ""; $routeReason = ""
+    $sessionHostTouched = "unknown"
     if ($env:CI -eq "true") {
         $routeReason = "CI always runs the full e2e suite"
     } else {
@@ -171,6 +172,7 @@ try {
             $e2eTarget = $kv["E2E_PYTEST_TARGET"]
             $e2eBrowsers = $kv["E2E_BROWSERS"]
             $routeReason = $kv["E2E_REASON"]
+            if ($kv.ContainsKey("E2E_SESSION_HOST_TOUCHED")) { $sessionHostTouched = $kv["E2E_SESSION_HOST_TOUCHED"] }
         } else {
             $routeReason = "classifier gave no verdict -- defaulting to full suite (fail-safe)"
         }
@@ -293,10 +295,11 @@ Write-Host ("[OK] Ready to ship -- all checks passed in {0:n1}s." -f $sw.Elapsed
 # A green gate + merge + tray.bat --restart still does not make a
 # session-host-path change live -- that process is deliberately excluded
 # from the reclaim sweep and can run stale code for
-# days with nothing else surfacing that. Reuse classify_e2e.py's own path categorization (the "session-host"
-# / "session-host/launcher" label it already computes for e2e routing) so
-# this warning never drifts out of sync with that classifier's path list.
-if ($routeReason -match "session-host") {
+# days with nothing else surfacing that. The classifier answers from CLAUDE.md's
+# `## session-host` block (the list /api/version's stale_relevant also reads), not
+# from its e2e route labels, so the warning cannot drift from that list. On CI the
+# classifier is not run, so the answer stays "unknown" and nothing is printed.
+if ($sessionHostTouched -eq "yes") {
     Write-Host ""
     Write-Host "[!] SESSION-HOST PATHS TOUCHED -- this is NOT live after tray.bat --restart." -ForegroundColor Yellow
     Write-Host "    Check GET /api/version's session_host.stale_relevant field before reporting" -ForegroundColor Yellow

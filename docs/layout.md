@@ -39,6 +39,7 @@ Beside them sit the entry points (`launcher.py`, `tray.bat`, `webapp.bat`, `weba
 | `src/jobs/` | The Jobs backend: `__init__.py` is the facade the routers import; `config`, `schtasks`, `queue`, `history`, `index`, `stats`, `reap`, `coverage`, `preflight`, `argv`, `trigger`, `secrets`, `webhook` and `config_models` hold the pieces. |
 | `src/jobs_kinds/` | One executor per job kind (batch, http_check, inline_shell, powershell, python, shell_wsl). |
 | `src/notify/` | Notification providers behind `notifications.py`. |
+| `src/tls/` | The webapp's TLS cert pair: the `cert.pem` / `key.pem` lookup and the Tailscale-leaf classifier shared by the tray, the router helpers and the cert / tunnel scripts. |
 
 `src/` sits just under the 40-module limit, so a new module goes in a `src/<domain>/` subpackage, not beside the flat ones. `session_host_text.py` holds the session host's pure terminal-text helpers (OSC titles, prompt titles, ring trimming); `session_host.py` keeps the session lifecycle.
 

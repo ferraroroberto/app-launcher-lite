@@ -35,6 +35,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP  # noqa: E402
+from src.tls.certs import cert_paths  # noqa: E402
 
 DEFAULT_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 SAMPLE_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.sample.yml"
@@ -73,8 +74,7 @@ def _spawn_uvicorn(port: int) -> subprocess.Popen:
             )
         except Exception as exc:
             logger.warning(f"⚠️  tailscale cert check failed (ignored): {exc}")
-    cert = PROJECT_ROOT / "webapp" / "certificates" / "cert.pem"
-    key = PROJECT_ROOT / "webapp" / "certificates" / "key.pem"
+    certs = cert_paths(PROJECT_ROOT)
     cmd = [
         str(_find_python()),
         "-m",
@@ -87,7 +87,8 @@ def _spawn_uvicorn(port: int) -> subprocess.Popen:
         "--log-level",
         "warning",
     ]
-    if cert.exists() and key.exists():
+    if certs is not None:
+        cert, key = certs
         cmd.extend(["--ssl-keyfile", str(key), "--ssl-certfile", str(cert)])
     logger.info(f"🚀 Starting uvicorn: {' '.join(cmd)}")
     return subprocess.Popen(

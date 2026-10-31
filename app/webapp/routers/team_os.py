@@ -31,7 +31,6 @@ for an endpoint that reads arbitrary files under a root).
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 import time
@@ -48,10 +47,9 @@ from src.webapp_config import WebappConfig
 
 from app.webapp.routers._helpers import (
     audit_off_loop,
+    audit_session_start_and_maybe_mirror,
     client_ip,
     maybe_json,
-    mirror_url,
-    should_mirror_to_pc,
     spawn_session_or_400,
 )
 
@@ -236,36 +234,14 @@ async def _spawn_skill_session(
     )
 
     sid = str(session.get("session_id") or "")
-    event = "remote_launch" if kind == "remote" else "session_start"
-    await audit_off_loop(
-        audit.audit_event,
-        event,
-        session=sid,
-        agent="copilot",
-        skill=audit_skill,
-        name=name,
-        project=str(team_os_dir),
-        resume=resume,
-        client=client_ip(request),
+    await audit_session_start_and_maybe_mirror(
+        cfg, request, body,
+        sid=sid, agent="copilot", name=name, project=str(team_os_dir),
+        resume=resume, skill=audit_skill, audit_mod=audit,
+        mirror_fn=open_local_terminal_window,
+        event="remote_launch" if kind == "remote" else "session_start",
+        mirror=kind == "pty",
     )
-    await audit_off_loop(
-        audit.session_log,
-        sid, "start", agent="copilot", skill=audit_skill, name=name,
-        project=str(team_os_dir),
-    )
-
-    # Mirror full-control sessions into a dedicated PC terminal window —
-    # identical to the Coding tab: the default
-    # for every caller, unless the launcher explicitly says it's rendering
-    # in-page itself (see should_mirror_to_pc).
-    if kind == "pty" and should_mirror_to_pc(
-        cfg.show_local_window, request, body
-    ):
-        asyncio.create_task(
-            asyncio.to_thread(
-                open_local_terminal_window, mirror_url(request, cfg, sid), sid
-            )
-        )
 
     return {
         "name": name,

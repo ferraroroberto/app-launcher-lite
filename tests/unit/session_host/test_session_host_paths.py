@@ -182,7 +182,7 @@ class TestDeclaredPathsCoverImportGraph:
         loaded = _session_host_import_closure(root)
         assert "src/vt_snapshot.py" in loaded  # the walk really follows imports
         undeclared = sorted(
-            f for f in loaded if not session_host_paths._touched_by([f], declared)
+            f for f in loaded if not session_host_paths.touched_by([f], declared)
         )
         assert undeclared == [], (
             "session-host loads modules CLAUDE.md's `## session-host` block "
