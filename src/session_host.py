@@ -207,9 +207,9 @@ class PtySession:
     _color_osc_carry: str = ""
     _prompt_raw: str = ""
     _prompt_captured: bool = False
-    # Headless VT mirror for full-screen (ratatui) agents only
-    # — Claude's raw-ring replay path never needs one. None for a
-    # non-fullscreen agent, or before SessionManager wires it in.
+    # Headless VT mirror of the full-screen (ratatui) Copilot TUI, used to
+    # repaint a reconnecting client. None only before SessionManager wires
+    # it in.
     _vt: Optional["VtSnapshot"] = None
     # Settle-then-submit state for server-initiated writes.
     # _bracketed_paste_mode mirrors xterm's term.modes.bracketedPasteMode,
