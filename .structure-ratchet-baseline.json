@@ -1,5 +1,8 @@
 {
   "version": 1,
   "band": {"files": 6, "functions": 13},
-  "entries": []
+  "root_extras": [],
+  "entries": [
+    {"key": "place:app/session_host", "files": 2}
+  ]
 }
