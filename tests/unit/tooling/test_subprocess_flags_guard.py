@@ -83,6 +83,10 @@ _VENDORED_VERBATIM_EXEMPT = {
         "The scaffold's conventions ratchet, vendored byte-for-byte and declared in "
         ".fleet.toml [vendored]; its git spawns use a locally derived _NO_WINDOW."
     ),
+    "scripts/runtime_write_ratchet.py": (
+        "The scaffold's runtime write ratchet, vendored byte-for-byte and declared in "
+        ".fleet.toml [vendored]; its git spawns use a locally derived _NO_WINDOW."
+    ),
     "scripts/shot_baseline.py": (
         "The scaffold's screenshot baseline, vendored byte-for-byte and declared in "
         ".fleet.toml [vendored]; its git and capture spawns use a locally derived "

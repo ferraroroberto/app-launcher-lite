@@ -8,7 +8,8 @@
 # ratchet (no file/function/directory growth, root layout matches the shape), the
 # conventions ratchet (no fleet-convention rule count above the baseline), the
 # comment ratchet (no more issue references in code comments than the baseline),
-# then the Playwright e2e suite (Chromium — this app is Android-only) against a disposable
+# the runtime write ratchet (no new write target resolving under a code folder), then
+# the Playwright e2e suite (Chromium — this app is Android-only) against a disposable
 # webapp the script boots itself on a free port, then the screenshot baseline
 # (no visible change against the committed PNGs under tests/e2e/shots).
 #
@@ -68,6 +69,13 @@ try {
     Phase "py_compile (app, src, tests)..."
     & $python -m compileall -q app src tests
     if ($LASTEXITCODE -ne 0) { Fail "byte-compile failed." }
+
+    # Runtime write probe, first half: what already sits untracked or ignored under the
+    # code folders, so the probe after the test runs names only what they wrote.
+    $runtimeSnapshot = Join-Path ([IO.Path]::GetTempPath()) "runtime-write-snapshot-$PID.json"
+    Phase "runtime write probe (snapshot)..."
+    & $python "scripts/runtime_write_ratchet.py" --snapshot $runtimeSnapshot
+    if ($LASTEXITCODE -ne 0) { Fail "runtime write probe could not take its snapshot (exit $LASTEXITCODE)." }
 
     Phase "pytest (non-e2e)..."
     & $python -m pytest -q --ignore=tests/e2e
@@ -149,6 +157,15 @@ try {
     Phase "comment ratchet..."
     & $python -m scripts.comment_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "comment ratchet failed or NOT CONFIRMED: a file carries more issue references in comments than its baseline, a file could not be scanned, or a baseline problem; see the output above and .comment-ratchet-baseline.json." }
+
+    # Runtime write ratchet (scaffold docs/runtime-write-ratchet.md): no file may gain a
+    # write target (open for writing, Path.write_*, mkdir, a log handler, sqlite3.connect)
+    # resolving under a code folder beyond .runtime-write-ratchet-baseline.json. Whole
+    # tree, so never diff-routed. Same wrapper shape as the other ratchets: exit 3 (a new
+    # target it cannot resolve) is NOT CONFIRMED and fails.
+    Phase "runtime write ratchet..."
+    & $python -m scripts.runtime_write_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "runtime write ratchet failed or NOT CONFIRMED: a file gained a write under a code folder, a target could not be resolved, or a baseline problem; see the output above and .runtime-write-ratchet-baseline.json." }
 
     # Diff-proportionate e2e routing. Classify the branch's
     # changed files vs main and run an e2e slice proportionate to the diff:
@@ -281,6 +298,13 @@ try {
             }
         }
     }
+
+    # Runtime write probe, second half: any file the unit, e2e and shot runs left under a code folder.
+    Phase "runtime write probe..."
+    & $python "scripts/runtime_write_ratchet.py" --probe $runtimeSnapshot
+    $probeExit = $LASTEXITCODE
+    if ($probeExit -eq 3) { Fail "runtime write probe NOT CONFIRMED (the snapshot could not be read)." }
+    if ($probeExit -ne 0) { Fail "runtime write probe failed: the test runs left a file under a code folder." }
 }
 finally {
     Pop-Location
