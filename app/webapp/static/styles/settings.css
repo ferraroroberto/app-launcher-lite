@@ -62,14 +62,6 @@
 .muted { color: var(--muted); }
 .small { font-size: var(--font-caption); }
 
-/* Status + build identity footer: centred plain text at the
-   very bottom of the page, outside every card. */
-.page-foot {
-  margin: 16px 4px;
-  text-align: center;
-}
-.page-foot p { margin: 2px 0; }
-
 .listeners {
   display: flex;
   flex-direction: column;
