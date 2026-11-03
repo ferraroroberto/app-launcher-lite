@@ -222,6 +222,9 @@ class WebappConfig:
     # here, so the shared Telegram chat isn't spammed by every failure.
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+    # Chat for sign-in guessing alerts (the fleet's `coding alerts` chat). Empty
+    # falls back to telegram_chat_id so a single configured chat still gets them.
+    telegram_alert_chat_id: str = ""
     # --- Jobs missed-fire coverage --------------------------
     # How often the webapp re-scans every scheduled job for coverage: a
     # missing/disabled Task Scheduler entry, or an elapsed slot with no run
@@ -376,6 +379,7 @@ def load_webapp_config(
         notify_failure_streak=int(raw.get("notify_failure_streak", 0) or 0),
         telegram_bot_token=str(raw.get("telegram_bot_token", "")),
         telegram_chat_id=str(raw.get("telegram_chat_id", "")),
+        telegram_alert_chat_id=str(raw.get("telegram_alert_chat_id", "")),
         jobs_coverage_interval_minutes=int(
             raw.get("jobs_coverage_interval_minutes", 60) or 0
         ),
