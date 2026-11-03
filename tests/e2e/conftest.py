@@ -53,6 +53,7 @@ import pytest
 import requests
 from playwright.sync_api import BrowserContext, Error as PlaywrightError, Page
 
+from src.runtime_data import app_dir_env_var
 from src.scanner import dir_ignored
 from tests.e2e._shot import CHROMIUM_CAPTURE_ARGS
 
@@ -93,6 +94,8 @@ _WEBAPP_CONFIG_PATH_ENV = "LAUNCHER_WEBAPP_CONFIG"
 # the real folder, so the test could only pass on a host with no
 # AppLauncher.bat installed there for real login-time autostart.
 _STARTUP_DIR_ENV = "LAUNCHER_STARTUP_DIR"
+# The disposable webapp keeps its runtime databases (the usage log) in a per-run temp folder.
+_DATA_DIR_ENV = app_dir_env_var("app-launcher-lite")
 _AUTOBOOT_ENV = "LAUNCHER_E2E_AUTOBOOT"
 # Sentinel flag for the lightweight PTY child (issue #534). Under autoboot the
 # disposable session-host's PATH is prepended with a harness-generated
@@ -497,6 +500,7 @@ def _autoboot_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     # real wrapper bat (existence + bytes) so the isolation can be *asserted*
     # after the run, not just assumed — mirrors the webapp-config check below.
     startup_dir = tmp_path_factory.mktemp("startup-dir")
+    data_dir = tmp_path_factory.mktemp("runtime-data")
     real_wrapper_bat = boot_autostart.wrapper_bat_path()
     real_wrapper_bytes = (
         real_wrapper_bat.read_bytes() if real_wrapper_bat.is_file() else None
@@ -531,6 +535,7 @@ def _autoboot_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
                 _SESSION_HOST_PORT_ENV: str(sh_port),
                 _WEBAPP_CONFIG_PATH_ENV: str(cfg_copy),
                 _STARTUP_DIR_ENV: str(startup_dir),
+                _DATA_DIR_ENV: str(data_dir),
             },
         )
 
