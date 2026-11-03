@@ -19,6 +19,7 @@ extra_roots  = ["webapp"]
 [contracts]
 ignore_refs = [
   { path = "app/webapp/static/index.html", repo = "content-management", why = "input placeholder example path, not a runtime reference" },
+  { path = "src/jobs/config.py", repo = "content-management", why = "docstring example of a jobs.json entry, not a runtime reference" },
 ]
 
 [vendored]
