@@ -20,6 +20,7 @@
   --ink: #1f2328;            /* vendored card.css token name (== --fg) */
   --muted: #656d76;          /* fg-muted (secondary text) */
   --line: #d1d9e0;           /* border — default hairline, the dominant border */
+  --input-bg: var(--card-off); /* control fill for the vendored select-native, modal and disabled button */
   --line-muted: #d8dee4;     /* border-muted — quieter ghost-toggle border */
   /* colors — accent + status (status colors signal state only) */
   --accent: #0969da;
@@ -94,6 +95,7 @@ terminal.js reads these. The opt-in override after the dark
   --font-heading-xl: 2rem;
   --font-heading-lg: 1.5rem;
   --font-body: 1rem;
+  --font-body-sm: 0.875rem;  /* secondary lines: the sign-in hint and error */
   --font-label: 0.92rem;
   --font-caption: 0.75rem;
   /* shared inline-control height (select / input / compact buttons) */
@@ -289,14 +291,13 @@ html, body {
 
    The overlay-hide rule below is app-specific glue the vendored file
    anticipates (its README: "a non-<dialog> overlay -> add the class
-   nav-hidden to <body>") — these five are hand-rolled [hidden]-toggled
+   nav-hidden to <body>") — these are hand-rolled [hidden]-toggled
    overlays, not native <dialog>, which the vendored file already covers via
    body:has(dialog[open]). visibility (not display) matches the vendored
    technique — gentler on iOS fixed-layer repainting across show/hide. */
 @media (pointer: coarse) and (max-width: 520px) {
   body.terminal-open .tabs,
-  body:has(#teamOsBrowser:not([hidden])) .tabs,
-  body:has(#loginOverlay:not([hidden])) .tabs {
+  body:has(#teamOsBrowser:not([hidden])) .tabs {
     visibility: hidden;
     pointer-events: none;
   }
@@ -312,7 +313,6 @@ html, body {
   @media (display-mode: standalone) {
     body.terminal-open .app,
     body:has(#teamOsBrowser:not([hidden])) .app,
-    body:has(#loginOverlay:not([hidden])) .app,
     body:has(dialog[open]) .app {
       overflow: hidden;
     }

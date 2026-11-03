@@ -111,7 +111,7 @@ All keys optional — missing keys fall back to `src/webapp_config.py` defaults.
 | Key | Default | Effect |
 | --- | --- | --- |
 | `auth_token` | `""` | Bearer token required from non-loopback callers. Empty = gate off. Generate with `scripts/gen_token.py`. |
-| `auth_password` | `""` | Optional login-overlay password that hands the token to a fresh device (`scripts/set_password.py`). |
+| `auth_password` | `""` | Optional sign-in-sheet password that hands the token to a fresh device (`scripts/set_password.py`). |
 | `tailnet_allowlist` | `[]` | Extra IPs/CIDRs allowed on terminal routes beyond loopback + the Tailscale CGNAT range — how a non-Tailscale VPN enables the terminal (add its client subnet). |
 | `show_local_window` | `true` | Phone-launched sessions also open a PC mirror terminal window. |
 | `terminal_history_lines` | `10000` | Session-host scrollback replayed on (re)connect (bounds 200–50000). |
