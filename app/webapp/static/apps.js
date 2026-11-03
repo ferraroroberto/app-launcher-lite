@@ -209,6 +209,7 @@ function buildCodingRow(a) {
 // Hideable under the same pseudo-id as the agents.
 function buildRepoButton(a) {
   const repoBtn = document.createElement('button');
+  repoBtn.dataset.track = 'apps-open-repo';
   repoBtn.type = 'button';
   repoBtn.className = 'icon-btn agent-btn';
   const repoIcon = document.createElement('img');
@@ -235,6 +236,7 @@ function buildRepoButton(a) {
 // Filled when starred, outline otherwise (see .star-btn.is-fav).
 function buildStarButton(a) {
   const starBtn = document.createElement('button');
+  starBtn.dataset.track = 'apps-favorite';
   starBtn.type = 'button';
   starBtn.className = 'icon-btn agent-btn star-btn' + (a.is_favorite ? ' is-fav' : '');
   starBtn.innerHTML = icon('star');
@@ -247,6 +249,7 @@ function buildStarButton(a) {
 
 function buildAgentButton(a, agent) {
   const btn = document.createElement('button');
+  btn.dataset.track = 'apps-launch-agent';
   btn.type = 'button';
   btn.className = 'icon-btn agent-btn';
   btn.dataset.agent = agent.id;
@@ -459,6 +462,7 @@ function buildAppRow(a) {
   main.className = 'app-main';
 
   const launch = document.createElement('button');
+  launch.dataset.track = 'apps-launch';
   launch.type = 'button';
   launch.className = 'launch-btn';
 
@@ -551,6 +555,7 @@ function buildEditActions(a) {
   actions.className = 'row-actions';
 
   const renameBtn = document.createElement('button');
+  renameBtn.dataset.track = 'apps-rename';
   renameBtn.type = 'button';
   renameBtn.className = 'icon-btn';
   renameBtn.innerHTML = icon('pencil');
@@ -560,6 +565,7 @@ function buildEditActions(a) {
   actions.appendChild(renameBtn);
 
   const removeBtn = document.createElement('button');
+  removeBtn.dataset.track = 'apps-remove';
   removeBtn.type = 'button';
   removeBtn.className = 'icon-btn danger';
   removeBtn.innerHTML = icon('trash-2');
@@ -733,6 +739,7 @@ export function renderRunningApps() {
     actions.className = 'row-actions session-actions';
 
     const openBtn = document.createElement('button');
+    openBtn.dataset.track = 'apps-running-open';
     openBtn.type = 'button';
     openBtn.className = 'icon-btn action-open';
     openBtn.innerHTML = icon('globe');
@@ -751,6 +758,7 @@ export function renderRunningApps() {
     actions.appendChild(openBtn);
 
     const stopBtn = document.createElement('button');
+    stopBtn.dataset.track = 'apps-running-stop';
     stopBtn.type = 'button';
     stopBtn.className = 'icon-btn action-stop-close';
     stopBtn.innerHTML = icon('square');

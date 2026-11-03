@@ -70,6 +70,7 @@ export function renderSkills() {
 
     // 📖 Browse — open the read-only content browser for this skill.
     const browseBtn = document.createElement('button');
+    browseBtn.dataset.track = 'team-os-browse';
     browseBtn.type = 'button';
     browseBtn.className = 'icon-btn agent-btn';
     browseBtn.innerHTML = icon('book-open');
@@ -80,6 +81,7 @@ export function renderSkills() {
 
     // Launch — fires a fresh Copilot session that auto-invokes /<skill>.
     const launchBtn = document.createElement('button');
+    launchBtn.dataset.track = 'team-os-launch';
     launchBtn.type = 'button';
     launchBtn.className = 'icon-btn agent-btn teamos-launch';
     launchBtn.innerHTML = icon('rocket');
@@ -273,6 +275,7 @@ function renderFileList(files) {
     const li = document.createElement('li');
     li.className = 'teamos-file-row';
     const btn = document.createElement('button');
+    btn.dataset.track = 'team-os-file';
     btn.type = 'button';
     btn.className = 'teamos-file-btn';
     btn.textContent = f.name;
@@ -495,6 +498,7 @@ function populateModelMenu() {
   menu.innerHTML = '';
   [''].concat(models).forEach(function (m) {
     const b = document.createElement('button');
+    b.dataset.track = 'team-os-model-option';
     b.type = 'button';
     b.setAttribute('role', 'option');
     b.dataset.value = m;

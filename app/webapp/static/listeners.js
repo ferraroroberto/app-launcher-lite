@@ -90,6 +90,7 @@ function buildListenerRow(l, isChild, hasChildren) {
   }
 
   const kill = document.createElement('button');
+  kill.dataset.track = 'listeners-kill';
   kill.type = 'button';
   kill.innerHTML = icon('octagon-x') + ' Kill';
   kill.addEventListener('click', async function (ev) {

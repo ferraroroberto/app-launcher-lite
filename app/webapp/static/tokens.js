@@ -45,6 +45,7 @@ function renderTokens(tokens) {
     meta.appendChild(detail);
     li.appendChild(meta);
     const revoke = document.createElement('button');
+    revoke.dataset.track = 'tokens-revoke';
     revoke.type = 'button';
     revoke.className = 'button-ghost';
     revoke.textContent = 'Revoke';

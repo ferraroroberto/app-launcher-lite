@@ -86,6 +86,7 @@ function renderSearchMatches(host) {
     const li = document.createElement('li');
     li.className = 'app-item job-search-hit';
     const button = document.createElement('button');
+    button.dataset.track = 'jobs-search-hit';
     button.type = 'button';
     button.className = 'launch-btn session-open';
     const title = document.createElement('span');
@@ -222,6 +223,7 @@ function renderHistoryLi(job) {
   title.textContent = 'Recent runs · ' + job.name;
   bar.appendChild(title);
   const close = document.createElement('button');
+  close.dataset.track = 'jobs-history-close';
   close.type = 'button';
   close.className = 'jobs-history-close';
   close.innerHTML = icon('x') + ' Close';
@@ -266,6 +268,7 @@ function renderHistoryLi(job) {
   webhookDetails.dataset.role = 'webhook-payload-details';
   webhookDetails.hidden = true;
   const webhookSummary = document.createElement('summary');
+  webhookSummary.dataset.track = 'jobs-webhook-payload';
   webhookSummary.innerHTML = icon('webhook') + ' Webhook payload';
   webhookDetails.appendChild(webhookSummary);
   const webhookPre = document.createElement('pre');
@@ -346,6 +349,7 @@ function redrawRunsList(jobId, runs) {
   runs.forEach(function (r) {
     const li = document.createElement('li');
     const btn = document.createElement('button');
+    btn.dataset.track = 'jobs-run-select';
     btn.type = 'button';
     btn.className = 'jobs-run-btn';
     if (state.selectedRun && state.selectedRun.jobId === jobId
@@ -376,6 +380,7 @@ function redrawRunsList(jobId, runs) {
     li.appendChild(btn);
 
     const pin = document.createElement('button');
+    pin.dataset.track = 'jobs-run-pin';
     pin.type = 'button';
     pin.className = 'icon-btn jobs-pin-btn' + (r.pinned ? ' selected' : '');
     pin.innerHTML = icon('pin');
@@ -392,6 +397,7 @@ function redrawRunsList(jobId, runs) {
     // params now. Opens the run dialog pre-filled with this run's values.
     if (job && declaredNames.size && r.params && typeof r.params === 'object') {
       const rerun = document.createElement('button');
+      rerun.dataset.track = 'jobs-run-rerun';
       rerun.type = 'button';
       rerun.className = 'icon-btn';
       rerun.innerHTML = icon('refresh-cw');
@@ -721,6 +727,7 @@ function renderKillButton(jobId, runId, status, extras) {
   }
   if (!killBtn) {
     killBtn = document.createElement('button');
+    killBtn.dataset.track = 'jobs-kill-run';
     killBtn.type = 'button';
     killBtn.className = 'icon-btn danger jobs-kill-btn';
     killBtn.dataset.role = 'kill-btn';

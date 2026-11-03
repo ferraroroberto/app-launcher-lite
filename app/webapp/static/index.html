@@ -70,32 +70,32 @@
        the physical viewport (home-automation#232). -->
   <nav class="tabs" role="tablist" aria-label="Primary navigation" data-active-tab="coding">
     <button id="tabBoard" type="button" class="tab" data-tab="board"
-            role="tab" aria-selected="false" aria-controls="paneBoard" tabindex="-1">
+            role="tab" aria-selected="false" aria-controls="paneBoard" tabindex="-1" data-track="tab-board">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-square-kanban"></use></svg>
       <span class="tab-label">Board</span>
     </button>
     <button id="tabCoding" type="button" class="tab active" data-tab="coding"
-            role="tab" aria-selected="true" aria-controls="paneCoding">
+            role="tab" aria-selected="true" aria-controls="paneCoding" data-track="tab-coding">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-code-xml"></use></svg>
       <span class="tab-label">Code</span>
     </button>
     <button id="tabTeamOS" type="button" class="tab" data-tab="teamos"
-            role="tab" aria-selected="false" aria-controls="paneTeamOS" tabindex="-1">
+            role="tab" aria-selected="false" aria-controls="paneTeamOS" tabindex="-1" data-track="tab-team-os">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-circle-plus"></use></svg>
       <span class="tab-label">Team</span>
     </button>
     <button id="tabApps" type="button" class="tab" data-tab="apps"
-            role="tab" aria-selected="false" aria-controls="paneApps" tabindex="-1">
+            role="tab" aria-selected="false" aria-controls="paneApps" tabindex="-1" data-track="tab-apps">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-layout-grid"></use></svg>
       <span class="tab-label">Apps</span>
     </button>
     <button id="tabJobs" type="button" class="tab" data-tab="jobs"
-            role="tab" aria-selected="false" aria-controls="paneJobs" tabindex="-1">
+            role="tab" aria-selected="false" aria-controls="paneJobs" tabindex="-1" data-track="tab-jobs">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg>
       <span class="tab-label">Jobs</span>
     </button>
     <button id="tabSettings" type="button" class="tab" data-tab="settings"
-            role="tab" aria-selected="false" aria-controls="paneSettings" tabindex="-1">
+            role="tab" aria-selected="false" aria-controls="paneSettings" tabindex="-1" data-track="tab-settings">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>
       <span class="tab-label">Settings</span>
     </button>
@@ -113,10 +113,10 @@
           Launcher Lite
         </span>
         <span id="homeHeadStatus" class="status"></span>
-        <button type="button" class="cpu-reading hit-target" data-level="unknown"
+        <button type="button" data-track="cpu-reading" class="cpu-reading hit-target" data-level="unknown"
                 title="CPU load" aria-label="CPU load unknown. Show details">–</button>
         <button type="button" id="themeToggle" class="icon-button home-toggle hit-target"
-                title="Toggle theme" aria-label="Toggle dark mode">
+                title="Toggle theme" aria-label="Toggle dark mode" data-track="theme-toggle">
           <svg class="theme-toggle-icon theme-icon-moon hit-target" aria-hidden="true" focusable="false"><use href="#i-moon"></use></svg>
           <svg class="theme-toggle-icon theme-icon-sun hit-target" aria-hidden="true" focusable="false"><use href="#i-sun"></use></svg>
         </button>
@@ -127,7 +127,7 @@
            The launch-time Detached/Resume toggles moved into the Projects
            card's summary — the surface sessions are actually started from. -->
       <details class="card card--collapsible sessions-card" open>
-        <summary class="collapse-summary">
+        <summary class="collapse-summary" data-track="coding-running-sessions">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-terminal"></use></svg>
             <h3 class="collapse-title">Running sessions</h3>
@@ -136,7 +136,7 @@
             <div class="sessions-header-actions">
               <button id="gitStatusBtn" type="button" class="button-ghost git-status-btn"
                       title="Check each project's git branch + uncommitted changes"
-                      aria-label="Check git status of all projects"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-git-branch"></use></svg> status</button>
+                      aria-label="Check git status of all projects" data-track="git-status-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-git-branch"></use></svg> status</button>
               <div id="gitStatusSummary" class="git-summary" hidden
                    role="list" aria-label="Projects not on their default branch"></div>
             </div>
@@ -154,7 +154,7 @@
            Detached + Resume live here (#496 item 2): they are launch-time
            controls, so they sit beside the tiles they modify. -->
       <details class="card card--collapsible projects-card">
-        <summary class="collapse-summary">
+        <summary class="collapse-summary" data-track="coding-projects">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-folder"></use></svg>
             <h3 class="collapse-title">Projects</h3>
@@ -165,17 +165,17 @@
                    (#copilotModel) — one control, one source of truth. -->
               <button type="button" id="codingDetached" class="detached-toggle" role="switch" aria-checked="false"
                      aria-label="Launch detached"
-                     title="Launch detached: a console window on the PC, listed and killable here but no phone terminal">
+                     title="Launch detached: a console window on the PC, listed and killable here but no phone terminal" data-track="coding-detached">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-cloud"></use></svg>
               </button>
               <button type="button" id="codingResume" class="detached-toggle" role="switch" aria-checked="false"
                      aria-label="Resume session"
-                     title="Resume: reopen the agent's own session picker — in a phone terminal, or in the detached console when Detached is also on">
+                     title="Resume: reopen the agent's own session picker — in a phone terminal, or in the detached console when Detached is also on" data-track="coding-resume">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rotate-ccw"></use></svg>
               </button>
             </div>
             <button id="favFilterBtn" type="button" class="button-ghost fav-filter-btn"
-                    aria-pressed="false" title="Show only favorites"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg> Favorites</button>
+                    aria-pressed="false" title="Show only favorites" data-track="fav-filter-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg> Favorites</button>
             <span class="collapse-chevron" aria-hidden="true">›</span>
           </span>
         </summary>
@@ -191,7 +191,7 @@
         </div>
       </details>
       <details id="codingOptions" class="card card--collapsible">
-        <summary class="collapse-summary">
+        <summary class="collapse-summary" data-track="coding-options">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>
             <h3 class="collapse-title">options</h3>
@@ -207,19 +207,19 @@
           <h3 class="opt-group-title">GitHub Copilot</h3>
           <div class="opt-row">
             <span class="opt-name">Model</span>
-            <select id="copilotModel" class="select-native" aria-label="Copilot model"></select>
+            <select id="copilotModel" class="select-native" aria-label="Copilot model" data-track="copilot-model"></select>
           </div>
           <div class="opt-row">
             <span class="opt-name">Context</span>
-            <select id="copilotContext" class="select-native" aria-label="Copilot context window"></select>
+            <select id="copilotContext" class="select-native" aria-label="Copilot context window" data-track="copilot-context"></select>
           </div>
           <div class="opt-row">
             <span class="opt-name">Effort</span>
-            <select id="copilotEffort" class="select-native" aria-label="Copilot reasoning effort"></select>
+            <select id="copilotEffort" class="select-native" aria-label="Copilot reasoning effort" data-track="copilot-effort"></select>
           </div>
           <div class="toggles">
-            <span class="switch-row"><span>Autopilot</span><button type="button" id="copilotAutopilot" class="toggle" role="switch" aria-checked="false" aria-label="Copilot autopilot"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
-            <span class="switch-row"><span>Skip permission prompts</span><button type="button" id="copilotSkipPerms" class="toggle" role="switch" aria-checked="false" aria-label="Skip Copilot permission prompts"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+            <span class="switch-row"><span>Autopilot</span><button type="button" id="copilotAutopilot" class="toggle" role="switch" aria-checked="false" aria-label="Copilot autopilot" data-track="copilot-autopilot"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+            <span class="switch-row"><span>Skip permission prompts</span><button type="button" id="copilotSkipPerms" class="toggle" role="switch" aria-checked="false" aria-label="Skip Copilot permission prompts" data-track="copilot-skip-perms"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
           </div>
           <p class="opt-hint">Sign in with <code>/login</code> inside the session. <strong>Default (auto)</strong> lets Copilot pick the model — Effort only applies with an explicit model (the auto model rejects it). The model list comes from <code>copilot_models</code> in <code>webapp_config.json</code> (tenant-gated ids — edit it there).</p>
           <div id="copilotFlagsPreview" class="flags-preview">copilot</div>
@@ -228,7 +228,7 @@
     </section>
     <section id="paneApps" class="pane" role="tabpanel" aria-labelledby="tabApps" hidden>
       <details class="card card--collapsible sessions-card" open>
-        <summary class="collapse-summary">
+        <summary class="collapse-summary" data-track="apps-running">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-play"></use></svg>
             <h3 class="collapse-title">Running apps</h3>
@@ -244,7 +244,7 @@
       <!-- Collapsed by default (#383 review round) — Running apps above is
            the tab's working set. -->
       <details class="card card--collapsible listeners-card">
-        <summary class="collapse-summary">
+        <summary class="collapse-summary" data-track="apps-listeners">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plug"></use></svg>
             <h3 class="collapse-title">Port listeners</h3>
@@ -258,7 +258,7 @@
         </div>
       </details>
       <details class="card card--collapsible apps-list-card">
-        <summary class="collapse-summary">
+        <summary class="collapse-summary" data-track="apps-registered">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-package"></use></svg>
             <h3 class="collapse-title">Registered apps</h3>
@@ -276,7 +276,7 @@
       <!-- Collapsed by default, matching Port listeners — a setup-once panel,
            not the tab's working set (issue #456 part 2/2). -->
       <details class="card card--collapsible registered-trays-card">
-        <summary class="collapse-summary">
+        <summary class="collapse-summary" data-track="apps-autostart-trays">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-package"></use></svg>
             <h3 class="collapse-title">Autostart registered trays</h3>
@@ -295,7 +295,7 @@
 
     <section id="paneJobs" class="pane" role="tabpanel" aria-labelledby="tabJobs" hidden>
       <details id="jobsAgendaCard" class="card card--collapsible sessions-card jobs-agenda-card">
-        <summary class="collapse-summary">
+        <summary class="collapse-summary" data-track="jobs-schedule">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-calendar-days"></use></svg>
             <h3 class="collapse-title">Schedule</h3>
@@ -307,23 +307,23 @@
         </div>
       </details>
       <details class="card card--collapsible sessions-card jobs-card" open>
-        <summary class="collapse-summary">
+        <summary class="collapse-summary" data-track="jobs-registered">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard-list"></use></svg>
             <h3 class="collapse-title">Registered jobs</h3>
           </span>
           <span class="summary-actions">
             <div class="jobs-header-actions">
-              <button id="jobsAddBtn" type="button" class="button-ghost jobs-add-btn" aria-label="Add job" title="Add job" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg></button>
+              <button id="jobsAddBtn" type="button" class="button-ghost jobs-add-btn" aria-label="Add job" title="Add job" hidden data-track="jobs-add-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg></button>
               <span class="jobs-edit-control">
                 <span class="jobs-edit-label">Edit mode</span>
                 <button type="button" id="jobsEditBtn" class="toggle" role="switch" aria-checked="false"
                        aria-label="Edit mode"
-                       title="Edit mode — reveal Add job plus edit + remove on job rows (same switch as Settings)">
+                       title="Edit mode — reveal Add job plus edit + remove on job rows (same switch as Settings)" data-track="jobs-edit-btn">
                   <span class="knob"></span><span class="toggle-label">OFF</span>
                 </button>
               </span>
-              <button id="jobsSortBtn" type="button" class="button-ghost jobs-sort-btn" aria-label="Change job sort order"></button>
+              <button id="jobsSortBtn" type="button" class="button-ghost jobs-sort-btn" aria-label="Change job sort order" data-track="jobs-sort-btn"></button>
             </div>
             <span class="collapse-chevron" aria-hidden="true">›</span>
           </span>
@@ -334,7 +334,7 @@
           <input id="jobsSearchInput" type="search" autocomplete="off"
                  placeholder="Search run output" aria-label="Search run output">
           <button id="jobsSearchClear" type="button" class="button-ghost hit-target"
-                  aria-label="Clear run search" title="Clear run search" hidden>
+                  aria-label="Clear run search" title="Clear run search" hidden data-track="jobs-search-clear">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
           </button>
         </div>
@@ -360,12 +360,12 @@
           <button id="teamOsRecapLaunch" type="button"
                   class="icon-btn agent-btn teamos-recap-launch"
                   title="Review the weekly recap (/weekly-recap)"
-                  aria-label="Launch weekly recap review"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rocket"></use></svg></button>
+                  aria-label="Launch weekly recap review" data-track="team-os-recap-launch"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rocket"></use></svg></button>
         </div>
       </section>
 
       <details class="card card--collapsible teamos-list-card" open>
-        <summary class="collapse-summary">
+        <summary class="collapse-summary" data-track="team-os-skills">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-library-big"></use></svg>
             <h3 class="collapse-title">Skills</h3>
@@ -381,19 +381,19 @@
               <span class="model-combo" id="teamOsModelCombo" data-value="">
                 <button type="button" id="teamOsModelBtn" class="model-combo-trigger"
                         aria-haspopup="listbox" aria-expanded="false" aria-controls="teamOsModelMenu"
-                        title="Model for the launched team-os skill">Default</button>
+                        title="Model for the launched team-os skill" data-track="team-os-model-btn">Default</button>
                 <span id="teamOsModelMenu" class="model-combo-menu" role="listbox" aria-label="Skill launch model" hidden>
-                  <button type="button" role="option" data-value="" aria-selected="true">Default</button>
+                  <button type="button" role="option" data-track="team-os-model-default" data-value="" aria-selected="true">Default</button>
                 </span>
               </span>
               <button type="button" id="teamOsDetached" class="detached-toggle" role="switch" aria-checked="false"
                      aria-label="Launch detached"
-                     title="Launch detached: a console window on the PC, listed and killable in the Coding tab but no phone terminal">
+                     title="Launch detached: a console window on the PC, listed and killable in the Coding tab but no phone terminal" data-track="team-os-detached">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-cloud"></use></svg>
               </button>
               <button type="button" id="teamOsResume" class="detached-toggle" role="switch" aria-checked="false"
                      aria-label="Resume session"
-                     title="Resume: reopen Copilot's session picker (drops the skill prompt) — in a phone terminal, or in the detached console when Detached is also on">
+                     title="Resume: reopen Copilot's session picker (drops the skill prompt) — in a phone terminal, or in the detached console when Detached is also on" data-track="team-os-resume">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rotate-ccw"></use></svg>
               </button>
             </div>
@@ -413,16 +413,16 @@
     <section id="paneBoard" class="pane" role="tabpanel" aria-labelledby="tabBoard" hidden>
       <div class="board-strip" role="tablist" aria-label="Board columns">
         <button id="boardColBacklog" type="button" class="board-strip-btn" data-col="backlog"
-                role="tab" aria-selected="false">git <span class="board-count">0</span></button>
+                role="tab" aria-selected="false" data-track="board-col-backlog">git <span class="board-count">0</span></button>
         <button id="boardColBot" type="button" class="board-strip-btn" data-col="bot_turn"
-                role="tab" aria-selected="false">bot <span class="board-count">0</span></button>
+                role="tab" aria-selected="false" data-track="board-col-bot">bot <span class="board-count">0</span></button>
         <button id="boardColYours" type="button" class="board-strip-btn active" data-col="your_turn"
-                role="tab" aria-selected="true">you <span class="board-count">0</span></button>
+                role="tab" aria-selected="true" data-track="board-col-yours">you <span class="board-count">0</span></button>
         <button id="boardColDone" type="button" class="board-strip-btn" data-col="done"
-                role="tab" aria-selected="false">Done <span class="board-count">0</span></button>
+                role="tab" aria-selected="false" data-track="board-col-done">Done <span class="board-count">0</span></button>
         <button id="boardRefresh" type="button" class="icon-btn board-refresh"
                 title="Refresh GitLab issues / done-today (runs glab)"
-                aria-label="Refresh GitLab data"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-refresh-cw"></use></svg></button>
+                aria-label="Refresh GitLab data" data-track="board-refresh"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-refresh-cw"></use></svg></button>
       </div>
       <div id="boardStatus" class="board-status" hidden></div>
       <div id="boardColumns" class="board-columns">
@@ -457,7 +457,7 @@
             <h3 class="collapse-title">Settings</h3>
           </span>
           <span class="summary-actions">
-            <span class="switch-row settings-edit-row"><span>Edit mode</span><button type="button" id="editMode" class="toggle" role="switch" aria-checked="false" aria-label="Edit mode" title="Edit mode — reveal rename + remove on Apps tab rows, Add on Jobs tab"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+            <span class="switch-row settings-edit-row"><span>Edit mode</span><button type="button" id="editMode" class="toggle" role="switch" aria-checked="false" aria-label="Edit mode" title="Edit mode — reveal rename + remove on Apps tab rows, Add on Jobs tab" data-track="edit-mode"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
           </span>
         </div>
         <div class="collapse-body">
@@ -493,24 +493,24 @@
         <div class="stacked settings-textsize">
           <span>Text size</span>
           <div class="segmented" id="textSizeControl" role="group" aria-label="Text size">
-            <button type="button" class="segmented-item" aria-pressed="false" data-textsize="small">Small</button>
-            <button type="button" class="segmented-item" aria-pressed="true" data-textsize="default">Default</button>
-            <button type="button" class="segmented-item" aria-pressed="false" data-textsize="large">Large</button>
+            <button type="button" data-track="text-size-small" class="segmented-item" aria-pressed="false" data-textsize="small">Small</button>
+            <button type="button" data-track="text-size-default" class="segmented-item" aria-pressed="true" data-textsize="default">Default</button>
+            <button type="button" data-track="text-size-large" class="segmented-item" aria-pressed="false" data-textsize="large">Large</button>
           </div>
         </div>
         <div class="switch-row settings-switch-row">
           <span>Start App Launcher Lite at log on</span>
-          <button type="button" id="bootAutostartToggle" class="toggle" role="switch" aria-checked="false" aria-label="Start App Launcher Lite at log on" title="Start App Launcher Lite automatically at log on (Startup folder — no admin needed)"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+          <button type="button" id="bootAutostartToggle" class="toggle" role="switch" aria-checked="false" aria-label="Start App Launcher Lite at log on" title="Start App Launcher Lite automatically at log on (Startup folder — no admin needed)" data-track="boot-autostart-toggle"><span class="knob"></span><span class="toggle-label">OFF</span></button>
         </div>
         <div class="row settings-actions">
-          <button id="saveSettings" type="button" class="button-ghost accent-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-save"></use></svg> Save</button>
-          <button id="rescanBtn" type="button" class="button-ghost"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> Scan for new apps</button>
+          <button id="saveSettings" type="button" class="button-ghost accent-btn" data-track="save-settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-save"></use></svg> Save</button>
+          <button id="rescanBtn" type="button" class="button-ghost" data-track="rescan-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> Scan for new apps</button>
         </div>
         <hr>
         <!-- The Screen view's entry (#60): screen-view.js owns the tap. -->
         <div class="switch-row settings-switch-row">
           <span>Screen — the PC's desktop, live</span>
-          <button type="button" id="screenOpen" class="button-ghost" aria-haspopup="dialog"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg> View live</button>
+          <button type="button" id="screenOpen" class="button-ghost" aria-haspopup="dialog" data-track="screen-open"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg> View live</button>
         </div>
         <p id="statusReadout" class="muted small"></p>
         </div>
@@ -533,16 +533,16 @@
           </label>
           <label class="stacked">
             <span>Job it may fire</span>
-            <select id="tokenJobSelect" class="input-native"></select>
+            <select id="tokenJobSelect" class="input-native" data-track="token-job-select"></select>
           </label>
           <div class="row settings-actions">
-            <button id="tokenMintBtn" type="button" class="button-ghost accent-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg> Mint token</button>
+            <button id="tokenMintBtn" type="button" class="button-ghost accent-btn" data-track="token-mint-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg> Mint token</button>
           </div>
           <div id="tokenMintResult" class="stacked" hidden>
             <span class="muted small">Copy it now — it is shown only once.</span>
             <div class="row">
               <input id="tokenMintValue" type="text" class="input-native" readonly>
-              <button id="tokenCopyBtn" type="button" class="button-ghost"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg> Copy</button>
+              <button id="tokenCopyBtn" type="button" class="button-ghost" data-track="token-copy-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg> Copy</button>
             </div>
             <span id="tokenMintUrl" class="muted small"></span>
           </div>
@@ -552,12 +552,12 @@
 
     <div id="teamOsBrowser" class="terminal-overlay" hidden>
       <div class="terminal-bar">
-        <button id="teamOsBrowserBack" type="button" class="term-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg> Skills</button>
+        <button id="teamOsBrowserBack" type="button" class="term-btn" data-track="team-os-browser-back"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg> Skills</button>
         <span id="teamOsBrowserTitle" class="terminal-title">skill</span>
         <div class="terminal-bar-actions">
-          <button id="teamOsDocDelete" type="button" class="term-btn" title="Delete this conversation log" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-trash-2"></use></svg></button>
-          <button id="teamOsDocRename" type="button" class="term-btn" title="Rename this conversation log" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
-          <button id="teamOsDocClose" type="button" class="term-btn" title="Close file" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+          <button id="teamOsDocDelete" type="button" class="term-btn" title="Delete this conversation log" hidden data-track="team-os-doc-delete"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-trash-2"></use></svg></button>
+          <button id="teamOsDocRename" type="button" class="term-btn" title="Rename this conversation log" hidden data-track="team-os-doc-rename"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
+          <button id="teamOsDocClose" type="button" class="term-btn" title="Close file" hidden data-track="team-os-doc-close"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
         </div>
       </div>
       <div class="teamos-browser-body">
@@ -568,11 +568,11 @@
 
     <!-- The Screen view (#60): the PC's desktop, live, full screen. Opened
          from the Settings tab's Screen row; screen-view.js drives it. -->
-    <dialog id="screenView" class="screen-view" aria-labelledby="screenViewTitle">
+    <dialog id="screenView" class="screen-view" aria-labelledby="screenViewTitle" data-track-view="screen-view">
       <div class="screen-view-bar">
         <h2 id="screenViewTitle" class="screen-view-title" tabindex="-1" autofocus><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg> Screen</h2>
         <div id="screenPicker" class="segmented screen-picker" role="group" aria-label="Display" hidden></div>
-        <button type="button" id="screenViewClose" class="icon-button" aria-label="Close" title="Close">
+        <button type="button" id="screenViewClose" class="icon-button" aria-label="Close" title="Close" data-track="screen-view-close">
           <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
         </button>
       </div>
@@ -582,11 +582,11 @@
       </div>
     </dialog>
 
-    <dialog id="jobDialog" class="rename-dialog">
+    <dialog id="jobDialog" class="rename-dialog" data-track-view="job-dialog">
       <form id="jobForm">
         <div class="dialog-head">
           <h2 id="jobDialogTitle">Add job</h2>
-          <button type="button" id="jobCancel" class="dialog-close" aria-label="Close">
+          <button type="button" id="jobCancel" class="dialog-close" aria-label="Close" data-track="job-cancel">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
           </button>
         </div>
@@ -597,7 +597,7 @@
         </label>
         <label class="stacked">
           <span>Kind</span>
-          <select id="jobKindInput" class="input-native">
+          <select id="jobKindInput" class="input-native" data-track="job-kind-input">
             <option value="">Auto (from extension)</option>
             <option value="python">Python (.py)</option>
             <option value="batch">Batch (.bat)</option>
@@ -615,7 +615,7 @@
         <div class="job-kind-group" id="jobInlineShellFields" hidden>
           <label class="stacked">
             <span>Script type</span>
-            <select id="jobInlineExtInput" class="input-native">
+            <select id="jobInlineExtInput" class="input-native" data-track="job-inline-ext-input">
               <option value=".ps1">PowerShell (.ps1)</option>
               <option value=".bat">Batch (.bat)</option>
               <option value=".sh">Shell — WSL (.sh)</option>
@@ -635,7 +635,7 @@
           </label>
           <label class="stacked">
             <span>Method</span>
-            <select id="jobHttpMethodInput" class="input-native">
+            <select id="jobHttpMethodInput" class="input-native" data-track="job-http-method-input">
               <option value="GET">GET</option>
               <option value="HEAD">HEAD</option>
               <option value="POST">POST</option>
@@ -658,7 +658,7 @@
         </label>
         <label class="stacked">
           <span>Schedule</span>
-          <select id="jobScheduleType" class="input-native">
+          <select id="jobScheduleType" class="input-native" data-track="job-schedule-type">
             <option value="none">None (manual only)</option>
             <option value="minutes">Every N minutes</option>
             <option value="hourly">Every N hours</option>
@@ -686,7 +686,7 @@
         </label>
         <label class="stacked" id="jobScheduleDayRow" hidden>
           <span>Day</span>
-          <select id="jobScheduleDay" class="input-native">
+          <select id="jobScheduleDay" class="input-native" data-track="job-schedule-day">
             <option value="MON">Monday</option>
             <option value="TUE">Tuesday</option>
             <option value="WED">Wednesday</option>
@@ -708,11 +708,11 @@
         </label>
         <div class="job-alert-row switch-row">
           <span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-bell"></use></svg> Alert to Telegram if failed</span>
-          <button type="button" id="jobAlertOnFailureInput" class="toggle" role="switch" aria-checked="false" aria-label="Alert to Telegram if failed"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+          <button type="button" id="jobAlertOnFailureInput" class="toggle" role="switch" aria-checked="false" aria-label="Alert to Telegram if failed" data-track="job-alert-on-failure-input"><span class="knob"></span><span class="toggle-label">OFF</span></button>
         </div>
         <div class="job-confirm-row switch-row">
           <span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-triangle-alert"></use></svg> Require confirmation before running</span>
-          <button type="button" id="jobConfirmInput" class="toggle" role="switch" aria-checked="false" aria-label="Require confirmation before running"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+          <button type="button" id="jobConfirmInput" class="toggle" role="switch" aria-checked="false" aria-label="Require confirmation before running" data-track="job-confirm-input"><span class="knob"></span><span class="toggle-label">OFF</span></button>
         </div>
         <section class="dialog-section">
           <h3 class="dialog-section-title">Run on success (chain)</h3>
@@ -731,7 +731,7 @@
             an empty list means one-tap fire as today.
           </p>
           <ol id="jobParamsList" class="job-params-list"></ol>
-          <button type="button" id="jobParamsAdd" class="button-ghost"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg> Add parameter</button>
+          <button type="button" id="jobParamsAdd" class="button-ghost" data-track="job-params-add"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg> Add parameter</button>
         </section>
         <section class="dialog-section">
           <h3 class="dialog-section-title">Webhook</h3>
@@ -742,7 +742,7 @@
           </p>
           <label class="stacked">
             <span>Provider</span>
-            <select id="jobWebhookProvider" class="input-native">
+            <select id="jobWebhookProvider" class="input-native" data-track="job-webhook-provider">
               <option value="">None (disabled)</option>
               <option value="github">GitHub</option>
               <option value="stripe">Stripe</option>
@@ -765,22 +765,22 @@
               to this job's parameter names above.
             </p>
             <ol id="jobWebhookMappingList" class="job-params-list"></ol>
-            <button type="button" id="jobWebhookMappingAdd" class="button-ghost"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg> Add mapping</button>
+            <button type="button" id="jobWebhookMappingAdd" class="button-ghost" data-track="job-webhook-mapping-add"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg> Add mapping</button>
           </div>
         </section>
         <ul id="jobPreflightProblems" class="job-preflight-problems" hidden></ul>
         <div class="dialog-actions dialog-actions--stacked">
-          <button type="button" id="jobSaveAnyway" class="button-tint warn" hidden>Save anyway</button>
-          <button type="submit" id="jobSaveBtn" class="button-primary">Add and verify</button>
+          <button type="button" id="jobSaveAnyway" class="button-tint warn" hidden data-track="job-save-anyway">Save anyway</button>
+          <button type="submit" id="jobSaveBtn" class="button-primary" data-track="job-save-btn">Add and verify</button>
         </div>
       </form>
     </dialog>
 
-    <dialog id="jobRunDialog" class="rename-dialog">
+    <dialog id="jobRunDialog" class="rename-dialog" data-track-view="job-run-dialog">
       <form id="jobRunForm">
         <div class="dialog-head">
           <h2 id="jobRunDialogTitle">Run job</h2>
-          <button type="button" id="jobRunCancel" class="dialog-close" aria-label="Close">
+          <button type="button" id="jobRunCancel" class="dialog-close" aria-label="Close" data-track="job-run-cancel">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
           </button>
         </div>
@@ -788,69 +788,69 @@
         <div id="jobRunDialogFields"></div>
         <div class="job-run-dryrow switch-row">
           <span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-flask-conical"></use></svg> Dry-run (sets <code>JOB_DRY_RUN=1</code> — opted-in scripts skip side effects)</span>
-          <button type="button" id="jobRunDialogDryRun" class="toggle" role="switch" aria-checked="false" aria-label="Dry-run"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+          <button type="button" id="jobRunDialogDryRun" class="toggle" role="switch" aria-checked="false" aria-label="Dry-run" data-track="job-run-dialog-dry-run"><span class="knob"></span><span class="toggle-label">OFF</span></button>
         </div>
         <div class="dialog-actions dialog-actions--stacked">
-          <button type="submit" class="button-primary"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-play"></use></svg> Run</button>
+          <button type="submit" data-track="job-run-submit" class="button-primary"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-play"></use></svg> Run</button>
         </div>
       </form>
     </dialog>
 
-    <dialog id="scanDialog" class="scan-dialog">
+    <dialog id="scanDialog" class="scan-dialog" data-track-view="scan-dialog">
       <div class="dialog-head">
         <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> New entries</h2>
-        <button type="button" id="scanCancel" class="dialog-close" aria-label="Close">
+        <button type="button" id="scanCancel" class="dialog-close" aria-label="Close" data-track="scan-cancel">
           <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
         </button>
       </div>
       <div id="scanResults" class="scan-results"></div>
       <div class="dialog-actions dialog-actions--stacked">
-        <button id="scanSave" type="button" class="button-primary">Add selected</button>
+        <button id="scanSave" type="button" class="button-primary" data-track="scan-save">Add selected</button>
       </div>
     </dialog>
 
     <!-- The PC load sheet (#65), behind the Coding header's CPU reading:
          total CPU, memory and the busiest processes (names only).
          system-load.js fills it on open and on each poll while it is open. -->
-    <dialog id="cpuSheet" class="rename-dialog" aria-labelledby="cpuSheetTitle">
+    <dialog id="cpuSheet" class="rename-dialog" aria-labelledby="cpuSheetTitle" data-track-view="cpu-sheet">
       <div class="dialog-head">
         <h2 id="cpuSheetTitle"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg> PC load</h2>
-        <button type="button" id="cpuSheetClose" class="dialog-close" aria-label="Close">
+        <button type="button" id="cpuSheetClose" class="dialog-close" aria-label="Close" data-track="cpu-sheet-close">
           <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
         </button>
       </div>
       <div id="cpuSheetBody" class="cpu-sheet-body"></div>
       <div class="dialog-actions dialog-actions--stacked">
-        <button type="button" id="cpuSheetDone" class="button-primary">Done</button>
+        <button type="button" id="cpuSheetDone" class="button-primary" data-track="cpu-sheet-done">Done</button>
       </div>
     </dialog>
 
-    <dialog id="renameDialog" class="rename-dialog">
+    <dialog id="renameDialog" class="rename-dialog" data-track-view="rename-dialog">
       <form id="renameForm">
         <div class="dialog-head">
           <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg> Rename</h2>
-          <button type="button" id="renameCancel" class="dialog-close" aria-label="Close">
+          <button type="button" id="renameCancel" class="dialog-close" aria-label="Close" data-track="rename-cancel">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
           </button>
         </div>
         <input id="renameInput" type="text" class="input-native" required>
         <div class="dialog-actions dialog-actions--stacked">
-          <button type="submit" class="button-primary">Save</button>
+          <button type="submit" data-track="rename-save" class="button-primary">Save</button>
         </div>
       </form>
     </dialog>
 
-    <dialog id="sessionRenameDialog" class="rename-dialog">
+    <dialog id="sessionRenameDialog" class="rename-dialog" data-track-view="session-rename-dialog">
       <form id="sessionRenameForm">
         <div class="dialog-head">
           <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg> Rename session</h2>
-          <button type="button" id="sessionRenameCancel" class="dialog-close" aria-label="Close">
+          <button type="button" id="sessionRenameCancel" class="dialog-close" aria-label="Close" data-track="session-rename-cancel">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
           </button>
         </div>
         <input id="sessionRenameInput" type="text" class="input-native" placeholder="Leave blank for the automatic title">
         <div class="dialog-actions dialog-actions--stacked">
-          <button type="submit" class="button-primary">Save</button>
+          <button type="submit" data-track="session-rename-save" class="button-primary">Save</button>
         </div>
       </form>
     </dialog>
@@ -872,32 +872,32 @@
       <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg> Sign in</h2>
       <p class="muted small">Enter the password to use the launcher.</p>
       <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" required>
-      <button type="submit" class="button-tint">Unlock</button>
+      <button type="submit" data-track="login-unlock" class="button-tint">Unlock</button>
       <div id="loginError" class="login-error" hidden></div>
     </form>
   </div>
 
   <div id="terminalOverlay" class="terminal-overlay" hidden>
     <div class="terminal-bar">
-      <button id="terminalBack" type="button" class="term-btn" title="Back to sessions" aria-label="Back to sessions"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
-      <button id="terminalKill" type="button" class="term-btn term-kill" title="Stop and kill this session" aria-label="Stop and kill this session"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
+      <button id="terminalBack" type="button" class="term-btn" title="Back to sessions" aria-label="Back to sessions" data-track="terminal-back"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+      <button id="terminalKill" type="button" class="term-btn term-kill" title="Stop and kill this session" aria-label="Stop and kill this session" data-track="terminal-kill"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
       <span id="terminalTitle" class="terminal-title">session</span>
       <div class="terminal-bar-actions">
-        <button id="terminalJumpEnd" type="button" class="term-btn" title="Jump to latest" aria-label="Jump to latest"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-down"></use></svg></button>
-        <button id="terminalPaste" type="button" class="term-btn" title="Paste from clipboard"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg></button>
-        <button id="terminalImage" type="button" class="term-btn" title="Send image"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-image"></use></svg></button>
-        <button id="terminalCompose" type="button" class="term-btn" title="Compose text with predictive keyboard"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
-        <button id="terminalKeys" type="button" class="term-btn" title="Keyboard keys"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-keyboard"></use></svg></button>
+        <button id="terminalJumpEnd" type="button" class="term-btn" title="Jump to latest" aria-label="Jump to latest" data-track="terminal-jump-end"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-down"></use></svg></button>
+        <button id="terminalPaste" type="button" class="term-btn" title="Paste from clipboard" data-track="terminal-paste"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg></button>
+        <button id="terminalImage" type="button" class="term-btn" title="Send image" data-track="terminal-image"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-image"></use></svg></button>
+        <button id="terminalCompose" type="button" class="term-btn" title="Compose text with predictive keyboard" data-track="terminal-compose"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
+        <button id="terminalKeys" type="button" class="term-btn" title="Keyboard keys" data-track="terminal-keys"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-keyboard"></use></svg></button>
       </div>
       <div id="terminalKeysPopover" class="keys-popover" hidden>
-        <button type="button" class="key-btn" data-key="esc">Esc</button>
-        <button type="button" class="key-btn" data-key="up" aria-label="Up"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-up"></use></svg></button>
-        <button type="button" class="key-btn" data-key="tab">Tab</button>
-        <button type="button" class="key-btn" data-key="left" aria-label="Left"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-left"></use></svg></button>
-        <button type="button" class="key-btn" data-key="enter" aria-label="Enter"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-corner-down-left"></use></svg></button>
-        <button type="button" class="key-btn" data-key="right" aria-label="Right"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-right"></use></svg></button>
-        <button type="button" class="key-btn key-shift" data-key="shift" aria-pressed="false" aria-label="Shift"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-big-up"></use></svg></button>
-        <button type="button" class="key-btn" data-key="down" aria-label="Down"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-down"></use></svg></button>
+        <button type="button" data-track="term-key-esc" class="key-btn" data-key="esc">Esc</button>
+        <button type="button" data-track="term-key-up" class="key-btn" data-key="up" aria-label="Up"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-up"></use></svg></button>
+        <button type="button" data-track="term-key-tab" class="key-btn" data-key="tab">Tab</button>
+        <button type="button" data-track="term-key-left" class="key-btn" data-key="left" aria-label="Left"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-left"></use></svg></button>
+        <button type="button" data-track="term-key-enter" class="key-btn" data-key="enter" aria-label="Enter"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-corner-down-left"></use></svg></button>
+        <button type="button" data-track="term-key-right" class="key-btn" data-key="right" aria-label="Right"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-right"></use></svg></button>
+        <button type="button" data-track="term-key-shift" class="key-btn key-shift" data-key="shift" aria-pressed="false" aria-label="Shift"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-big-up"></use></svg></button>
+        <button type="button" data-track="term-key-down" class="key-btn" data-key="down" aria-label="Down"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-down"></use></svg></button>
         <span class="key-spacer"></span>
       </div>
     </div>
@@ -912,8 +912,8 @@
       <div class="compose-tools">
         <!-- General attach (issue #366): same sendImage()/#terminalImageInput
              flow as the outer-bar 🖼 button, reachable from the compose view. -->
-        <button id="terminalComposeAttach" type="button" class="compose-record" title="Attach image or file (path added to the prompt)"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-image"></use></svg></button>
-        <button id="terminalComposeSend" type="button" class="compose-send" title="Send (with Enter)"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-send-horizontal"></use></svg></button>
+        <button id="terminalComposeAttach" type="button" class="compose-record" title="Attach image or file (path added to the prompt)" data-track="terminal-compose-attach"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-image"></use></svg></button>
+        <button id="terminalComposeSend" type="button" class="compose-send" title="Send (with Enter)" data-track="terminal-compose-send"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-send-horizontal"></use></svg></button>
       </div>
     </div>
     <div id="terminalStatus" class="terminal-status" hidden></div>

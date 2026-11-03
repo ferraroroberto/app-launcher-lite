@@ -179,6 +179,7 @@ function buildSessionActions(s) {
   // sessionTitle()'s precedence, for both kinds. Submitting a blank title
   // clears it, reverting to the automatic precedence.
   const renameBtn = document.createElement('button');
+  renameBtn.dataset.track = 'sessions-rename';
   renameBtn.type = 'button';
   renameBtn.className = 'icon-btn';
   renameBtn.innerHTML = icon('pencil');
@@ -192,6 +193,7 @@ function buildSessionActions(s) {
   // always closes. A plain ✕ glyph (not a loud 🛑 emoji) inherits the
   // theme — muted by default via `action-stop-close`, danger-red on press.
   const stopBtn = document.createElement('button');
+  stopBtn.dataset.track = 'sessions-stop';
   stopBtn.type = 'button';
   stopBtn.className = 'icon-btn action-stop-close';
   stopBtn.innerHTML = icon('x');
