@@ -236,6 +236,7 @@ function buildJobActions(job, handlers) {
   let run = null;
   if (job.manual_run_allowed !== false) {
     run = document.createElement('button');
+    run.dataset.track = 'jobs-run';
     run.type = 'button';
     run.className = 'icon-btn';
     run.dataset.role = 'run-btn';
@@ -251,6 +252,7 @@ function buildJobActions(job, handlers) {
     (job.schedule && job.schedule.type && job.schedule.type !== 'none');
   if (hasSchedule && job.schedule_controls_allowed !== false) {
     const pause = document.createElement('button');
+    pause.dataset.track = 'jobs-pause';
     pause.type = 'button';
     pause.className = 'icon-btn';
     pause.dataset.role = 'pause-btn';
@@ -268,6 +270,7 @@ function buildJobActions(job, handlers) {
 
   if (handlers.editMode) {
     const dryRun = document.createElement('button');
+    dryRun.dataset.track = 'jobs-dry-run';
     dryRun.type = 'button';
     dryRun.className = 'icon-btn';
     dryRun.innerHTML = icon('flask-conical');
@@ -282,6 +285,7 @@ function buildJobActions(job, handlers) {
     actions.appendChild(dryRun);
 
     const edit = document.createElement('button');
+    edit.dataset.track = 'jobs-edit';
     edit.type = 'button';
     edit.className = 'icon-btn';
     edit.innerHTML = icon('pencil');
@@ -294,6 +298,7 @@ function buildJobActions(job, handlers) {
     actions.appendChild(edit);
 
     const remove = document.createElement('button');
+    remove.dataset.track = 'jobs-remove';
     remove.type = 'button';
     remove.className = 'icon-btn danger';
     remove.innerHTML = icon('trash-2');
@@ -317,6 +322,7 @@ export function renderJobRow(job, options) {
   const main = document.createElement('div');
   main.className = 'app-main';
   const info = document.createElement('button');
+  info.dataset.track = 'jobs-row-open';
   info.type = 'button';
   info.className = 'launch-btn session-open';
 

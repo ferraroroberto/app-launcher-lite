@@ -65,6 +65,7 @@ function renderAgenda(data) {
       host.appendChild(h);
     }
     const row = document.createElement('button');
+    row.dataset.track = 'jobs-agenda-row';
     row.type = 'button';
     row.className = 'jobs-agenda-row';
     row.dataset.jobId = o.job_id;

@@ -65,6 +65,7 @@ function setState(name, opts) {
   host.replaceChildren(msg);
   if (retry) {
     const btn = document.createElement('button');
+    btn.dataset.track = 'screen-retry';
     btn.type = 'button';
     btn.className = 'button-ghost screen-retry';
     btn.textContent = 'Retry';
@@ -161,6 +162,7 @@ function renderPicker() {
   const labels = monitorLabels(view.monitors);
   view.monitors.forEach(function (m, i) {
     const btn = document.createElement('button');
+    btn.dataset.track = 'screen-monitor';
     btn.type = 'button';
     btn.className = 'segmented-item';
     btn.textContent = labels[i];

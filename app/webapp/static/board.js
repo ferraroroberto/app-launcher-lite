@@ -83,6 +83,7 @@ function cardShell(iconName, topText, titleText, cls) {
   const li = document.createElement('li');
   li.className = 'app-item board-item' + (cls ? ' ' + cls : '');
   const btn = document.createElement('button');
+  btn.dataset.track = 'board-session-card';
   btn.type = 'button';
   btn.className = 'launch-btn board-card';
   const top = document.createElement('span');
@@ -166,6 +167,7 @@ function buildDrawer(card) {
     input.placeholder = 'Reply to ' + (card.project || 'session') + '…';
     actions.appendChild(input);
     const send = document.createElement('button');
+    send.dataset.track = 'board-reply-send';
     send.type = 'button';
     send.className = 'board-reply-send';
     send.innerHTML = icon('send-horizontal');
@@ -184,6 +186,7 @@ function buildDrawer(card) {
   // (see fetchBoard()).
   if (card.alive) {
     const rename = document.createElement('button');
+    rename.dataset.track = 'board-session-rename';
     rename.type = 'button';
     rename.className = 'board-rename-btn';
     rename.innerHTML = icon('pencil');
@@ -197,13 +200,12 @@ function buildDrawer(card) {
     });
     actions.appendChild(rename);
   }
-  // Stop (ordered before Terminal): kill a live
-  // PTY session straight from the Board — the same unified stop path as
-  // the Coding tab (the agent's own quit, force-fallback
-  // server-side), one tap, no confirm. Detached consoles keep going
-  // through the Coding tab's row button.
+  // Stop (ordered before Terminal): kills a live PTY session via the Coding
+  // tab's unified stop path (quit, then server-side force), one tap, no
+  // confirm. Detached consoles stop through the Coding tab's row button.
   if (card.alive && card.kind === 'pty') {
     const stop = document.createElement('button');
+    stop.dataset.track = 'board-session-stop';
     stop.type = 'button';
     stop.className = 'board-stop-btn';
     stop.innerHTML = icon('x');
@@ -225,6 +227,7 @@ function buildDrawer(card) {
   // Terminal is deliberately the LAST button in the row.
   if (card.alive && card.kind !== 'remote') {
     const open = document.createElement('button');
+    open.dataset.track = 'board-open-terminal';
     open.type = 'button';
     open.className = 'board-open-terminal';
     open.innerHTML = icon('zap') + ' Terminal';
@@ -404,6 +407,7 @@ function renderIssueCard(card) {
   if (isInProgress) li.classList.add('is-in-progress');
 
   const btn = document.createElement('button');
+  btn.dataset.track = 'board-issue-card';
   btn.type = 'button';
   btn.className = 'launch-btn board-card board-card-flat';
   const textCol = document.createElement('span');
@@ -444,6 +448,8 @@ function renderIssueCard(card) {
     row.className = 'board-issue-actions board-issue-actions-compact';
     [['start', 'play', 'Start'], ['yolo', 'zap', 'YOLO']].forEach(function (pair) {
       const actionBtn = document.createElement('button');
+      if (pair[0] === 'start') actionBtn.dataset.track = 'board-issue-start';
+      else actionBtn.dataset.track = 'board-issue-yolo';
       actionBtn.type = 'button';
       actionBtn.className = 'board-issue-btn icon-only';
       actionBtn.innerHTML = icon(pair[1]);
