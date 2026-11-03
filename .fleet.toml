@@ -25,6 +25,7 @@ disclosure = { src = "app/webapp/static/_vendored/disclosure", sha = "5d460bd1d9
 icon-button = { src = "app/webapp/static/_vendored/icon-button", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/icon-button" }
 segmented = { src = "app/webapp/static/_vendored/segmented", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/segmented" }
 text-size = { src = "app/webapp/static/_vendored/text-size", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/text-size" }
+page-foot = { src = "app/webapp/static/_vendored/page-foot", sha = "35c1f11348e100fa6b5da487411424c6d6ced43c", dest = "app/webapp/static/_vendored/page-foot" }
 notify = { src = "src/notify", sha = "aa820f1215151087588433f290cd2ba55b34658d", dest = "src/notify" }
 build_info = { src = "src/build_info.py", sha = "c9e54e917fd3cbc96011d6c09f9d363af460b205", dest = "src/build_info.py" }
 static_ratchet = { src = "scripts/static_ratchet.py", sha = "5505185c5f4b10eea5ab268e7b6676c6c54340c4", dest = "scripts/static_ratchet.py" }

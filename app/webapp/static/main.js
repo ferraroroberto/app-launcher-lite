@@ -23,6 +23,7 @@ import { fetchWebauthnStatus, writeTerminalToken } from './webauthn.js';
 import { icon } from './_vendored/icons/icons.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { bindTextSize } from './_vendored/text-size/text-size.js';
+import { buildReadoutText } from './_vendored/page-foot/page-foot.js';
 
 // --------------------------------------------------------- settings panel
 // One edit-mode state, two switches: the Settings-head toggle and the
@@ -158,9 +159,7 @@ async function fetchVersion() {
   // bearer token is attached — /api/version is auth-gated like the rest.
   try {
     const body = await jsonApi('/api/version');
-    const sha = body.git_sha || 'unknown';
-    const ts = (body.built_at || '').replace('T', ' ').slice(0, 16);
-    els.buildReadout.textContent = ts ? ('Build: ' + sha + ' · ' + ts) : ('Build: ' + sha);
+    els.buildReadout.textContent = buildReadoutText(body.git_sha || 'unknown', body.built_at || '');
   } catch (_) {
     els.buildReadout.textContent = '';
   }
