@@ -102,7 +102,7 @@ async function start() {
     const tt = await ensureTerminalToken();
     body = await jsonApi('/api/screen/monitors', { headers: authHeaders({ terminalToken: tt }) });
   } catch (exc) {
-    // The login overlay just went up under this top-layer dialog: step
+    // The sign-in sheet just went up under this top-layer dialog: step
     // aside so it can be used.
     if (exc instanceof AuthRequiredError) { closeView(); return; }
     if (!view.open) return;

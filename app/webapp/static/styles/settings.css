@@ -24,15 +24,9 @@
   gap: 4px;
   margin: 10px 0;
 }
-.input-native, .select-native {
-  background: var(--card-off);
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
-  font-size: var(--font-label);
-  min-height: var(--control-h);
-}
+/* The control recipe is the vendored select-native.css; a multi-line
+   textarea keeps its rows instead of the single-line control height. */
+textarea.input-native { height: auto; padding: 8px 10px; }
 /* .big-btn / .ghost-btn migrated to the vendored button-tint / button-ghost
    tiers (project-scaffolding's button/ component) — fill,
    border, radius, cursor and the shared :disabled recipe now come from
