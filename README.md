@@ -21,7 +21,7 @@ First-run configuration, in order:
 4. **fleet-config-lite** — clone it and run its `install.ps1` to install the Copilot hooks (they write `~/.copilot/hooks/state/sessions-state.json` for the Board) and the lite issue skills the Board's ▶/⚡ buttons invoke.
 5. Optional: `config/config.json` (from `config.sample.json`) for `tailnet_host` (Apps-tab remote URLs) and the webapp embed section; `config/apps.json` (from `apps.sample.json`) for the Apps tab registry.
 
-**Phone access & auth.** The auth model is unchanged from upstream: loopback always passes; non-loopback callers need a bearer token (`scripts/gen_token.py`, stored as `auth_token`); an optional login password (`scripts/set_password.py`) lets a fresh device swap the password for the token. Terminal-grade routes (live PTY, transcripts, team-os private files) are additionally **private-network-only + passkey-gated**: they are refused over a public tunnel, and on a trusted network (Tailscale's CGNAT range or an allowlisted VPN subnet — see [Remote access](#remote-access--tailscale-or-any-vpn)) they require a WebAuthn platform passkey enrolled via the tray menu's **Enroll device (5 min)**. HTTPS comes from any `cert.pem`/`key.pem` pair in `webapp/certificates/` — `scripts/gen_tailscale_cert.py` is the Tailscale provisioner, checked on boot. An optional Cloudflare named tunnel (`webapp_tunnel_named.bat`) exposes only the non-terminal surfaces.
+**Phone access & auth.** The auth model is unchanged from upstream: loopback always passes; non-loopback callers need a bearer token (`scripts/gen_token.py`, stored as `auth_token`); an optional login password (`scripts/set_password.py`) lets a fresh device swap the password for the token. The password route answers `429` with `Retry-After` after six wrong passwords from one client (the PC itself is exempt; public-tunnel visitors are keyed on their own address) and sends one `telegram_alert_chat_id` alert after three. Terminal-grade routes (live PTY, transcripts, team-os private files) are additionally **private-network-only + passkey-gated**: they are refused over a public tunnel, and on a trusted network (Tailscale's CGNAT range or an allowlisted VPN subnet — see [Remote access](#remote-access--tailscale-or-any-vpn)) they require a WebAuthn platform passkey enrolled via the tray menu's **Enroll device (5 min)**. HTTPS comes from any `cert.pem`/`key.pem` pair in `webapp/certificates/` — `scripts/gen_tailscale_cert.py` is the Tailscale provisioner, checked on boot. An optional Cloudflare named tunnel (`webapp_tunnel_named.bat`) exposes only the non-terminal surfaces.
 
 ## The tabs
 
@@ -126,6 +126,7 @@ All keys optional — missing keys fall back to `src/webapp_config.py` defaults.
 | `notify_on_failure` | `false` | Master switch — one push per failed run. |
 | `notify_failure_streak` | `0` | Also push when N consecutive failures stack up (0 = off). |
 | `telegram_bot_token` / `telegram_chat_id` | `""` | Credentials for per-job Telegram alerts (`Job.alert_on_failure`). |
+| `telegram_alert_chat_id` | `""` | Chat for the sign-in guessing alert (the fleet's `coding alerts` chat); empty falls back to `telegram_chat_id`. Needs `telegram_bot_token`. |
 | `jobs_coverage_interval_minutes` | `60` | Background missed-fire coverage scan interval (0 = poll-only). |
 
 **Secrets & tokens**

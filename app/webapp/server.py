@@ -64,6 +64,7 @@ from src.static_versioning import (
     fleet_hash_of,
     rewrite_js_imports,
 )
+from src.login_lockout import LoginLockout
 from src.usage_log import usage_router
 from src.webapp_config import SESSION_HOST_PORT_ENV, load_webapp_config
 from src.webauthn_gate import WebAuthnGate
@@ -316,6 +317,9 @@ def create_app() -> FastAPI:
     app.state.app_config = app_config
     app.state.webapp_config = webapp_cfg
     app.state.webauthn_gate = WebAuthnGate()
+    app.state.login_lockout = LoginLockout(
+        on_alert=auth.make_login_alert(lambda: app.state.webapp_config)
+    )
 
     asset_hashes = compute_asset_hashes(STATIC_DIR)
     app.state.asset_hashes = asset_hashes
