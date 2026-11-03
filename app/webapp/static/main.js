@@ -8,6 +8,7 @@
 import { els, state, BOARD_POLL_MS, GIT_STATUS_POLL_MS, JOBS_POLL_MS, LISTENERS_POLL_MS, RUNNING_APPS_POLL_MS, SESSIONS_POLL_MS, SYSTEM_LOAD_POLL_MS, TUNNEL_POLL_MS, WEBAUTHN_POLL_MS } from './state.js';
 import { apiFailToast, consumeUrlParam, jsonApi, toast, wireLoginForm, writeToken } from './api.js';
 import { wireTabs } from './tabs.js';
+import { wireUsageLog } from './usage.js';
 import { fetchConfig, patchConfig, wireCopilotOptions } from './copilot-options.js';
 import { fetchSessions, wireSessions } from './sessions.js';
 import { fetchAgents, fetchApps, fetchRunningApps, refreshGitStatus, wireApps } from './apps.js';
@@ -266,6 +267,7 @@ async function boot() {
 
 // --------------------------------------------------------- wire + go
 wireLoginForm(boot);
+wireUsageLog();
 wireTabs();
 wireCopilotOptions();
 wireSessions();

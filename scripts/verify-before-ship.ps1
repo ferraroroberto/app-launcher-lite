@@ -8,7 +8,8 @@
 # ratchet (no file/function/directory growth, root layout matches the shape), the
 # conventions ratchet (no fleet-convention rule count above the baseline), the
 # comment ratchet (no more issue references in code comments than the baseline),
-# the runtime write ratchet (no new write target resolving under a code folder), then
+# the runtime write ratchet (no new write target resolving under a code folder), the
+# usage track ratchet (no new untracked control, sheet or built id, usage log wired), then
 # the Playwright e2e suite (Chromium — this app is Android-only) against a disposable
 # webapp the script boots itself on a free port, then the screenshot baseline
 # (no visible change against the committed PNGs under tests/e2e/shots).
@@ -166,6 +167,15 @@ try {
     Phase "runtime write ratchet..."
     & $python -m scripts.runtime_write_ratchet_gate
     if ($LASTEXITCODE -ne 0) { Fail "runtime write ratchet failed or NOT CONFIRMED: a file gained a write under a code folder, a target could not be resolved, or a baseline problem; see the output above and .runtime-write-ratchet-baseline.json." }
+
+    # Usage track ratchet (scaffold docs/usage-track-ratchet.md): no web control without a
+    # constant tracking id, no <dialog> without data-track-view, no built id, and the usage
+    # log wired, beyond .usage-track-ratchet-baseline.json. Whole tree, so never diff-routed.
+    # Same wrapper shape as the other ratchets: exit 3 (a file that cannot be read or closed)
+    # is NOT CONFIRMED and fails.
+    Phase "usage track ratchet..."
+    & $python -m scripts.usage_track_ratchet_gate
+    if ($LASTEXITCODE -ne 0) { Fail "usage track ratchet failed or NOT CONFIRMED: an untracked control or sheet, a built id, the usage log not wired, a file that could not be read, or a baseline problem; see the output above and .usage-track-ratchet-baseline.json." }
 
     # Diff-proportionate e2e routing. Classify the branch's
     # changed files vs main and run an e2e slice proportionate to the diff:

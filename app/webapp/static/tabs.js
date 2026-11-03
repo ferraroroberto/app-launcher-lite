@@ -10,6 +10,7 @@
 
 import { state } from './state.js';
 import { initNavTabs } from './_vendored/nav/nav-tabs.js';
+import { trackView } from './usage.js';
 
 let nav = null;
 
@@ -23,6 +24,6 @@ export function wireTabs() {
     // default. Without this explicit default the vendored controller selects
     // the first DOM tab, coupling presentation order to startup behavior.
     defaultTab: 'coding',
-    onChange: function (tab) { state.tab = tab; },
+    onChange: function (tab) { state.tab = tab; trackView(tab); },
   });
 }

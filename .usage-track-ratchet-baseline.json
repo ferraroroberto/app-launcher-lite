@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "entries": [
+    {"key": "app/webapp/static/apps.js", "counts": {"untracked-control": 8}},
+    {"key": "app/webapp/static/board.js", "counts": {"untracked-control": 7}},
+    {"key": "app/webapp/static/index.html", "counts": {"untracked-control": 93, "untracked-sheet": 7}},
+    {"key": "app/webapp/static/jobs-agenda.js", "counts": {"untracked-control": 1}},
+    {"key": "app/webapp/static/jobs-dialog.js", "counts": {"untracked-control": 4}},
+    {"key": "app/webapp/static/jobs-row.js", "counts": {"untracked-control": 6}},
+    {"key": "app/webapp/static/jobs.js", "counts": {"untracked-control": 7}},
+    {"key": "app/webapp/static/listeners.js", "counts": {"untracked-control": 1}},
+    {"key": "app/webapp/static/screen-view.js", "counts": {"untracked-control": 2}},
+    {"key": "app/webapp/static/sessions.js", "counts": {"untracked-control": 2}},
+    {"key": "app/webapp/static/team-os.js", "counts": {"untracked-control": 4}},
+    {"key": "app/webapp/static/tokens.js", "counts": {"untracked-control": 1}}
+  ]
+}
