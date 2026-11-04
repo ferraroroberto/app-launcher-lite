@@ -24,7 +24,7 @@ Beside them sit the entry points (`launcher.py`, `tray.bat`, `webapp.bat`, `weba
 | `app/cli/` | Argparse dispatcher only; one module per command under `commands/`. |
 | `app/tray/` | The pystray icon that owns the webapp, plus single-instance, watchdog and Tailscale helpers. |
 | `app/session_host/` | The loopback PTY host process on `:8466`. |
-| `app/webapp/` | `server.py` (app factory), `manager.py` (adopt-or-spawn of uvicorn), `middleware.py`, `observability.py`, `event_loop.py`. |
+| `app/webapp/` | `server.py` (app factory), `manager.py` (adopt-or-spawn of the webapp), `middleware.py`, `observability.py`, `event_loop.py`, `serve.py` (vendored HTTP/2 launch module). |
 | `app/webapp/routers/` | Thin routers: parse the request, call `src/`, return. One module per concern. |
 | `app/webapp/static/` | The single-page shell (`index.html`, `styles/` for the CSS, one script per view and per terminal concern), the PWA manifest and icons. |
 | `app/webapp/static/_vendored/` | Vendor-verbatim components, never edited here. |

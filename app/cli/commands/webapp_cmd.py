@@ -19,13 +19,16 @@ class WebappCommand(BaseCommand):
         )
         p.add_argument("--host", default=None, help="Override host")
         p.add_argument("--port", type=int, default=None, help="Override port")
+        p.add_argument(
+            "--server", choices=("hypercorn", "uvicorn"), default="hypercorn",
+            help="hypercorn serves HTTP/2 over TLS; uvicorn is the HTTP/1.1 fallback",
+        )
 
     def execute(self, args: argparse.Namespace) -> int:
         # Lazy imports so a plain `webapp` subcommand doesn't drag pystray in.
-        import uvicorn
-
-        from app.webapp.event_loop import LOOP_FACTORY
+        from app.webapp.event_loop import selector_loop_factory
         from app.webapp.manager import cert_paths
+        from app.webapp.serve import run
         from src.webapp_config import load_webapp_config
 
         cfg = load_webapp_config()
@@ -34,15 +37,14 @@ class WebappCommand(BaseCommand):
 
         certs = cert_paths()
         kwargs = {
-            "host": host,
-            "port": port,
             "log_level": "info",
-            "loop": LOOP_FACTORY,
+            "server": args.server,
+            "loop_factory": selector_loop_factory,
         }
         if certs is not None:
             cert, key = certs
-            kwargs["ssl_certfile"] = str(cert)
-            kwargs["ssl_keyfile"] = str(key)
+            kwargs["certfile"] = str(cert)
+            kwargs["keyfile"] = str(key)
             scheme = "https"
         else:
             scheme = "http"
@@ -50,5 +52,5 @@ class WebappCommand(BaseCommand):
         logger.info(
             f"🚀 launcher webapp on {scheme}://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}"
         )
-        uvicorn.run("app.webapp.server:app", **kwargs)
+        run(host, port, **kwargs)
         return 0

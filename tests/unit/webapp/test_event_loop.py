@@ -49,6 +49,14 @@ def test_selector_loop_factory_is_zero_arg_and_returns_an_instance():
         loop.close()
 
 
+def test_manager_build_command_launches_serve_module_with_the_configured_server():
+    cmd = WebappManager(WebappManagerConfig(port=18465))._build_command()
+    assert cmd[cmd.index("-m") + 1] == "app.webapp.serve"
+    assert cmd[cmd.index("--server") + 1] == "hypercorn"
+    fallback = WebappManager(WebappManagerConfig(port=18465, server="uvicorn"))._build_command()
+    assert fallback[fallback.index("--server") + 1] == "uvicorn"
+
+
 def test_manager_build_command_passes_loop_factory():
     mgr = WebappManager(WebappManagerConfig(port=18465))
     cmd = mgr._build_command()
@@ -63,10 +71,10 @@ def test_webapp_cmd_passes_loop_factory(monkeypatch):
 
     captured = {}
 
-    def fake_run(app, **kwargs):
+    def fake_run(host, port, **kwargs):
         captured.update(kwargs)
 
-    monkeypatch.setattr("uvicorn.run", fake_run)
+    monkeypatch.setattr("app.webapp.serve.run", fake_run)
     monkeypatch.setattr(
         "app.webapp.manager.cert_paths", lambda *a, **k: None
     )
@@ -75,8 +83,9 @@ def test_webapp_cmd_passes_loop_factory(monkeypatch):
         lambda: type("Cfg", (), {"host": "127.0.0.1", "port": 18465})(),
     )
 
-    WebappCommand(config=None).execute(argparse.Namespace(host=None, port=None))
-    assert captured.get("loop") == LOOP_FACTORY
+    WebappCommand(config=None).execute(argparse.Namespace(host=None, port=None, server="hypercorn"))
+    assert captured.get("loop_factory") is selector_loop_factory
+    assert captured.get("server") == "hypercorn"
 
 
 def test_e2e_autoboot_wires_loop_factory():

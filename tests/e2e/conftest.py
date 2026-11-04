@@ -362,14 +362,13 @@ def _prepare_config_copy(logs_dir: Path) -> Tuple[Path, Optional[bytes]]:
 
 
 def _webapp_cmd(port: int, certs: Optional[Tuple[Path, Path]]) -> List[str]:
-    """The uvicorn command line for the disposable webapp."""
+    """The serve-module command line for the disposable webapp."""
     from app.webapp.event_loop import LOOP_FACTORY
 
     wa_cmd = [
         sys.executable,
         "-m",
-        "uvicorn",
-        "app.webapp.server:app",
+        "app.webapp.serve",
         "--host",
         "127.0.0.1",
         "--port",
