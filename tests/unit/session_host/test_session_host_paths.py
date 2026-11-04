@@ -21,7 +21,7 @@ class TestDeclaredSessionHostPaths:
     def test_real_claude_md_declares_the_known_session_host_paths(self):
         paths = session_host_paths.declared_session_host_paths(_CLAUDE_MD)
         assert "src/session_host.py" in paths
-        assert "app/session_host/" in paths
+        assert "app/webapp/session_host/" in paths
 
     def test_missing_file_returns_empty(self, tmp_path):
         assert session_host_paths.declared_session_host_paths(tmp_path / "missing.md") == []
@@ -47,10 +47,10 @@ class TestDeclaredSessionHostPaths:
         md.write_text(
             "## session-host\n"
             "- what/why: no paths here\n"
-            "- not restarted/deployed by: `tray.bat --restart` reclaim of `app/session_host/`\n",
+            "- not restarted/deployed by: `tray.bat --restart` reclaim of `app/webapp/session_host/`\n",
             encoding="utf-8",
         )
-        assert session_host_paths.declared_session_host_paths(md) == ["app/session_host/"]
+        assert session_host_paths.declared_session_host_paths(md) == ["app/webapp/session_host/"]
 
 
 class TestPathsTouchedBetween:
@@ -99,7 +99,7 @@ class TestPathsTouchedBetween:
         head_sha = self._commit_all(repo, "touch session_host")
 
         result = session_host_paths.paths_touched_between(
-            repo, base_sha, head_sha, ["src/session_host.py", "app/session_host/"]
+            repo, base_sha, head_sha, ["src/session_host.py", "app/webapp/session_host/"]
         )
         assert result is True
 
@@ -112,7 +112,7 @@ class TestPathsTouchedBetween:
         head_sha = self._commit_all(repo, "touch other")
 
         result = session_host_paths.paths_touched_between(
-            repo, base_sha, head_sha, ["src/session_host.py", "app/session_host/"]
+            repo, base_sha, head_sha, ["src/session_host.py", "app/webapp/session_host/"]
         )
         assert result is False
 

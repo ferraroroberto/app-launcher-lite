@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app.session_host import server
+from app.webapp.session_host import server
 
 
 def _fail_create(*args, **kwargs):

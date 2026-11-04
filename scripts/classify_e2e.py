@@ -111,13 +111,16 @@ def _classify_one(path: str) -> tuple[Category, str]:
         # .js / .css / real .html / anything else under static -> browser.
         return Category.FULL, "webapp-static-code"
 
+    # --- session-host / launcher on the e2e surface -> FULL -----------------
+    # The session-host package sits inside app/webapp/, so its rule comes first
+    # and its diff keeps the "session-host" label the gate warns on.
+    if path.startswith("app/webapp/session_host/"):
+        return Category.FULL, "session-host"
+
     # --- the rest of the webapp package (server, routers, manager) -> FULL ---
     if path.startswith("app/webapp/"):
         return Category.FULL, "webapp"
 
-    # --- session-host / launcher on the e2e surface -> FULL -----------------
-    if path.startswith("app/session_host/"):
-        return Category.FULL, "session-host"
     if path in _FULL_SRC_PY_EXACT or path == "launcher.py":
         return Category.FULL, "session-host/launcher"
     if path.startswith("src/session_host") and ext == "py":

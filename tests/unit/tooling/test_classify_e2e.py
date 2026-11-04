@@ -33,7 +33,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
         ("app/webapp/static/_vendored/nav/nav.css", Category.FULL),  # vendored CSS is layout
         ("app/webapp/server.py", Category.FULL),
         ("app/webapp/routers/board.py", Category.FULL),
-        ("app/session_host/server.py", Category.FULL),
+        ("app/webapp/session_host/server.py", Category.FULL),
         ("src/session_host.py", Category.FULL),
         ("src/session_host_pty.py", Category.FULL),  # future split, not on disk yet
         ("src/session_client.py", Category.FULL),

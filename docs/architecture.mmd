@@ -64,7 +64,7 @@ flowchart TB
   end
   R_MISC --> STATICJS
 
-  subgraph sessionhost["app/session_host/ — loopback-only, :8466"]
+  subgraph sessionhost["app/webapp/session_host/ — loopback-only, :8466"]
     HOSTSERVER["server.py\nHTTP + WebSocket surface\nPOST/GET /sessions, WS /sessions/{sid}/ws"]
   end
   HOSTCMD --> HOSTSERVER

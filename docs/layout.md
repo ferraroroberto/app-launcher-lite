@@ -6,7 +6,7 @@ Where code goes in this repo. Its shape is `webapp-tray` (declared as `shape` in
 
 | Folder | Holds |
 | --- | --- |
-| `app/` | The UI layer: CLI, tray, session-host process, the FastAPI webapp and its static PWA. |
+| `app/` | The UI layer: CLI, tray, the FastAPI webapp and its static PWA. |
 | `src/` | The logic layer. Never imports `app/`; a helper both need lives here. |
 | `tests/` | The pytest suite; `tests/e2e/` is the Playwright browser suite. |
 | `scripts/` | Ops CLIs, the pre-ship gate and the vendored ratchets. Never imported by `app/`. |
@@ -23,8 +23,8 @@ Beside them sit the entry points (`launcher.py`, `tray.bat`, `webapp.bat`, `weba
 | --- | --- |
 | `app/cli/` | Argparse dispatcher only; one module per command under `commands/`. |
 | `app/tray/` | The pystray icon that owns the webapp, plus single-instance, watchdog and Tailscale helpers. |
-| `app/session_host/` | The loopback PTY host process on `:8466`. |
 | `app/webapp/` | `server.py` (app factory), `manager.py` (adopt-or-spawn of the webapp), `middleware.py`, `observability.py`, `event_loop.py`, `serve.py` (vendored HTTP/2 launch module). |
+| `app/webapp/session_host/` | The loopback PTY host process on `:8466`: a second, separately bound HTTP surface with its own `server.py` and entry point (`launcher.py session-host`). The webapp mounts nothing from it and reaches it only over loopback HTTP through `src/session_client.py`. |
 | `app/webapp/routers/` | Thin routers: parse the request, call `src/`, return. One module per concern. |
 | `app/webapp/static/` | The single-page shell (`index.html`, `styles/` for the CSS, one script per view and per terminal concern), the PWA manifest and icons. |
 | `app/webapp/static/_vendored/` | Vendor-verbatim components, never edited here. |
