@@ -146,9 +146,9 @@ export function applyTerminalSize(t, session) {
   // its own canvas off `cols`, not the host box, so no extra CSS is
   // needed). The host is overflow:hidden, so panned-off top rows clip
   // cleanly; panning by the content-vs-box overflow also covers the
-  // keyboard-down case (overflow 0 → transform cleared). Claude (inline)
-  // and the fullscreen first-fit case fall through to the reflow path
-  // below, which also clears the pan.
+  // keyboard-down case (overflow 0 → transform cleared). The first fit,
+  // before a size has been sent, falls through to the reflow path below,
+  // which also clears the pan.
   // (The pan shortcut additionally requires a size to have been SENT —
   // the pre-WS first fit sets fsSized, but the phone's authoritative
   // size must still go out on the first open.)

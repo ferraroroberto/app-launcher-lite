@@ -32,7 +32,8 @@ const _IMAGE_SUBMIT_DELAY_MS = 350;
 // (Claude echoes the paste / collapses it into a "[Pasted text #N]" chip)
 // and that output has been quiet for _BULK_QUIET_MS — with a floor (never
 // sooner than _BULK_FLOOR_MS) and a cap (send anyway at _BULK_CAP_MS).
-// Calibrated with a real-Claude ConPTY probe under synthetic load:
+// Calibrated with a real-Claude ConPTY probe under synthetic load. Not yet
+// re-probed against the Copilot CLI, so treat the values as unverified there:
 // immediate CR submitted 1/20, fixed 350 ms 19/20, fixed 1000 ms 19/20, a
 // bare quiet-window 13/20 (under load the echo itself is deferred, so it
 // fires early) — this echo-then-quiet protocol was the only one to run
