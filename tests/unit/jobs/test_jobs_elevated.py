@@ -119,5 +119,5 @@ class TestSyncSchtasksSkipsElevated:
             return _mk_completed(rc=0)
 
         created = jobs_mod.sync_schtasks(job, runner=runner)
-        assert created == ["\\AppLauncher\\plain"]
+        assert created == ["\\AppLauncherLite\\plain"]
         assert any(c[:2] == ["schtasks", "/Create"] for c in calls)

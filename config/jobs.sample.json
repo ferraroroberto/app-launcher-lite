@@ -1,5 +1,5 @@
 {
-  "_comment": "Jobs-tab registry. Real file is config/jobs.json (gitignored, empty by default). Each job fires a script one-shot from the phone and/or on a Task Scheduler schedule (entries land under \\AppLauncher\\ in Task Scheduler). Kinds: python (default), powershell, batch, inline-shell, shell-wsl, http-check. See docs/jobs-tab.md for params, webhooks, secrets, and alerting.",
+  "_comment": "Jobs-tab registry. Real file is config/jobs.json (gitignored, empty by default). Each job fires a script one-shot from the phone and/or on a Task Scheduler schedule (entries land under \\AppLauncherLite\\ in Task Scheduler). Kinds: python (default), powershell, batch, inline-shell, shell-wsl, http-check. See docs/jobs-tab.md for params, webhooks, secrets, and alerting.",
   "jobs": [
     {
       "id": "weekly-report",

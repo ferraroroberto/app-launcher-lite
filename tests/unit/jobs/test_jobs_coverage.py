@@ -80,7 +80,7 @@ class TestStructuralCheck:
             runs_root, "demo", "20260801",
             started_at="2026-08-01T09:00:04", status="success",
         )
-        result = cov.coverage_for(job, _states("\\AppLauncher\\demo"), now=NOW)
+        result = cov.coverage_for(job, _states("\\AppLauncherLite\\demo"), now=NOW)
         assert result["state"] == cov.STATE_OK
 
     def test_missing_task_flagged_without_waiting_for_the_slot(self, runs_root):
@@ -103,7 +103,7 @@ class TestStructuralCheck:
         assert result["state"] == cov.STATE_PROBLEM
         assert cov.PROBLEM_TASK_MISSING in result["problems"]
         assert cov.PROBLEM_MISSED_FIRE not in result["problems"]
-        assert result["missing_tasks"] == ["\\AppLauncher\\demo"]
+        assert result["missing_tasks"] == ["\\AppLauncherLite\\demo"]
 
     def test_disabled_task_flagged(self, runs_root):
         job = _daily_job()
@@ -117,7 +117,7 @@ class TestStructuralCheck:
             started_at="2026-08-01T09:00:04", status="success",
         )
         result = cov.coverage_for(
-            job, _states("\\AppLauncher\\demo", enabled=False), now=NOW
+            job, _states("\\AppLauncherLite\\demo", enabled=False), now=NOW
         )
         assert result["state"] == cov.STATE_PROBLEM
         assert result["problems"] == [cov.PROBLEM_TASK_DISABLED]
@@ -135,7 +135,7 @@ class TestStructuralCheck:
             started_at="2026-08-01T09:00:04", status="success",
         )
         result = cov.coverage_for(
-            job, {"\\AppLauncher\\demo": None}, now=NOW
+            job, {"\\AppLauncherLite\\demo": None}, now=NOW
         )
         assert result["state"] == cov.STATE_OK
 
@@ -157,9 +157,9 @@ class TestStructuralCheck:
 
     def test_daily_times_expects_every_fan_out_task(self, runs_root):
         job = _daily_job(schedule=Schedule(type="daily_times", at=["09:00", "18:00"]))
-        result = cov.coverage_for(job, _states("\\AppLauncher\\demo-1"), now=NOW)
+        result = cov.coverage_for(job, _states("\\AppLauncherLite\\demo-1"), now=NOW)
         assert cov.PROBLEM_TASK_MISSING in result["problems"]
-        assert result["missing_tasks"] == ["\\AppLauncher\\demo-2"]
+        assert result["missing_tasks"] == ["\\AppLauncherLite\\demo-2"]
 
 
 # ------------------------------------------------------------ behavioural
@@ -249,7 +249,7 @@ class TestMissedFires:
 
     def test_missed_fire_reported_even_when_task_is_registered(self, runs_root):
         job = _daily_job()
-        result = cov.coverage_for(job, _states("\\AppLauncher\\demo"), now=NOW)
+        result = cov.coverage_for(job, _states("\\AppLauncherLite\\demo"), now=NOW)
         assert result["state"] == cov.STATE_PROBLEM
         assert result["problems"] == [cov.PROBLEM_MISSED_FIRE]
         assert result["missed_count"] == 3
@@ -272,8 +272,8 @@ class TestScanCoverage:
             return SimpleNamespace(
                 returncode=0,
                 stdout=(
-                    "TaskName: \\AppLauncher\\a\nScheduled Task State: Enabled\n\n"
-                    "TaskName: \\AppLauncher\\b\nScheduled Task State: Enabled\n\n"
+                    "TaskName: \\AppLauncherLite\\a\nScheduled Task State: Enabled\n\n"
+                    "TaskName: \\AppLauncherLite\\b\nScheduled Task State: Enabled\n\n"
                 ),
                 stderr="",
             )
@@ -295,14 +295,14 @@ class TestScanCoverage:
 class TestSchtasksStateParsing:
     def test_status_key_fallback(self):
         records = jobs_schtasks_mod._parse_bulk_records(
-            "TaskName: \\AppLauncher\\a\nStatus: Ready\n\n"
-            "TaskName: \\AppLauncher\\b\nStatus: Disabled\n\n"
-            "TaskName: \\AppLauncher\\c\nNext Run Time: N/A\n\n"
+            "TaskName: \\AppLauncherLite\\a\nStatus: Ready\n\n"
+            "TaskName: \\AppLauncherLite\\b\nStatus: Disabled\n\n"
+            "TaskName: \\AppLauncherLite\\c\nNext Run Time: N/A\n\n"
         )
-        assert records["\\AppLauncher\\a"]["enabled"] is True
-        assert records["\\AppLauncher\\b"]["enabled"] is False
+        assert records["\\AppLauncherLite\\a"]["enabled"] is True
+        assert records["\\AppLauncherLite\\b"]["enabled"] is False
         # Neither state key present → unknown, never a confident False.
-        assert records["\\AppLauncher\\c"]["enabled"] is None
+        assert records["\\AppLauncherLite\\c"]["enabled"] is None
 
     def test_failed_query_returns_none_not_empty(self, monkeypatch):
         jobs_schtasks_mod.invalidate_next_run_cache()
@@ -322,14 +322,14 @@ class TestSchtasksStateParsing:
             lambda argv: SimpleNamespace(
                 returncode=0,
                 stdout=(
-                    "TaskName: \\AppLauncher\\a\n"
+                    "TaskName: \\AppLauncherLite\\a\n"
                     "Next Run Time: 2026-08-02 09:00:00\n\n"
                 ),
                 stderr="",
             ),
         )
         assert jobs_schtasks_mod._cached_bulk_next_runs() == {
-            "\\AppLauncher\\a": "2026-08-02 09:00:00"
+            "\\AppLauncherLite\\a": "2026-08-02 09:00:00"
         }
         jobs_schtasks_mod.invalidate_next_run_cache()
 
@@ -412,7 +412,7 @@ class TestCheckAndAlert:
         assert telegram.notify.call_count == 1
 
         # Coverage recovers: task back, every slot covered.
-        registered["value"] = {"\\AppLauncher\\demo": True}
+        registered["value"] = {"\\AppLauncherLite\\demo": True}
         missed["value"] = []
         cov.check_and_alert(
             self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram

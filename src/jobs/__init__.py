@@ -75,8 +75,6 @@ from src.jobs.coverage import (
 from src.jobs.reap import reap_stranded_runs
 from src.jobs.schtasks import (
     FREQUENT_SCHEDULE_TYPES,
-    TASK_FOLDER_PREFIX,
-    TASK_NAMESPACE,
     _run_schtasks,  # noqa: F401 -- re-exported for tests that monkeypatch it here
     delete_schtasks,
     invalidate_next_run_cache,
@@ -105,8 +103,6 @@ __all__ = [
     "JOBS_RUNS_DIR",
     "MAX_RUNS_PER_JOB",
     "JOBS_QUEUE_PATH",
-    "TASK_NAMESPACE",
-    "TASK_FOLDER_PREFIX",
     "FREQUENT_SCHEDULE_TYPES",
     "resolve_venv_python",
     "task_run_command",

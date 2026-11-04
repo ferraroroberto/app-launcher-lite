@@ -65,7 +65,7 @@ class TestTaskNamesFor:
             script_path="C:\\x.bat",
             schedule=Schedule(type="daily", at="06:00"),
         )
-        assert jobs_mod.task_names_for(job) == ["\\AppLauncher\\reporting"]
+        assert jobs_mod.task_names_for(job) == ["\\AppLauncherLite\\reporting"]
 
     def test_suffixed_for_daily_times(self):
         job = Job(
@@ -75,9 +75,9 @@ class TestTaskNamesFor:
             schedule=Schedule(type="daily_times", at=["06:00", "12:00", "18:00"]),
         )
         assert jobs_mod.task_names_for(job) == [
-            "\\AppLauncher\\linkedin-scrape-1",
-            "\\AppLauncher\\linkedin-scrape-2",
-            "\\AppLauncher\\linkedin-scrape-3",
+            "\\AppLauncherLite\\linkedin-scrape-1",
+            "\\AppLauncherLite\\linkedin-scrape-2",
+            "\\AppLauncherLite\\linkedin-scrape-3",
         ]
 
 
@@ -198,10 +198,10 @@ class TestSyncSchtasks:
             return _mk_completed(rc=0)
 
         created = jobs_mod.sync_schtasks(job, runner=runner)
-        assert created == ["\\AppLauncher\\demo"]
+        assert created == ["\\AppLauncherLite\\demo"]
         # Last call is the /Create for the daily task.
         last = calls[-1]
-        assert last[:5] == ["schtasks", "/Create", "/F", "/TN", "\\AppLauncher\\demo"]
+        assert last[:5] == ["schtasks", "/Create", "/F", "/TN", "\\AppLauncherLite\\demo"]
         assert "/SC" in last and "DAILY" in last and "06:00" in last
 
     def test_daily_times_creates_three_tasks(self):
@@ -214,9 +214,9 @@ class TestSyncSchtasks:
         runner = MagicMock(return_value=_mk_completed(rc=0))
         created = jobs_mod.sync_schtasks(job, runner=runner)
         assert created == [
-            "\\AppLauncher\\ls-1",
-            "\\AppLauncher\\ls-2",
-            "\\AppLauncher\\ls-3",
+            "\\AppLauncherLite\\ls-1",
+            "\\AppLauncherLite\\ls-2",
+            "\\AppLauncherLite\\ls-3",
         ]
 
     def test_none_schedule_only_deletes(self):
@@ -239,11 +239,11 @@ class TestSyncSchtasks:
 
 class TestDeleteSchtasks:
     def test_uses_query_results_when_available(self):
-        # Query lists three tasks under \AppLauncher\ — two for our job, one foreign.
+        # Query lists three tasks under \AppLauncherLite\ — two for our job, one foreign.
         query_stdout = (
-            '"\\AppLauncher\\ls-1","ready","..."\n'
-            '"\\AppLauncher\\ls-2","ready","..."\n'
-            '"\\AppLauncher\\other","ready","..."\n'
+            '"\\AppLauncherLite\\ls-1","ready","..."\n'
+            '"\\AppLauncherLite\\ls-2","ready","..."\n'
+            '"\\AppLauncherLite\\other","ready","..."\n'
         )
         deletes: List[str] = []
 
@@ -256,9 +256,9 @@ class TestDeleteSchtasks:
             return _mk_completed(rc=0)
 
         result = jobs_mod.delete_schtasks("ls", runner=runner)
-        assert sorted(result) == ["\\AppLauncher\\ls-1", "\\AppLauncher\\ls-2"]
+        assert sorted(result) == ["\\AppLauncherLite\\ls-1", "\\AppLauncherLite\\ls-2"]
         # The foreign task is left alone.
-        assert "\\AppLauncher\\other" not in result
+        assert "\\AppLauncherLite\\other" not in result
 
 
 class TestBulkParser:
@@ -266,23 +266,23 @@ class TestBulkParser:
 
     def test_filters_by_prefix(self):
         stdout = (
-            "TaskName: \\AppLauncher\\demo\nNext Run Time: 2026-06-01 06:00:00\n\n"
+            "TaskName: \\AppLauncherLite\\demo\nNext Run Time: 2026-06-01 06:00:00\n\n"
             "TaskName: \\Foreign\\task\nNext Run Time: 2026-06-01 12:00:00\n\n"
         )
         out = jobs_schtasks_mod._parse_bulk_records(stdout)
-        assert "\\AppLauncher\\demo" in out
-        assert out["\\AppLauncher\\demo"]["next_run"] == "2026-06-01 06:00:00"
+        assert "\\AppLauncherLite\\demo" in out
+        assert out["\\AppLauncherLite\\demo"]["next_run"] == "2026-06-01 06:00:00"
         # Foreign task is filtered out.
         assert "\\Foreign\\task" not in out
 
     def test_n_a_collapses_to_none(self):
         stdout = (
-            "TaskName: \\AppLauncher\\demo-1\nNext Run Time: N/A\n\n"
-            "TaskName: \\AppLauncher\\demo-2\nNext Run Time: Disabled\n\n"
+            "TaskName: \\AppLauncherLite\\demo-1\nNext Run Time: N/A\n\n"
+            "TaskName: \\AppLauncherLite\\demo-2\nNext Run Time: Disabled\n\n"
         )
         out = jobs_schtasks_mod._parse_bulk_records(stdout)
-        assert out["\\AppLauncher\\demo-1"]["next_run"] is None
-        assert out["\\AppLauncher\\demo-2"]["next_run"] is None
+        assert out["\\AppLauncherLite\\demo-1"]["next_run"] is None
+        assert out["\\AppLauncherLite\\demo-2"]["next_run"] is None
 
 
 class TestDeleteSchtasksQueryOutcomes:
@@ -315,6 +315,6 @@ class TestDeleteSchtasksQueryOutcomes:
         deletes: List[str] = []
         runner = self._runner(1, "", deletes)
         jobs_mod.delete_schtasks("backup", runner=runner, other_job_ids=["backup-2"])
-        assert "\\AppLauncher\\backup" in deletes
-        assert "\\AppLauncher\\backup-1" in deletes
-        assert "\\AppLauncher\\backup-2" not in deletes
+        assert "\\AppLauncherLite\\backup" in deletes
+        assert "\\AppLauncherLite\\backup-1" in deletes
+        assert "\\AppLauncherLite\\backup-2" not in deletes
