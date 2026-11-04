@@ -1,4 +1,4 @@
-"""``POST /sessions/{sid}/input`` (app/session_host/server.py) — issues #607/#611.
+"""``POST /sessions/{sid}/input`` (app/webapp/session_host/server.py) — issues #607/#611.
 
 #607: before that fix, the route unconditionally returned ``{"ok": true}``
 even when the write silently dropped (session already exited but not yet
@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
-from app.session_host import server
+from app.webapp.session_host import server
 
 
 def test_input_delivered_returns_ok(monkeypatch):
