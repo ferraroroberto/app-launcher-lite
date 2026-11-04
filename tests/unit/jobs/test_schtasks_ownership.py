@@ -10,7 +10,7 @@ from src import jobs as jobs_mod
 from src.jobs import schtasks as jobs_schtasks
 from src.jobs.config import make_job_id
 
-_FOLDER = "\\AppLauncher\\"
+_FOLDER = "\\AppLauncherLite\\"
 
 
 def _completed(stdout: str = "", rc: int = 0) -> subprocess.CompletedProcess:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
@@ -16,6 +17,16 @@ from typing import Dict, Optional
 logger = logging.getLogger(__name__)
 
 VALID_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+
+# The Task Scheduler folder this fork's job entries live under. It differs from
+# upstream app-launcher's ``AppLauncher`` because both apps can run on one
+# machine, and a shared folder turns a job id present in both registries into
+# one task that whichever app synced last points at its own launcher.
+DEFAULT_TASK_NAMESPACE = "AppLauncherLite"
+
+# The name goes verbatim into ``schtasks /TN`` and the query filter, so a
+# separator, quote or space would change which tasks a delete can reach.
+_TASK_NAMESPACE_RE = re.compile(r"[A-Za-z0-9_.-]+")
 
 
 @dataclass
@@ -28,6 +39,10 @@ class AppConfig:
     # as the tray's Copy-remote-URL fallback when Tailscale is absent.
     # Empty string disables the feature (Open button hidden / disabled).
     tailnet_host: str = ""
+    # Task Scheduler folder for Jobs-tab entries (``\<namespace>\<job id>``).
+    # Per-machine: a PC whose tasks live under another name sets it here
+    # rather than editing code.
+    task_namespace: str = DEFAULT_TASK_NAMESPACE
     # Optional webapp section — when missing, the tray spawns the webapp
     # on `:8465` with default settings. Set webapp.enabled:false to opt out.
     webapp: Dict = field(default_factory=dict)
@@ -49,6 +64,7 @@ def load_app_config(path: Optional[Path] = None) -> AppConfig:
     return AppConfig(
         log_level=raw.get("log_level", "INFO"),
         tailnet_host=str(raw.get("tailnet_host", "") or ""),
+        task_namespace=raw.get("task_namespace") or DEFAULT_TASK_NAMESPACE,
         webapp=raw.get("webapp") or {},
     )
 
@@ -56,3 +72,11 @@ def load_app_config(path: Optional[Path] = None) -> AppConfig:
 def _validate(raw: Dict) -> None:
     if "log_level" in raw and raw["log_level"] not in VALID_LOG_LEVELS:
         raise ValueError(f"log_level must be one of {VALID_LOG_LEVELS}")
+    namespace = raw.get("task_namespace")
+    if namespace and not (
+        isinstance(namespace, str) and _TASK_NAMESPACE_RE.fullmatch(namespace)
+    ):
+        raise ValueError(
+            "task_namespace must be one folder name of letters, digits, "
+            "'_', '.' or '-'"
+        )

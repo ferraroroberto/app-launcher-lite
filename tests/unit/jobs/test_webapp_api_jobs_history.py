@@ -223,11 +223,11 @@ class TestBulkCacheNextRun:
             # Return one fake task per registered job so the cache
             # actually has entries to look up.
             stdout = (
-                "TaskName: \\AppLauncher\\demo-0\nNext Run Time: 2026-06-01 06:00:00\n\n"
-                "TaskName: \\AppLauncher\\demo-1\nNext Run Time: 2026-06-01 06:00:00\n\n"
-                "TaskName: \\AppLauncher\\demo-2\nNext Run Time: 2026-06-01 06:00:00\n\n"
-                "TaskName: \\AppLauncher\\demo-3\nNext Run Time: 2026-06-01 06:00:00\n\n"
-                "TaskName: \\AppLauncher\\demo-4\nNext Run Time: 2026-06-01 06:00:00\n\n"
+                "TaskName: \\AppLauncherLite\\demo-0\nNext Run Time: 2026-06-01 06:00:00\n\n"
+                "TaskName: \\AppLauncherLite\\demo-1\nNext Run Time: 2026-06-01 06:00:00\n\n"
+                "TaskName: \\AppLauncherLite\\demo-2\nNext Run Time: 2026-06-01 06:00:00\n\n"
+                "TaskName: \\AppLauncherLite\\demo-3\nNext Run Time: 2026-06-01 06:00:00\n\n"
+                "TaskName: \\AppLauncherLite\\demo-4\nNext Run Time: 2026-06-01 06:00:00\n\n"
             )
             return subprocess.CompletedProcess(args=argv, returncode=0, stdout=stdout, stderr="")
 

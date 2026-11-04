@@ -1,9 +1,10 @@
 """Windows Task Scheduler sync + spawn helpers for the Jobs tab.
 
 Every :class:`~src.jobs.config.Job` with a non-``none`` schedule
-materialises as one or more entries under the ``\\AppLauncher\\`` Task
-Scheduler folder. ``daily_times`` jobs fan out into
-``\\AppLauncher\\<id>-1``, ``…-2``, … so a single schedule with three
+materialises as one or more entries under the ``\\<namespace>\\`` Task
+Scheduler folder (``task_namespace`` in ``config.json``, default
+``AppLauncherLite``). ``daily_times`` jobs fan out into
+``\\<namespace>\\<id>-1``, ``…-2``, … so a single schedule with three
 wake-ups becomes three Task Scheduler entries pointing at the same
 executor.
 
@@ -34,10 +35,12 @@ import re
 import subprocess
 import time
 from datetime import datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
+from src.app_config import load_app_config
 from src.jobs.argv import encode_params_token
 from src.jobs.config import Job, Schedule
 from src.subprocess_flags import NO_WINDOW
@@ -46,8 +49,21 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-TASK_NAMESPACE = "AppLauncher"
-TASK_FOLDER_PREFIX = f"\\{TASK_NAMESPACE}\\"
+
+@lru_cache(maxsize=1)
+def task_namespace() -> str:
+    """The Task Scheduler folder name, read once from ``config.json``.
+
+    Cached because ownership checks call it per task; a config edit takes
+    effect on the next process start, like every other ``config.json`` key.
+    """
+    return load_app_config().task_namespace
+
+
+def task_folder_prefix() -> str:
+    """``\\<namespace>\\`` — the prefix every Jobs-tab task name starts with."""
+    return f"\\{task_namespace()}\\"
+
 
 # Process-local TTL cache of the bulk schtasks "Next Run Time" query. The
 # original Jobs-tab v1 shelled out to schtasks once per job, per /api/jobs
@@ -201,9 +217,9 @@ def task_names_for(job: Job) -> List[str]:
     """The Task Scheduler task names ``job`` materialises into.
 
     ``daily_times`` is the only schedule that produces more than one;
-    every other type produces a single ``\\AppLauncher\\<id>``.
+    every other type produces a single ``\\<namespace>\\<id>``.
     """
-    base = TASK_FOLDER_PREFIX + job.id
+    base = task_folder_prefix() + job.id
     if job.schedule.type == "daily_times" and isinstance(job.schedule.at, list):
         return [f"{base}-{i}" for i in range(1, len(job.schedule.at) + 1)]
     return [base]
@@ -254,7 +270,7 @@ def schedule_argv_parts(sched: Schedule) -> List[List[str]]:
 def list_known_tasks(
     runner: Optional[Callable[[List[str]], subprocess.CompletedProcess]] = None,
 ) -> Optional[List[str]]:
-    """All task names currently under ``\\AppLauncher\\``, or ``None``.
+    """All task names currently under ``\\<namespace>\\``, or ``None``.
 
     ``None`` means the query failed (Task Scheduler service down, no
     permission, empty output): "unknown", distinct from a successful query
@@ -266,13 +282,14 @@ def list_known_tasks(
     if proc.returncode != 0 or not proc.stdout:
         return None
     names: List[str] = []
+    prefix = task_folder_prefix()
     for line in proc.stdout.splitlines():
         line = line.strip()
         if not line:
             continue
         # CSV first column = TaskName, optionally quoted.
         first = line.split(",", 1)[0].strip().strip('"')
-        if first.startswith(TASK_FOLDER_PREFIX):
+        if first.startswith(prefix):
             names.append(first)
     return names
 
@@ -295,16 +312,17 @@ def _other_job_ids(job_id: str) -> List[str]:
 def owns_task(name: str, job_id: str, other_job_ids: Iterable[str]) -> bool:
     """True when Task Scheduler task ``name`` belongs to ``job_id``.
 
-    A job owns its bare ``\\AppLauncher\\<id>`` task and its ``<id>-<digits>``
+    A job owns its bare ``\\<namespace>\\<id>`` task and its ``<id>-<digits>``
     ``daily_times`` slots. A slot-shaped name that is another job's bare
     task (job ``backup-2`` next to job ``backup``) is that job's, not a slot.
     """
-    base = TASK_FOLDER_PREFIX + job_id
+    prefix = task_folder_prefix()
+    base = prefix + job_id
     if name == base:
         return True
     if not name.startswith(base) or not _SLOT_SUFFIX_RE.fullmatch(name[len(base):]):
         return False
-    return name not in {TASK_FOLDER_PREFIX + o for o in other_job_ids}
+    return name not in {prefix + o for o in other_job_ids}
 
 
 def delete_schtasks(
@@ -312,7 +330,7 @@ def delete_schtasks(
     runner: Optional[Callable[[List[str]], subprocess.CompletedProcess]] = None,
     other_job_ids: Optional[Iterable[str]] = None,
 ) -> List[str]:
-    """Delete every ``\\AppLauncher\\<job_id>`` and ``…-N`` variant.
+    """Delete every ``\\<namespace>\\<job_id>`` and ``…-N`` variant.
 
     Tries a directed query first (an empty but successful result deletes
     nothing); only when the query itself fails does it fall back to a
@@ -324,7 +342,7 @@ def delete_schtasks(
     swallowed).
     """
     runner = runner or _run_schtasks
-    base = TASK_FOLDER_PREFIX + job_id
+    base = task_folder_prefix() + job_id
     known = list_known_tasks(runner=runner)
     others = _other_job_ids(job_id) if other_job_ids is None else list(other_job_ids)
     if known is None:
@@ -348,7 +366,7 @@ def sync_schtasks(
 ) -> List[str]:
     """Re-create the Task Scheduler entries for ``job`` from its schedule.
 
-    Deletes anything currently under ``\\AppLauncher\\<job.id>*`` first,
+    Deletes anything currently under ``\\<namespace>\\<job.id>*`` first,
     then creates one task per schedule slot. Returns the list of task
     names created (empty for ``schedule.type == "none"`` after the
     pre-existing tasks are deleted).
@@ -428,7 +446,7 @@ def _parse_bulk_records(stdout: str) -> Dict[str, Dict[str, Any]]:
     Each task record is a block of ``Key: Value`` lines separated from
     the next by blank line(s). We walk records, pluck the first
     ``TaskName:`` we find plus the fields we care about, and keep only
-    entries under ``\\AppLauncher\\`` so foreign tasks never leak into the
+    entries under ``\\<namespace>\\`` so foreign tasks never leak into the
     cache.
 
     Each value is ``{"next_run": Optional[str], "enabled": Optional[bool]}``:
@@ -443,10 +461,11 @@ def _parse_bulk_records(stdout: str) -> Dict[str, Dict[str, Any]]:
     """
     out: Dict[str, Dict[str, Any]] = {}
     block: Dict[str, str] = {}
+    prefix = task_folder_prefix()
 
     def commit(b: Dict[str, str]) -> None:
         name = b.get("TaskName", "").strip()
-        if not name.startswith(TASK_FOLDER_PREFIX):
+        if not name.startswith(prefix):
             return
         next_run = b.get("Next Run Time", "").strip()
         # schtasks renders missing / disabled as "N/A" or "Disabled" —
@@ -492,10 +511,10 @@ def _parse_bulk_records(stdout: str) -> Dict[str, Dict[str, Any]]:
 def _bulk_records(
     runner: Optional[Callable[[List[str]], subprocess.CompletedProcess]] = None,
 ) -> Optional[Dict[str, Dict[str, Any]]]:
-    """One ``schtasks /Query /FO LIST /V`` covering every AppLauncher task.
+    """One ``schtasks /Query /FO LIST /V`` covering every task in our folder.
 
     ``None`` when the query itself failed — distinct from ``{}`` ("the
-    query worked and there are no AppLauncher tasks"). The coverage check
+    query worked and there are no tasks in the folder"). The coverage check
     (:mod:`src.jobs.coverage`) needs that distinction: without it, one
     failed query would flag every scheduled job as missing its task.
     """
@@ -535,7 +554,7 @@ def _cached_bulk_next_runs(
 def registered_task_states(
     runner: Optional[Callable[[List[str]], subprocess.CompletedProcess]] = None,
 ) -> Optional[Dict[str, Optional[bool]]]:
-    """``{task_name: enabled}`` for every ``\\AppLauncher\\`` task.
+    """``{task_name: enabled}`` for every ``\\<namespace>\\`` task.
 
     Backed by the same 30 s cached bulk query the "next run" column uses,
     so the coverage check costs no extra ``schtasks`` shell-out on top of

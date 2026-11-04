@@ -90,7 +90,7 @@ class TestSyncSchtasksHonoursVisible:
             return _mk_completed(rc=0)
 
         created = jobs_mod.sync_schtasks(job, runner=runner)
-        assert created == ["\\AppLauncher\\vis"]
+        assert created == ["\\AppLauncherLite\\vis"]
         create = next(c for c in calls if c[:2] == ["schtasks", "/Create"])
         tr = create[create.index("/TR") + 1]
         assert "python.exe" in tr and "pythonw.exe" not in tr

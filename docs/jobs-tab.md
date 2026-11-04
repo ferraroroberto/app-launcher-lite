@@ -163,10 +163,10 @@ A job can carry `"elevated": true` (omitted / `false` is the default) for a scri
 }
 ```
 
-**The launcher never *creates* a Task Scheduler entry for an elevated job.** `/RL HIGHEST` — Task Scheduler's own silent elevation, needed so the scheduled fire runs elevated with no interactive UAC prompt — can only be set by an already-elevated *calling* process (empirically verified: an admin account running non-elevated gets `ERROR: Access is denied` on the `/Create` call; being in the Administrators group is not enough, the token itself must be elevated). The launcher's webapp always runs non-elevated, so `sync_schtasks()` never issues a `/Create` the moment `job.elevated` is true, on `POST /api/jobs`, `PUT /api/jobs/<id>` (any field edit), `pause`, or `resume`. It still *deletes* any stale `\AppLauncher\<id>*` entry first — otherwise a job that used to be non-elevated leaves its old un-elevated scheduled task behind, still firing on its old schedule indefinitely. An elevated job's real Task Scheduler entry is treated as **externally-managed**: everything else (registry row, run history, stats, the computed `next_run` sortable field) keeps working normally, but the entry itself must be registered and updated by hand, from an elevated shell:
+**The launcher never *creates* a Task Scheduler entry for an elevated job.** `/RL HIGHEST` — Task Scheduler's own silent elevation, needed so the scheduled fire runs elevated with no interactive UAC prompt — can only be set by an already-elevated *calling* process (empirically verified: an admin account running non-elevated gets `ERROR: Access is denied` on the `/Create` call; being in the Administrators group is not enough, the token itself must be elevated). The launcher's webapp always runs non-elevated, so `sync_schtasks()` never issues a `/Create` the moment `job.elevated` is true, on `POST /api/jobs`, `PUT /api/jobs/<id>` (any field edit), `pause`, or `resume`. It still *deletes* any stale `\AppLauncherLite\<id>*` entry first — otherwise a job that used to be non-elevated leaves its old un-elevated scheduled task behind, still firing on its old schedule indefinitely. An elevated job's real Task Scheduler entry is treated as **externally-managed**: everything else (registry row, run history, stats, the computed `next_run` sortable field) keeps working normally, but the entry itself must be registered and updated by hand, from an elevated shell:
 
 ```
-schtasks /Create /F /TN "\AppLauncher\hwinfo-restart" /TR '"C:\path\to\app-launcher-lite\.venv\Scripts\pythonw.exe" "C:\path\to\app-launcher-lite\launcher.py" run-job hwinfo-restart' /SC HOURLY /MO 8 /RL HIGHEST
+schtasks /Create /F /TN "\AppLauncherLite\hwinfo-restart" /TR '"C:\path\to\app-launcher-lite\.venv\Scripts\pythonw.exe" "C:\path\to\app-launcher-lite\launcher.py" run-job hwinfo-restart' /SC HOURLY /MO 8 /RL HIGHEST
 ```
 
 (Single-quote the `/TR` value in PowerShell — double-quoted strings there don't pass embedded `"` through literally.) The Jobs tab marks an elevated job with a `🔒 external schedule` pill next to its schedule chip so it's visually obvious which jobs the app isn't managing. The row remains tappable for run history, and edit mode still offers the side-effect-free dry-run check. Run-now and pause/resume are omitted and their API endpoints return `409`: the non-elevated launcher cannot honor those actions safely against an externally managed `/RL HIGHEST` task. `elevated` round-trips through `POST`/`PUT` like `visible` and is omitted from the stored row when false. There's no dedicated UI checkbox yet (same as `visible`) — set it directly in `config/jobs.json` or via the API.
@@ -426,14 +426,16 @@ field, and a mapping editor (param-name / JSONPath row pairs, `+ Add mapping`)
 — structurally identical to the Parameters editor just above it. Switching
 the provider back to "None" and saving clears the job's webhook.
 
-## Task Scheduler — `\AppLauncher\` namespace
+## Task Scheduler — `\AppLauncherLite\` namespace
 
-All Jobs-tab schtasks entries live under the `\AppLauncher\` Task Scheduler folder. The naming rule:
+All Jobs-tab schtasks entries live under one Task Scheduler folder, `\AppLauncherLite\` by default. It is deliberately not upstream app-launcher's `\AppLauncher\`: both apps can run on one machine, and a shared folder would make a job id present in both registries a single task that whichever app synced last points at its own launcher.
 
-- Single-task schedules → `\AppLauncher\<job_id>`
-- `daily_times` → `\AppLauncher\<job_id>-1`, `-2`, … (one per HH:MM)
+The folder name is the `task_namespace` key in `config/config.json` (one folder name of letters, digits, `_`, `.` or `-`; anything else is rejected at load). It is read once per process, so a change needs a webapp restart. A machine whose tasks already sit under another folder sets the key to that name; the launcher never moves tasks between folders, so existing entries move by hand: `schtasks /Delete` each old task, then save each scheduled job in the Jobs tab to re-register it under the new folder. Tasks outside the configured folder are never listed, counted by the coverage check, or deleted. The naming rule:
 
-Sync is idempotent: on every create/edit, the launcher deletes every existing `\AppLauncher\<job_id>*` task first, then re-creates from the current schedule. Edits never leave stale entries behind. Delete-via-API removes both the registry row and every matching schtasks entry.
+- Single-task schedules → `\AppLauncherLite\<job_id>`
+- `daily_times` → `\AppLauncherLite\<job_id>-1`, `-2`, … (one per HH:MM)
+
+Sync is idempotent: on every create/edit, the launcher deletes every existing `\AppLauncherLite\<job_id>*` task first, then re-creates from the current schedule. Edits never leave stale entries behind. Delete-via-API removes both the registry row and every matching schtasks entry.
 
 The `/TR` (task run) command stored in Task Scheduler is quoted so paths containing spaces survive Task Scheduler's own tokenisation:
 
@@ -448,7 +450,7 @@ Scheduled runs use `pythonw.exe` (silent — no console window appears on schedu
 To inspect what's actually scheduled:
 
 ```powershell
-schtasks /Query /TN "\AppLauncher\reporting-daily" /FO LIST /V
+schtasks /Query /TN "\AppLauncherLite\reporting-daily" /FO LIST /V
 schtasks /Query /FO CSV /NH | findstr "AppLauncher"
 ```
 
@@ -669,9 +671,9 @@ If the **executor itself** dies before it reaches its own finalise (interrupt, r
 
 The original v1 issued one `schtasks /Query` per job per `/api/jobs` poll — N+1 fork+exec on Windows. The decoration layer now reads `next_run` out of a single process-local snapshot:
 
-- One bulk `schtasks /Query /FO LIST /V` populates `{task_name: {next_run, enabled}}` for every entry under `\AppLauncher\` — `next_run` backs the countdown, `enabled` backs the [missed-fire coverage](#missed-fire-coverage-issue-697) structural check, so both read one query.
+- One bulk `schtasks /Query /FO LIST /V` populates `{task_name: {next_run, enabled}}` for every entry under `\AppLauncherLite\` — `next_run` backs the countdown, `enabled` backs the [missed-fire coverage](#missed-fire-coverage-issue-697) structural check, so both read one query.
 - The snapshot is cached for **30 s** (`_NEXT_RUN_TTL_SECONDS` in `src/jobs/schtasks.py`).
-- A *failed* query caches as `None`, distinct from `{}` ("the query worked and there are no `\AppLauncher\` tasks") — without that distinction one failed query would flag every scheduled job as missing its entry.
+- A *failed* query caches as `None`, distinct from `{}` ("the query worked and there are no `\AppLauncherLite\` tasks") — without that distinction one failed query would flag every scheduled job as missing its entry.
 - `sync_schtasks` and `delete_schtasks` call `invalidate_next_run_cache()` at the end so user edits show up on the next poll without waiting out the TTL. That also drops the derived coverage scan, which reads this same snapshot.
 
 Net effect: `GET /api/jobs` performs at most one `schtasks` invocation per cache window regardless of job count.
@@ -725,7 +727,7 @@ Failure alerting covers a run that **failed**; the ⚠️ stuck marker covers on
 
 Two halves, both answered from data the tab already reads:
 
-- **Structural** — every non-paused, scheduled job must have a matching, **enabled** `\AppLauncher\<id>` entry (every fan-out slot for `daily_times`). This is what catches a deleted entry immediately, without waiting for the missed slot itself. It reads the *same* 30 s cached bulk `schtasks /Query` the `next_run` column already pays for (see [`next_run` cache](#next_run-cache)) — one batched query per cycle, never an N+1 shell-out storm.
+- **Structural** — every non-paused, scheduled job must have a matching, **enabled** `\AppLauncherLite\<id>` entry (every fan-out slot for `daily_times`). This is what catches a deleted entry immediately, without waiting for the missed slot itself. It reads the *same* 30 s cached bulk `schtasks /Query` the `next_run` column already pays for (see [`next_run` cache](#next_run-cache)) — one batched query per cycle, never an N+1 shell-out storm.
 - **Behavioural** — the schedule is expanded across the last `COVERAGE_WINDOW_DAYS` (3) via `upcoming_fires`, and each elapsed slot is matched against the on-disk run records.
 
 The never-flag rules are the load-bearing half — a coverage check that cries wolf gets muted, and then it protects nothing:
@@ -789,7 +791,7 @@ Mint the token in **Settings → API tokens**, scoped to exactly this job — th
 ## Why not …
 
 - **A DB as the canonical run store.** Files stay simpler and cold-reader friendly. SQLite is used only as a rebuildable metadata/FTS mirror so cross-run search and aggregate reads do not repeatedly walk the filesystem.
-- **A custom scheduler daemon / APScheduler.** Windows already has a scheduler; running a second one inside the launcher process couples job firing to the launcher's lifecycle. With Task Scheduler the schedules survive a tray restart, a reboot, and a launcher uninstall (until the user cleans up `\AppLauncher\` themselves).
+- **A custom scheduler daemon / APScheduler.** Windows already has a scheduler; running a second one inside the launcher process couples job firing to the launcher's lifecycle. With Task Scheduler the schedules survive a tray restart, a reboot, and a launcher uninstall (until the user cleans up `\AppLauncherLite\` themselves).
 - **A live PTY per job.** One-shot scripts do not need input or terminal emulation. The lightweight output-only WebSocket tails `output.log`; interactive-terminal infrastructure remains reserved for Coding.
 - **Raw cron expressions.** The five presets cover real use without inviting the standard "did I get the day-of-week field right?" pitfall.
 
@@ -800,7 +802,7 @@ The pre-ship gate (`pwsh -File scripts/verify-before-ship.ps1`) runs the unit su
 Live verification after restart of `:8465`:
 
 ```powershell
-# Confirm \AppLauncher\ tasks materialised correctly
+# Confirm \AppLauncherLite\ tasks materialised correctly
 schtasks /Query /FO CSV /NH | findstr "AppLauncher"
 
 # Trigger a run from the CLI (same path the webapp uses)

@@ -28,6 +28,16 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
+@pytest.fixture(autouse=True)
+def _default_task_namespace(monkeypatch) -> None:
+    """Pin the Task Scheduler folder so a developer's own ``config.json``
+    ``task_namespace`` cannot change what the Jobs unit tests assert."""
+    from src.app_config import DEFAULT_TASK_NAMESPACE
+    from src.jobs import schtasks
+
+    monkeypatch.setattr(schtasks, "task_namespace", lambda: DEFAULT_TASK_NAMESPACE)
+
+
 # ------------------------------------------------- gate progress log (#534)
 # When the pre-ship gate (scripts/verify-before-ship.ps1) sets
 # LAUNCHER_VERIFY_PROGRESS_LOG, every test's start and finish is appended —

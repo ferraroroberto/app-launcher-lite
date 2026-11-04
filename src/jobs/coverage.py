@@ -9,7 +9,7 @@ showing its old stats and no alert existed for "expected a run, saw none".
 Two independent halves, both answered from data the Jobs tab already reads:
 
 * **Structural** — every non-paused, scheduled job must have a matching,
-  enabled ``\\AppLauncher\\<id>`` Task Scheduler entry. This is the cheap
+  enabled ``\\<namespace>\\<id>`` Task Scheduler entry. This is the cheap
   half that would have caught both real incidents (``config-map`` and
   ``sota-watch`` shipped launchers + "runs weekly unattended" docs with no
   registered task at all, for weeks), and it fires the moment the entry

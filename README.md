@@ -39,7 +39,7 @@ The registry in `config/apps.json` (gitignored; sample committed) — one row pe
 
 ### Jobs
 
-Remote-fireable scripts backed by `config/jobs.json` (empty by default; sample committed). A job is defined once — script path, typed params, optional schedule — and every trigger (phone tap, scoped-token URL, Task Scheduler slot, webhook, chain) funnels through one executor producing a uniform run record (status, duration, output log, artifacts). Schedules materialise under `\AppLauncher\` in Windows Task Scheduler; kinds cover `python`, `powershell`, `batch`, `inline-shell`, `shell-wsl`, and `http-check`. Failure alerts (Pushover global / Telegram per-job), missed-fire coverage, watchdog kills, run-history search — the full reference is [docs/jobs-tab.md](docs/jobs-tab.md).
+Remote-fireable scripts backed by `config/jobs.json` (empty by default; sample committed). A job is defined once — script path, typed params, optional schedule — and every trigger (phone tap, scoped-token URL, Task Scheduler slot, webhook, chain) funnels through one executor producing a uniform run record (status, duration, output log, artifacts). Schedules materialise under `\AppLauncherLite\` in Windows Task Scheduler; kinds cover `python`, `powershell`, `batch`, `inline-shell`, `shell-wsl`, and `http-check`. Failure alerts (Pushover global / Telegram per-job), missed-fire coverage, watchdog kills, run-history search — the full reference is [docs/jobs-tab.md](docs/jobs-tab.md).
 
 ### Team OS
 
@@ -63,6 +63,7 @@ There is no `.env`. Committed samples live next to each gitignored real file in 
 | --- | --- | --- |
 | `log_level` | `INFO` | Root logging level. |
 | `tailnet_host` | `""` | Any hostname/IP the phone reaches this PC on (Tailscale MagicDNS name, VPN DNS name, or static VPN/LAN IP) — builds the Apps tab's remote Open URLs and the tray's Copy-remote-URL fallback. Empty disables. |
+| `task_namespace` | `AppLauncherLite` | Task Scheduler folder the Jobs tab registers entries under (`\<name>\<job id>`); one folder name of letters, digits, `_`, `.` or `-`, read at startup. Separate from upstream app-launcher's `AppLauncher` so both can share a machine ([docs/jobs-tab.md](docs/jobs-tab.md)). |
 | `webapp` | `{}` | Embed section for the tray-spawned webapp: `enabled` (default true), `host`, `port`. |
 
 ### `config/webapp_config.json` (UI prefs + secrets, written by "Save")

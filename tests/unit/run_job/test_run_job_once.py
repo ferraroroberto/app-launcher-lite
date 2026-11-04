@@ -47,7 +47,7 @@ class TestOnceCleanup:
         save_jobs(cfg)
         _silence_notifier(monkeypatch)
 
-        delete = MagicMock(return_value=["\\AppLauncher\\oneoff"])
+        delete = MagicMock(return_value=["\\AppLauncherLite\\oneoff"])
         # The executor imports delete_schtasks at module top — patch
         # the rjc binding, not jobs_mod, so the executor sees the mock.
         monkeypatch.setattr(rjc, "delete_schtasks", delete)
