@@ -79,8 +79,7 @@ def _spawn_uvicorn(port: int) -> subprocess.Popen:
     cmd = [
         str(_find_python()),
         "-m",
-        "uvicorn",
-        "app.webapp.server:app",
+        "app.webapp.serve",
         "--host",
         "127.0.0.1",
         "--port",
