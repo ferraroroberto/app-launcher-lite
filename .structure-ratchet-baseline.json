@@ -2,5 +2,10 @@
   "version": 1,
   "band": {"files": 6, "functions": 13},
   "root_extras": [],
+  "shape_contract": {
+    "root_files": [],
+    "redundant": ["webapp/"],
+    "folder_types": {}
+  },
   "entries": []
 }
