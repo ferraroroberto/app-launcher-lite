@@ -1,19 +1,15 @@
 """Board drill-down (issue #301) — exchange parser, reply proxy, issue start.
 
 Covers the act-from-the-card loop server-side:
-  * ``board.last_exchange`` — tail JSONL parsing: text blocks joined across
-    lines of the same assistant message, thinking/tool_use lines skipped,
-    tool-result user lines skipped, harness wrappers skipped, missing file
-    degraded to ``available: False``.
-  * ``board.state_row_for_session`` — resolves the same row the board's
-    merge renders (newest-session-wins claim order).
+  * ``board_exchange.launcher_last_exchange`` — the exact-id PTY capture
+    parse (the only exchange source; no agent transcript is read).
   * ``POST /api/coding/sessions/{sid}/input`` — one call to the
     session-host, which now owns framing + settle-then-submit itself
     (#611); the bare-submit escape hatch for a stranded composer.
   * ``POST /api/board/issues/start`` — server-built ``/issue-<mode> <N>``
     prompt, mode/number validation, repo resolution in the projects folder.
-  * ``GET /api/board/sessions/{sid}/exchange`` — agent-aware native history,
-    then the exact-id launcher capture fallback (#457).
+  * ``GET /api/board/sessions/{sid}/exchange`` — the exact-id launcher
+    capture (#457).
   * passkey classification of all three new paths (gate refusal off-tailnet
     + ``_terminal_guard_level`` mapping).
 """
@@ -26,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from src import board, board_exchange
+from src import board_exchange
 
 
 def _iso(moment: datetime) -> str:
@@ -34,91 +30,6 @@ def _iso(moment: datetime) -> str:
 
 
 NOW = datetime(2026, 7, 2, 12, 0, 0, tzinfo=timezone.utc)
-
-
-# ------------------------------------------------------------ last_exchange
-
-
-def _write_jsonl(path: Path, lines: list) -> str:
-    path.write_text(
-        "\n".join(json.dumps(line) for line in lines) + "\n", encoding="utf-8"
-    )
-    return str(path)
-
-
-def _user_line(text) -> dict:
-    return {
-        "type": "user", "timestamp": "2026-07-02T11:50:00Z",
-        "message": {"role": "user", "content": text},
-    }
-
-
-def _assistant_line(blocks: list, msg_id: str = "m1") -> dict:
-    return {
-        "type": "assistant", "timestamp": "2026-07-02T11:55:00Z",
-        "message": {"id": msg_id, "role": "assistant", "content": blocks},
-    }
-
-
-def test_last_exchange_happy_path(tmp_path: Path):
-    target = _write_jsonl(tmp_path / "t.jsonl", [
-        _user_line("fix the bug please"),
-        _assistant_line([{"type": "thinking", "thinking": "hmm"}]),
-        _assistant_line([{"type": "tool_use", "name": "Bash", "input": {}}]),
-        _user_line([{"type": "tool_result", "content": "exit 0"}]),
-        _assistant_line([{"type": "text", "text": "Done — the bug is fixed."}]),
-    ])
-    result = board.last_exchange(target)
-    assert result["available"] is True
-    assert result["assistant"]["text"] == "Done — the bug is fixed."
-    assert result["user"]["text"] == "fix the bug please"
-
-
-def test_last_exchange_joins_blocks_of_same_message(tmp_path: Path):
-    """Transcripts write one line per content block — same message.id lines
-    are one reply and must be joined in order."""
-    target = _write_jsonl(tmp_path / "t.jsonl", [
-        _user_line("q"),
-        _assistant_line([{"type": "text", "text": "First part."}], msg_id="m9"),
-        _assistant_line([{"type": "tool_use", "name": "Read"}], msg_id="m9"),
-        _assistant_line([{"type": "text", "text": "Second part."}], msg_id="m9"),
-    ])
-    result = board.last_exchange(target)
-    assert result["assistant"]["text"] == "First part.\n\nSecond part."
-
-
-def test_last_exchange_earlier_message_not_merged(tmp_path: Path):
-    target = _write_jsonl(tmp_path / "t.jsonl", [
-        _user_line("q"),
-        _assistant_line([{"type": "text", "text": "Old reply."}], msg_id="m1"),
-        _user_line("follow-up"),
-        _assistant_line([{"type": "text", "text": "New reply."}], msg_id="m2"),
-    ])
-    result = board.last_exchange(target)
-    assert result["assistant"]["text"] == "New reply."
-    assert result["user"]["text"] == "follow-up"
-
-
-def test_last_exchange_skips_harness_wrapper_user_lines(tmp_path: Path):
-    target = _write_jsonl(tmp_path / "t.jsonl", [
-        _user_line("the real prompt"),
-        _user_line("<command-name>/compact</command-name>"),
-        _assistant_line([{"type": "text", "text": "reply"}]),
-    ])
-    assert board.last_exchange(target)["user"]["text"] == "the real prompt"
-
-
-def test_last_exchange_missing_or_empty():
-    assert board.last_exchange(None)["available"] is False
-    assert board.last_exchange("C:/nope/missing.jsonl")["available"] is False
-
-
-def test_last_exchange_no_assistant_text_in_tail(tmp_path: Path):
-    target = _write_jsonl(tmp_path / "t.jsonl", [
-        _user_line("q"),
-        _assistant_line([{"type": "tool_use", "name": "Bash"}]),
-    ])
-    assert board.last_exchange(target)["available"] is False
 
 
 # ------------------------------------------ agent-aware source fallbacks (#457)
@@ -229,7 +140,7 @@ def test_launcher_exchange_survives_private_dsr_end_to_end(tmp_path: Path):
     assert "after the DSR" in result["assistant"]["text"]
 
 
-# --------------------------------------------------- state_row_for_session
+# ------------------------------------------------------------- live fixture
 
 
 def _live_sess(session_id: str, project_dir: str, started_min_ago: int) -> dict:
@@ -240,21 +151,6 @@ def _live_sess(session_id: str, project_dir: str, started_min_ago: int) -> dict:
         "project_dir": project_dir,
         "started_at": (NOW - timedelta(minutes=started_min_ago)).timestamp(),
     }
-
-
-def test_state_row_for_session_matches_render_claim():
-    """#537: an ambiguous single row (2 live sessions sharing one cwd)
-    matches neither — state_row_for_session must stay consistent with what
-    merge_sessions renders rather than resolving the ambiguity differently."""
-    live = [_live_sess("old", "E:/a/x", 120), _live_sess("new", "E:/a/x", 5)]
-    rows = {
-        "t1": {"cwd": "E:/a/x", "status": "needs-you",
-               "updated_at": _iso(NOW - timedelta(minutes=1)),
-               "transcript_path": "p1"},
-    }
-    assert board.state_row_for_session(live, rows, "new") is None
-    assert board.state_row_for_session(live, rows, "old") is None
-    assert board.state_row_for_session(live, rows, "ghost") is None
 
 
 # ----------------------------------------------------------- passkey gates
@@ -595,43 +491,18 @@ class TestIssueStart:
 
 class TestExchangeEndpoint:
 
-    def test_resolves_transcript_via_state_row(
-        self, webapp_client, _bypass_gate, tmp_path: Path
-    ):
-        client, app, overrides = webapp_client
-        transcript = _write_jsonl(tmp_path / "t.jsonl", [
-            _user_line("status?"),
-            _assistant_line([{"type": "text", "text": "All green."}]),
-        ])
-        state_file = Path(app.state.webapp_config.sessions_state_file)
-        state_file.write_text(json.dumps({
-            "t-uuid": {"cwd": "E:/proj/app", "status": "needs-you",
-                       "updated_at": _iso(NOW), "transcript_path": transcript},
-        }), encoding="utf-8")
-        overrides["session"].list_sessions.return_value = [
-            _live_sess("sess1", "E:/proj/app", 10)
-        ]
-        body = client.get("/api/board/sessions/sess1/exchange").json()
-        assert body["available"] is True
-        assert body["assistant"]["text"] == "All green."
-        assert body["user"]["text"] == "status?"
-
     def test_unknown_session_degrades(self, webapp_client, _bypass_gate):
         client, _, _ = webapp_client
         body = client.get("/api/board/sessions/ghost/exchange").json()
         assert body["available"] is False
         assert body["reason"] == "session_not_found"
 
-    @pytest.mark.parametrize("agent, with_missing_native", [
-        ("copilot", True),
-        ("ssh", False),
-    ])
-    def test_launcher_capture_falls_back_when_native_exchange_is_unavailable(
+    def test_exchange_is_read_from_the_launcher_capture(
         self, webapp_client, _bypass_gate, tmp_path: Path, monkeypatch,
-        agent: str, with_missing_native: bool,
     ):
-        """#457 repro: both a missing hook transcript and a session with no
-        hook row at all still have an exact-id launcher capture."""
+        """#457 repro: a session with no hook row at all still has an
+        exact-id launcher capture, and a transcript path a hook row declares
+        is never read."""
         from app.webapp.routers import board as board_router
 
         client, app, overrides = webapp_client
@@ -646,18 +517,26 @@ class TestExchangeEndpoint:
         )
 
         live = _live_sess("sess1", "E:/proj/app", 10)
-        live.update(agent=agent, prompt_title="show the latest exchange")
+        live.update(agent="copilot", prompt_title="show the latest exchange")
         overrides["session"].list_sessions.return_value = [live]
 
-        if with_missing_native:
-            state_file = Path(app.state.webapp_config.sessions_state_file)
-            state_file.write_text(json.dumps({
-                "t-uuid": {
-                    "agent": "copilot", "cwd": "E:/proj/app",
-                    "status": "needs-you", "updated_at": _iso(NOW),
-                    "transcript_path": str(tmp_path / "missing.jsonl"),
-                },
-            }), encoding="utf-8")
+        declared = tmp_path / "declared.jsonl"
+        declared.write_text(
+            json.dumps({
+                "type": "assistant", "timestamp": "2026-07-02T11:55:00Z",
+                "message": {"id": "m1", "role": "assistant",
+                            "content": [{"type": "text", "text": "from a transcript"}]},
+            }) + "\n",
+            encoding="utf-8",
+        )
+        state_file = Path(app.state.webapp_config.sessions_state_file)
+        state_file.write_text(json.dumps({
+            "t-uuid": {
+                "agent": "copilot", "cwd": "E:/proj/app",
+                "status": "needs-you", "updated_at": _iso(NOW),
+                "transcript_path": str(declared),
+            },
+        }), encoding="utf-8")
 
         body = client.get("/api/board/sessions/sess1/exchange").json()
         assert body["available"] is True

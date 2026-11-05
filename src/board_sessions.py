@@ -18,59 +18,27 @@ resolves to the same state row, and therefore the same title, on both tabs.
 from __future__ import annotations
 
 import logging
-import re
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import AbstractSet, Any, Dict, FrozenSet, List, Optional
+from typing import AbstractSet, Any, Dict, List, Optional, Tuple
 
 from src.board_state import STATE_STALE_AFTER, _age_seconds, _now, _parse_iso
-from src.board_transcript import (
-    _external_row_liveness,
-    _refine_waiting_status,
-    _transcript_overlay,
-)
 
 logger = logging.getLogger(__name__)
 
-# Worktree sibling suffix (``skills/_lib/worktree_claim.py``'s ``<repo>-wt-<N>``)
-# stripped so a session built in an isolated worktree still resolves to its
-# primary repo's own active-issue marker.
-_WORKTREE_SUFFIX_RE = re.compile(r"-wt-\d+$")
+# External-row liveness: a hook state is semantic evidence, not proof that its
+# process still exists. Only a recently written transcript lets an unmatched
+# row render as an external session; otherwise missing cloud/bridge rows and
+# quiet waiting rows would linger for the whole retention window. Five minutes
+# is an inherently imperfect fallback (a process that writes once and exits
+# inside the window is indistinguishable from one still running); the two
+# deterministic checks in :func:`_external_row_liveness` run first.
+_EXTERNAL_ACTIVITY_AFTER = timedelta(minutes=5)
 
-
-def _normalize_repo_name(name: str) -> str:
-    """Lower-cased repo key for a project/directory name, worktree-suffix
-    stripped — see :data:`_WORKTREE_SUFFIX_RE`."""
-    return _WORKTREE_SUFFIX_RE.sub("", str(name or "").strip().lower())
-
-
-def active_issue_repos(active_issue_rows: Dict[str, Any]) -> FrozenSet[str]:
-    """Distinct lower-cased repo names carrying a live active-issue marker.
-
-    :func:`src.board_state.read_active_issues` already prunes stale/malformed
-    rows, so every ``repo`` value seen here is a currently-open issue
-    workflow. This is the cheap, already-fetched-every-poll signal
-    :func:`merge_sessions` uses to keep a session's card out of
-    ``idle-finished`` while its own repo's issue work is still open (#627) —
-    coarser than the branch/PR-level evidence the issue itself describes
-    (that would need a new ``git``/``gh`` call per session per poll, which
-    this Board explicitly never does — see ``scanner.git_status``'s own
-    on-demand-only docstring), but free and directionally right: prefer
-    under-claiming ``idle-finished`` over asserting it from mere silence.
-    """
-    repos = set()
-    for row in active_issue_rows.values():
-        if isinstance(row, dict):
-            repo = row.get("repo")
-            if isinstance(repo, str) and repo.strip():
-                repos.add(repo.strip().lower())
-    return frozenset(repos)
-
-# Statuses the hook writer emits; anything else renders as "unknown". This
-# gates the *raw* row status only — a card's final ``status`` can diverge
-# further downstream (the transcript overlay, and the needs-you split;
-# see :func:`merge_sessions`).
+# Statuses the hook writer emits; anything else renders as "unknown". The
+# writer's ``needs-you`` is surfaced on the card as ``awaiting-input`` (see
+# :func:`_card_status`) — the raw string never reaches a card.
 _KNOWN_STATUSES = frozenset({"working", "needs-you", "idle"})
 
 _EPOCH = datetime.min.replace(tzinfo=timezone.utc)
@@ -194,9 +162,9 @@ def _claim_walk(
 ) -> tuple:
     """Assign state rows to live sessions, newest session first.
 
-    The single source of the claim order — ``merge_sessions`` renders it and
-    ``state_row_for_session`` resolves one session's row consistently with
-    what the board displays. Returns ``(pairs, leftovers)`` where ``pairs``
+    The single source of the claim order — ``merge_sessions`` and
+    ``attach_shared_names`` both resolve rows through it, so the Board and the
+    Coding tab agree on which row belongs to which session. Returns ``(pairs, leftovers)`` where ``pairs``
     is ``[(session, row-or-None, sid-or-None), ...]`` (fleet-config#242's
     ``state_sid`` — the claimed row's own key — rides alongside the row so
     ``merge_sessions`` can put it on the card) and ``leftovers`` the unclaimed
@@ -247,24 +215,6 @@ def _live_launcher_session_ids(live: List[Dict[str, Any]]) -> "set[str]":
     }
 
 
-def state_row_for_session(
-    live: List[Dict[str, Any]],
-    state_rows: Dict[str, Dict[str, Any]],
-    session_id: str,
-) -> Optional[Dict[str, Any]]:
-    """The state row the board's merge assigns to this live session (or None).
-
-    Used by the drill-down endpoint (#301) to find a session's
-    ``transcript_path`` — the transcript UUID lives only in the hook row,
-    never in the session-host record.
-    """
-    pairs, _ = _claim_walk(live, state_rows)
-    for sess, row, _sid in pairs:
-        if str(sess.get("session_id")) == str(session_id):
-            return row
-    return None
-
-
 def attach_shared_names(
     live: List[Dict[str, Any]], state_rows: Dict[str, Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
@@ -290,33 +240,93 @@ def attach_shared_names(
     ]
 
 
+def _card_status(raw_status: Any) -> str:
+    """The card status for a hook row's raw status.
+
+    The writer's ``needs-you`` becomes ``awaiting-input`` (a prompt is
+    expected); ``working`` / ``idle`` pass through; anything else is
+    ``unknown``. No transcript is read: a status the hook did not write is
+    never inferred.
+    """
+    if raw_status == "needs-you":
+        return "awaiting-input"
+    return raw_status if raw_status in _KNOWN_STATUSES else "unknown"
+
+
+def _transcript_mtime(transcript_path: Any) -> Optional[datetime]:
+    """The transcript file's mtime as a UTC datetime, or ``None`` on any
+    OSError (missing file, permission, …)."""
+    try:
+        return datetime.fromtimestamp(
+            Path(str(transcript_path)).stat().st_mtime, tz=timezone.utc
+        )
+    except OSError:
+        return None
+
+
+def _external_row_liveness(
+    row: Optional[Dict[str, Any]],
+    now: datetime,
+    *,
+    claimed_transcripts: AbstractSet[str] = frozenset(),
+    live_launcher_session_ids: AbstractSet[str] = frozenset(),
+) -> Tuple[bool, str]:
+    """Whether an unmatched hook row has independent process-liveness proof.
+
+    A hook row can survive a hard kill or a cloud/bridge lifecycle gap for the
+    writer's whole 24-hour retention window. Its status says what the agent was
+    doing at the last event; it does not say the process is still alive. Two
+    deterministic checks run before the transcript-freshness fallback:
+
+    * ``launcher_session_id`` present but absent from the *current* live
+      session-host list is definitive: the session-host is the authority on
+      which PTYs it owns, so a row whose own PTY has been reaped is proven
+      dead regardless of how recently its transcript happened to be touched.
+    * A transcript path already claimed by a live, *matched* card's own row
+      (``claimed_transcripts``) means this unmatched row is a superseded
+      leftover of that same session — re-keyed when a worker moved from one
+      issue to the next, still pointing at the transcript the live session
+      keeps writing — not independent evidence of a second process.
+
+    Only once neither applies does a transcript written in the last 5
+    minutes remain the (inherently imperfect) fallback evidence for a
+    genuinely external row the launcher has no other way to verify.
+
+    The reason string is deliberately condition-specific so the caller can
+    leave one useful info-level breadcrumb for the next recurrence.
+    """
+    if row is None:
+        return False, "missing state row"
+    launcher_sid = row.get("launcher_session_id")
+    if launcher_sid and str(launcher_sid) not in live_launcher_session_ids:
+        return False, "launcher session no longer live"
+    transcript = row.get("transcript_path")
+    if transcript and transcript in claimed_transcripts:
+        return False, "transcript claimed by a live matched session"
+    if not transcript:
+        return False, "missing transcript path"
+    mtime = _transcript_mtime(transcript)
+    if mtime is None:
+        return False, "transcript file unavailable"
+    if now - mtime > _EXTERNAL_ACTIVITY_AFTER:
+        return False, "transcript quiet past 5 minutes"
+    return True, "recent transcript activity"
+
+
 def _live_card(
     sess: Dict[str, Any],
     row: Optional[Dict[str, Any]],
     sid: Optional[str],
     now: datetime,
-    active_repos: AbstractSet[str],
 ) -> Dict[str, Any]:
     """The board card for one live session-host session and its claimed row."""
     project_dir = sess.get("project_dir")
 
-    raw_status = (row or {}).get("status")
-    status = raw_status if raw_status in _KNOWN_STATUSES else "unknown"
+    status = _card_status((row or {}).get("status"))
     anchor = (_parse_iso(row.get("updated_at")) if row else None) or (
         _session_started(sess)
     )
-    status, anchor = _transcript_overlay(
-        row,
-        status,
-        anchor,
-        now=now,
-        live_title=sess.get("live_title"),
-        last_output_at=sess.get("last_output_at"),
-    )
-    status = _refine_waiting_status(status, (row or {}).get("transcript_path"))
     project = (row or {}).get("project") or Path(str(project_dir or "")).name
-    if status == "idle-finished" and _normalize_repo_name(project) in active_repos:
-        status = "awaiting-input"
     return {
         "session_id": sess.get("session_id"),
         "state_sid": sid,
@@ -342,7 +352,6 @@ def _external_card(
     sid: str,
     row: Dict[str, Any],
     now: datetime,
-    active_repos: AbstractSet[str],
     *,
     claimed_transcripts: AbstractSet[str],
     live_launcher_session_ids: AbstractSet[str],
@@ -351,14 +360,9 @@ def _external_card(
     stamp = _parse_iso(row.get("updated_at"))
     if stamp is None or now - stamp > STATE_STALE_AFTER:
         return None  # cold leftovers: not worth a card
-    raw_status = row.get("status")
     cwd = row.get("cwd")
     project = row.get("project") or Path(str(cwd or "")).name
-    status = raw_status if raw_status in _KNOWN_STATUSES else "unknown"
-    status, anchor = _transcript_overlay(row, status, stamp, now=now)
-    status = _refine_waiting_status(status, row.get("transcript_path"))
-    if status == "idle-finished" and _normalize_repo_name(project) in active_repos:
-        status = "awaiting-input"
+    status = _card_status(row.get("status"))
     externally_live, reason = _external_row_liveness(
         row, now,
         claimed_transcripts=claimed_transcripts,
@@ -389,7 +393,7 @@ def _external_card(
         "shared_name_source": row.get("name_source"),
         "project": str(project),
         "status": status,
-        "age_seconds": _age_seconds(anchor, now),
+        "age_seconds": _age_seconds(stamp, now),
     }
 
 
@@ -398,41 +402,18 @@ def merge_sessions(
     state_rows: Dict[str, Dict[str, Any]],
     *,
     now: Optional[datetime] = None,
-    active_issue_repos: Optional[AbstractSet[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Join live session-host sessions with hook state rows into board cards.
 
     Live sessions are walked newest-first. Exact launcher-session id + agent
     claims win; agent-less rows fall back to cwd recency. Later sessions in
     the same directory render ``unknown``. A state row with no live match only
-    becomes an external card when recent transcript activity independently
-    proves the process still exists — hook state alone is not liveness (#455).
-    Waiting statuses are checked against transcript activity — see
-    :func:`src.board_transcript._transcript_overlay` (#305) — and a hook
-    ``needs-you`` is then split into ``stalled`` / ``awaiting-decision`` /
-    ``idle-finished`` / ``awaiting-input`` (#608's
-    :func:`src.board_transcript._refine_waiting_status`) so a caller never
-    has to fetch the exchange to tell those four apart. The raw
-    ``needs-you`` string itself never reaches a card's ``status`` field. The
-    live session's ``last_output_at`` rides along with ``live_title`` to the
-    matched-pairs call site only (#636) — a busy title with a genuinely
-    stale PTY (no more raw output at all) falls through to this same
-    transcript-based logic instead of being trusted blindly; unmatched rows
-    have no live PTY to read a freshness stamp from, same scoping as
-    ``live_title`` itself.
+    becomes an external card when a recently written transcript independently
+    proves the process still exists — hook state alone is not liveness.
 
-    ``idle-finished`` gets one more downgrade after that split (#627): a
-    clean stop with nothing pending is still only an *absence* of evidence,
-    not positive proof the session's own work is done — a turn can end mid
-    task (no tool call issued, nothing to structurally detect) just as
-    cleanly as a turn that is genuinely finished. Per-session proof would
-    need a fresh ``git``/``gh`` call this Board deliberately never makes on
-    a poll, so ``active_issue_repos`` (see :func:`active_issue_repos`) is the
-    cheap, already-fetched substitute: an ``idle-finished`` card whose repo
-    still has an open issue workflow is reported ``awaiting-input`` instead
-    — a coarser, repo-level check that can occasionally keep a genuinely
-    finished session in view, which is exactly the asymmetry #627 asks for
-    (under-claim, don't over-claim).
+    A card's status is the hook row's own status (:func:`_card_status`); the
+    transcript content is never read, so a status the hook did not write is
+    never inferred.
 
     Live-session cards also carry ``state_sid`` — the claimed state row's own
     key (``None`` when unmatched) — so a Slack ping's deep link, which only
@@ -441,19 +422,18 @@ def merge_sessions(
     session-host id and no drawer target, so a deep link to one is out of scope.
     """
     now = now or _now()
-    active_repos = active_issue_repos or frozenset()
     cards: List[Dict[str, Any]] = []
     pairs, unmatched = _claim_walk(live, state_rows)
 
     for sess, row, sid in pairs:
-        cards.append(_live_card(sess, row, sid, now, active_repos))
+        cards.append(_live_card(sess, row, sid, now))
 
     claimed_transcripts = _claimed_transcript_paths(pairs)
     live_launcher_session_ids = _live_launcher_session_ids(live)
 
     for sid, row in unmatched.items():
         card = _external_card(
-            sid, row, now, active_repos,
+            sid, row, now,
             claimed_transcripts=claimed_transcripts,
             live_launcher_session_ids=live_launcher_session_ids,
         )

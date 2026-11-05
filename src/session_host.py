@@ -612,11 +612,7 @@ class PtySession:
             "prompt_title": self.prompt_title,
             "manual_title": self.manual_title,
             "output_chars": output_chars,
-            # Raw PTY-activity timestamp: lets the board tell "still genuinely
-            # producing output" apart from "live_title frozen on a busy glyph
-            # because the PTY wedged" — board_sessions.py passes it to
-            # board_transcript._pty_output_is_fresh, which gates the busy-title
-            # override on it.
+            # Raw PTY-activity timestamp (epoch seconds; 0.0 until the first read).
             "last_output_at": self._last_output_at,
         }
 
