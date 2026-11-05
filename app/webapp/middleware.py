@@ -250,7 +250,7 @@ def terminal_reachability(request: Request) -> Dict[str, Any]:
                 "The live terminal is private-network-only — it is blocked "
                 "on the public Cloudflare tunnel by design. Open the "
                 "launcher over your Tailscale or VPN URL "
-                "(https://<host>:8465) to use it."
+                "(https://<host>:<webapp port>) to use it."
             ),
         }
     cfg = request.app.state.webapp_config

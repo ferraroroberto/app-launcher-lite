@@ -64,7 +64,7 @@ There is no `.env`. Committed samples live next to each gitignored real file in 
 | `log_level` | `INFO` | Root logging level. |
 | `tailnet_host` | `""` | Any hostname/IP the phone reaches this PC on (Tailscale MagicDNS name, VPN DNS name, or static VPN/LAN IP) — builds the Apps tab's remote Open URLs and the tray's Copy-remote-URL fallback. Empty disables. |
 | `task_namespace` | `AppLauncherLite` | Task Scheduler folder the Jobs tab registers entries under (`\<name>\<job id>`); one folder name of letters, digits, `_`, `.` or `-`, read at startup. Separate from upstream app-launcher's `AppLauncher` so both can share a machine ([docs/jobs-tab.md](docs/jobs-tab.md)). |
-| `webapp` | `{}` | Embed section for the tray-spawned webapp: `enabled` (default true), `host`, `port`. |
+| `webapp` | `{}` | Embed section for the tray-spawned webapp: `enabled` (default true), `host`, `port` (default `8465`). **`webapp.port` is the one place the webapp port is set** — the tray, `launcher.py webapp`, `webapp.bat`, `tray.bat`'s restart reclaim, the PC mirror window URL and `GET /api/config` all read it (the `.bat` files through `python -m scripts.webapp_port`). A work-PC config that serves on a non-default port must carry `"webapp": { "port": <n> }`; without the key every reader falls back to `8465`. |
 
 ### `config/webapp_config.json` (UI prefs + secrets, written by "Save")
 
@@ -74,8 +74,8 @@ All keys optional — missing keys fall back to `src/webapp_config.py` defaults.
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `host` / `port` | `0.0.0.0` / `8465` | Webapp bind. |
-| `session_host_port` | `8466` | Loopback-only PTY session-host port; must differ from `port`. |
+| `host` | `0.0.0.0` | Webapp bind address. The webapp *port* is `config.json`'s `webapp.port`, not a key here (a leftover `port` key in an older file is ignored). |
+| `session_host_port` | `8466` | Loopback-only PTY session-host port; must differ from the webapp port. |
 
 **Coding / Apps / Team OS**
 

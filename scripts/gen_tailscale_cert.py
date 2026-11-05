@@ -1,7 +1,7 @@
 """Provision a Tailscale HTTPS certificate for this machine.
 
 The app's only HTTPS provisioner (issue #383 retired the self-signed-CA
-generator): browsers trust https://<machine>.tail*.ts.net:8465 without any
+generator): browsers trust https://<machine>.tail*.ts.net:<port> without any
 manual certificate installation on any device — ``tailscale cert`` issues a
 real Let's Encrypt leaf for the tailnet MagicDNS name, so there is no CA
 install, no mobileconfig detour, no Certificate Trust toggle.
@@ -33,6 +33,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.app_config import resolve_webapp_port  # noqa: E402
 from src.subprocess_flags import NO_WINDOW  # noqa: E402
 from src.tls.certs import tailscale_hostname_from_cert  # noqa: E402
 
@@ -140,10 +141,11 @@ def main() -> None:
     _provision(hostname)
     print()
     print("Restart the webapp (tray.bat --restart or webapp.bat), then open:")
-    print(f"  https://{hostname}:8465")
+    port = resolve_webapp_port()
+    print(f"  https://{hostname}:{port}")
     print()
     print("Note: the cert is issued only for the Tailscale hostname, so")
-    print("https://127.0.0.1:8465 and LAN-IP URLs will show a hostname-mismatch")
+    print(f"https://127.0.0.1:{port} and LAN-IP URLs will show a hostname-mismatch")
     print("warning. The PC mirror windows connect over loopback — see the")
     print("README HTTPS section before switching an instance that uses them.")
 

@@ -29,11 +29,12 @@ class WebappCommand(BaseCommand):
         from app.webapp.event_loop import selector_loop_factory
         from app.webapp.manager import cert_paths
         from app.webapp.serve import run
+        from src.app_config import resolve_webapp_port
         from src.webapp_config import load_webapp_config
 
         cfg = load_webapp_config()
         host = args.host or cfg.host
-        port = args.port or cfg.port
+        port = args.port or resolve_webapp_port()
 
         certs = cert_paths()
         kwargs = {

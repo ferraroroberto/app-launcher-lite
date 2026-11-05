@@ -23,7 +23,7 @@ from src.webapp_config import (
 
 
 def _write_cfg(tmp_path: Path, **overrides) -> Path:
-    cfg = {"host": "127.0.0.1", "port": 8465, "session_host_port": 8466}
+    cfg = {"host": "127.0.0.1", "session_host_port": 8466}
     cfg.update(overrides)
     target = tmp_path / "webapp_config.json"
     target.write_text(json.dumps(cfg), encoding="utf-8")
@@ -59,8 +59,9 @@ def test_override_must_differ_from_webapp_port(tmp_path, monkeypatch):
     # _validate rejects session_host_port == webapp port; the override is
     # applied before validation, so a colliding value must still be caught.
     monkeypatch.setenv(SESSION_HOST_PORT_ENV, "8465")
+    monkeypatch.setattr("src.webapp_config.resolve_webapp_port", lambda: 8465)
     with pytest.raises(ValueError):
-        load_webapp_config(_write_cfg(tmp_path, port=8465))
+        load_webapp_config(_write_cfg(tmp_path))
 
 
 def test_default_constant_unchanged():

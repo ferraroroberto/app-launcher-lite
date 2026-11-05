@@ -57,6 +57,13 @@ try {
     } else {
         Write-Host "Could not read session_host_port from the config -- assuming :8466." -ForegroundColor Yellow
     }
+    # The webapp port is config.json `webapp.port`; the resolver itself falls
+    # back to 8465 when the key is missing.
+    $webappPort = & $venvPython -m scripts.webapp_port
+    if ($LASTEXITCODE -ne 0 -or "$webappPort" -notmatch '^\d+$') {
+        Write-Host "Could not read webapp.port from config.json -- assuming :8465." -ForegroundColor Yellow
+        $webappPort = 8465
+    }
 } finally {
     Pop-Location
 }
@@ -78,7 +85,7 @@ $deadline = (Get-Date).AddSeconds(30)
 $reported = $false
 while ((Get-Date) -lt $deadline) {
     try {
-        $body = Invoke-RestMethod -Uri "https://127.0.0.1:8465/api/version" -SkipCertificateCheck -TimeoutSec 3
+        $body = Invoke-RestMethod -Uri "https://127.0.0.1:$webappPort/api/version" -SkipCertificateCheck -TimeoutSec 3
         $host_ = $body.session_host
         if ($host_.reachable -eq $true) {
             $staleText = if ($host_.stale -eq $false) { "fresh" } elseif ($host_.stale -eq $true) { "STILL STALE" } else { "unknown" }

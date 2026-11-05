@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 
 from fastapi import HTTPException, Request, WebSocket
 
+from src.app_config import resolve_webapp_port
 from src.launch_flags import build_copilot_flags
 from src.session_client import SessionHostError
 from src.tls.certs import cert_paths, tailscale_hostname_from_cert
@@ -132,9 +133,9 @@ def mirror_url(request: Request, cfg: WebappConfig, sid: str) -> str:
     ts_host = tsnet_host_from_cert()
     if ts_host is None:
         scheme = "https" if cert_present() else "http"
-        return f"{scheme}://127.0.0.1:{cfg.port}/?terminal={sid}"
+        return f"{scheme}://127.0.0.1:{resolve_webapp_port()}/?terminal={sid}"
     url = append_auth_token(
-        f"https://{ts_host}:{cfg.port}/?terminal={sid}", cfg.auth_token
+        f"https://{ts_host}:{resolve_webapp_port()}/?terminal={sid}", cfg.auth_token
     )
     gate = getattr(request.app.state, "webauthn_gate", None)
     if gate is not None and WebAuthnGate.configured(cfg):

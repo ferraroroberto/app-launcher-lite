@@ -24,6 +24,11 @@ VALID_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 # one task that whichever app synced last points at its own launcher.
 DEFAULT_TASK_NAMESPACE = "AppLauncherLite"
 
+# Port the webapp binds when ``config.json`` carries no ``webapp.port``.
+DEFAULT_WEBAPP_PORT = 8465
+
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "config.json"
+
 # The name goes verbatim into ``schtasks /TN`` and the query filter, so a
 # separator, quote or space would change which tasks a delete can reach.
 _TASK_NAMESPACE_RE = re.compile(r"[A-Za-z0-9_.-]+")
@@ -51,7 +56,7 @@ class AppConfig:
 def load_app_config(path: Optional[Path] = None) -> AppConfig:
     """Load `config/config.json` from next to this file (or an override)."""
     if path is None:
-        path = Path(__file__).resolve().parent.parent / "config" / "config.json"
+        path = DEFAULT_CONFIG_PATH
     else:
         path = Path(path).resolve()
 
@@ -80,3 +85,39 @@ def _validate(raw: Dict) -> None:
             "task_namespace must be one folder name of letters, digits, "
             "'_', '.' or '-'"
         )
+
+
+def webapp_port(webapp: Optional[Dict] = None) -> int:
+    """The webapp port from a ``config.json`` ``webapp`` section.
+
+    A missing key yields :data:`DEFAULT_WEBAPP_PORT`. An unusable value
+    (non-integer, out of range) also falls back, with a warning, so a typo
+    can never leave the tray, the ``.bat`` launchers and the mirror window
+    disagreeing about where the webapp lives.
+    """
+    raw = (webapp or {}).get("port", DEFAULT_WEBAPP_PORT)
+    try:
+        port = int(raw)
+    except (TypeError, ValueError):
+        port = 0
+    if not (1 <= port <= 65535):
+        logger.warning(
+            f"⚠️  ignoring unusable webapp.port={raw!r}; using {DEFAULT_WEBAPP_PORT}"
+        )
+        return DEFAULT_WEBAPP_PORT
+    return port
+
+
+def resolve_webapp_port(path: Optional[Path] = None) -> int:
+    """The single source of truth for the webapp port: ``config.json`` ``webapp.port``.
+
+    Every reader (tray manager, ``webapp`` CLI command, mirror window URL,
+    ``.bat`` launchers via ``scripts/webapp_port.py``) goes through here.
+    A missing or unreadable file yields the default rather than raising —
+    the launchers must still start on a fresh checkout.
+    """
+    try:
+        return webapp_port(load_app_config(path).webapp)
+    except (OSError, ValueError) as exc:  # JSONDecodeError is a ValueError
+        logger.warning(f"⚠️  could not read webapp.port ({exc}); using {DEFAULT_WEBAPP_PORT}")
+        return DEFAULT_WEBAPP_PORT

@@ -49,7 +49,7 @@ REM  IMPORTANT: the :8466 session-host is linked-but-independent -- it hosts the
 REM  user's live Coding / PTY sessions, is spawned DETACHED so a `taskkill /T`
 REM  subtree kill cannot reach it, and is re-adopted by the fresh tray on start.
 REM  It is deliberately NOT in OWNED_PORTS below (reclaiming it would kill those
-REM  sessions). Only the webapp port :8465, which this tray definitively owns
+REM  sessions). Only the webapp port (config.json webapp.port), which this tray definitively owns
 REM  and cycles, is reclaimed.
 REM ============================================================================
 
@@ -98,7 +98,11 @@ if not exist "%TRAY_PS%" (
 
 REM === ADAPT (4/4): this tray's exclusively-owned ports as a comma list.
 REM     Exclude any mutex-shared port -- see the :8466 note above. ===
+REM  The webapp port is config\config.json webapp.port (default 8465 when unset),
+REM  read through the same resolver the Python code uses; the literal is the
+REM  fallback if the venv python cannot answer.
 set "OWNED_PORTS=8465"
+if exist "%TRAY_VENV%\Scripts\python.exe" for /f "usebackq delims=" %%P in (`"%TRAY_VENV%\Scripts\python.exe" -m scripts.webapp_port`) do set "OWNED_PORTS=%%P"
 REM Optional override. Leave blank to verify http://127.0.0.1:<first-owned-port>/api/version.
 set "VERSION_URL="
 

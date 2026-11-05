@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from src import boot_autostart
+from src.app_config import resolve_webapp_port
 from src.launch_flags import build_copilot_flags
 from src.webapp_config import (
     MAX_TERMINAL_HISTORY_LINES,
@@ -36,7 +37,7 @@ async def get_config(request: Request) -> Dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
     return {
         "host": cfg.host,
-        "port": cfg.port,
+        "port": resolve_webapp_port(),
         "projects_dir": cfg.projects_dir,
         "projects_ignore": cfg.projects_ignore,
         # Coding-row buttons the user hid — agent ids plus the
