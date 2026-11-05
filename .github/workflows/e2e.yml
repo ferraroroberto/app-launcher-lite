@@ -67,7 +67,7 @@ jobs:
           E2E_LOG_POLL_DEADLINE_MS: '20000'
           E2E_STOP_OVERLAY_HIDE_MS: '30000'
           E2E_REAL_AGENT_ECHO_MS: '90000'
-        run: pwsh -File scripts/verify-before-ship.ps1
+        run: pwsh -File scripts/verify-before-ship.ps1  # no-pwsh-stub-exempt: GitHub-hosted runner ships a real pwsh
 
       - name: Upload e2e diagnostic logs
         # Runs even when the gate fails — the autoboot webapp/session-host

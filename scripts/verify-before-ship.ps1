@@ -15,7 +15,7 @@
 # (no visible change against the committed PNGs under tests/e2e/shots).
 #
 # Usage:
-#   pwsh -File scripts/verify-before-ship.ps1
+#   C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/verify-before-ship.ps1
 #   powershell -File scripts\verify-before-ship.ps1   # Windows PowerShell 5.1 works too
 #
 # A tray on :8465 may be running or not — autoboot picks a free port for its
