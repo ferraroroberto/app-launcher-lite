@@ -7,7 +7,7 @@ The pre-ship gate and its browser routing. `CLAUDE.md` keeps the one-line rule (
 Before declaring any webapp, launcher or session-host change done, run the pre-ship gate:
 
 ```
-pwsh -File scripts/verify-before-ship.ps1
+C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/verify-before-ship.ps1
 ```
 
 It boots its own disposable webapp and session-host, so no tray is needed.
