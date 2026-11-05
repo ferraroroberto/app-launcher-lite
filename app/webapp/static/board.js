@@ -2,9 +2,9 @@
  * kanban.
  *
  * Four computed columns from GET /api/board, each single-purpose — Backlog
- * (open issues), Bot's turn (sessions working/unknown/idle/idle-finished),
- * Your turn (stalled/awaiting-decision/awaiting-input sessions only — the
- * split of the old undifferentiated needs-you), Done (closed issues today).
+ * (open issues), Bot's turn (sessions working/unknown/idle), Your turn
+ * (awaiting-input sessions only — the hook's needs-you), Done (closed issues
+ * today).
  * Phone-first: the columns container is a scroll-snap carousel (one column
  * per swipe) and the strip above it doubles as column switcher + counts.
  *
@@ -64,15 +64,12 @@ function sessionLabel(card) {
 }
 
 
-// The hook-written needs-you is split server-side into four
-// caller-actionable values (src/board_transcript.py::_refine_waiting_status)
-// — the raw "needs-you" string itself never reaches a card's status field.
+// The hook-written needs-you reaches a card as "awaiting-input"
+// (src/board_sessions.py::_card_status) — the raw "needs-you" string itself
+// never reaches a card's status field.
 const STATUS_META = {
   working: { icon: 'zap', text: 'working', cls: 'is-working' },
-  stalled: { icon: 'hourglass', text: 'stalled', cls: 'is-stalled' },
-  'awaiting-decision': { icon: 'sparkle', text: 'awaiting decision', cls: 'is-awaiting-decision' },
   'awaiting-input': { icon: 'sparkle', text: 'needs you', cls: 'is-awaiting-input' },
-  'idle-finished': { icon: 'circle-check', text: 'finished', cls: 'is-idle-finished' },
   idle: { icon: 'moon', text: 'idle', cls: 'is-idle' },
   unknown: { icon: null, text: '', cls: 'is-unknown' },
 };
@@ -255,7 +252,6 @@ async function loadExchange(card, el) {
       const reasons = {
         no_exchange: 'No exchange yet.',
         session_not_found: 'Session ended — refresh the Board.',
-        native_unavailable: 'Conversation preview unavailable — open the terminal.',
         capture_unparseable: 'Conversation preview unavailable — open the terminal.',
       };
       el.textContent = reasons[body.reason] ||

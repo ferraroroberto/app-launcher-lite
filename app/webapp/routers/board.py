@@ -90,10 +90,7 @@ async def get_board(request: Request) -> Dict[str, Any]:
     )
     gitlab = gitlab_client.snapshot()
 
-    session_cards = board.merge_sessions(
-        live, state["rows"],
-        active_issue_repos=board.active_issue_repos(active_issues["rows"]),
-    )
+    session_cards = board.merge_sessions(live, state["rows"])
     columns = board.build_board(session_cards, gitlab)
     _mark_active_backlog(columns, active_issues["rows"])
 
@@ -135,37 +132,24 @@ async def refresh_gitlab(request: Request) -> Dict[str, Any]:
 async def session_exchange(sid: str, request: Request) -> Dict[str, Any]:
     """Last user↔assistant exchange for a live session (private network + passkey).
 
-    Structured native history wins when it correlates safely. A missing
-    hook JSONL or unsupported agent falls back to the launcher's exact-id PTY
-    capture + input audit, parsed on demand (never on the Board poll). Distinct
-    unavailable reasons let the client separate true-empty from source error.
+    Read from the launcher's exact-id PTY capture + input audit, parsed on
+    demand (never on the Board poll). Distinct unavailable reasons let the
+    client separate true-empty from source error.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    live, state = await asyncio.gather(
-        asyncio.to_thread(_safe_list_sessions, cfg.session_host_port),
-        asyncio.to_thread(board.read_sessions_state, Path(cfg.sessions_state_file)),
-    )
+    live = await asyncio.to_thread(_safe_list_sessions, cfg.session_host_port)
     session = next(
         (item for item in live if str(item.get("session_id")) == str(sid)), None
     )
     if session is None:
         return unavailable("session_not_found")
-    row = board.state_row_for_session(live, state["rows"], sid)
-    transcript = (row or {}).get("transcript_path")
     result = await asyncio.to_thread(
         resolve_exchange,
         session,
-        transcript,
         audit.transcript_path(sid),
         audit.session_log_path(sid),
     )
-    if result.get("source") == "launcher":
-        logger.info(
-            "ℹ️ Board exchange %s (%s) used exact-id launcher capture; "
-            "native transcript unavailable",
-            sid[:8], session.get("agent") or agents.DEFAULT_AGENT,
-        )
-    elif not result.get("available"):
+    if not result.get("available"):
         logger.info(
             "ℹ️ Board exchange %s (%s) unavailable: %s",
             sid[:8], session.get("agent") or agents.DEFAULT_AGENT,

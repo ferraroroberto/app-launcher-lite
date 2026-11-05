@@ -267,7 +267,7 @@ def test_board_strip_click_scrolls_carousel_not_page(
 
 _FAKE_EXCHANGE = {
     "available": True,
-    "source": "native",
+    "source": "launcher",
     "reason": None,
     "user": {"text": "please fix the merge", "timestamp": "2026-07-02T11:50:00Z"},
     "assistant": {
@@ -403,7 +403,7 @@ def test_board_card_drawer_shows_agent_native_exchange(
     })
     _mock_board(authed_page, payload)
     _mock_exchange(authed_page, sid="s-native", payload={
-        "available": True, "source": "native", "reason": None,
+        "available": True, "source": "launcher", "reason": None,
         "user": {"text": "fix the drawer", "timestamp": None},
         "assistant": {"text": "Native exchange resolved.", "timestamp": None},
     })

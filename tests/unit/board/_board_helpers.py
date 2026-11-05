@@ -46,29 +46,14 @@ def _state_row(cwd: str, status: str = "working", updated_min_ago: int = 5, **ex
     return row
 
 
-# ------------------------------- transcript activity overlay (#305 / #309)
+# ------------------------------------------------------- transcript files
 
 
-def _msg_line(kind: str, ts: datetime) -> str:
-    """One real conversation line — the shape the #309 tail probe accepts."""
-    return json.dumps({
-        "type": kind,
-        "timestamp": _iso(ts),
-        "message": {"role": kind, "content": [{"type": "text", "text": "hi"}]},
-    })
-
-
-def _transcript_file(tmp_path: Path, mtime: datetime, content: str = None) -> str:
-    """A transcript file with its mtime pinned to ``mtime``.
-
-    Default content is a single assistant line stamped at ``mtime``, so mtime
-    and last-activity agree (the plain #305 shape). Pass ``content`` to make
-    them diverge — the #309 metadata-only-appends case.
-    """
+def _transcript_file(tmp_path: Path, mtime: datetime) -> str:
+    """A transcript file with its mtime pinned to ``mtime`` — the only thing
+    the Board reads of it (external-row liveness)."""
     target = tmp_path / "transcript.jsonl"
-    if content is None:
-        content = _msg_line("assistant", mtime) + "\n"
-    target.write_text(content, encoding="utf-8")
+    target.write_text(json.dumps({"type": "session.start"}) + "\n", encoding="utf-8")
     stamp = mtime.timestamp()
     os.utime(target, (stamp, stamp))
     return str(target)

@@ -10,30 +10,25 @@ from pathlib import Path
 from src import board, gitlab_client
 from tests.unit.board._board_helpers import _iso, _live
 
-# ---------------------------------------------- build_board routing (#608)
+# ---------------------------------------------------- build_board routing
 
 
-def test_build_board_idle_finished_routes_to_bot_turn():
-    """idle-finished isn't an alert — it belongs in Bot's turn alongside
-    working/idle/unknown, not Your turn."""
-    cards = [{"session_id": "s1", "status": "idle-finished", "label": ""}]
-    columns = board.build_board(cards, {})
-    assert columns["your_turn"] == []
-    assert [c["session_id"] for c in columns["bot_turn"]] == ["s1"]
-
-
-def test_build_board_needs_you_family_routes_to_your_turn():
-    """stalled / awaiting-decision / awaiting-input all still mean "a human
-    needs to look at this" and route to Your turn."""
+def test_build_board_waiting_statuses_route_to_bot_turn():
+    """working / idle / unknown aren't alerts — they belong in Bot's turn."""
     cards = [
-        {"session_id": "s-stalled", "status": "stalled", "label": ""},
-        {"session_id": "s-decision", "status": "awaiting-decision", "label": ""},
-        {"session_id": "s-input", "status": "awaiting-input", "label": ""},
+        {"session_id": f"s-{status}", "status": status, "label": ""}
+        for status in ("working", "idle", "unknown")
     ]
     columns = board.build_board(cards, {})
-    assert {c["session_id"] for c in columns["your_turn"]} == {
-        "s-stalled", "s-decision", "s-input",
-    }
+    assert columns["your_turn"] == []
+    assert len(columns["bot_turn"]) == 3
+
+
+def test_build_board_awaiting_input_routes_to_your_turn():
+    """awaiting-input means "a human needs to look at this" — Your turn."""
+    cards = [{"session_id": "s-input", "status": "awaiting-input", "label": ""}]
+    columns = board.build_board(cards, {})
+    assert [c["session_id"] for c in columns["your_turn"]] == ["s-input"]
     assert columns["bot_turn"] == []
 
 

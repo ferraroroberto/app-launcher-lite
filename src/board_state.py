@@ -15,9 +15,8 @@ missing/corrupt/stale file must never error — callers get an
 exception, so a board render never breaks on a cold or torn state file.
 
 Also home to the small time/parse helpers (:func:`_now`, :func:`_parse_iso`,
-:func:`_iso_z`, :func:`_age_seconds`) shared by :mod:`src.board_sessions` and
-:mod:`src.board_transcript` — every board-side timestamp flows through these
-same two tolerant parsers.
+:func:`_iso_z`, :func:`_age_seconds`) shared by :mod:`src.board_sessions` — every
+board-side timestamp flows through these same two tolerant parsers.
 """
 
 from __future__ import annotations

@@ -14,20 +14,19 @@ Two inputs, one board:
 
 plus the in-memory GitLab snapshot from :mod:`src.gitlab_client`.
 
-This module is now a thin ``build_board`` assembly (issue #408 split — was a
-690-line god file). The three other concerns each own their own module, and
-their public names are re-exported here so every existing ``board.<name>``
-call site (routers, tests) keeps working unchanged:
+This module is a thin ``build_board`` assembly. The two other concerns each
+own their own module, and their public names are re-exported here so every
+``board.<name>`` call site (routers, tests) keeps working unchanged:
 
 * :mod:`src.board_state` — hook-state-file IO (:func:`read_sessions_state`,
   :func:`read_active_issues`).
 * :mod:`src.board_sessions` — session-claim/merge logic
-  (:func:`merge_sessions`, :func:`attach_shared_names`,
-  :func:`state_row_for_session`). Writer-provided launcher id + agent wins;
-  agent-less rows use an agent-gated normalized-cwd fallback.
-* :mod:`src.board_transcript` — transcript-JSONL parsing
-  (:func:`last_exchange`, plus the activity-overlay/external-liveness helpers
-  ``merge_sessions`` calls internally).
+  (:func:`merge_sessions`, :func:`attach_shared_names`). Writer-provided
+  launcher id + agent wins; agent-less rows use an agent-gated normalized-cwd
+  fallback.
+
+A card's status is the hook row's own status — no transcript is parsed
+(Copilot's ``events.jsonl`` is not the Claude shape the removed parsers read).
 
 Degradation contract (#164 acceptance): a missing/corrupt/stale state file
 must never error — session cards fall back to ``unknown`` status and the
@@ -57,23 +56,16 @@ from src.board_state import (  # noqa: F401 — re-exported for board.<name> cal
     read_sessions_state,
 )
 from src.board_sessions import (  # noqa: F401 — re-exported for board.<name> callers
-    active_issue_repos,
     attach_shared_names,
     merge_sessions,
-    state_row_for_session,
-)
-from src.board_transcript import (  # noqa: F401 — re-exported
-    last_exchange,
 )
 
 logger = logging.getLogger(__name__)
 
 
-# The family of statuses that still mean "a human needs to look at
-# this" after board_transcript's needs-you split. ``idle-finished`` is
-# deliberately excluded — a clean-stopped session that nothing is pending on
-# isn't an alert, it's Claude quietly holding a workspace, same as ``idle``.
-_NEEDS_YOU_STATUSES = frozenset({"stalled", "awaiting-decision", "awaiting-input"})
+# The one card status that means "a human needs to look at this": the hook's
+# ``needs-you`` surfaced as ``awaiting-input``.
+_NEEDS_YOU_STATUSES = frozenset({"awaiting-input"})
 
 
 def build_board(
@@ -83,12 +75,10 @@ def build_board(
     """Route the two sources into the four computed columns.
 
     Each column holds one kind of card (#399, reduced to four in Phase 5):
-    Backlog = open issues. Bot's turn = sessions working / unknown / idle /
-    idle-finished (idle and idle-finished are dimmed client-side, not hidden
-    — a session with nothing pending is still the bot holding a workspace,
-    not an alert). Your turn = :data:`_NEEDS_YOU_STATUSES` only (#608:
-    ``stalled`` / ``awaiting-decision`` / ``awaiting-input`` — the needs-you
-    split's three genuinely human-actionable outcomes) — a terminal that
+    Backlog = open issues. Bot's turn = sessions working / unknown / idle
+    (idle is dimmed client-side, not hidden — a session with nothing pending
+    is still the bot holding a workspace, not an alert). Your turn =
+    :data:`_NEEDS_YOU_STATUSES` only (``awaiting-input``) — a terminal that
     needs a human. Done = today's closed issues only — a merged MR that
     closed one is already reflected by the issue itself.
     """

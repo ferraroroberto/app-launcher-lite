@@ -1,9 +1,7 @@
-"""Agent-aware conversation previews for the Board drawer (issue #457).
+"""Conversation previews for the Board drawer (issue #457).
 
-The hook row's native JSONL remains the best source when it exists because it
-is structured chat data.  Launcher-owned PTYs also have an exact-id capture,
-however, and that is the common fallback for sessions whose declared JSONL is
-absent and for agents that publish no hook transcript at all.
+The source is the launcher-owned PTY's exact-id capture: no agent transcript
+is parsed, because Copilot's ``events.jsonl`` is not a shape this module reads.
 
 The capture is terminal output, not prose.  A bounded tail is replayed through
 ``pyte`` and reply blocks are selected by the terminal's leading-bullet colour
@@ -21,7 +19,6 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pyte
 
-from src.board_transcript import last_exchange
 from src.vt_snapshot import _MirrorScreen
 
 logger = logging.getLogger(__name__)
@@ -79,15 +76,10 @@ def unavailable(reason: str) -> Dict[str, Any]:
 
 def resolve_exchange(
     session: Dict[str, Any],
-    native_path: Any,
     launcher_capture_path: Path,
     launcher_input_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Resolve one live session's exchange through the source hierarchy."""
-    native = last_exchange(native_path)
-    if native.get("available"):
-        return {**native, "source": "native", "reason": None}
-
+    """Resolve one live session's exchange from its exact-id PTY capture."""
     fallback = launcher_last_exchange(
         launcher_capture_path,
         launcher_input_path=launcher_input_path,
@@ -98,15 +90,9 @@ def resolve_exchange(
     if fallback.get("available"):
         return fallback
 
-    native_declared = bool(native_path)
-    capture_exists = _nonempty_file(launcher_capture_path)
-    if capture_exists:
-        reason = str(fallback.get("reason") or "capture_unparseable")
-    elif native_declared:
-        reason = "native_unavailable"
-    else:
-        reason = "no_exchange"
-    return unavailable(reason)
+    if _nonempty_file(launcher_capture_path):
+        return unavailable(str(fallback.get("reason") or "capture_unparseable"))
+    return unavailable("no_exchange")
 
 
 def launcher_last_exchange(
