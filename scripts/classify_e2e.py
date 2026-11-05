@@ -214,6 +214,11 @@ def classify(paths: Sequence[str]) -> Routing:
 
 
 # --------------------------------------------------------------------- git diff
+# A read-only diff/rev-parse over a local repo returns in milliseconds; this bounds a
+# wedged git so the gate escalates to the full suite instead of hanging.
+_GIT_TIMEOUT_S = 120
+
+
 def _run_git(args: List[str]) -> List[str]:
     try:
         # git-wrapper-exempt: runs in the caller's cwd and degrades to [] on any
@@ -224,7 +229,11 @@ def _run_git(args: List[str]) -> List[str]:
             creationflags=NO_WINDOW,
             # Read-only: never take the optional index.lock.
             env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+            timeout=_GIT_TIMEOUT_S,
         )
+    except subprocess.TimeoutExpired:
+        print(f"classify_e2e: git {args[0]} timed out after {_GIT_TIMEOUT_S}s; routing escalates to full", file=sys.stderr)
+        return []
     except OSError:
         return []
     if out.returncode != 0:
