@@ -35,13 +35,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.webapp.event_loop import LOOP_FACTORY  # noqa: E402
+from src.app_config import resolve_webapp_port  # noqa: E402
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP  # noqa: E402
 from src.tls.certs import cert_paths  # noqa: E402
 
 DEFAULT_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 SAMPLE_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.sample.yml"
 TUNNEL_URL_FILE = PROJECT_ROOT / "webapp" / "last_tunnel_url.txt"
-DEFAULT_PORT = 8465
 
 
 def _have_listener(port: int) -> bool:
@@ -207,7 +207,7 @@ def main() -> int:
             "but last_tunnel_url.txt won't be updated."
         )
 
-    port = int(os.environ.get("WEBAPP_PORT", DEFAULT_PORT))
+    port = resolve_webapp_port()
     uvicorn_proc: Optional[subprocess.Popen] = None
     if _have_listener(port):
         logger.info(f"🔗 Adopting existing webapp on :{port}")

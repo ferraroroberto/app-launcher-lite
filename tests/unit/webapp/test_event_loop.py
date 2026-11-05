@@ -72,7 +72,7 @@ def test_webapp_cmd_passes_loop_factory(monkeypatch):
     captured = {}
 
     def fake_run(host, port, **kwargs):
-        captured.update(kwargs)
+        captured.update(kwargs, port=port)
 
     monkeypatch.setattr("app.webapp.serve.run", fake_run)
     monkeypatch.setattr(
@@ -80,12 +80,14 @@ def test_webapp_cmd_passes_loop_factory(monkeypatch):
     )
     monkeypatch.setattr(
         "src.webapp_config.load_webapp_config",
-        lambda: type("Cfg", (), {"host": "127.0.0.1", "port": 18465})(),
+        lambda: type("Cfg", (), {"host": "127.0.0.1"})(),
     )
+    monkeypatch.setattr("src.app_config.resolve_webapp_port", lambda *a, **k: 18465)
 
     WebappCommand(config=None).execute(argparse.Namespace(host=None, port=None, server="hypercorn"))
     assert captured.get("loop_factory") is selector_loop_factory
     assert captured.get("server") == "hypercorn"
+    assert captured.get("port") == 18465
 
 
 def test_e2e_autoboot_wires_loop_factory():

@@ -25,6 +25,7 @@ import requests
 
 from app.tray.single_instance import cross_process_lock
 from app.webapp.event_loop import LOOP_FACTORY
+from src.app_config import DEFAULT_WEBAPP_PORT, webapp_port
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
 from src.tls.certs import cert_paths
 
@@ -43,7 +44,7 @@ class WebappManagerConfig:
 
     enabled: bool = True
     host: str = "0.0.0.0"
-    port: int = 8465
+    port: int = DEFAULT_WEBAPP_PORT
     startup_timeout_seconds: float = 15.0
     request_timeout_seconds: float = 1.0
     poll_interval_seconds: float = 0.4
@@ -66,7 +67,7 @@ def load_config(raw: Optional[Dict[str, Any]] = None) -> WebappManagerConfig:
     return WebappManagerConfig(
         enabled=bool(raw.get("enabled", True)),
         host=str(raw.get("host", "0.0.0.0")),
-        port=int(raw.get("port", 8465)),
+        port=webapp_port(raw),
         startup_timeout_seconds=float(raw.get("startup_timeout_seconds", 15.0)),
         request_timeout_seconds=float(raw.get("request_timeout_seconds", 1.0)),
         poll_interval_seconds=float(raw.get("poll_interval_seconds", 0.4)),

@@ -22,6 +22,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
+import pytest
+
 from app.webapp.routers import _helpers
 from app.webapp.routers._helpers import (
     mirror_url,
@@ -155,9 +157,16 @@ def test_tsnet_host_missing_cert_is_none(tmp_path) -> None:
 # --------------------------------------------------------------- mirror_url
 
 
+@pytest.fixture(autouse=True)
+def _webapp_port(monkeypatch) -> None:
+    # The mirror URL's port comes from config.json; pin it so the live
+    # config on the dev box can never decide these tests.
+    monkeypatch.setattr(_helpers, "resolve_webapp_port", lambda: 8465)
+
+
 def _cfg(**over) -> SimpleNamespace:
     base = dict(
-        port=8465, auth_token="", webauthn_rp_id="", webauthn_rp_name="",
+        auth_token="", webauthn_rp_id="", webauthn_rp_name="",
         webauthn_origin="",
     )
     base.update(over)
@@ -178,6 +187,14 @@ def test_mirror_url_loopback_on_self_signed(monkeypatch) -> None:
     monkeypatch.setattr(_helpers, "cert_present", lambda: True)
     url = mirror_url(_request_with_gate(None), _cfg(auth_token="sekrit"), "abc")
     assert url == "https://127.0.0.1:8465/?terminal=abc"
+
+
+def test_mirror_url_uses_the_configured_webapp_port(monkeypatch) -> None:
+    monkeypatch.setattr(_helpers, "resolve_webapp_port", lambda: 9123)
+    monkeypatch.setattr(_helpers, "tsnet_host_from_cert", lambda: None)
+    monkeypatch.setattr(_helpers, "cert_present", lambda: False)
+    url = mirror_url(_request_with_gate(None), _cfg(), "abc")
+    assert url == "http://127.0.0.1:9123/?terminal=abc"
 
 
 def test_mirror_url_tsnet_with_token(monkeypatch) -> None:

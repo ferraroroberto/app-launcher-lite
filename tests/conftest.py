@@ -173,7 +173,6 @@ def _isolate_configs(tmp_path: Path, monkeypatch) -> dict:
         json.dumps(
             {
                 "host": "127.0.0.1",
-                "port": 8465,
                 "projects_dir": str(tmp_projects_dir),
                 "apps_scan_root": str(tmp_apps_root),
                 "auth_token": "",

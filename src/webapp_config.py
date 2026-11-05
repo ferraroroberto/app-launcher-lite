@@ -6,7 +6,8 @@ runs. The CLI also reads this file so both surfaces share one source
 of truth.
 
 Holds:
-- network knobs (host, port)
+- network knob (host); the webapp port lives in ``config.json``'s
+  ``webapp.port`` (see :func:`src.app_config.resolve_webapp_port`)
 - scan roots for coding projects and Apps
 - the Copilot launch *settings* (model list, model, autopilot, context,
   effort) together with the ``VALID_*`` value sets the fields validate
@@ -32,6 +33,7 @@ from typing import Dict, Optional
 from urllib.parse import urlencode, urlparse, urlunparse
 
 from src._json_io import atomic_write_json
+from src.app_config import resolve_webapp_port
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,6 @@ DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "webapp_config.json"
 SAMPLE_CONFIG_PATH = PROJECT_ROOT / "config" / "webapp_config.sample.json"
 
 DEFAULT_HOST = "0.0.0.0"
-DEFAULT_PORT = 8465
 # Loopback port the PTY session-host binds. Never network-reachable.
 DEFAULT_SESSION_HOST_PORT = 8466
 # Env override for the session-host port. Set ONLY by the e2e pre-ship gate's
@@ -113,7 +114,6 @@ class WebappConfig:
     """User-authored, persisted webapp settings."""
 
     host: str = DEFAULT_HOST
-    port: int = DEFAULT_PORT
     # Master folder whose direct child directories the Coding tab
     # lists as launchable projects.
     projects_dir: str = field(default_factory=_default_projects_dir)
@@ -330,7 +330,6 @@ def load_webapp_config(
 
     cfg = WebappConfig(
         host=str(raw.get("host", DEFAULT_HOST)),
-        port=int(raw.get("port", DEFAULT_PORT)),
         projects_dir=str(raw.get("projects_dir") or _default_projects_dir()),
         projects_ignore=[str(p) for p in (raw.get("projects_ignore") or [])],
         coding_favorites=[str(p) for p in (raw.get("coding_favorites") or [])],
@@ -451,13 +450,11 @@ def _validate(cfg: WebappConfig) -> None:
     # config loading. Empty gitlab_group is valid (Board shows a hint).
     cfg.gitlab_group = str(cfg.gitlab_group or "").strip()
     cfg.gitlab_host = str(cfg.gitlab_host or "").strip()
-    if not (1 <= cfg.port <= 65535):
-        raise ValueError(f"port out of range: {cfg.port}")
     if not (1 <= cfg.session_host_port <= 65535):
         raise ValueError(
             f"session_host_port out of range: {cfg.session_host_port}"
         )
-    if cfg.session_host_port == cfg.port:
+    if cfg.session_host_port == resolve_webapp_port():
         raise ValueError("session_host_port must differ from the webapp port")
     if not (MIN_TERMINAL_HISTORY_LINES <= cfg.terminal_history_lines <= MAX_TERMINAL_HISTORY_LINES):
         raise ValueError(
