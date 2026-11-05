@@ -47,6 +47,10 @@ from src.subprocess_flags import NO_WINDOW
 
 logger = logging.getLogger(__name__)
 
+# schtasks.exe answers a create/query/delete in well under a second; a hang means a
+# wedged Task Scheduler service, and callers treat the synthetic failure like any other.
+SCHTASKS_TIMEOUT_S = 60
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
@@ -107,13 +111,19 @@ def resolve_venv_python(script_path: Path) -> Optional[Path]:
 
 def _run_schtasks(argv: List[str]) -> subprocess.CompletedProcess:
     """Invoke ``schtasks.exe`` with ``argv``. Module-level so tests can mock it."""
-    return subprocess.run(
-        argv,
-        capture_output=True,
-        text=True,
-        check=False,
-        creationflags=NO_WINDOW,
-    )
+    try:
+        return subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            check=False,
+            creationflags=NO_WINDOW,
+            timeout=SCHTASKS_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        message = f"schtasks timed out after {SCHTASKS_TIMEOUT_S}s"
+        logger.error("❌ %s: %s", message, " ".join(argv[:2]))
+        return subprocess.CompletedProcess(argv, returncode=1, stdout="", stderr=message)
 
 
 def _launcher_python(*, visible: bool = False) -> str:

@@ -191,6 +191,21 @@ def test_run_git_disables_optional_index_lock(monkeypatch):
     monkeypatch.setenv("GIT_OPTIONAL_LOCKS", "1")
     assert classify_e2e._run_git(["diff", "--name-only"]) == ["a.py"]
     assert seen["env"]["GIT_OPTIONAL_LOCKS"] == "0"
+    assert seen["timeout"] == classify_e2e._GIT_TIMEOUT_S
+
+
+def test_run_git_timeout_reads_as_no_files(monkeypatch, capsys):
+    """A wedged git yields no paths, which routes the whole diff to the full suite."""
+    import subprocess
+
+    from scripts import classify_e2e
+
+    def _hang(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, kwargs["timeout"])
+
+    monkeypatch.setattr(subprocess, "run", _hang)
+    assert classify_e2e._run_git(["diff", "--name-only"]) == []
+    assert "timed out" in capsys.readouterr().err
 
 
 # ------------------------------------------------ session-host touched warning
