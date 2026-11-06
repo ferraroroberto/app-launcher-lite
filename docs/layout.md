@@ -13,7 +13,7 @@ Where code goes in this repo. Its shape is `webapp-tray` (declared as `shape` in
 | `config/` | Committed `*.sample.json` templates; the real config files are gitignored. |
 | `assets/` | Generated icons the app ships: the tray `.ico` and the Stream Deck button. |
 | `docs/` | Durable reference, this page included. |
-| `webapp/` | Declared extra root, see below. |
+| `webapp/` | The tray-owned webapp's runtime-state folder (certificates, logs, briefs, the pid and tunnel files, all gitignored) and two tracked samples, `cloudflared.sample.yml` and `terminal-themes.sample.json`, which sit next to the real copies they template. The tray and the webapp read and write it at that path. |
 
 Beside them sit the entry points (`launcher.py`, `tray.bat`, `webapp.bat`, `webapp_tunnel_named.bat`, `setup.bat`) and the hidden `.claude/` (the repo's `verify` skill) and `.github/` (the advisory e2e workflow).
 
@@ -56,7 +56,6 @@ The pytest suite sits in `tests/unit/<domain>/`, one `test_<module>.py` per modu
 
 ## Declared exceptions
 
-- **`webapp/`** is the tray-owned webapp's runtime-state folder (certificates, logs, briefs, the pid and tunnel files, all gitignored). It also tracks two sample files, `cloudflared.sample.yml` and `terminal-themes.sample.json`, which sit next to the real copies they template. It is listed in `extra_roots` because the tray and the webapp read and write it at that path.
 - **Baselined offenders.** `.structure-ratchet-baseline.json` records each file, function and directory already over a limit at its size when the ratchet was adopted. They may not grow; they are split in their own changes, not hidden. The baseline is empty today: no file, function or directory is over a limit.
 
 ## Stylesheets

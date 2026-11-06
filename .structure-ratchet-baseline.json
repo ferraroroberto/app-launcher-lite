@@ -4,7 +4,7 @@
   "root_extras": [],
   "shape_contract": {
     "root_files": [],
-    "redundant": ["webapp/"],
+    "redundant": [],
     "folder_types": {}
   },
   "entries": []
