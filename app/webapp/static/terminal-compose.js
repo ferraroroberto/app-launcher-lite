@@ -23,17 +23,18 @@ const _COMPOSE_MAX_ROWS = 8;
 const _IMAGE_SUBMIT_DELAY_MS = 350;
 
 // Bulk-text CR settle watch: a dictation-sized paste can outrun
-// Claude Code's bracketed-paste ingest when the machine is under load
+// the agent's bracketed-paste ingest when the machine is under load
 // (concurrent PTY sessions, gates, browsers — measured at 5× latency
 // spikes), so the immediately-following CR lands mid-ingest and becomes a
 // newline into the still-settling composer instead of Submit. For payloads
 // past the threshold, the CR is held until the session's output stream shows
 // the paste was ingested AND settled: some output arrived after the send
-// (Claude echoes the paste / collapses it into a "[Pasted text #N]" chip)
+// (the agent echoes the paste / collapses it into a "[Pasted text #N]" chip)
 // and that output has been quiet for _BULK_QUIET_MS — with a floor (never
 // sooner than _BULK_FLOOR_MS) and a cap (send anyway at _BULK_CAP_MS).
-// Calibrated with a real-Claude ConPTY probe under synthetic load. Not yet
-// re-probed against the Copilot CLI, so treat the values as unverified there:
+// Calibrated with a ConPTY probe of Claude Code under synthetic load, the
+// agent this was written for. Copilot CLI (this fork's only agent) has not
+// been probed, so the values are unverified there:
 // immediate CR submitted 1/20, fixed 350 ms 19/20, fixed 1000 ms 19/20, a
 // bare quiet-window 13/20 (under load the echo itself is deferred, so it
 // fires early) — this echo-then-quiet protocol was the only one to run
@@ -45,7 +46,7 @@ const _BULK_QUIET_MS = 350;
 const _BULK_CAP_MS = 3000;
 
 export function growComposeInput() {
-  // Auto-grow up to _COMPOSE_MAX_ROWS; the iOS return key adds newlines,
+  // Auto-grow up to _COMPOSE_MAX_ROWS; the phone keyboard's return key adds newlines,
   // only ➤ Send forwards to the PTY.
   const ta = els.terminalComposeInput;
   ta.style.height = 'auto';
