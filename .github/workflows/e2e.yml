@@ -1,4 +1,4 @@
-# Pre-ship gate on CI (issue #38, deferred from #33 scope D).
+# Pre-ship gate on CI.
 #
 # Runs the exact same gate as the local `scripts/verify-before-ship.ps1` so the
 # checks run without relying on the developer remembering. The local gate stays
@@ -22,9 +22,9 @@ concurrency:
 jobs:
   verify-before-ship:
     runs-on: windows-2025
-    # Typical green is ~8 min since #534 unskipped the UI-terminal e2e tests
+    # Typical green is ~8 min with the UI-terminal e2e tests unskipped
     # (stub-backed, no Claude CLI needed); the suite has wedged on a slow
-    # runner with no cap (issue #184). Bound it so a wedge fails fast (red)
+    # runner with no cap. Bound it so a wedge fails fast (red)
     # instead of running to GitHub's 6 h ceiling, with headroom over the
     # new typical so a merely-loaded runner isn't a false red.
     timeout-minutes: 20
@@ -56,11 +56,11 @@ jobs:
           Copy-Item config/apps.sample.json config/apps.json
 
       - name: Run pre-ship gate
-        # Give the input-delivery polls headroom on the slow hosted runner
-        # (issue #184): 20 s on CI vs the 5 s local default in conftest.py.
-        # Likewise widen the stop/kill overlay-hide budget (#286) so the
+        # Give the input-delivery polls headroom on the slow hosted runner:
+        # 20 s on CI vs the 5 s local default in conftest.py.
+        # Likewise widen the stop/kill overlay-hide budget so the
         # graceful-then-force stop window doesn't time the phone-projection test out.
-        # And widen the real-agent echo budget (#678) for the reconnect-replay
+        # And widen the real-agent echo budget for the reconnect-replay
         # test's real-agent cold boot (currently skipped pending a probe on a
         # deployment machine -- see tests/e2e/terminal/test_terminal_reconnect.py).
         env:
@@ -72,7 +72,7 @@ jobs:
       - name: Upload e2e diagnostic logs
         # Runs even when the gate fails — the autoboot webapp/session-host
         # output and the per-session input logs make any future e2e failure
-        # diagnosable from the run page without a local repro (issue #58).
+        # diagnosable from the run page without a local repro.
         if: always()
         uses: actions/upload-artifact@v7
         with:
