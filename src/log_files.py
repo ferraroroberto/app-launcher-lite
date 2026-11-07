@@ -49,8 +49,8 @@ def ensure_file_log_handler(
     ):
         return
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        handler = logging.FileHandler(path, encoding="utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: caller-supplied log path, passed by the entry points
+        handler = logging.FileHandler(path, encoding="utf-8")  # runtime-write-exempt: caller-supplied log path, passed by the entry points
         handler.setLevel(level)
         handler.setFormatter(logging.Formatter(LOG_FORMAT))
         target.addHandler(handler)

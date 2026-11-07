@@ -401,7 +401,7 @@ def load_webapp_config(
 def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
     """Atomically write the config back to disk."""
     target = _resolve_config_path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
+    target.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: webapp_config.json, machine-local config the webapp reads
 
     # Every field is persisted, so the dataclass itself is the key list —
     # no hand-maintained payload dict to fall out of sync when a knob is

@@ -20,14 +20,13 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.webapp.middleware import LOOPBACK_HOSTS, via_cloudflare
+from app.webapp.routers._helpers import PROJECT_ROOT, maybe_json
 from src.api_tokens import constant_time_equals
 from src.log_files import ensure_file_log_handler
 from src.login_lockout import LockoutAlert, LoginLockout, retry_after_header
 from src.notify import Notifier, NotifierError, TelegramConfig, build_notifier
 from src.webapp_config import WebappConfig
-
-from app.webapp.middleware import LOOPBACK_HOSTS, via_cloudflare
-from app.webapp.routers._helpers import PROJECT_ROOT, maybe_json
 
 auth_logger = logging.getLogger("launcher.auth")
 _AUTH_LOG_PATH = PROJECT_ROOT / "webapp" / "auth.log"

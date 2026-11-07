@@ -35,7 +35,6 @@ from src.agents import (
 )
 from src.audit import transcript_path
 from src.env_path import effective_path
-from src.subprocess_flags import NO_WINDOW
 from src.session_host_text import (
     PROMPT_TITLE_BUF_MAX,
     cook_input_line,
@@ -45,6 +44,7 @@ from src.session_host_text import (
     strip_color_osc,
     trim_ring_head,
 )
+from src.subprocess_flags import NO_WINDOW
 from src.vt_snapshot import VtSnapshot
 
 try:  # Windows-only — ConPTY via pywinpty.
@@ -226,8 +226,8 @@ class PtySession:
         """Spawn the background thread that pumps PTY output to subscribers."""
         try:
             path = transcript_path(self.session_id)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            self._transcript = path.open("a", encoding="utf-8", errors="replace")
+            path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: session transcript under the runtime sessions dir
+            self._transcript = path.open("a", encoding="utf-8", errors="replace")  # runtime-write-exempt: session transcript under the runtime sessions dir
             self._transcript.write(
                 f"\n=== session {self.session_id} :: {self.name} :: "
                 f"{time.strftime('%Y-%m-%d %H:%M:%S')} ===\n"

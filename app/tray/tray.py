@@ -38,14 +38,6 @@ from typing import Optional
 
 import yaml
 
-from src import AppConfig
-from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
-from src.webapp_config import (
-    DEFAULT_SESSION_HOST_PORT,
-    append_auth_token,
-    load_webapp_config,
-)
-
 from app.tray import registered_trays, tailscale
 from app.tray.single_instance import SingleInstance
 from app.tray.watchdog import HealthWatchdog
@@ -53,6 +45,13 @@ from app.webapp.manager import (
     WebappManager,
     cert_paths,
     load_config,
+)
+from src import AppConfig
+from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
+from src.webapp_config import (
+    DEFAULT_SESSION_HOST_PORT,
+    append_auth_token,
+    load_webapp_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -141,9 +140,9 @@ def _clipboard_copy(text: str) -> bool:
 def _breadcrumb(path: Path, msg: str) -> None:
     """Append a timestamped breadcrumb line to ``path`` (best-effort)."""
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: breadcrumb path is the tray's runtime debug log, passed in by the caller
         stamp = datetime.datetime.now().isoformat(timespec="seconds")
-        with path.open("a", encoding="utf-8") as fh:
+        with path.open("a", encoding="utf-8") as fh:  # runtime-write-exempt: breadcrumb path is the tray's runtime debug log, passed in by the caller
             fh.write(f"{stamp} {msg}\n")
     except OSError:
         pass

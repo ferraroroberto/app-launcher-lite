@@ -69,8 +69,8 @@ from src.jobs.config import Job, get_by_id, load_jobs
 from src.jobs.secrets import resolve_env_overlay
 from src.jobs.trigger import TRIGGER_SYNTAX, is_valid_trigger
 from src.notifications import (
-    Notifier,
     NoopNotifier,
+    Notifier,
     build_notifier_from_config,
     build_telegram_notifier_from_config,
 )
@@ -233,7 +233,7 @@ def _finalize_cooldown_skip(job: Job, args: argparse.Namespace) -> Optional[int]
     remaining, cooldown_seconds, anchor_id = cooldown_state
     skip_run_id = args.run_id or new_run_id()
     skip_dir = runs_dir(job.id) / skip_run_id
-    skip_dir.mkdir(parents=True, exist_ok=True)
+    skip_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: per-job run dir under the runtime jobs dir, outside the code folders
     stamped = datetime.now().isoformat(timespec="seconds")
     write_run_json(
         skip_dir,
@@ -421,7 +421,7 @@ def _spawn_and_wait(
     # read run history or config itself.
     max_runtime_seconds, no_output_seconds = resolve_watchdog_limits(job)
     try:
-        with output_log.open("wb") as fh:
+        with output_log.open("wb") as fh:  # runtime-write-exempt: output.log sits in the per-job run dir under the runtime jobs dir
             # A ``visible`` job streams the child's combined output to
             # BOTH output.log (remote run-history) and the launcher's
             # own console (the user watching on the PC). Non-visible
@@ -471,7 +471,7 @@ def _spawn_and_wait(
         exit_code = -1
         status = "failed"
         try:
-            with output_log.open("ab") as fh:
+            with output_log.open("ab") as fh:  # runtime-write-exempt: output.log sits in the per-job run dir under the runtime jobs dir
                 fh.write(f"[run-job spawn error] {exc}\n".encode("utf-8"))
         except OSError:
             pass
@@ -742,7 +742,7 @@ def _build_child_env(
     env.update(job_env)
     env.update(extra_env)
     artifact_dir = run_dir / "artifacts"
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: per-job run dir under the runtime jobs dir, outside the code folders
     env["JOB_ARTIFACT_DIR"] = str(artifact_dir.resolve())
     if dry_run:
         env["JOB_DRY_RUN"] = "1"
@@ -835,7 +835,7 @@ class RunJobCommand(BaseCommand):
         # run.json / output.log.
         if args.run_id:
             run_dir = runs_dir(job.id) / args.run_id
-            run_dir.mkdir(parents=True, exist_ok=True)
+            run_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: per-job run dir under the runtime jobs dir, outside the code folders
         else:
             run_dir = new_run_dir(job.id, new_run_id())
 

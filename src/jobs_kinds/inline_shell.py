@@ -15,6 +15,7 @@ from typing import Dict, List, Tuple
 
 from src.jobs.config import Job
 from src.jobs_kinds.base import Problem
+
 # Dotted-path submodule imports (not ``from src.jobs_kinds import batch``) —
 # this module is itself imported *by* ``src/jobs_kinds/__init__.py``, so
 # resolving siblings via an attribute lookup on the partially-initialised
@@ -83,7 +84,7 @@ class InlineShellKind:
             raise ValueError(f"inline-shell job has unsupported ext: {ext!r}")
 
         temp_script = run_dir / f"_inline{ext}"
-        temp_script.write_text(str(body), encoding="utf-8")
+        temp_script.write_text(str(body), encoding="utf-8")  # runtime-write-exempt: temp script is written into the per-job run dir under the runtime jobs dir
 
         # A synthetic Job pointed at the temp file so the sibling kind's
         # build_argv (which reads job.script_path) needs no changes at all.

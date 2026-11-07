@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from app.webapp.routers._helpers import PROJECT_ROOT, STATIC_DIR
 from src import session_client, system_load
 from src.agents import detect_agents
 from src.build_info import build_identity, resolve_git_sha
@@ -25,8 +26,6 @@ from src.scanner import pretty_folder_name
 from src.session_host_paths import declared_session_host_paths, paths_touched_between
 from src.static_versioning import asset_hash_for, inline_includes, rewrite_index_html
 from src.webapp_config import WebappConfig
-
-from app.webapp.routers._helpers import PROJECT_ROOT, STATIC_DIR
 
 _log = logging.getLogger(__name__)
 

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import pathlib
 
-
 from scripts import gen_icons
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent

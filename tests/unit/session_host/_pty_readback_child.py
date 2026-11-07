@@ -10,9 +10,9 @@ This is the bounded-pipe-faithful check the reopened #64 demanded: a
 ``MagicMock`` PtyProcess can never drop bytes, so only a real pseudoconsole
 readback proves ``PtySession.write`` delivers a multi-KB payload intact.
 """
+import ctypes
 import os
 import sys
-import ctypes
 from ctypes import wintypes
 
 SENTINEL = b"<<<EOP>>>"

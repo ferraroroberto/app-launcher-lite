@@ -52,15 +52,15 @@ def new_run_dir(job_id: str, run_id: Optional[str] = None) -> Path:
     other.
     """
     base = runs_dir(job_id)
-    base.mkdir(parents=True, exist_ok=True)
+    base.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: per-job run dir under the runtime jobs dir, outside the code folders
     rid = run_id or new_run_id()
     target = base / rid
     n = 2
     while target.exists():
         target = base / f"{rid}-{n}"
         n += 1
-    target.mkdir()
-    (target / "artifacts").mkdir()
+    target.mkdir()  # runtime-write-exempt: per-job run dir under the runtime jobs dir, outside the code folders
+    (target / "artifacts").mkdir()  # runtime-write-exempt: per-job run dir under the runtime jobs dir, outside the code folders
     return target
 
 

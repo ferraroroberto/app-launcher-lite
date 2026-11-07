@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from app.webapp.routers.team_os import resolve_within, _recap_staleness
+from app.webapp.routers.team_os import _recap_staleness, resolve_within
 
 
 # --------------------------------------------------------------- path jail

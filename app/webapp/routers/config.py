@@ -11,6 +11,13 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.webapp.middleware import terminal_reachability
+from app.webapp.routers._helpers import (
+    PROJECT_ROOT,
+    cert_present,
+    copilot_flags_payload,
+    maybe_json,
+)
 from src import boot_autostart
 from src.app_config import resolve_webapp_port
 from src.launch_flags import build_copilot_flags
@@ -19,14 +26,6 @@ from src.webapp_config import (
     MIN_TERMINAL_HISTORY_LINES,
     WebappConfig,
     update_webapp_config,
-)
-
-from app.webapp.middleware import terminal_reachability
-from app.webapp.routers._helpers import (
-    PROJECT_ROOT,
-    cert_present,
-    copilot_flags_payload,
-    maybe_json,
 )
 
 router = APIRouter()

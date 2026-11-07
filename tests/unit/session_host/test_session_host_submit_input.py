@@ -18,6 +18,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src import session_host as session_host_module
 from src.session_host import (
     _BULK_CAP_MS,
     _BULK_FLOOR_MS,
@@ -26,7 +27,6 @@ from src.session_host import (
     PtySession,
 )
 from src.session_host_text import scan_bracketed_paste_mode
-from src import session_host as session_host_module
 
 
 def _make_session() -> PtySession:

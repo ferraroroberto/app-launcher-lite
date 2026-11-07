@@ -58,8 +58,8 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List, Optional
 
-from src.jobs import history as jobs_history
 from src._json_io import atomic_write_json
+from src.jobs import history as jobs_history
 from src.jobs.config import Job, load_jobs
 from src.jobs.schtasks import (
     FREQUENT_SCHEDULE_TYPES,
@@ -360,7 +360,7 @@ def _read_alert_state() -> Dict[str, Any]:
 def _write_alert_state(state: Dict[str, Any]) -> None:
     path = coverage_alerts_path()
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: alert state file under the runtime jobs dir
         atomic_write_json(path, state)
     except OSError as exc:
         logger.warning(f"⚠️  coverage alert state not persisted: {exc}")

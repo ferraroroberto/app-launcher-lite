@@ -19,9 +19,6 @@ from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect as ws_connect
 from websockets.exceptions import InvalidHandshake
 
-from src import audit, board, launcher, session_client
-from src.webapp_config import SESSION_HOST_PORT_ENV, WebappConfig
-
 from app.webapp.middleware import LOOPBACK_HOSTS, ws_terminal_gate
 from app.webapp.routers._helpers import (
     audit_off_loop,
@@ -30,6 +27,8 @@ from app.webapp.routers._helpers import (
     maybe_json,
     mirror_url,
 )
+from src import audit, board, launcher, session_client
+from src.webapp_config import SESSION_HOST_PORT_ENV, WebappConfig
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
