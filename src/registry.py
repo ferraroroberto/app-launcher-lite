@@ -135,7 +135,7 @@ def load_registry(path: Optional[Path] = None) -> Registry:
 
 def save_registry(reg: Registry, path: Optional[Path] = None) -> Path:
     target = Path(path) if path is not None else DEFAULT_REGISTRY_PATH
-    target.parent.mkdir(parents=True, exist_ok=True)
+    target.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: apps.json, machine-local config the Apps tab reads
     atomic_write_json(target, reg.to_dict())
     return target
 

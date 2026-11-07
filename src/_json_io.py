@@ -41,7 +41,7 @@ def atomic_write_json(target: Path, payload: Any, *, indent: int = 2) -> None:
     responsible for ensuring ``target.parent`` exists.
     """
     tmp = target.with_suffix(target.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=indent), encoding="utf-8")
+    tmp.write_text(json.dumps(payload, indent=indent), encoding="utf-8")  # runtime-write-exempt: caller-supplied target; the atomic-write helper cannot know its folder
     os.replace(tmp, target)
 
 
@@ -67,8 +67,8 @@ def file_lock(lock_path: Path, *, label: str) -> Iterator[None]:
     if msvcrt is None:  # pragma: no cover - non-Windows fallback
         yield
         return
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    handle = open(lock_path, "a+b")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: caller-supplied lock path; the helper cannot know its folder
+    handle = open(lock_path, "a+b")  # runtime-write-exempt: caller-supplied lock path; the helper cannot know its folder
     locked = False
     try:
         for attempt in range(_LOCK_ATTEMPTS):

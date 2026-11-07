@@ -116,7 +116,7 @@ class WebAuthnGate:
         return list(raw.get("devices") or [])
 
     def _save_devices(self, devices: List[Dict[str, Any]]) -> None:
-        self._devices_path.parent.mkdir(parents=True, exist_ok=True)
+        self._devices_path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: webauthn_devices.json, machine-local config under config/
         atomic_write_json(self._devices_path, {"devices": devices})
 
     def list_devices(self) -> List[Dict[str, Any]]:

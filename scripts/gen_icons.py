@@ -105,8 +105,8 @@ def sync(
         if status not in (DRIFT, MISSING_LOCAL):
             continue
         destination = local_root / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(upstream_root / relative, destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: the sync tool's job is to rewrite tracked brand assets under local_root
+        shutil.copyfile(upstream_root / relative, destination)  # runtime-write-exempt: the sync tool's job is to rewrite tracked brand assets under local_root
         copied.append(relative)
     return copied
 

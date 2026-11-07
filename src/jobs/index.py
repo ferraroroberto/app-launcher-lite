@@ -30,8 +30,8 @@ def index_path() -> Path:
 
 def _connect() -> sqlite3.Connection:
     path = index_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=10)
+    path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: run-history index under the runtime jobs dir
+    conn = sqlite3.connect(path, timeout=10)  # runtime-write-exempt: run-history index under the runtime jobs dir
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

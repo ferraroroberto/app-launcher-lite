@@ -458,11 +458,11 @@ async def _save_image(project_dir: str, file: UploadFile) -> str:
         raise HTTPException(status_code=400, detail="empty upload")
     target_dir = Path(project_dir) / _IMAGE_DIR_NAME
     try:
-        target_dir.mkdir(parents=True, exist_ok=True)
+        target_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: uploads land in the target project's own folder, chosen by the user
         stamp = time.strftime("%Y%m%d-%H%M%S")
         safe = re.sub(r"[^a-zA-Z0-9._-]", "_", Path(file.filename or "img").stem)[:40]
         out = target_dir / f"{stamp}-{uuid.uuid4().hex[:6]}-{safe}{suffix}"
-        out.write_bytes(data)
+        out.write_bytes(data)  # runtime-write-exempt: uploads land in the target project's own folder, chosen by the user
     except OSError as exc:
         raise HTTPException(status_code=400, detail=f"could not save image: {exc}")
     return str(out)

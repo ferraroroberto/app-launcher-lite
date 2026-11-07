@@ -1,22 +1,4 @@
 {
   "version": 1,
-  "entries": [
-    {"key": "app/cli/commands/run_job_cmd.py", "counts": {"unresolved": 5}},
-    {"key": "app/webapp/session_host/server.py", "counts": {"unresolved": 2}},
-    {"key": "app/tray/tray.py", "counts": {"unresolved": 2}},
-    {"key": "scripts/gen_icons.py", "counts": {"unresolved": 2}},
-    {"key": "src/_json_io.py", "counts": {"unresolved": 3}},
-    {"key": "src/boot_autostart.py", "counts": {"unresolved": 2}},
-    {"key": "src/jobs/config.py", "counts": {"unresolved": 1}},
-    {"key": "src/jobs/coverage.py", "counts": {"unresolved": 1}},
-    {"key": "src/jobs/history.py", "counts": {"unresolved": 3}},
-    {"key": "src/jobs/index.py", "counts": {"unresolved": 2}},
-    {"key": "src/jobs/queue.py", "counts": {"unresolved": 1}},
-    {"key": "src/jobs_kinds/inline_shell.py", "counts": {"unresolved": 1}},
-    {"key": "src/log_files.py", "counts": {"unresolved": 2}},
-    {"key": "src/registry.py", "counts": {"unresolved": 1}},
-    {"key": "src/session_host.py", "counts": {"unresolved": 2}},
-    {"key": "src/webapp_config.py", "counts": {"unresolved": 1}},
-    {"key": "src/webauthn_gate.py", "counts": {"unresolved": 1}}
-  ]
+  "entries": []
 }
