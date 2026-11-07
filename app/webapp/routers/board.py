@@ -41,11 +41,6 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Request
 
-from src import agents, audit, board, gitlab_client, session_client
-from src.board_exchange import resolve_exchange, unavailable
-from src.launcher import open_local_terminal_window, spawn_agent_session
-from src.webapp_config import WebappConfig
-
 from app.webapp.routers._helpers import (
     audit_session_start_and_maybe_mirror,
     maybe_json,
@@ -56,6 +51,10 @@ from app.webapp.routers.board_spawn import (
     _resolve_repo_entry,
     _safe_list_sessions,
 )
+from src import agents, audit, board, gitlab_client, session_client
+from src.board_exchange import resolve_exchange, unavailable
+from src.launcher import open_local_terminal_window, spawn_agent_session
+from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

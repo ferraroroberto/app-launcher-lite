@@ -39,14 +39,19 @@ returns the new ``run_id`` immediately.
 
 from __future__ import annotations
 
+from src.jobs.coverage import (
+    coverage_for_job,
+    invalidate_coverage_cache,
+    scan_coverage,
+)
 from src.jobs.history import (
     JOBS_RUNS_DIR,
     MAX_RUNS_PER_JOB,
     base_run_meta,
     is_running,
     latest_run,
-    list_runs,
     list_artifacts,
+    list_runs,
     mark_run_failed,
     new_run_dir,
     new_run_id,
@@ -66,11 +71,6 @@ from src.jobs.queue import (
     mutex_collision,
     peek_mutex_queue,
     pop_mutex_entry,
-)
-from src.jobs.coverage import (
-    coverage_for_job,
-    invalidate_coverage_cache,
-    scan_coverage,
 )
 from src.jobs.reap import reap_stranded_runs
 from src.jobs.schtasks import (

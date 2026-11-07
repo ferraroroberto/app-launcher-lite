@@ -28,10 +28,9 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
-from src import audit, desktop_capture
-
 from app.webapp.middleware import ws_terminal_gate
 from app.webapp.routers._helpers import audit_off_loop, client_ip_ws
+from src import audit, desktop_capture
 
 logger = logging.getLogger(__name__)
 

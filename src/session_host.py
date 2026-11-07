@@ -35,7 +35,6 @@ from src.agents import (
 )
 from src.audit import transcript_path
 from src.env_path import effective_path
-from src.subprocess_flags import NO_WINDOW
 from src.session_host_text import (
     PROMPT_TITLE_BUF_MAX,
     cook_input_line,
@@ -45,6 +44,7 @@ from src.session_host_text import (
     strip_color_osc,
     trim_ring_head,
 )
+from src.subprocess_flags import NO_WINDOW
 from src.vt_snapshot import VtSnapshot
 
 try:  # Windows-only — ConPTY via pywinpty.

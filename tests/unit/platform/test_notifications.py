@@ -11,9 +11,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-
 from src import notifications as notif
-
 
 # ============================================================== Notifiers
 

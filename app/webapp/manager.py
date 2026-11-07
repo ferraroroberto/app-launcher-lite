@@ -110,8 +110,8 @@ class WebappManager:
         self._session = requests.Session()
         self._session.verify = False
         try:
-            from urllib3.exceptions import InsecureRequestWarning
             import urllib3
+            from urllib3.exceptions import InsecureRequestWarning
 
             urllib3.disable_warnings(InsecureRequestWarning)
         except Exception:

@@ -39,12 +39,6 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
-from src import audit
-from src.launch_flags import build_copilot_flags, build_resume_flags
-from src.launcher import open_local_terminal_window, spawn_agent_session
-from src.scanner import Skill, scan_skills, skills_dir_for
-from src.webapp_config import WebappConfig
-
 from app.webapp.routers._helpers import (
     audit_off_loop,
     audit_session_start_and_maybe_mirror,
@@ -52,6 +46,11 @@ from app.webapp.routers._helpers import (
     maybe_json,
     spawn_session_or_400,
 )
+from src import audit
+from src.launch_flags import build_copilot_flags, build_resume_flags
+from src.launcher import open_local_terminal_window, spawn_agent_session
+from src.scanner import Skill, scan_skills, skills_dir_for
+from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

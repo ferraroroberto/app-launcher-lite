@@ -69,8 +69,8 @@ from src.jobs.config import Job, get_by_id, load_jobs
 from src.jobs.secrets import resolve_env_overlay
 from src.jobs.trigger import TRIGGER_SYNTAX, is_valid_trigger
 from src.notifications import (
-    Notifier,
     NoopNotifier,
+    Notifier,
     build_notifier_from_config,
     build_telegram_notifier_from_config,
 )

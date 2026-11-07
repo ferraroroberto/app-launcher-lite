@@ -12,10 +12,9 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.webapp.routers._helpers import copilot_flags_payload, maybe_json
 from src.scanner import git_status, scan_project_dirs
 from src.webapp_config import WebappConfig, update_webapp_config
-
-from app.webapp.routers._helpers import copilot_flags_payload, maybe_json
 
 router = APIRouter()
 

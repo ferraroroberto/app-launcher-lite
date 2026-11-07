@@ -47,6 +47,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
+from src.board_sessions import (  # noqa: F401 — re-exported for board.<name> callers
+    attach_shared_names,
+    merge_sessions,
+)
 from src.board_state import (  # noqa: F401 — re-exported for board.<name> callers
     STATE_STALE_AFTER,
     _age_seconds,
@@ -54,10 +58,6 @@ from src.board_state import (  # noqa: F401 — re-exported for board.<name> cal
     _parse_iso,
     read_active_issues,
     read_sessions_state,
-)
-from src.board_sessions import (  # noqa: F401 — re-exported for board.<name> callers
-    attach_shared_names,
-    merge_sessions,
 )
 
 logger = logging.getLogger(__name__)

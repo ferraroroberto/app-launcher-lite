@@ -16,6 +16,13 @@ from typing import Any, Dict, List, Tuple
 import requests
 from fastapi import APIRouter, HTTPException, Request
 
+from app.webapp.routers._helpers import (
+    audit_off_loop,
+    audit_session_start_and_maybe_mirror,
+    client_ip,
+    maybe_json,
+    spawn_session_or_400,
+)
 from src import agents, app_runtime, audit
 from src.app_config import AppConfig
 from src.diagnostics import (
@@ -26,8 +33,8 @@ from src.diagnostics import (
 from src.launch_flags import build_copilot_flags, build_resume_flags
 from src.launcher import (
     open_local_terminal_window,
-    spawn_bat,
     spawn_agent_session,
+    spawn_bat,
 )
 from src.registry import (
     AppEntry,
@@ -43,14 +50,6 @@ from src.registry import (
 )
 from src.scanner import KIND_CODING, KIND_TRAY, KIND_TUNNEL
 from src.webapp_config import WebappConfig
-
-from app.webapp.routers._helpers import (
-    audit_off_loop,
-    audit_session_start_and_maybe_mirror,
-    client_ip,
-    maybe_json,
-    spawn_session_or_400,
-)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

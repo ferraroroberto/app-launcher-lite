@@ -56,19 +56,6 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope
 
-from src import launcher, session_client, system_load
-from src.app_config import load_app_config
-from src.runtime_data import runtime_db_path
-from src.static_versioning import (
-    compute_asset_hashes,
-    fleet_hash_of,
-    rewrite_js_imports,
-)
-from src.login_lockout import LoginLockout
-from src.usage_log import usage_router
-from src.webapp_config import SESSION_HOST_PORT_ENV, load_webapp_config
-from src.webauthn_gate import WebAuthnGate
-
 from app.webapp.middleware import BearerTokenMiddleware
 from app.webapp.observability import (
     SlowRequestLogMiddleware,
@@ -89,6 +76,18 @@ from app.webapp.routers import (
     webauthn,
 )
 from app.webapp.routers._helpers import STATIC_DIR
+from src import launcher, session_client, system_load
+from src.app_config import load_app_config
+from src.login_lockout import LoginLockout
+from src.runtime_data import runtime_db_path
+from src.static_versioning import (
+    compute_asset_hashes,
+    fleet_hash_of,
+    rewrite_js_imports,
+)
+from src.usage_log import usage_router
+from src.webapp_config import SESSION_HOST_PORT_ENV, load_webapp_config
+from src.webauthn_gate import WebAuthnGate
 
 _log = logging.getLogger(__name__)
 

@@ -25,9 +25,9 @@ import pytest
 
 from app.cli.commands import run_job_cmd as rjc
 from src import jobs as jobs_mod
+from src import run_supervision
 from src.jobs import history as jobs_history_mod
 from src.jobs import stats as jobs_stats_mod
-from src import run_supervision
 from src.jobs.config import Job, JobsConfig, job_from_dict
 from src.subprocess_flags import NO_WINDOW
 

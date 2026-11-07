@@ -45,13 +45,14 @@ import socket
 import subprocess
 import sys
 import time
-import urllib3
 from pathlib import Path
-from typing import Callable, IO, Iterator, List, Optional, Tuple
+from typing import IO, Callable, Iterator, List, Optional, Tuple
 
 import pytest
 import requests
-from playwright.sync_api import BrowserContext, Error as PlaywrightError, Page
+import urllib3
+from playwright.sync_api import BrowserContext, Page
+from playwright.sync_api import Error as PlaywrightError
 
 from src.app_config import resolve_webapp_port
 from src.runtime_data import app_dir_env_var
