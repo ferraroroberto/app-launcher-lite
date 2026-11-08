@@ -21,6 +21,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from src import runtime_files
+
 logger = logging.getLogger(__name__)
 
 #: Shared line format for the webapp's side logs. Level is spelled out because
@@ -49,8 +51,8 @@ def ensure_file_log_handler(
     ):
         return
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: caller-supplied log path, passed by the entry points
-        handler = logging.FileHandler(path, encoding="utf-8")  # runtime-write-exempt: caller-supplied log path, passed by the entry points
+        runtime_files.make_dirs(path.parent)
+        handler = runtime_files.file_handler(path)
         handler.setLevel(level)
         handler.setFormatter(logging.Formatter(LOG_FORMAT))
         target.addHandler(handler)
