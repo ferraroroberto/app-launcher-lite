@@ -47,6 +47,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from src.agents import DEFAULT_AGENT, SESSION_HOST_AGENTS, is_fullscreen
 from src.build_info import build_identity
+from src.runtime_files import make_dirs, save_bytes
 from src.session_host import _EOF, SessionManager
 
 logger = logging.getLogger(__name__)
@@ -458,12 +459,12 @@ async def _save_image(project_dir: str, file: UploadFile) -> str:
         raise HTTPException(status_code=400, detail="empty upload")
     target_dir = Path(project_dir) / _IMAGE_DIR_NAME
     try:
-        target_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: uploads land in the target project's own folder, chosen by the user
+        make_dirs(target_dir)
         stamp = time.strftime("%Y%m%d-%H%M%S")
         safe = re.sub(r"[^a-zA-Z0-9._-]", "_", Path(file.filename or "img").stem)[:40]
         out = target_dir / f"{stamp}-{uuid.uuid4().hex[:6]}-{safe}{suffix}"
-        out.write_bytes(data)  # runtime-write-exempt: uploads land in the target project's own folder, chosen by the user
-    except OSError as exc:
+        save_bytes(out, data)
+    except (OSError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=f"could not save image: {exc}")
     return str(out)
 

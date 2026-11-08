@@ -32,7 +32,7 @@ Beside them sit the entry points (`launcher.py`, `tray.bat`, `webapp.bat`, `weba
 
 ## `src/`
 
-`src/` is a flat directory of domain-prefixed modules. By domain: `app_config.py`, `webapp_config.py` and `registry.py` (config and the apps registry); `agents.py` and `launch_flags.py` (the Copilot agent and its flags); `session_host*.py`, `session_client.py`, `vt_snapshot.py` and `launcher.py` (PTY sessions); `board*.py` and `gitlab_client.py` (the Board and its GitLab reads); `jobs/` and `jobs_kinds/` (the Jobs backend); `webauthn_gate.py`, `api_tokens.py` and `audit.py` (auth and audit); the rest are small shared helpers (`subprocess_flags.py`, `git_run.py`, `env_path.py`, `build_info.py`).
+`src/` is a flat directory of domain-prefixed modules. By domain: `app_config.py`, `webapp_config.py` and `registry.py` (config and the apps registry); `agents.py` and `launch_flags.py` (the Copilot agent and its flags); `session_host*.py`, `session_client.py`, `vt_snapshot.py` and `launcher.py` (PTY sessions); `board*.py` and `gitlab_client.py` (the Board and its GitLab reads); `jobs/` and `jobs_kinds/` (the Jobs backend); `webauthn_gate.py`, `api_tokens.py` and `audit.py` (auth and audit); the rest are small shared helpers (`subprocess_flags.py`, `git_run.py`, `env_path.py`, `build_info.py`, and `runtime_files.py`, whose writers refuse a path under `src`, `app`, `scripts`, `hooks` or `skills` so runtime output never lands beside the code).
 
 | Subpackage | Holds |
 | --- | --- |

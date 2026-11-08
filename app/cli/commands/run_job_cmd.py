@@ -43,7 +43,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from src import jobs_kinds
+from src import jobs_kinds, runtime_files
 from src.jobs import (
     MAX_RUNS_PER_JOB,
     base_run_meta,
@@ -233,7 +233,7 @@ def _finalize_cooldown_skip(job: Job, args: argparse.Namespace) -> Optional[int]
     remaining, cooldown_seconds, anchor_id = cooldown_state
     skip_run_id = args.run_id or new_run_id()
     skip_dir = runs_dir(job.id) / skip_run_id
-    skip_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: per-job run dir under the runtime jobs dir, outside the code folders
+    runtime_files.make_dirs(skip_dir)
     stamped = datetime.now().isoformat(timespec="seconds")
     write_run_json(
         skip_dir,
@@ -263,11 +263,11 @@ def _finalize_mutex_queue(
     """Queue a **scheduled** fire that collides with a live sibling in the
     same ``mutex_group`` instead of running it concurrently (issue #696).
 
-    ``mutex_group`` used to be enforced only on the webapp admission path
-    (``app/webapp/routers/jobs_run.py::_admit_and_spawn``), so a
-    schtasks-fired run walked straight past it — which is exactly where
-    cross-job serialisation matters most (the weekly fleet chain). This is
-    the executor-side half of that gate; the drain half already lived here
+    The webapp admission path (``app/webapp/routers/jobs_run.py::_admit_and_spawn``)
+    enforces ``mutex_group`` for UI fires, but a schtasks-fired run never
+    passes it — and that is where cross-job serialisation matters most (the
+    weekly fleet chain). This is the executor-side half of that gate; the
+    drain half lives here
     (:func:`_drain_mutex_queue_for`).
 
     Returns ``0`` when the fire was queued and finalised, ``None`` when
@@ -421,7 +421,7 @@ def _spawn_and_wait(
     # read run history or config itself.
     max_runtime_seconds, no_output_seconds = resolve_watchdog_limits(job)
     try:
-        with output_log.open("wb") as fh:  # runtime-write-exempt: output.log sits in the per-job run dir under the runtime jobs dir
+        with runtime_files.open_for_write(output_log, "wb") as fh:
             # A ``visible`` job streams the child's combined output to
             # BOTH output.log (remote run-history) and the launcher's
             # own console (the user watching on the PC). Non-visible
@@ -471,7 +471,7 @@ def _spawn_and_wait(
         exit_code = -1
         status = "failed"
         try:
-            with output_log.open("ab") as fh:  # runtime-write-exempt: output.log sits in the per-job run dir under the runtime jobs dir
+            with runtime_files.open_for_write(output_log, "ab") as fh:
                 fh.write(f"[run-job spawn error] {exc}\n".encode("utf-8"))
         except OSError:
             pass
@@ -742,7 +742,7 @@ def _build_child_env(
     env.update(job_env)
     env.update(extra_env)
     artifact_dir = run_dir / "artifacts"
-    artifact_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: per-job run dir under the runtime jobs dir, outside the code folders
+    runtime_files.make_dirs(artifact_dir)
     env["JOB_ARTIFACT_DIR"] = str(artifact_dir.resolve())
     if dry_run:
         env["JOB_DRY_RUN"] = "1"
@@ -835,7 +835,7 @@ class RunJobCommand(BaseCommand):
         # run.json / output.log.
         if args.run_id:
             run_dir = runs_dir(job.id) / args.run_id
-            run_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: per-job run dir under the runtime jobs dir, outside the code folders
+            runtime_files.make_dirs(run_dir)
         else:
             run_dir = new_run_dir(job.id, new_run_id())
 

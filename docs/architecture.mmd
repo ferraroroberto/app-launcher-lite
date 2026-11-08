@@ -104,6 +104,8 @@ OSC titles, prompt titles, ring trim"]
     STATICVER["static_versioning.py\nasset content-hash stamping"]
     DIAG["diagnostics.py\nring log buffer, list_app_listeners"]
     JSONIO["_json_io.py"]
+    RTFILES["runtime_files.py
+guarded writers: refuse a path under a code folder"]
     LOOPHTTP["_loopback_http.py"]
     GITRUN["git_run.py\nthe one git -C invocation contract"]
     LOGFILES["log_files.py\nfile-log-handler bootstrap"]
@@ -112,6 +114,8 @@ OSC titles, prompt titles, ring trim"]
   end
 
   SCANNER --> GITRUN
+  JSONIO --> RTFILES
+  SESSHOST --> RTFILES
   R_AUTH --> LOGFILES
 
   HOSTSERVER --> SESSHOST

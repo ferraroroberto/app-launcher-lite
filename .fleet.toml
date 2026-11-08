@@ -112,8 +112,9 @@ baseline = ".structure-ratchet-baseline.json"
 # Exit 3 (a file could not be scanned) fails as NOT CONFIRMED. Procedure + limits:
 # project-scaffolding docs/comment-ratchet.md.
 [comment_ratchet]
-enabled  = true
-baseline = ".comment-ratchet-baseline.json"
+enabled         = true
+baseline        = ".comment-ratchet-baseline.json"
+history_phrases = true
 
 # [instruction_ratchet] -- the scaffold's baseline-and-ratchet check on the agent
 # instruction files (CLAUDE.md, AGENTS.md, .claude/rules/*.md, every SKILL.md and the
@@ -125,8 +126,12 @@ baseline = ".comment-ratchet-baseline.json"
 # read or a skill description could not be parsed) fails as NOT CONFIRMED. Procedure +
 # limits: project-scaffolding docs/instruction-ratchet.md.
 [instruction_ratchet]
-enabled  = true
-baseline = ".instruction-ratchet-baseline.json"
+enabled             = true
+baseline            = ".instruction-ratchet-baseline.json"
+ci_expectations     = true
+agents_pointer      = true
+claude_md_max_lines = 120
+repeated_text_words = 12
 
 # [doc_refs_ratchet] -- the scaffold's baseline-and-ratchet check on references in
 # README.md, CLAUDE.md and docs/**/*.md. The gate runs scripts/doc_refs_ratchet.py
@@ -184,8 +189,8 @@ paths  = ["app/", "src/"]
 # A raw connect skips the WAL and foreign-key pragmas; a raw replace skips the tmp-file swap.
 [[conventions_ratchet.must_use]]
 call   = "sqlite3.connect"
-helper = ["src/jobs/index.py"]
-why    = "src/jobs/index.py owns the one SQLite database and its connect (WAL, foreign keys, timeout)"
+helper = ["src/runtime_files.py"]
+why    = "src/runtime_files.py opens every SQLite file behind its code-folder guard; src/jobs/index.py sets WAL, foreign keys and timeout on the one database"
 
 [[conventions_ratchet.must_use]]
 call   = "os.replace"

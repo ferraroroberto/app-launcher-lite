@@ -124,14 +124,14 @@ def enable(*, tray_bat: Path = TRAY_BAT_PATH, startup_dir: Optional[Path] = None
     behind issue #582 was exactly a silent no-op.
     """
     target_dir = startup_dir if startup_dir is not None else _startup_dir()
-    target_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: the Windows Startup folder, outside the repo
+    target_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: the Windows Startup folder is fixed by the OS shell and sits outside the repo
     path = target_dir / STARTUP_BAT_NAME
     # Binary I/O so the CRLF line endings land verbatim: text-mode write would
     # translate each "\n" to os.linesep, turning our "\r\n" into "\r\r\n" on
     # disk, and text-mode read-back would then differ from what we wrote,
     # making the verification below spuriously fail.
     data = _wrapper_bat_content(tray_bat).encode("utf-8")
-    path.write_bytes(data)  # runtime-write-exempt: the Windows Startup folder, outside the repo
+    path.write_bytes(data)  # runtime-write-exempt: the Windows Startup folder is fixed by the OS shell and sits outside the repo
     try:
         written = path.read_bytes()
     except OSError as exc:

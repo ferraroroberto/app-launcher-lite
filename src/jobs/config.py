@@ -62,6 +62,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple
 
+from src import runtime_files
 from src._json_io import atomic_write_json
 from src.jobs.config_chain import (
     _validate_chain_consistency,
@@ -169,7 +170,7 @@ def load_jobs(path: Optional[Path] = None) -> JobsConfig:
 def save_jobs(cfg: JobsConfig, path: Optional[Path] = None) -> Path:
     """Persist ``cfg`` to disk via an atomic ``.tmp`` swap."""
     target = Path(path) if path is not None else DEFAULT_JOBS_PATH
-    target.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: jobs.json, machine-local config the Jobs tab and Task Scheduler read
+    runtime_files.make_dirs(target.parent)
     atomic_write_json(target, cfg.to_dict())
     return target
 

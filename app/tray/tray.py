@@ -46,7 +46,7 @@ from app.webapp.manager import (
     cert_paths,
     load_config,
 )
-from src import AppConfig
+from src import AppConfig, runtime_files
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
 from src.webapp_config import (
     DEFAULT_SESSION_HOST_PORT,
@@ -140,9 +140,9 @@ def _clipboard_copy(text: str) -> bool:
 def _breadcrumb(path: Path, msg: str) -> None:
     """Append a timestamped breadcrumb line to ``path`` (best-effort)."""
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: breadcrumb path is the tray's runtime debug log, passed in by the caller
+        runtime_files.make_dirs(path.parent)
         stamp = datetime.datetime.now().isoformat(timespec="seconds")
-        with path.open("a", encoding="utf-8") as fh:  # runtime-write-exempt: breadcrumb path is the tray's runtime debug log, passed in by the caller
+        with runtime_files.open_for_write(path, "a", encoding="utf-8") as fh:
             fh.write(f"{stamp} {msg}\n")
     except OSError:
         pass

@@ -29,6 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from . import runtime_files
 from ._json_io import atomic_write_json
 from .scanner import (
     KIND_CODING,
@@ -135,7 +136,7 @@ def load_registry(path: Optional[Path] = None) -> Registry:
 
 def save_registry(reg: Registry, path: Optional[Path] = None) -> Path:
     target = Path(path) if path is not None else DEFAULT_REGISTRY_PATH
-    target.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: apps.json, machine-local config the Apps tab reads
+    runtime_files.make_dirs(target.parent)
     atomic_write_json(target, reg.to_dict())
     return target
 
