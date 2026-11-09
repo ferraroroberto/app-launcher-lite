@@ -109,7 +109,7 @@ def _mock_board(page: Page) -> None:
     )
 
 
-def test_board_and_coding_tab_show_identical_shared_title(
+def scenario_board_and_coding_tab_show_identical_shared_title(
     authed_page: Page, base_url: str
 ) -> None:
     _mock_sessions(authed_page)

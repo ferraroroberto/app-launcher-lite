@@ -97,7 +97,7 @@ async () => {
 """
 
 
-def test_native_touch_scroll_routing(authed_page: Page, base_url: str) -> None:
+def scenario_native_touch_scroll_routing(authed_page: Page, base_url: str) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     authed_page.wait_for_function(
         "() => typeof window.Terminal === 'function'", timeout=5_000

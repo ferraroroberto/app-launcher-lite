@@ -64,7 +64,7 @@ def _repo_btn(page: Page):
     )
 
 
-def test_repo_icon_opens_server_computed_issues_url(
+def scenario_repo_icon_opens_server_computed_issues_url(
     authed_page: Page, base_url: str
 ) -> None:
     repo_url = "https://gitlab.com/testgroup/app-launcher"
@@ -91,7 +91,7 @@ def test_repo_icon_opens_server_computed_issues_url(
     )
 
 
-def test_repo_icon_disabled_without_issues_url(
+def scenario_repo_icon_disabled_without_issues_url(
     authed_page: Page, base_url: str
 ) -> None:
     _install_routes(authed_page, None, None)

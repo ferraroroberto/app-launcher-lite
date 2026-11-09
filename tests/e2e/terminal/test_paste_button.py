@@ -37,7 +37,7 @@ _CLIPBOARD_MOCK = """
 """ % _PASTE_PAYLOAD
 
 
-def test_paste_button_forwards_clipboard_to_pty(
+def scenario_paste_button_forwards_clipboard_to_pty(
     authed_page: Page,
     base_url: str,
     launched_pty_session: str,

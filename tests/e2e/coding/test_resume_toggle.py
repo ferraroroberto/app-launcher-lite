@@ -85,7 +85,7 @@ def _open_coding(page: Page, base_url: str) -> None:
     )
 
 
-def test_resume_toggle_present(authed_page: Page, base_url: str) -> None:
+def scenario_resume_toggle_present(authed_page: Page, base_url: str) -> None:
     _install_mocks(authed_page)
     _open_coding(authed_page, base_url)
     # The toggle lives in the (collapsed) options <summary>, so its
@@ -94,7 +94,7 @@ def test_resume_toggle_present(authed_page: Page, base_url: str) -> None:
     expect(authed_page.locator("#codingResume")).not_to_be_checked()
 
 
-def test_resume_only_launch_streams_pty(
+def scenario_resume_only_launch_streams_pty(
     authed_page: Page, base_url: str
 ) -> None:
     _install_mocks(authed_page)
@@ -116,7 +116,7 @@ def test_resume_only_launch_streams_pty(
     assert payload.get("agent") == "copilot"
 
 
-def test_resume_with_detached_launches_remote_console(
+def scenario_resume_with_detached_launches_remote_console(
     authed_page: Page, base_url: str
 ) -> None:
     _install_mocks(authed_page)

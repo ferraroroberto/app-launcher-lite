@@ -19,6 +19,15 @@ import time
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e import test_smoke as smoke
+from tests.e2e._flow import FLOW_TIMEOUT_S
+from tests.e2e.jobs import test_jobs_agenda as jobs_agenda
+from tests.e2e.jobs import test_jobs_alert_on_failure as jobs_alert_on_failure
+from tests.e2e.jobs import test_jobs_cooldown_toast as jobs_cooldown_toast
+from tests.e2e.jobs import test_jobs_log_copy as jobs_log_copy
+from tests.e2e.jobs import test_jobs_run_store as jobs_run_store
+from tests.e2e.jobs import test_jobs_toast_not_clipped as jobs_toast_not_clipped
+
 pytestmark = pytest.mark.smoke
 
 
@@ -80,7 +89,7 @@ def _row_ids(page: Page):
     )
 
 
-def test_jobs_default_to_next_run_order_with_countdown(
+def scenario_jobs_default_to_next_run_order_with_countdown(
     authed_page: Page, base_url: str
 ) -> None:
     # Guard against a sort pref leaking from a reused context — default is 'next'.
@@ -110,7 +119,7 @@ def test_jobs_default_to_next_run_order_with_countdown(
     ).count() == 0, "a job with no next fire must not show a countdown chip"
 
 
-def test_sort_toggle_switches_to_alphabetical(
+def scenario_sort_toggle_switches_to_alphabetical(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.add_init_script(
@@ -137,7 +146,7 @@ def test_sort_toggle_switches_to_alphabetical(
     )
 
 
-def test_external_schedule_card_only_offers_history(
+def scenario_external_schedule_card_only_offers_history(
     authed_page: Page, base_url: str
 ) -> None:
     # Computed at call time (#646) — see _wire_jobs for why.
@@ -169,7 +178,7 @@ def test_external_schedule_card_only_offers_history(
     expect(row.locator("[data-role='pause-btn']")).to_have_count(0)
 
 
-def test_manual_run_state_is_distinct_from_next_scheduled_fire(
+def scenario_manual_run_state_is_distinct_from_next_scheduled_fire(
     authed_page: Page, base_url: str
 ) -> None:
     # Computed at call time (#646) — see _wire_jobs for why.
@@ -207,4 +216,33 @@ def test_manual_run_state_is_distinct_from_next_scheduled_fire(
 def _is_open(page: Page) -> bool:
     return bool(
         page.locator("#paneJobs details.jobs-card").evaluate("el => el.open")
+    )
+
+
+@pytest.mark.timeout(FLOW_TIMEOUT_S)
+def test_jobs_flow(run_flow) -> None:
+    """The Jobs tab: list order and countdown, run dialog, agenda, alert-on-failure, toasts, log copy and the run store.
+
+    Each scenario below ran as its own test before; ``run_flow`` gives each a fresh
+    browser context and reports every scenario that fails, not just the first.
+    """
+    run_flow(
+        smoke.scenario_jobs_row_renders_sparkline_and_duration_chip,
+        smoke.scenario_parameterised_job_run_dialog_posts_values,
+        scenario_jobs_default_to_next_run_order_with_countdown,
+        scenario_sort_toggle_switches_to_alphabetical,
+        scenario_external_schedule_card_only_offers_history,
+        scenario_manual_run_state_is_distinct_from_next_scheduled_fire,
+        jobs_agenda.scenario_agenda_groups_by_day_in_order,
+        jobs_agenda.scenario_agenda_row_reveals_job,
+        jobs_agenda.scenario_agenda_empty_state,
+        jobs_alert_on_failure.scenario_toggle_precedes_confirm_toggle_in_dialog,
+        jobs_alert_on_failure.scenario_saving_toggle_sends_alert_on_failure,
+        jobs_alert_on_failure.scenario_bell_icon_shown_only_when_flag_set,
+        jobs_cooldown_toast.scenario_cooldown_429_shows_skipped_toast,
+        jobs_cooldown_toast.scenario_non_cooldown_failure_still_shows_run_failed,
+        jobs_log_copy.scenario_tapping_job_log_copies_to_clipboard,
+        jobs_run_store.scenario_search_jump_artifact_link_and_pin_toggle,
+        jobs_toast_not_clipped.scenario_toast_is_body_level_sibling_of_app,
+        jobs_toast_not_clipped.scenario_toast_renders_above_nav_bar,
     )

@@ -63,7 +63,7 @@ async () => {
 """
 
 
-def test_fullscreen_keyboard_pan(authed_page: Page, base_url: str) -> None:
+def scenario_fullscreen_keyboard_pan(authed_page: Page, base_url: str) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     r = authed_page.evaluate(_PROBE)
 

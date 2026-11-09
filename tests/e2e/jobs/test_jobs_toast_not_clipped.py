@@ -20,7 +20,7 @@ from playwright.sync_api import Page, expect
 pytestmark = pytest.mark.smoke
 
 
-def test_toast_is_body_level_sibling_of_app(authed_page: Page, base_url: str) -> None:
+def scenario_toast_is_body_level_sibling_of_app(authed_page: Page, base_url: str) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     authed_page.wait_for_selector("#sessionsList", state="attached", timeout=5_000)
 
@@ -39,7 +39,7 @@ def test_toast_is_body_level_sibling_of_app(authed_page: Page, base_url: str) ->
     assert toast_parent_is_body, "#toast's parent should be <body> directly."
 
 
-def test_toast_renders_above_nav_bar(authed_page: Page, base_url: str) -> None:
+def scenario_toast_renders_above_nav_bar(authed_page: Page, base_url: str) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     authed_page.wait_for_selector("#sessionsList", state="attached", timeout=5_000)
     authed_page.locator("#tabJobs").click()

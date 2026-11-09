@@ -32,7 +32,7 @@ from playwright.sync_api import Page
 pytestmark = pytest.mark.smoke
 
 
-def test_mirror_page_keeps_close_marker_in_document_title(
+def scenario_mirror_page_keeps_close_marker_in_document_title(
     authed_page: Page, base_url: str, launched_pty_session: str
 ) -> None:
     sid = launched_pty_session
@@ -52,7 +52,7 @@ def test_mirror_page_keeps_close_marker_in_document_title(
     )
 
 
-def test_mirror_marker_applies_on_tailnet_origin(
+def scenario_mirror_marker_applies_on_tailnet_origin(
     authed_page: Page, base_url: str, launched_pty_session: str
 ) -> None:
     """Regression pin for issue #371: the ts.net-hosted mirror window.

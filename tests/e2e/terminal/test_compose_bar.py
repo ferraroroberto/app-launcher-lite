@@ -32,6 +32,13 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e._flow import FLOW_TIMEOUT_S
+from tests.e2e.terminal import test_fullscreen_keyboard_pan as fullscreen_keyboard_pan
+from tests.e2e.terminal import test_keyboard_overlay as keyboard_overlay
+from tests.e2e.terminal import test_keys_popover as keys_popover
+from tests.e2e.terminal import test_paste_button as paste_button
+from tests.e2e.terminal import test_paste_framing as paste_framing
+
 # 1x1 transparent PNG — smallest valid image the session-host will accept.
 _PNG_1x1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk"
@@ -55,7 +62,7 @@ def _open_terminal(page: Page, base_url: str, sid: str) -> None:
     )
 
 
-def test_compose_button_hidden_in_mirror(
+def scenario_compose_button_hidden_in_mirror(
     authed_page: Page, base_url: str, launched_pty_session: str
 ) -> None:
     """Loopback open is the PC mirror — the ✏️ button must stay hidden."""
@@ -64,7 +71,7 @@ def test_compose_button_hidden_in_mirror(
     expect(authed_page.locator("#terminalComposeBar")).to_be_hidden()
 
 
-def test_compose_send_forwards_text_to_pty(
+def scenario_compose_send_forwards_text_to_pty(
     authed_page: Page,
     base_url: str,
     launched_pty_session: str,
@@ -97,7 +104,7 @@ def test_compose_send_forwards_text_to_pty(
     )
 
 
-def test_compose_send_submits_cr_in_its_own_frame(
+def scenario_compose_send_submits_cr_in_its_own_frame(
     authed_page: Page, base_url: str, launched_pty_session: str
 ) -> None:
     r"""➤ Send delivers the submitting CR immediately after the text (#166).
@@ -157,7 +164,7 @@ def test_compose_send_submits_cr_in_its_own_frame(
     )
 
 
-def test_compose_image_inserts_path_into_bar(
+def scenario_compose_image_inserts_path_into_bar(
     authed_page: Page, base_url: str, launched_pty_session: str
 ) -> None:
     """🖼 with the bar open drops the uploaded path into the textarea (#41)."""
@@ -182,7 +189,7 @@ def test_compose_image_inserts_path_into_bar(
     expect(authed_page.locator("#terminalComposeBar")).to_be_visible()
 
 
-def test_compose_attach_appends_at_end_with_blank_line(
+def scenario_compose_attach_appends_at_end_with_blank_line(
     authed_page: Page, base_url: str, launched_pty_session: str
 ) -> None:
     r"""Issue #366: inline uploads always append at the very end as their own
@@ -232,7 +239,7 @@ def test_compose_attach_appends_at_end_with_blank_line(
     expect(authed_page.locator("#terminalComposeAttach")).to_be_attached()
 
 
-def test_compose_attach_multiple_images_in_one_pick(
+def scenario_compose_attach_multiple_images_in_one_pick(
     authed_page: Page, base_url: str, launched_pty_session: str
 ) -> None:
     """Issue #448: picking several gallery images in ONE file-picker
@@ -269,7 +276,7 @@ def test_compose_attach_multiple_images_in_one_pick(
     )
 
 
-def test_compose_send_and_attach_stay_put_during_autogrow(
+def scenario_compose_send_and_attach_stay_put_during_autogrow(
     authed_page: Page, base_url: str, launched_pty_session: str
 ) -> None:
     """Issue #447: the ➤ Send button (and the compose-tools column, e.g.
@@ -322,4 +329,29 @@ def test_compose_send_and_attach_stay_put_during_autogrow(
     )
     assert abs(attach_after["y"] - attach_before["y"]) < 1, (
         f"Attach button moved during autogrow: {attach_before} -> {attach_after}"
+    )
+
+
+@pytest.mark.timeout(FLOW_TIMEOUT_S)
+def test_terminal_input_flow(run_flow) -> None:
+    """Typing into a terminal: the compose bar, keys popover, paste, and the on-screen keyboard.
+
+    Each scenario below ran as its own test before; ``run_flow`` gives each a fresh
+    browser context and reports every scenario that fails, not just the first.
+    """
+    run_flow(
+        scenario_compose_button_hidden_in_mirror,
+        scenario_compose_send_forwards_text_to_pty,
+        scenario_compose_send_submits_cr_in_its_own_frame,
+        scenario_compose_image_inserts_path_into_bar,
+        scenario_compose_attach_appends_at_end_with_blank_line,
+        scenario_compose_attach_multiple_images_in_one_pick,
+        scenario_compose_send_and_attach_stay_put_during_autogrow,
+        keys_popover.scenario_keys_popover_sends_escape_sequences,
+        keys_popover.scenario_shift_toggle_sends_back_tab,
+        keys_popover.scenario_no_stale_ctrlc_quit_buttons,
+        paste_button.scenario_paste_button_forwards_clipboard_to_pty,
+        paste_framing.scenario_frame_paste_brackets_only_when_mode_enabled,
+        keyboard_overlay.scenario_keyboard_overlay_height,
+        fullscreen_keyboard_pan.scenario_fullscreen_keyboard_pan,
     )

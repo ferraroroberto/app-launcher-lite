@@ -70,7 +70,7 @@ def _foreground_read(page: Page) -> None:
         _set_hidden(page, False)
 
 
-def test_header_shows_the_reading_and_its_four_states(
+def scenario_header_shows_the_reading_and_its_four_states(
     authed_page: Page, base_url: str
 ) -> None:
     page = authed_page
@@ -129,7 +129,7 @@ def test_header_shows_the_reading_and_its_four_states(
     expect(reading).to_have_attribute("data-level", "normal")
 
 
-def test_the_tap_sheet_lists_cpu_memory_and_the_top_three(
+def scenario_the_tap_sheet_lists_cpu_memory_and_the_top_three(
     authed_page: Page, base_url: str
 ) -> None:
     page = authed_page
@@ -155,7 +155,7 @@ def test_the_tap_sheet_lists_cpu_memory_and_the_top_three(
     expect(sheet).to_be_hidden()
 
 
-def test_the_sheet_groups_a_burn_and_says_why_a_reading_is_unknown(
+def scenario_the_sheet_groups_a_burn_and_says_why_a_reading_is_unknown(
     authed_page: Page, base_url: str
 ) -> None:
     """A group is one row with its count (never "×1" for a lone process),
@@ -194,7 +194,7 @@ def test_the_sheet_groups_a_burn_and_says_why_a_reading_is_unknown(
     expect(page.locator("#cpuSheet")).to_be_hidden()
 
 
-def test_a_hidden_page_does_not_read_the_load(authed_page: Page, base_url: str) -> None:
+def scenario_a_hidden_page_does_not_read_the_load(authed_page: Page, base_url: str) -> None:
     page = authed_page
     calls: list = []
     _route_load(page, {"body": _reading("normal", 20.0)}, calls)

@@ -114,8 +114,7 @@ def _install_routes(page: Page) -> None:
     )
 
 
-@pytest.fixture()
-def rows(authed_page: Page, base_url: str) -> Page:
+def _open_rows(authed_page: Page, base_url: str) -> Page:
     """A 390px-wide page with the Projects card open and all rows painted."""
     authed_page.set_viewport_size({"width": PHONE_W, "height": PHONE_H})
     _install_routes(authed_page)
@@ -155,7 +154,7 @@ def _button_boxes(page: Page, row_id: str) -> list[dict]:
     return boxes
 
 
-def test_default_branch_row_is_a_single_line(rows: Page) -> None:
+def _check_default_branch_row_is_a_single_line(rows: Page) -> None:
     """No pill → name and action strip share one flat ~44px line."""
     row = _box(rows, '.coding-item[data-id="onmain"]')
     name = _box(rows, '.coding-item[data-id="onmain"] .coding-name')
@@ -170,8 +169,7 @@ def test_default_branch_row_is_a_single_line(rows: Page) -> None:
     )
 
 
-@pytest.mark.parametrize("row_id", ["realbranch", "offmain"])
-def test_off_main_row_puts_the_pill_under_the_name(rows: Page, row_id: str) -> None:
+def _check_off_main_row_puts_the_pill_under_the_name(rows: Page, row_id: str) -> None:
     """The pill stacks beneath the name — never beside it, never wrapping.
 
     The action strip still shares the row (it is not what wraps), and the row
@@ -205,7 +203,7 @@ def test_off_main_row_puts_the_pill_under_the_name(rows: Page, row_id: str) -> N
 MIN_PILL_PX = 110
 
 
-def test_stacked_pill_is_wide_enough_to_read(rows: Page) -> None:
+def _check_stacked_pill_is_wide_enough_to_read(rows: Page) -> None:
     """The reason the pill moved onto its own line: it must be readable.
 
     Pinned as a width floor rather than "nothing is ever cut" — at 390px the
@@ -225,7 +223,7 @@ def test_stacked_pill_is_wide_enough_to_read(rows: Page) -> None:
     )
 
 
-def test_pathological_branch_truncates_and_keeps_the_full_name(rows: Page) -> None:
+def _check_pathological_branch_truncates_and_keeps_the_full_name(rows: Page) -> None:
     """Longer than the tile → ellipsis, with the full name still in `title`."""
     sel = '.coding-item[data-id="offmain"] .git-branch-tag'
     expect(rows.locator(sel)).to_have_text(LONG_BRANCH)
@@ -242,8 +240,7 @@ def test_pathological_branch_truncates_and_keeps_the_full_name(rows: Page) -> No
     )
 
 
-@pytest.mark.parametrize("row_id", ["onmain", "offmain"])
-def test_row_buttons_meet_the_44px_target_and_do_not_overlap(
+def _check_row_buttons_meet_the_44px_target_and_do_not_overlap(
     rows: Page, row_id: str
 ) -> None:
     """Real geometry, not a ::before expansion — so targets never overlap."""
@@ -265,7 +262,7 @@ def test_row_buttons_meet_the_44px_target_and_do_not_overlap(
         )
 
 
-def test_agent_launch_is_the_rightmost_button(rows: Page) -> None:
+def _check_agent_launch_is_the_rightmost_button(rows: Page) -> None:
     """Order is Repository · Star · Copilot (issue #8).
 
     The launch is the row's primary action and takes the far-right slot, the
@@ -285,7 +282,7 @@ def test_agent_launch_is_the_rightmost_button(rows: Page) -> None:
     )
 
 
-def test_row_buttons_align_with_the_summary_controls(rows: Page) -> None:
+def _check_row_buttons_align_with_the_summary_controls(rows: Page) -> None:
     """The three row buttons sit directly under the summary's three controls.
 
     Cloud / rotate / star in the Projects summary head, Copilot / GitHub /
@@ -314,7 +311,7 @@ def test_row_buttons_align_with_the_summary_controls(rows: Page) -> None:
     )
 
 
-def test_all_three_glyphs_render_on_the_same_grid(rows: Page) -> None:
+def _check_all_three_glyphs_render_on_the_same_grid(rows: Page) -> None:
     """The star is an inline SVG, its neighbours are <img> — same box anyway.
 
     Regression for the "haphazard" look: the star used to render 20px and
@@ -340,3 +337,18 @@ def test_all_three_glyphs_render_on_the_same_grid(rows: Page) -> None:
     # Same vertical centre line — "perfectly aligned", not just same-sized.
     centres = {round(b["y"] + b["height"] / 2, 1) for b in boxes}
     assert len(centres) == 1, f"glyphs sit on different centre lines: {sorted(centres)}"
+
+
+def test_coding_row_layout(authed_page: Page, base_url: str) -> None:
+    """One Projects-card boot, every row-geometry pin read off the same page."""
+    rows = _open_rows(authed_page, base_url)
+    _check_default_branch_row_is_a_single_line(rows)
+    for row_id in ("realbranch", "offmain"):
+        _check_off_main_row_puts_the_pill_under_the_name(rows, row_id)
+    _check_stacked_pill_is_wide_enough_to_read(rows)
+    _check_pathological_branch_truncates_and_keeps_the_full_name(rows)
+    for row_id in ("onmain", "offmain"):
+        _check_row_buttons_meet_the_44px_target_and_do_not_overlap(rows, row_id)
+    _check_agent_launch_is_the_rightmost_button(rows)
+    _check_row_buttons_align_with_the_summary_controls(rows)
+    _check_all_three_glyphs_render_on_the_same_grid(rows)

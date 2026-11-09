@@ -62,7 +62,7 @@ async () => {
 """
 
 
-def test_frame_paste_brackets_only_when_mode_enabled(
+def scenario_frame_paste_brackets_only_when_mode_enabled(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(base_url, wait_until="domcontentloaded")

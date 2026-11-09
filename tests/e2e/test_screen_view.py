@@ -71,7 +71,7 @@ def _wait_for(page: Page, done: Callable[[], bool], what: str, timeout_s: float 
         page.wait_for_timeout(50)
 
 
-def test_settings_opens_a_live_view_of_the_chosen_display(
+def scenario_settings_opens_a_live_view_of_the_chosen_display(
     authed_page: Page, base_url: str
 ) -> None:
     page = authed_page

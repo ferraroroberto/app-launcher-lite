@@ -28,6 +28,12 @@ The browser slice is diff-proportionate, routed against `main` by the vendored `
 
 Routing is fail-safe: uncertainty escalates to full, never narrows. The chosen tier prints to the console and to `webapp/verify-progress.log`. Separately, `scripts/session_host_touched.py` reads CLAUDE.md's `## session-host` block and makes the gate warn when the diff touched a path the `:8466` session-host loads, whatever tier it routed to.
 
+## The e2e budget
+
+The fleet budget is fewer than 15 e2e tests; this suite holds one `test_*` per user-visible flow, listed by `pytest tests/e2e --co -q`. A flow test takes the `run_flow` fixture from `tests/e2e/conftest.py` and hands it plain `scenario_*` functions. Each scenario gets its own browser context, page and (when it asks for `launched_pty_session`) PTY session, so route mocks and storage never leak between scenarios, exactly as when each was a separate test. A scenario that fails does not stop the others: the flow fails once, at the end, with every failing scenario's name and traceback; a flow whose scenarios all skip is skipped. Each flow carries `@pytest.mark.timeout(FLOW_TIMEOUT_S)` because the 120 s per-test cap is sized for one scenario.
+
+Add a browser check as a `scenario_*` function in the flow it belongs to, never as a new `test_*`. Checks that read one page's geometry from a single boot (the Coding row layout) are one test that shares the page.
+
 ## Dev-loop commands
 
 - Smoke against the live tray: `.\scripts\run-e2e.ps1` (sets `LAUNCHER_E2E_LIVE=1`). A bare `pytest tests/e2e` without opt-in env vars exits with a guard.

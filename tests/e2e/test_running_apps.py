@@ -15,6 +15,10 @@ import json
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e import test_listeners_collapse as listeners_collapse
+from tests.e2e import test_registered_trays_panel as registered_trays_panel
+from tests.e2e._flow import FLOW_TIMEOUT_S
+
 pytestmark = pytest.mark.smoke
 
 
@@ -54,7 +58,7 @@ def _two_row_payload() -> dict:
     }
 
 
-def test_section_renders_empty(authed_page: Page, base_url: str) -> None:
+def scenario_section_renders_empty(authed_page: Page, base_url: str) -> None:
     authed_page.route(
         "**/api/apps/running",
         lambda route: route.fulfill(
@@ -72,7 +76,7 @@ def test_section_renders_empty(authed_page: Page, base_url: str) -> None:
     assert errors == [], "JS errors:\n  - " + "\n  - ".join(errors)
 
 
-def test_section_renders_rows(authed_page: Page, base_url: str) -> None:
+def scenario_section_renders_rows(authed_page: Page, base_url: str) -> None:
     authed_page.route(
         "**/api/apps/running",
         lambda route: route.fulfill(
@@ -99,7 +103,7 @@ def test_section_renders_rows(authed_page: Page, base_url: str) -> None:
     expect(row1.locator(".action-open")).to_be_disabled()
 
 
-def test_open_button_opens_new_tab(authed_page: Page, base_url: str) -> None:
+def scenario_open_button_opens_new_tab(authed_page: Page, base_url: str) -> None:
     target = "https://example.invalid/"
     payload = _two_row_payload()
     payload["running"] = [payload["running"][0]]
@@ -129,7 +133,7 @@ def test_open_button_opens_new_tab(authed_page: Page, base_url: str) -> None:
     assert opened == [target], f"window.open called with {opened!r}, expected [{target!r}]"
 
 
-def test_stop_confirms_and_posts(authed_page: Page, base_url: str) -> None:
+def scenario_stop_confirms_and_posts(authed_page: Page, base_url: str) -> None:
     stop_calls: list[str] = []
 
     payload = _two_row_payload()
@@ -170,7 +174,7 @@ def test_stop_confirms_and_posts(authed_page: Page, base_url: str) -> None:
     ), f"stop POST hit the wrong path: {stop_calls[0]}"
 
 
-def test_polling_pauses_on_other_tab(authed_page: Page, base_url: str) -> None:
+def scenario_polling_pauses_on_other_tab(authed_page: Page, base_url: str) -> None:
     calls: list[float] = []
 
     def _handler(route):
@@ -202,4 +206,26 @@ def test_polling_pauses_on_other_tab(authed_page: Page, base_url: str) -> None:
     assert len(calls) == paused_at, (
         f"polling kept firing after leaving the Apps tab: "
         f"{len(calls) - paused_at} extra call(s)"
+    )
+
+
+@pytest.mark.timeout(FLOW_TIMEOUT_S)
+def test_apps_flow(run_flow) -> None:
+    """The Apps tab: running apps, port listeners and registered trays.
+
+    Each scenario below ran as its own test before; ``run_flow`` gives each a fresh
+    browser context and reports every scenario that fails, not just the first.
+    """
+    run_flow(
+        scenario_section_renders_empty,
+        scenario_section_renders_rows,
+        scenario_open_button_opens_new_tab,
+        scenario_stop_confirms_and_posts,
+        scenario_polling_pauses_on_other_tab,
+        listeners_collapse.scenario_parent_collapsed_by_default_and_toggles,
+        listeners_collapse.scenario_childless_listener_keeps_flat_row,
+        listeners_collapse.scenario_kill_works_collapsed_parent_and_expanded_child,
+        registered_trays_panel.scenario_only_tray_kind_rows_appear_in_registered_trays_panel,
+        registered_trays_panel.scenario_empty_state_shown_with_no_tray_rows,
+        registered_trays_panel.scenario_autostart_toggle_reflects_state_and_patches,
     )

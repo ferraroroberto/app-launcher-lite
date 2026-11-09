@@ -31,7 +31,7 @@ from playwright.sync_api import Page, expect
 pytestmark = pytest.mark.smoke
 
 
-def test_inpage_loopback_open_is_not_treated_as_mirror(
+def scenario_inpage_loopback_open_is_not_treated_as_mirror(
     authed_page: Page, base_url: str, launched_pty_session: str, phone_projection: bool
 ) -> None:
     # Opening a session by tapping its row is an *in-page* terminal only on a

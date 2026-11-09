@@ -102,7 +102,7 @@ def _reset_visibility(page: Page, base_url: str) -> None:
     )
 
 
-def test_copilot_button_present_and_github_toggle_persists(
+def scenario_copilot_button_present_and_github_toggle_persists(
     authed_page: Page, base_url: str
 ) -> None:
     _install_routes(authed_page)

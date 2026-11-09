@@ -100,7 +100,7 @@ def _wire_job_routes(page: Page) -> None:
     )
 
 
-def test_tapping_job_log_copies_to_clipboard(
+def scenario_tapping_job_log_copies_to_clipboard(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.add_init_script(_CLIPBOARD_MOCK)

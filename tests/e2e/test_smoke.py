@@ -14,6 +14,14 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e import test_bottom_tab_bar as bottom_tab_bar
+from tests.e2e import test_collapsible_other_tabs as collapsible_other_tabs
+from tests.e2e import test_header_cpu_reading as header_cpu_reading
+from tests.e2e import test_home_head as home_head
+from tests.e2e import test_primary_nav as primary_nav
+from tests.e2e import test_viewport as viewport
+from tests.e2e._flow import FLOW_TIMEOUT_S
+
 pytestmark = pytest.mark.smoke
 
 
@@ -28,7 +36,7 @@ def _navigate_collecting_errors(page: Page, base_url: str) -> list[str]:
     return errors
 
 
-def test_page_loads_without_console_errors(authed_page: Page, base_url: str) -> None:
+def scenario_page_loads_without_console_errors(authed_page: Page, base_url: str) -> None:
     errors = _navigate_collecting_errors(authed_page, base_url)
     # Give the boot script a beat to settle: fetchConfig, sessions poll,
     # listeners poll. Anything thrown during that fans out as pageerror.
@@ -36,7 +44,7 @@ def test_page_loads_without_console_errors(authed_page: Page, base_url: str) -> 
     assert errors == [], f"JS errors during boot:\n  - " + "\n  - ".join(errors)
 
 
-def test_coding_options_populated(authed_page: Page, base_url: str) -> None:
+def scenario_coding_options_populated(authed_page: Page, base_url: str) -> None:
     _navigate_collecting_errors(authed_page, base_url)
     # The Coding options card is a <details> collapsed by default — expand
     # it so the Copilot selects become visible. renderCopilotOptions()
@@ -68,7 +76,7 @@ def test_coding_options_populated(authed_page: Page, base_url: str) -> None:
     assert effort_count >= 1, f"#copilotEffort rendered no options (got {effort_count})"
 
 
-def test_sessions_panel_renders(authed_page: Page, base_url: str) -> None:
+def scenario_sessions_panel_renders(authed_page: Page, base_url: str) -> None:
     _navigate_collecting_errors(authed_page, base_url)
     expect(authed_page.locator("#sessionsList")).to_be_attached()
     # The panel is valid when it has rows OR the empty-state paragraph
@@ -91,7 +99,7 @@ def test_sessions_panel_renders(authed_page: Page, base_url: str) -> None:
     )
 
 
-def test_tabs_switch(authed_page: Page, base_url: str) -> None:
+def scenario_tabs_switch(authed_page: Page, base_url: str) -> None:
     _navigate_collecting_errors(authed_page, base_url)
     pane_claude = authed_page.locator("#paneCoding")
     pane_apps = authed_page.locator("#paneApps")
@@ -123,7 +131,7 @@ def test_tabs_switch(authed_page: Page, base_url: str) -> None:
     expect(pane_jobs).to_be_hidden()
 
 
-def test_pty_session_renders_with_both_stop_buttons(
+def scenario_pty_session_renders_with_both_stop_buttons(
     authed_page: Page, base_url: str, launched_pty_session: str
 ) -> None:
     """End-to-end: the launched PTY session shows up with both stop buttons.
@@ -169,7 +177,7 @@ def test_pty_session_renders_with_both_stop_buttons(
     assert saw_pty, "launched PTY session did not surface as a 'full control' row"
 
 
-def test_jobs_row_renders_sparkline_and_duration_chip(
+def scenario_jobs_row_renders_sparkline_and_duration_chip(
     authed_page: Page, base_url: str
 ) -> None:
     """Issue #66 — the Jobs row must render the sparkline + duration chip
@@ -238,7 +246,7 @@ def test_jobs_row_renders_sparkline_and_duration_chip(
     )
 
 
-def test_parameterised_job_run_dialog_posts_values(
+def scenario_parameterised_job_run_dialog_posts_values(
     authed_page: Page, base_url: str
 ) -> None:
     """Issue #67 — tapping ▶ on a job with declared params must open the
@@ -331,7 +339,7 @@ def test_parameterised_job_run_dialog_posts_values(
     assert payload == {"params": {"since": "2026-06-01", "tier": "b"}}, payload
 
 
-def test_sign_in_sheet_opens_on_401(authed_page: Page, base_url: str) -> None:
+def scenario_sign_in_sheet_opens_on_401(authed_page: Page, base_url: str) -> None:
     """A 401 opens the vendored sign-in sheet, with an editable password field.
 
     The bearer middleware bypasses loopback, so a bad token from 127.0.0.1
@@ -350,3 +358,29 @@ def test_sign_in_sheet_opens_on_401(authed_page: Page, base_url: str) -> None:
     pw.fill("dummy")
     expect(pw).to_have_value("dummy")
     expect(sheet.locator("[data-track=sign-in-submit]")).to_be_enabled()
+
+
+@pytest.mark.timeout(FLOW_TIMEOUT_S)
+def test_app_shell_flow(run_flow) -> None:
+    """The app shell: boots clean, primary navigation per projection, tab switching, the sign-in sheet, the home head, collapsible panels and the header load reading.
+
+    Each scenario below ran as its own test before; ``run_flow`` gives each a fresh
+    browser context and reports every scenario that fails, not just the first.
+    """
+    run_flow(
+        scenario_page_loads_without_console_errors,
+        scenario_tabs_switch,
+        scenario_sign_in_sheet_opens_on_401,
+        primary_nav.scenario_primary_nav_is_responsive_and_accessible,
+        bottom_tab_bar.scenario_bottom_tab_bar_is_stable_and_low,
+        viewport.scenario_android_viewport_active_on_phone_projection,
+        home_head.scenario_home_head_is_first_card_with_stats_and_toggle,
+        home_head.scenario_options_card_is_last_and_toggles_live_on_projects_card,
+        collapsible_other_tabs.scenario_apps_tab_panels_default_states,
+        collapsible_other_tabs.scenario_jobs_panel_is_collapsible_and_add_button_does_not_toggle,
+        collapsible_other_tabs.scenario_team_skills_panel_is_collapsible,
+        header_cpu_reading.scenario_header_shows_the_reading_and_its_four_states,
+        header_cpu_reading.scenario_the_tap_sheet_lists_cpu_memory_and_the_top_three,
+        header_cpu_reading.scenario_the_sheet_groups_a_burn_and_says_why_a_reading_is_unknown,
+        header_cpu_reading.scenario_a_hidden_page_does_not_read_the_load,
+    )

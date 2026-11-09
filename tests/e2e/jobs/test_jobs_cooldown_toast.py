@@ -48,7 +48,7 @@ def _wire_jobs_list(page: Page) -> None:
     )
 
 
-def test_cooldown_429_shows_skipped_toast(authed_page: Page, base_url: str) -> None:
+def scenario_cooldown_429_shows_skipped_toast(authed_page: Page, base_url: str) -> None:
     _wire_jobs_list(authed_page)
     # FastAPI double-wraps our raise HTTPException(detail={...}) — this is
     # the exact body shape the server produces (jobs.py:538-546).
@@ -79,7 +79,7 @@ def test_cooldown_429_shows_skipped_toast(authed_page: Page, base_url: str) -> N
     expect(authed_page.locator(".toast")).not_to_contain_text("Run failed")
 
 
-def test_non_cooldown_failure_still_shows_run_failed(
+def scenario_non_cooldown_failure_still_shows_run_failed(
     authed_page: Page, base_url: str
 ) -> None:
     _wire_jobs_list(authed_page)
