@@ -52,6 +52,25 @@ trap {
 }
 # gate-verdict:end
 
+# e2e-target:begin
+# The classifier prints E2E_PYTEST_TARGET as one or more space-joined paths. Pytest
+# needs each as its own argument: handed whole, a two-module target is one path with
+# a space in it and collects nothing.
+function Split-E2eTarget([string]$Target) {
+    return @($Target -split '\s+' | Where-Object { $_ })
+}
+
+# A target that runs the whole suite or the capture module has just recaptured every
+# shot, so the baseline stage only compares; any other slice leaves the capture to it.
+function Test-ShotsRecaptured([string[]]$Targets) {
+    $capturing = @("tests/e2e", "tests/e2e/screens/test_screen_shots.py")
+    foreach ($t in $Targets) {
+        if ($capturing -contains ($t -replace '\\', '/').TrimEnd('/')) { return $true }
+    }
+    return $false
+}
+# e2e-target:end
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $python = Join-Path $repoRoot ".venv\Scripts\python.exe"
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -218,15 +237,10 @@ try {
     if ($env:CI -eq "true") {
         $routeReason = "CI always runs the full e2e suite"
     } else {
-        # The classifier's git reads must never take the optional index.lock: a gate
-        # run beside another git process would otherwise strand a 0-byte lock.
-        $env:GIT_OPTIONAL_LOCKS = "0"
-        try {
-            $classifyOut = & $python (Join-Path $repoRoot "scripts\classify_e2e.py")
-            $shTouchedOut = & $python (Join-Path $repoRoot "scripts\session_host_touched.py")
-        } finally {
-            Remove-Item Env:\GIT_OPTIONAL_LOCKS -ErrorAction SilentlyContinue
-        }
+        # classify_e2e.py sets GIT_OPTIONAL_LOCKS=0 on every git call it makes, and
+        # session_host_touched.py reads its diff through that same function.
+        $classifyOut = & $python (Join-Path $repoRoot "scripts\classify_e2e.py")
+        $shTouchedOut = & $python (Join-Path $repoRoot "scripts\session_host_touched.py")
         $kv = @{}
         foreach ($line in @($classifyOut) + @($shTouchedOut)) {
             if ($line -match '^(E2E_[A-Z_]+)=(.*)$') { $kv[$matches[1]] = $matches[2] }
@@ -290,7 +304,8 @@ try {
             # nodeid logged at test start. Locally keep the compact dotted output.
             $verbosity = if ($env:CI -eq "true") { "-v" } else { "-q" }
             if ($env:CI -eq "true") { $env:PYTHONUNBUFFERED = "1" }
-            $e2eArgs = @($e2eTarget, $verbosity)
+            $e2eTargets = Split-E2eTarget $e2eTarget
+            $e2eArgs = @($e2eTargets) + @($verbosity)
             foreach ($b in ($e2eBrowsers -split ',' | Where-Object { $_ })) {
                 $e2eArgs += @("--browser", $b)
             }
@@ -320,7 +335,7 @@ try {
                 # The vendored script spawns git without setting this itself.
                 $env:GIT_OPTIONAL_LOCKS = "0"
                 try {
-                    if (@("tests/e2e", "tests/e2e/screens/test_screen_shots.py") -contains $e2eTarget) {
+                    if (Test-ShotsRecaptured $e2eTargets) {
                         $since = $shotSince.ToString([Globalization.CultureInfo]::InvariantCulture)
                         Phase "shot baseline (compare)..."
                         & $python scripts/shot_baseline.py --check-tree --since $since
