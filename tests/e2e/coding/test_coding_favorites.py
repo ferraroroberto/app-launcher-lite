@@ -22,6 +22,16 @@ import json
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e import test_collapsible_code_tab as collapsible_code_tab
+from tests.e2e import test_smoke as smoke
+from tests.e2e import test_status_popover as status_popover
+from tests.e2e._flow import FLOW_TIMEOUT_S
+from tests.e2e.coding import test_coding_agent_visibility as coding_agent_visibility
+from tests.e2e.coding import test_coding_github_issues_link as coding_github_issues_link
+from tests.e2e.coding import test_coding_model_selector as coding_model_selector
+from tests.e2e.coding import test_git_status_flags as git_status_flags
+from tests.e2e.coding import test_resume_toggle as resume_toggle
+
 pytestmark = pytest.mark.smoke
 
 
@@ -92,7 +102,7 @@ def _open_projects(page: Page) -> None:
     page.locator("details.projects-card").evaluate("el => { el.open = true; }")
 
 
-def test_favorites_pin_to_top_then_filter(authed_page: Page, base_url: str) -> None:
+def scenario_favorites_pin_to_top_then_filter(authed_page: Page, base_url: str) -> None:
     # Routes must be live before boot's first /api/apps fetch.
     _install_routes(authed_page)
     # Start with the filter OFF regardless of any persisted pref from a
@@ -129,7 +139,7 @@ def test_favorites_pin_to_top_then_filter(authed_page: Page, base_url: str) -> N
     assert _order(authed_page) == ["bravo", "alpha", "charlie", "delta"]
 
 
-def test_star_toggle_reorders_and_persists(authed_page: Page, base_url: str) -> None:
+def scenario_star_toggle_reorders_and_persists(authed_page: Page, base_url: str) -> None:
     _install_routes(authed_page)
     authed_page.add_init_script(
         "window.localStorage.setItem('launcher.codingFavFilter', '0');"
@@ -160,3 +170,29 @@ def test_star_toggle_reorders_and_persists(authed_page: Page, base_url: str) -> 
         authed_page.locator("#codingList .coding-item").first
     ).to_have_attribute("data-id", "delta")
     assert _order(authed_page) == ["delta", "alpha", "bravo", "charlie"]
+
+
+@pytest.mark.timeout(FLOW_TIMEOUT_S)
+def test_coding_projects_flow(run_flow) -> None:
+    """The Coding tab's project list: options, running-sessions and projects panels, favorites, per-project launch controls, git status and resume.
+
+    Each scenario below ran as its own test before; ``run_flow`` gives each a fresh
+    browser context and reports every scenario that fails, not just the first.
+    """
+    run_flow(
+        smoke.scenario_coding_options_populated,
+        smoke.scenario_sessions_panel_renders,
+        collapsible_code_tab.scenario_sessions_open_and_projects_collapsed_by_default,
+        collapsible_code_tab.scenario_header_action_tap_does_not_toggle_sessions_panel,
+        status_popover.scenario_status_button_opens_off_main_popover,
+        scenario_favorites_pin_to_top_then_filter,
+        scenario_star_toggle_reorders_and_persists,
+        coding_agent_visibility.scenario_copilot_button_present_and_github_toggle_persists,
+        coding_github_issues_link.scenario_repo_icon_opens_server_computed_issues_url,
+        coding_github_issues_link.scenario_repo_icon_disabled_without_issues_url,
+        coding_model_selector.scenario_copilot_model_select_lists_config_models_and_persists,
+        git_status_flags.scenario_git_status_auto_annotates_tiles_without_tap,
+        resume_toggle.scenario_resume_toggle_present,
+        resume_toggle.scenario_resume_only_launch_streams_pty,
+        resume_toggle.scenario_resume_with_detached_launches_remote_console,
+    )

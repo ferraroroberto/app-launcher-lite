@@ -23,7 +23,7 @@ TAB_ORDER = [
 ]
 
 
-def test_primary_nav_is_responsive_and_accessible(
+def scenario_primary_nav_is_responsive_and_accessible(
     authed_page: Page, base_url: str, phone_projection: bool
 ) -> None:
     authed_page.goto(base_url, wait_until="domcontentloaded")

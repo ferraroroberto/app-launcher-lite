@@ -36,7 +36,7 @@ pytestmark = pytest.mark.smoke
 _NARROW_VIEWPORT = {"width": 320, "height": 640}
 
 
-def test_terminal_bar_buttons_stay_within_viewport(
+def scenario_terminal_bar_buttons_stay_within_viewport(
     authed_page: Page, base_url: str, phone_projection: bool, launched_pty_session: str
 ) -> None:
     if not phone_projection:
@@ -81,7 +81,7 @@ def test_terminal_bar_buttons_stay_within_viewport(
         assert box["right"] <= viewport_width
 
 
-def test_terminal_bar_fits_at_once_on_default_phone(
+def scenario_terminal_bar_fits_at_once_on_default_phone(
     authed_page: Page, base_url: str, phone_projection: bool, launched_pty_session: str
 ) -> None:
     """All seven bar buttons fit the default phone projection without scrolling.

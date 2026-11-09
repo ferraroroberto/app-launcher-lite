@@ -34,6 +34,7 @@ spawns.
 
 from __future__ import annotations
 
+import contextlib
 import glob
 import json
 import logging
@@ -51,12 +52,13 @@ from typing import IO, Callable, Iterator, List, Optional, Tuple
 import pytest
 import requests
 import urllib3
-from playwright.sync_api import BrowserContext, Page
+from playwright.sync_api import Browser, BrowserContext, Page
 from playwright.sync_api import Error as PlaywrightError
 
 from src.app_config import resolve_webapp_port
 from src.runtime_data import app_dir_env_var
 from src.scanner import dir_ignored
+from tests.e2e._flow import run_scenarios
 from tests.e2e._shot import CHROMIUM_CAPTURE_ARGS
 
 logger = logging.getLogger(__name__)
@@ -307,8 +309,8 @@ def _write_copilot_shim(shim_dir: Path) -> None:
     ``--e2e-stub`` sentinel routes to the stub child, anything else falls
     through to the real ``copilot`` resolved at generation time. Where copilot
     isn't installed (the CI runner) the fall-through branch fails loud — but
-    it is never reached there, because `launched_copilot_pty_session` skips
-    first (same `shutil.which` guard as always).
+    it is never reached there, because the PTY-session launch skips first
+    (same `shutil.which` guard as always).
     """
     stub_py = shim_dir / "e2e_stub_child.py"
     stub_py.write_text(_STUB_CHILD_SOURCE, encoding="utf-8")
@@ -731,16 +733,12 @@ _QUIET_SYSTEM_LOAD = json.dumps({
 })
 
 
-@pytest.fixture
-def authed_page(
-    context: BrowserContext, base_url: str, auth_token: str
-) -> Iterator[Page]:
+def _new_authed_page(context: BrowserContext, auth_token: str) -> Page:
+    """A page in ``context`` that boots signed in, with a quiet header load reading."""
     if auth_token:
         context.add_init_script(_seed_token_init_script(auth_token))
-    # The header's CPU reading (#65) reads the real box, and the gate loads
-    # it: a hot reading would make every header-width test depend on the
-    # gate's own load. A quiet default; a page.route() in a test takes
-    # precedence over this context route.
+    # The header load reading otherwise tracks the gate's own CPU; a test's
+    # page.route() takes precedence over this context route.
     context.route(
         re.compile(r".*/api/system/load$"),
         lambda route: route.fulfill(
@@ -749,6 +747,14 @@ def authed_page(
     )
     page = context.new_page()
     _retry_goto_on_no_buffer_space(page)
+    return page
+
+
+@pytest.fixture
+def authed_page(
+    context: BrowserContext, base_url: str, auth_token: str
+) -> Iterator[Page]:
+    page = _new_authed_page(context, auth_token)
     try:
         yield page
     finally:
@@ -836,9 +842,9 @@ def _launch_copilot_via_webapp(base_url: str, auth_token: str) -> str:
     return str(sid)
 
 
-@pytest.fixture
-def launched_pty_session(
-    request: pytest.FixtureRequest, base_url: str, auth_token: str
+@contextlib.contextmanager
+def _pty_session(
+    config: pytest.Config, base_url: str, auth_token: str
 ) -> Iterator[str]:
     """A live PTY session for UI-only assertions (issue #534).
 
@@ -855,12 +861,9 @@ def launched_pty_session(
     Against the LIVE tray (run-e2e.ps1 dev loop) there is no shim on the
     tray's PATH, so this falls back to a real copilot launch — behaviour
     identical to before the split.
-
-    Tests that assert real agent semantics (rendered agent output, agent
-    echo, lifecycle) must use `launched_copilot_pty_session` instead.
     """
     headers = _auth_headers(auth_token)
-    if _autoboot_enabled(request.config):
+    if _autoboot_enabled(config):
         sh_port = _AUTOBOOT_STATE.get("session_host_port")
         if not sh_port:
             pytest.fail("autoboot state missing session_host_port (issue #534)")
@@ -898,20 +901,12 @@ def launched_pty_session(
 
 
 @pytest.fixture
-def launched_copilot_pty_session(base_url: str, auth_token: str) -> Iterator[str]:
-    """A live PTY session running the REAL Copilot CLI (issue #534).
-
-    Only for tests whose assertions depend on the real agent — rendered
-    agent output in the xterm buffer, agent input echo, agent lifecycle
-    semantics. Spawns a real agent process per test: keep its consumer set
-    minimal, and put UI-only assertions on `launched_pty_session`.
-    """
-    headers = _auth_headers(auth_token)
-    sid = _launch_copilot_via_webapp(base_url, auth_token)
-    try:
+def launched_pty_session(
+    request: pytest.FixtureRequest, base_url: str, auth_token: str
+) -> Iterator[str]:
+    """A live PTY session for one test; see ``_pty_session``."""
+    with _pty_session(request.config, base_url, auth_token) as sid:
         yield sid
-    finally:
-        _stop_session(base_url, headers, sid)
 
 
 # ----------------------------------------------------- input-delivery polling
@@ -954,3 +949,47 @@ def wait_for_session_log() -> Callable[..., bool]:
         return _hit()
 
     return _wait
+
+
+@pytest.fixture
+def run_flow(
+    request: pytest.FixtureRequest,
+    browser: Browser,
+    browser_context_args: dict,
+    base_url: str,
+    auth_token: str,
+    phone_projection: bool,
+    wait_for_session_log: Callable[..., bool],
+) -> Callable[..., None]:
+    """``run(*scenarios)``: one e2e test per flow, see tests/e2e/_flow.py."""
+    plain = {
+        "base_url": base_url,
+        "auth_token": auth_token,
+        "phone_projection": phone_projection,
+        "wait_for_session_log": wait_for_session_log,
+    }
+
+    def provide(name: str, stack: contextlib.ExitStack, cache: dict) -> object:
+        if name in plain:
+            return plain[name]
+        if name not in cache:
+            if name == "launched_pty_session":
+                cache[name] = stack.enter_context(
+                    _pty_session(request.config, base_url, auth_token)
+                )
+            elif name in ("authed_page", "unauthed_page"):
+                context = stack.enter_context(
+                    contextlib.closing(browser.new_context(**browser_context_args))
+                )
+                context.set_default_timeout(_DEFAULT_TIMEOUT_MS)
+                context.set_default_navigation_timeout(_DEFAULT_TIMEOUT_MS)
+                cache[name] = (
+                    _new_authed_page(context, auth_token)
+                    if name == "authed_page"
+                    else context.new_page()
+                )
+            else:
+                raise LookupError(f"flow scenario asks for unknown fixture {name!r}")
+        return cache[name]
+
+    return lambda *scenarios: run_scenarios(scenarios, provide)

@@ -25,7 +25,7 @@ def _is_open(page: Page, selector: str) -> bool:
     return bool(page.locator(selector).evaluate("el => el.open"))
 
 
-def test_sessions_open_and_projects_collapsed_by_default(
+def scenario_sessions_open_and_projects_collapsed_by_default(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
@@ -49,7 +49,7 @@ def test_sessions_open_and_projects_collapsed_by_default(
     assert not _is_open(authed_page, "details.projects-card"), "second title tap should re-collapse it"
 
 
-def test_header_action_tap_does_not_toggle_sessions_panel(
+def scenario_header_action_tap_does_not_toggle_sessions_panel(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")

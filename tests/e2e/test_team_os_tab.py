@@ -14,11 +14,14 @@ browser bypasses the gate entirely, so those checks belong there.
 
 from __future__ import annotations
 
+import functools
 import json as _json
 import re
 
 import pytest
 from playwright.sync_api import Page, expect
+
+from tests.e2e._flow import FLOW_TIMEOUT_S
 
 pytestmark = pytest.mark.smoke
 
@@ -71,7 +74,6 @@ def _mock_recap(
     )
 
 
-@pytest.fixture(autouse=True)
 def _default_recap(authed_page: Page) -> None:
     """Stub /api/team-os/recap-status for every test so opening the Team OS tab
     is hermetic — without this the live endpoint answers (team-os is checked
@@ -84,7 +86,19 @@ def _default_recap(authed_page: Page) -> None:
     _mock_recap(authed_page, available=False)
 
 
-def test_team_os_recap_tile_shows_staleness_badge(
+def _with_default_recap(scenario):
+    """Run ``scenario`` with the recap tile stubbed hidden first."""
+
+    @functools.wraps(scenario)
+    def run(authed_page: Page, base_url: str) -> None:
+        _default_recap(authed_page)
+        scenario(authed_page, base_url)
+
+    return run
+
+
+@_with_default_recap
+def scenario_team_os_recap_tile_shows_staleness_badge(
     authed_page: Page, base_url: str
 ) -> None:
     """Regression for #167: the Weekly-recap tile renders above the skills
@@ -107,7 +121,8 @@ def test_team_os_recap_tile_shows_staleness_badge(
     expect(badge).to_contain_text("draft ready")
 
 
-def test_team_os_recap_launch_posts(
+@_with_default_recap
+def scenario_team_os_recap_launch_posts(
     authed_page: Page, base_url: str
 ) -> None:
     """Tapping 🚀 on the recap tile POSTs /api/team-os/recap/launch with the
@@ -148,7 +163,8 @@ def test_team_os_recap_launch_posts(
     assert payload["model"] == "", payload
 
 
-def test_team_os_tab_renders_skill_tiles(authed_page: Page, base_url: str) -> None:
+@_with_default_recap
+def scenario_team_os_tab_renders_skill_tiles(authed_page: Page, base_url: str) -> None:
     _mock_skills(authed_page)
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     authed_page.wait_for_selector("#tabTeamOS", state="attached", timeout=5_000)
@@ -165,7 +181,8 @@ def test_team_os_tab_renders_skill_tiles(authed_page: Page, base_url: str) -> No
     expect(authed_page.locator("#teamOsDetached")).to_be_attached()
 
 
-def test_team_os_toggles_live_in_skills_summary_without_options_card(
+@_with_default_recap
+def scenario_team_os_toggles_live_in_skills_summary_without_options_card(
     authed_page: Page, base_url: str
 ) -> None:
     """#496 round 2: the separate Team OS options card is gone — the model
@@ -210,7 +227,8 @@ def test_team_os_toggles_live_in_skills_summary_without_options_card(
     )
 
 
-def test_team_os_launch_posts_mode_and_model(
+@_with_default_recap
+def scenario_team_os_launch_posts_mode_and_model(
     authed_page: Page, base_url: str
 ) -> None:
     """The launch POST carries the model combo's value (a copilot_models
@@ -260,7 +278,8 @@ def test_team_os_launch_posts_mode_and_model(
     assert payload == {"mode": "remote", "model": "gpt-5.6-terra", "resume": False}, payload
 
 
-def test_team_os_pty_launch_carries_terminal_size(
+@_with_default_recap
+def scenario_team_os_pty_launch_carries_terminal_size(
     authed_page: Page, base_url: str
 ) -> None:
     """Regression pin for issue #374: a streamed (pty) skill launch sizes
@@ -314,7 +333,8 @@ def test_team_os_pty_launch_carries_terminal_size(
         assert payload.get("rows", 0) >= 10 and payload.get("cols", 0) >= 20
 
 
-def test_team_os_detached_resume_posts_remote_console(
+@_with_default_recap
+def scenario_team_os_detached_resume_posts_remote_console(
     authed_page: Page, base_url: str
 ) -> None:
     """Regression for #239: Detached and Resume are orthogonal on the Team OS
@@ -365,7 +385,8 @@ def test_team_os_detached_resume_posts_remote_console(
     assert payload.get("resume") is True, payload
 
 
-def test_team_os_tile_keeps_name_and_buttons_on_one_row(
+@_with_default_recap
+def scenario_team_os_tile_keeps_name_and_buttons_on_one_row(
     authed_page: Page, base_url: str
 ) -> None:
     """Regression for #124: a Life tile keeps its name and both buttons
@@ -428,7 +449,8 @@ def test_team_os_tile_keeps_name_and_buttons_on_one_row(
     )
 
 
-def test_team_os_browser_full_screen_doc_toggle(
+@_with_default_recap
+def scenario_team_os_browser_full_screen_doc_toggle(
     authed_page: Page, base_url: str
 ) -> None:
     """📖 Browse shows a full-screen file list; tapping a file opens it
@@ -491,7 +513,8 @@ def test_team_os_browser_full_screen_doc_toggle(
     expect(authed_page.locator("#teamOsDocClose")).to_be_hidden()
 
 
-def test_team_os_doc_link_keeps_its_url_inside_href(
+@_with_default_recap
+def scenario_team_os_doc_link_keeps_its_url_inside_href(
     authed_page: Page, base_url: str
 ) -> None:
     """A markdown link whose URL carries quote characters renders as one
@@ -537,7 +560,8 @@ def test_team_os_doc_link_keeps_its_url_inside_href(
     assert link.get_attribute("href") == url
 
 
-def test_team_os_delete_conversation_log_from_doc_toolbar(
+@_with_default_recap
+def scenario_team_os_delete_conversation_log_from_doc_toolbar(
     authed_page: Page, base_url: str
 ) -> None:
     """🗑️ never appears in the browse list; it shows in the document toolbar
@@ -623,3 +647,25 @@ def test_team_os_delete_conversation_log_from_doc_toolbar(
     expect(
         authed_page.locator(".teamos-file-btn:has-text('trial.md')")
     ).to_have_count(0)
+
+
+@pytest.mark.timeout(FLOW_TIMEOUT_S)
+def test_team_os_flow(run_flow) -> None:
+    """The Team OS tab: skill tiles, launch modes, recap tile and the doc viewer.
+
+    Each scenario below ran as its own test before; ``run_flow`` gives each a fresh
+    browser context and reports every scenario that fails, not just the first.
+    """
+    run_flow(
+        scenario_team_os_recap_tile_shows_staleness_badge,
+        scenario_team_os_recap_launch_posts,
+        scenario_team_os_tab_renders_skill_tiles,
+        scenario_team_os_toggles_live_in_skills_summary_without_options_card,
+        scenario_team_os_launch_posts_mode_and_model,
+        scenario_team_os_pty_launch_carries_terminal_size,
+        scenario_team_os_detached_resume_posts_remote_console,
+        scenario_team_os_tile_keeps_name_and_buttons_on_one_row,
+        scenario_team_os_browser_full_screen_doc_toggle,
+        scenario_team_os_doc_link_keeps_its_url_inside_href,
+        scenario_team_os_delete_conversation_log_from_doc_toolbar,
+    )

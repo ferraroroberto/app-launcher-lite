@@ -61,7 +61,7 @@ def _job(job_id: str, name: str, *, with_bool_param: bool = False) -> dict:
     }
 
 
-def test_scan_rows_use_vendored_switch(authed_page: Page, base_url: str) -> None:
+def scenario_scan_rows_use_vendored_switch(authed_page: Page, base_url: str) -> None:
     payload = {
         "new": [
             {
@@ -90,7 +90,7 @@ def test_scan_rows_use_vendored_switch(authed_page: Page, base_url: str) -> None
     expect(toggle).to_have_attribute("aria-checked", "false")
 
 
-def test_job_dialog_switches_use_vendored_component(
+def scenario_job_dialog_switches_use_vendored_component(
     authed_page: Page, base_url: str
 ) -> None:
     jobs = [_job("alpha", "Alpha", with_bool_param=True), _job("beta", "Beta")]
@@ -130,7 +130,7 @@ def test_job_dialog_switches_use_vendored_component(
     _assert_switch(authed_page, "#jobRunDialogDryRun")
 
 
-def test_static_boolean_controls_have_no_checkbox_markup(
+def scenario_static_boolean_controls_have_no_checkbox_markup(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(base_url, wait_until="domcontentloaded")

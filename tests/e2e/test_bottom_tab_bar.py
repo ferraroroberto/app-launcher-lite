@@ -36,7 +36,7 @@ TAB_IDS = [
 ]
 
 
-def test_bottom_tab_bar_is_stable_and_low(
+def scenario_bottom_tab_bar_is_stable_and_low(
     authed_page: Page, base_url: str, phone_projection: bool
 ) -> None:
     if not phone_projection:

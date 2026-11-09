@@ -53,7 +53,7 @@ def _wire_jobs_list(page: Page, jobs: list) -> None:
     )
 
 
-def test_toggle_precedes_confirm_toggle_in_dialog(
+def scenario_toggle_precedes_confirm_toggle_in_dialog(
     authed_page: Page, base_url: str
 ) -> None:
     _wire_jobs_list(authed_page, [dict(_BASE_JOB)])
@@ -77,7 +77,7 @@ def test_toggle_precedes_confirm_toggle_in_dialog(
     expect(rows.nth(1)).to_have_class(re.compile("job-confirm-row"))
 
 
-def test_saving_toggle_sends_alert_on_failure(
+def scenario_saving_toggle_sends_alert_on_failure(
     authed_page: Page, base_url: str
 ) -> None:
     _wire_jobs_list(authed_page, [dict(_BASE_JOB)])
@@ -109,7 +109,7 @@ def test_saving_toggle_sends_alert_on_failure(
     assert captured["body"].get("alert_on_failure") is True
 
 
-def test_bell_icon_shown_only_when_flag_set(
+def scenario_bell_icon_shown_only_when_flag_set(
     authed_page: Page, base_url: str
 ) -> None:
     on_job = dict(_BASE_JOB, id="alerted", name="Alerted", alert_on_failure=True)

@@ -22,7 +22,7 @@ from playwright.sync_api import Page, expect
 pytestmark = pytest.mark.smoke
 
 
-def test_home_head_is_first_card_with_stats_and_toggle(
+def scenario_home_head_is_first_card_with_stats_and_toggle(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
@@ -55,7 +55,7 @@ def test_home_head_is_first_card_with_stats_and_toggle(
     )
 
 
-def test_options_card_is_last_and_toggles_live_on_projects_card(
+def scenario_options_card_is_last_and_toggles_live_on_projects_card(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")

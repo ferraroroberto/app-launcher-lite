@@ -51,7 +51,7 @@ def _skip_unless_phone(phone_projection: bool) -> None:
         )
 
 
-def test_terminal_view_has_back_arrow_and_kill_button(
+def scenario_terminal_view_has_back_arrow_and_kill_button(
     authed_page: Page, base_url: str, launched_pty_session: str, phone_projection: bool
 ) -> None:
     _skip_unless_phone(phone_projection)
@@ -82,7 +82,7 @@ def test_terminal_view_has_back_arrow_and_kill_button(
     expect(authed_page.locator("#terminalKill")).to_be_visible()
 
 
-def test_kill_from_terminal_view_stops_and_returns_to_list(
+def scenario_kill_from_terminal_view_stops_and_returns_to_list(
     authed_page: Page, base_url: str, launched_pty_session: str, phone_projection: bool
 ) -> None:
     _skip_unless_phone(phone_projection)

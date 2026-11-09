@@ -17,7 +17,7 @@ pytestmark = pytest.mark.smoke
 _PIXEL_8_PRO_WIDTH = 448
 
 
-def test_android_viewport_active_on_phone_projection(
+def scenario_android_viewport_active_on_phone_projection(
     authed_page: Page, base_url: str, phone_projection: bool
 ) -> None:
     if not phone_projection:

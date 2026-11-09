@@ -11,11 +11,22 @@ patches the card in place rather than re-fetching — see board.js).
 
 from __future__ import annotations
 
+import functools
 import json as _json
 import re
 
 import pytest
 from playwright.sync_api import Page, expect
+
+from tests.e2e import test_desktop_session_mirror as desktop_session_mirror
+from tests.e2e import test_edge_mirror_close as edge_mirror_close
+from tests.e2e import test_inpage_terminal_not_mirror as inpage_terminal_not_mirror
+from tests.e2e import test_screen_view as screen_view
+from tests.e2e import test_session_title_naming as session_title_naming
+from tests.e2e import test_shared_session_title as shared_session_title
+from tests.e2e import test_smoke as smoke
+from tests.e2e import test_stop_unify_and_terminal_kill as stop_unify_and_terminal_kill
+from tests.e2e._flow import FLOW_TIMEOUT_S
 
 pytestmark = pytest.mark.smoke
 
@@ -114,7 +125,7 @@ def _mock_board(page: Page) -> None:
     )
 
 
-def test_coding_tab_rename_wins_over_launch_name(
+def scenario_coding_tab_rename_wins_over_launch_name(
     authed_page: Page, base_url: str
 ) -> None:
     state = {"manual_title": ""}
@@ -143,7 +154,7 @@ def test_coding_tab_rename_wins_over_launch_name(
     expect(row.locator(".name")).to_have_text("My custom title", timeout=10_000)
 
 
-def test_board_drawer_rename_patches_card_in_place(
+def scenario_board_drawer_rename_patches_card_in_place(
     authed_page: Page, base_url: str
 ) -> None:
     captured: dict = {}
@@ -184,7 +195,7 @@ def test_board_drawer_rename_patches_card_in_place(
     )
 
 
-def test_rename_dialog_adopts_modal_contract(
+def scenario_rename_dialog_adopts_modal_contract(
     authed_page: Page, base_url: str
 ) -> None:
     # #545 supersedes #484: the rename dialogs adopt the fleet modal contract
@@ -234,8 +245,7 @@ def test_rename_dialog_adopts_modal_contract(
     )
 
 
-@pytest.mark.parametrize("width", [700, 900, 1100])
-def test_board_drawer_rename_btn_clickable_at_narrow_desktop_widths(
+def scenario_board_drawer_rename_btn_clickable_at_narrow_desktop_widths(
     authed_page: Page, base_url: str, width: int
 ) -> None:
     # Regression for #473: below ~1150px the desktop board grid
@@ -265,3 +275,31 @@ def test_board_drawer_rename_btn_clickable_at_narrow_desktop_widths(
     expect(drawer).to_be_visible()
     drawer.locator("button.board-rename-btn").click()
     expect(authed_page.locator("#sessionRenameDialog")).to_be_visible()
+
+
+@pytest.mark.timeout(FLOW_TIMEOUT_S)
+def test_sessions_flow(run_flow) -> None:
+    """A live session from the list: its stop control, rename and title naming, the desktop mirror, closing, and the terminal view's back and kill controls.
+
+    Each scenario below ran as its own test before; ``run_flow`` gives each a fresh
+    browser context and reports every scenario that fails, not just the first.
+    """
+    run_flow(
+        smoke.scenario_pty_session_renders_with_both_stop_buttons,
+        scenario_coding_tab_rename_wins_over_launch_name,
+        scenario_board_drawer_rename_patches_card_in_place,
+        scenario_rename_dialog_adopts_modal_contract,
+        functools.partial(scenario_board_drawer_rename_btn_clickable_at_narrow_desktop_widths, width=700),
+        functools.partial(scenario_board_drawer_rename_btn_clickable_at_narrow_desktop_widths, width=900),
+        functools.partial(scenario_board_drawer_rename_btn_clickable_at_narrow_desktop_widths, width=1100),
+        session_title_naming.scenario_session_title_precedence,
+        session_title_naming.scenario_mirror_doc_title_keeps_marker_and_human_title,
+        shared_session_title.scenario_board_and_coding_tab_show_identical_shared_title,
+        stop_unify_and_terminal_kill.scenario_terminal_view_has_back_arrow_and_kill_button,
+        stop_unify_and_terminal_kill.scenario_kill_from_terminal_view_stops_and_returns_to_list,
+        desktop_session_mirror.scenario_desktop_row_tap_mirrors_and_keeps_inpage_terminal_closed,
+        edge_mirror_close.scenario_mirror_page_keeps_close_marker_in_document_title,
+        edge_mirror_close.scenario_mirror_marker_applies_on_tailnet_origin,
+        inpage_terminal_not_mirror.scenario_inpage_loopback_open_is_not_treated_as_mirror,
+        screen_view.scenario_settings_opens_a_live_view_of_the_chosen_display,
+    )

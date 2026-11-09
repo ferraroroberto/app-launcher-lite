@@ -60,13 +60,9 @@ jobs:
         # 20 s on CI vs the 5 s local default in conftest.py.
         # Likewise widen the stop/kill overlay-hide budget so the
         # graceful-then-force stop window doesn't time the phone-projection test out.
-        # And widen the real-agent echo budget for the reconnect-replay
-        # test's real-agent cold boot (currently skipped pending a probe on a
-        # deployment machine -- see tests/e2e/terminal/test_terminal_reconnect.py).
         env:
           E2E_LOG_POLL_DEADLINE_MS: '20000'
           E2E_STOP_OVERLAY_HIDE_MS: '30000'
-          E2E_REAL_AGENT_ECHO_MS: '90000'
         run: pwsh -File scripts/verify-before-ship.ps1  # no-pwsh-stub-exempt: GitHub-hosted runner ships a real pwsh
 
       - name: Upload e2e diagnostic logs

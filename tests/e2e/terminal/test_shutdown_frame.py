@@ -46,7 +46,7 @@ async () => {
 """
 
 
-def test_route_frame_classifies_shutdown_vs_output(
+def scenario_route_frame_classifies_shutdown_vs_output(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(base_url, wait_until="domcontentloaded")

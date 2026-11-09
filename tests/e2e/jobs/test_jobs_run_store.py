@@ -119,7 +119,7 @@ def _mock_jobs_routes(page: Page) -> list[dict]:
     return pin_payloads
 
 
-def test_search_jump_artifact_link_and_pin_toggle(
+def scenario_search_jump_artifact_link_and_pin_toggle(
     authed_page: Page, base_url: str
 ) -> None:
     pin_payloads = _mock_jobs_routes(authed_page)

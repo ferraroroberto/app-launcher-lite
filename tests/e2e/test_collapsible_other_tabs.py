@@ -29,7 +29,7 @@ def _is_open(page: Page, selector: str) -> bool:
     return bool(page.locator(selector).evaluate("el => el.open"))
 
 
-def test_apps_tab_panels_default_states(
+def scenario_apps_tab_panels_default_states(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
@@ -58,7 +58,7 @@ def test_apps_tab_panels_default_states(
     )
 
 
-def test_jobs_panel_is_collapsible_and_add_button_does_not_toggle(
+def scenario_jobs_panel_is_collapsible_and_add_button_does_not_toggle(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
@@ -85,7 +85,7 @@ def test_jobs_panel_is_collapsible_and_add_button_does_not_toggle(
     )
 
 
-def test_team_skills_panel_is_collapsible(authed_page: Page, base_url: str) -> None:
+def scenario_team_skills_panel_is_collapsible(authed_page: Page, base_url: str) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     authed_page.locator("#tabTeamOS").click()
 

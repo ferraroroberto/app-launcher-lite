@@ -44,7 +44,7 @@ _LIVE_MODULE = """
 """
 
 
-def test_orientationchange_releases_stale_overlay_pin(
+def scenario_orientationchange_releases_stale_overlay_pin(
     authed_page: Page,
     base_url: str,
     launched_pty_session: str,

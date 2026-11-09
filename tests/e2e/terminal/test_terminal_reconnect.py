@@ -19,25 +19,18 @@ This test exercises the JS half of the fix by:
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from playwright.sync_api import Page
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+from tests.e2e._flow import FLOW_TIMEOUT_S
+from tests.e2e.terminal import (
+    test_repaint_batch_reconnect_race as repaint_batch_reconnect_race,
+)
+from tests.e2e.terminal import test_shutdown_frame as shutdown_frame
+from tests.e2e.terminal import test_terminal_native_scroll as terminal_native_scroll
+from tests.e2e.terminal import test_warm_terminal_reopen as warm_terminal_reopen
 
 pytestmark = pytest.mark.smoke
-
-# How long to wait for a typed marker to echo back through a REAL Copilot
-# CLI process's composer (issue #678). Unlike the UI-transition budgets this
-# is not comparable to (#186's 15s default action timeout), this one has to
-# cover a real agent's cold boot — on a box already running several other
-# live agent PTYs plus the dual-projection browser suite, that boot can run
-# long, especially on the slower phone projection. Env-tunable like
-# ``E2E_LOG_POLL_DEADLINE_MS`` (#184) and ``E2E_STOP_OVERLAY_HIDE_MS`` (#286)
-# so a loaded host gets headroom without slowing the common-case local pass.
-# 60s is roughly two cold boots' worth of headroom and still fails fast
-# against a genuinely broken replay.
-_REAL_AGENT_ECHO_MS = int(os.environ.get("E2E_REAL_AGENT_ECHO_MS", "60000"))
 
 # Wrap WebSocket so we can see every instance the SPA constructs. Runs
 # before any page script, so connectWs() in terminal.js uses the wrapped
@@ -71,7 +64,7 @@ _WS_PROBE = """
 """
 
 
-def test_terminal_reconnects_after_ws_drop(
+def scenario_terminal_reconnects_after_ws_drop(
     authed_page: Page,
     base_url: str,
     launched_pty_session: str,
@@ -119,170 +112,6 @@ def test_terminal_reconnects_after_ws_drop(
     )
 
 
-# --------------------------------------------------------------- issue #444
-
-# The SPA loads its modules cache-busted (`state.js?v=<asset_hash>`). A bare
-# import('/static/state.js') would evaluate a SECOND module instance with its
-# own empty state — silently testing a parallel universe. Resolve the page's
-# real module URL from the resource timeline so the import shares the live
-# instance (same pattern as test_warm_terminal_reopen.py).
-_LIVE_MODULE = """
-(name) => {
-  const hit = performance.getEntriesByType('resource')
-    .map((r) => r.name)
-    .find((n) => n.includes('/static/' + name + '?v='));
-  return hit || ('/static/' + name);
-}
-"""
-
-# Count occurrences of a marker across the ACTIVE terminal's whole xterm
-# buffer (scrollback + viewport). Installed once as window.__bufCount.
-_BUF_COUNT_SETUP = """
-async () => {
-  const live = """ + _LIVE_MODULE + """;
-  const { state } = await import(live('state.js'));
-  window.__bufCount = (marker) => {
-    const t = state.terminal;
-    if (!t || !t.term) return -1;
-    const buf = t.term.buffer.active;
-    let count = 0;
-    for (let i = 0; i < buf.length; i++) {
-      const line = buf.getLine(i);
-      if (!line) continue;
-      const text = line.translateToString(true);
-      let idx = text.indexOf(marker);
-      while (idx !== -1) {
-        count += 1;
-        idx = text.indexOf(marker, idx + marker.length);
-      }
-    }
-    return count;
-  };
-}
-"""
-
-
-def _stable_marker_count(page: Page, marker: str) -> int:
-    """Sample the buffer count until two consecutive reads agree."""
-    last = page.evaluate("(m) => window.__bufCount(m)", marker)
-    for _ in range(20):
-        page.wait_for_timeout(500)
-        cur = page.evaluate("(m) => window.__bufCount(m)", marker)
-        if cur == last:
-            return cur
-        last = cur
-    return last
-
-
-@pytest.mark.skip(
-    reason="deployment-machine probe pending (Phase 4): a real `copilot` boot "
-    "does not reliably echo a raw typed marker through its composer on this "
-    "machine — the TUI paints (transcript shows the Copilot start screen) but "
-    "the marker never lands in the xterm buffer within E2E_REAL_AGENT_ECHO_MS. "
-    "Probe Copilot's composer echo semantics on the target machine (and "
-    "whether the config's tenant-gated --model id is accepted) before "
-    "re-enabling the #444 dup-scrollback pin against the real agent."
-)
-def test_reconnect_replay_does_not_duplicate_scrollback(
-    authed_page: Page,
-    base_url: str,
-    launched_copilot_pty_session: str,
-) -> None:
-    """Regression pin for issue #444 (duplicated conversation tail).
-
-    Copilot is a full-screen agent, so a (re)connect takes the skip-replay
-    path (#128): the server sends the clear-frame preamble as its own first
-    frame, then the headless-VT current-frame snapshot (#432) — never the
-    raw ring. Without the wipe, the repainted frame lands *below* the stale
-    buffer and duplicates the conversation tail. Pin: type a distinctive
-    marker (no newline — it just echoes in the agent's composer), force a
-    WS drop, let the auto-reconnect land, and assert the marker count in
-    the buffer did NOT grow.
-
-    Uses the REAL Copilot fixture (issue #534): the marker's on-screen echo
-    comes from the agent painting its composer, and the reconnect frame must
-    carry that real rendered content — the one e2e assertion a stub child
-    can't stand in for.
-    """
-    sid = launched_copilot_pty_session
-    authed_page.add_init_script(_WS_PROBE)
-    authed_page.goto(f"{base_url}/?terminal={sid}", wait_until="domcontentloaded")
-    authed_page.wait_for_function(
-        "() => window.__wsInstances && window.__wsInstances.length >= 1 "
-        "&& window.__wsInstances[0].readyState === 1",
-        timeout=10_000,
-    )
-    authed_page.evaluate(_BUF_COUNT_SETUP)
-
-    # Echo a marker into the agent's composer (no \n — never submitted, so
-    # the agent doesn't act on it; short enough not to wrap on the phone
-    # projection's narrow cols).
-    marker = "dup-pin-444"
-    authed_page.evaluate(
-        "(text) => window.__wsInstances.at(-1).send("
-        "JSON.stringify({ type: 'input', data: text }))",
-        marker,
-    )
-    # The echo lands once a REAL Copilot CLI process has painted its
-    # composer — a real cold boot, not a UI transition, so this budget is
-    # env-tunable and wide (see _REAL_AGENT_ECHO_MS above), unlike the
-    # slower projections' usual fixed headroom for pure UI waits.
-    try:
-        authed_page.wait_for_function(
-            "(m) => window.__bufCount(m) >= 1",
-            arg=marker,
-            timeout=_REAL_AGENT_ECHO_MS,
-        )
-    except PlaywrightTimeoutError as exc:
-        raise AssertionError(
-            f"marker echo did not land within {_REAL_AGENT_ECHO_MS}ms — the "
-            "real Copilot CLI process backing this session likely hasn't "
-            "finished its cold boot (see #678); check host load before "
-            "assuming this is a diff regression"
-        ) from exc
-    before = _stable_marker_count(authed_page, marker)
-    assert before >= 1
-
-    # Force-drop the live socket → the #28 backoff reconnects and the
-    # session-host replays the ring.
-    authed_page.evaluate("window.__wsInstances.at(-1).close()")
-    authed_page.wait_for_function(
-        "() => window.__wsInstances.length >= 2 "
-        "&& window.__wsInstances.at(-1).readyState === 1",
-        timeout=15_000,
-    )
-    # Protocol pin (#444, fullscreen shape): the reconnect must open with
-    # the clear-frame preamble — for a fullscreen agent the server sends it
-    # as its own first text frame, before the VT-snapshot frame (#128/#432)
-    # — wiping the stale buffer before the current frame lands. This is
-    # what fails on an unfixed host: without the wipe the repaint lands
-    # below the stale buffer and duplicates the conversation tail.
-    authed_page.wait_for_function(
-        "() => window.__wsInstances.at(-1).__firstMsg !== null",
-        timeout=10_000,
-    )
-    first = authed_page.evaluate("window.__wsInstances.at(-1).__firstMsg")
-    assert first is not None and first.startswith("\x1b[H\x1b[2J\x1b[3J"), (
-        f"reconnect frame does not start with the clear-frame "
-        f"preamble (got {first!r:.60}) — the repaint would land below "
-        "the stale buffer and duplicate the conversation tail (#444)"
-    )
-
-    # Wait for the replayed marker to be back on screen, then for the
-    # buffer to go quiet before counting.
-    authed_page.wait_for_function(
-        "(m) => window.__bufCount(m) >= 1", arg=marker, timeout=15_000
-    )
-    after = _stable_marker_count(authed_page, marker)
-
-    assert after == before, (
-        f"reconnect replay duplicated the scrollback: marker {marker!r} "
-        f"appeared {before}x before the WS drop but {after}x after the "
-        "replay — the ring landed below the stale buffer instead of on a "
-        "wiped one (#444)"
-    )
-
-
 # --------------------------------------------------------------- issue #610
 
 # A WebSocket that opens (after a tick, same async shape as a real socket)
@@ -322,7 +151,7 @@ _SILENT_WS = """
 """
 
 
-def test_terminal_watchdog_fires_when_nothing_ever_paints(
+def scenario_terminal_watchdog_fires_when_nothing_ever_paints(
     authed_page: Page,
     base_url: str,
     launched_pty_session: str,
@@ -369,4 +198,21 @@ def test_terminal_watchdog_fires_when_nothing_ever_paints(
         " && window.__silentWs && window.__silentWs.readyState === 1",
         arg=count_before,
         timeout=10_000,
+    )
+
+
+@pytest.mark.timeout(FLOW_TIMEOUT_S)
+def test_terminal_session_flow(run_flow) -> None:
+    """A terminal's session life: reconnect after a drop, the first-paint watchdog, repaint races, shutdown frames, warm reopen and native scroll.
+
+    Each scenario below ran as its own test before; ``run_flow`` gives each a fresh
+    browser context and reports every scenario that fails, not just the first.
+    """
+    run_flow(
+        scenario_terminal_reconnects_after_ws_drop,
+        scenario_terminal_watchdog_fires_when_nothing_ever_paints,
+        repaint_batch_reconnect_race.scenario_reconnect_repaint_batch_discards_stale_state,
+        shutdown_frame.scenario_route_frame_classifies_shutdown_vs_output,
+        warm_terminal_reopen.scenario_warm_reopen_reuses_terminal_and_ws,
+        terminal_native_scroll.scenario_native_touch_scroll_routing,
     )

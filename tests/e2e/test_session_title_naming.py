@@ -125,7 +125,7 @@ async () => {
 """
 
 
-def test_session_title_precedence(authed_page: Page, base_url: str) -> None:
+def scenario_session_title_precedence(authed_page: Page, base_url: str) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     r = authed_page.evaluate(_TITLE_PROBE)
 
@@ -183,7 +183,7 @@ def test_session_title_precedence(authed_page: Page, base_url: str) -> None:
     )
 
 
-def test_mirror_doc_title_keeps_marker_and_human_title(
+def scenario_mirror_doc_title_keeps_marker_and_human_title(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")

@@ -23,10 +23,14 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e import test_settings_api_tokens as settings_api_tokens
+from tests.e2e import test_vendored_switch as vendored_switch
+from tests.e2e._flow import FLOW_TIMEOUT_S
+
 pytestmark = pytest.mark.smoke
 
 
-def test_settings_tab_opens_pane_with_controls(
+def scenario_settings_tab_opens_pane_with_controls(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(base_url, wait_until="domcontentloaded")
@@ -47,7 +51,7 @@ def test_settings_tab_opens_pane_with_controls(
     expect(authed_page.locator("#editMode")).to_be_visible()
 
 
-def test_settings_panel_absent_from_other_tabs(
+def scenario_settings_panel_absent_from_other_tabs(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(base_url, wait_until="domcontentloaded")
@@ -57,7 +61,7 @@ def test_settings_panel_absent_from_other_tabs(
     expect(authed_page.locator("#settingsPanel")).to_be_hidden()
 
 
-def test_theme_toggle_lives_on_coding_tab_and_flips_theme(
+def scenario_theme_toggle_lives_on_coding_tab_and_flips_theme(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(base_url, wait_until="domcontentloaded")
@@ -80,7 +84,7 @@ def test_theme_toggle_lives_on_coding_tab_and_flips_theme(
     assert after != before
 
 
-def test_terminal_history_lines_field_loads_and_saves(
+def scenario_terminal_history_lines_field_loads_and_saves(
     authed_page: Page, base_url: str
 ) -> None:
     """The scrollback-depth field (issue #435 follow-up) loads pre-filled
@@ -103,7 +107,7 @@ def test_terminal_history_lines_field_loads_and_saves(
     expect(authed_page.locator("#terminalHistoryLines")).to_have_value("5000")
 
 
-def test_boot_autostart_toggle_writes_and_removes_startup_bat(
+def scenario_boot_autostart_toggle_writes_and_removes_startup_bat(
     authed_page: Page, base_url: str
 ) -> None:
     """The "Start app-launcher at log on" switch (issue #456 part 1/2) is a
@@ -136,7 +140,7 @@ def test_boot_autostart_toggle_writes_and_removes_startup_bat(
     )
 
 
-def test_settings_boolean_controls_use_vendored_switch(
+def scenario_settings_boolean_controls_use_vendored_switch(
     authed_page: Page, base_url: str
 ) -> None:
     """Settings booleans use the fleet switch track + sliding thumb."""
@@ -153,7 +157,7 @@ def test_settings_boolean_controls_use_vendored_switch(
         assert round(box["height"]) == 26
 
 
-def test_settings_status_readout_has_no_tls_or_tunnel_url(
+def scenario_settings_status_readout_has_no_tls_or_tunnel_url(
     authed_page: Page, base_url: str
 ) -> None:
     """The TLS badge + tunnel-URL status line was removed (issue #435
@@ -168,7 +172,7 @@ def test_settings_status_readout_has_no_tls_or_tunnel_url(
     assert "http" not in text
 
 
-def test_text_size_control_scales_and_persists(
+def scenario_text_size_control_scales_and_persists(
     authed_page: Page, base_url: str
 ) -> None:
     """The Settings Small/Default/Large control scales the root font-size and
@@ -198,3 +202,28 @@ def test_text_size_control_scales_and_persists(
     # Pre-paint stamp: set from storage before any control is bound or clicked.
     assert page.evaluate("document.documentElement.dataset.textsize") == "large"
     assert page.evaluate("getComputedStyle(document.documentElement).fontSize") == "18px"
+
+
+@pytest.mark.timeout(FLOW_TIMEOUT_S)
+def test_settings_flow(run_flow) -> None:
+    """The Settings tab: its controls and saves, API tokens, and the vendored switch component across the app.
+
+    Each scenario below ran as its own test before; ``run_flow`` gives each a fresh
+    browser context and reports every scenario that fails, not just the first.
+    """
+    run_flow(
+        scenario_settings_tab_opens_pane_with_controls,
+        scenario_settings_panel_absent_from_other_tabs,
+        scenario_theme_toggle_lives_on_coding_tab_and_flips_theme,
+        scenario_terminal_history_lines_field_loads_and_saves,
+        scenario_boot_autostart_toggle_writes_and_removes_startup_bat,
+        scenario_settings_boolean_controls_use_vendored_switch,
+        scenario_settings_status_readout_has_no_tls_or_tunnel_url,
+        scenario_text_size_control_scales_and_persists,
+        settings_api_tokens.scenario_mint_shows_token_once_and_lists_it,
+        settings_api_tokens.scenario_mint_requires_label,
+        settings_api_tokens.scenario_revoke_removes_row,
+        vendored_switch.scenario_scan_rows_use_vendored_switch,
+        vendored_switch.scenario_job_dialog_switches_use_vendored_component,
+        vendored_switch.scenario_static_boolean_controls_have_no_checkbox_markup,
+    )

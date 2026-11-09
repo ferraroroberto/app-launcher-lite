@@ -50,7 +50,7 @@ def _navigate(page: Page, base_url: str) -> None:
         summary.click()
 
 
-def test_only_tray_kind_rows_appear_in_registered_trays_panel(
+def scenario_only_tray_kind_rows_appear_in_registered_trays_panel(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.route(
@@ -73,7 +73,7 @@ def test_only_tray_kind_rows_appear_in_registered_trays_panel(
     expect(other_rows.first).to_contain_text("Photo OCR")
 
 
-def test_empty_state_shown_with_no_tray_rows(
+def scenario_empty_state_shown_with_no_tray_rows(
     authed_page: Page, base_url: str
 ) -> None:
     payload = _apps_payload()
@@ -90,7 +90,7 @@ def test_empty_state_shown_with_no_tray_rows(
     expect(authed_page.locator("#registeredTraysEmpty")).to_be_visible()
 
 
-def test_autostart_toggle_reflects_state_and_patches(
+def scenario_autostart_toggle_reflects_state_and_patches(
     authed_page: Page, base_url: str
 ) -> None:
     patches: list[dict] = []

@@ -26,7 +26,7 @@ from playwright.sync_api import Page, expect
 pytestmark = pytest.mark.smoke
 
 
-def test_desktop_row_tap_mirrors_and_keeps_inpage_terminal_closed(
+def scenario_desktop_row_tap_mirrors_and_keeps_inpage_terminal_closed(
     authed_page: Page, base_url: str, launched_pty_session: str, phone_projection: bool
 ) -> None:
     # Desktop (pointer: fine) behaviour. The conftest maps the phone

@@ -78,7 +78,7 @@ async () => {
 """
 
 
-def test_reconnect_repaint_batch_discards_stale_state(
+def scenario_reconnect_repaint_batch_discards_stale_state(
     authed_page: Page, base_url: str
 ) -> None:
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")

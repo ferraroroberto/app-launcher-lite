@@ -88,7 +88,7 @@ def _open_agenda(page: Page, base_url: str) -> None:
     page.wait_for_selector(".jobs-agenda-row", state="attached", timeout=5_000)
 
 
-def test_agenda_groups_by_day_in_order(authed_page: Page, base_url: str) -> None:
+def scenario_agenda_groups_by_day_in_order(authed_page: Page, base_url: str) -> None:
     _wire(authed_page)
     _open_agenda(authed_page, base_url)
 
@@ -105,7 +105,7 @@ def test_agenda_groups_by_day_in_order(authed_page: Page, base_url: str) -> None
     expect(authed_page.locator(".jobs-agenda-frequent")).to_contain_text("Mango")
 
 
-def test_agenda_row_reveals_job(authed_page: Page, base_url: str) -> None:
+def scenario_agenda_row_reveals_job(authed_page: Page, base_url: str) -> None:
     _wire(authed_page)
     _open_agenda(authed_page, base_url)
 
@@ -116,7 +116,7 @@ def test_agenda_row_reveals_job(authed_page: Page, base_url: str) -> None:
     ).to_be_visible()
 
 
-def test_agenda_empty_state(authed_page: Page, base_url: str) -> None:
+def scenario_agenda_empty_state(authed_page: Page, base_url: str) -> None:
     _wire(authed_page, agenda={"days": 7, "generated_epoch": _epoch(0),
                                "occurrences": [], "frequent": []})
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")

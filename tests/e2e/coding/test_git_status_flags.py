@@ -25,7 +25,7 @@ pytestmark = pytest.mark.smoke
 _BRANCH = "feat/regress-115"
 
 
-def test_git_status_auto_annotates_tiles_without_tap(
+def scenario_git_status_auto_annotates_tiles_without_tap(
     authed_page: Page, base_url: str
 ) -> None:
     # Install the intercept BEFORE goto — the boot fetch (#496) must consume

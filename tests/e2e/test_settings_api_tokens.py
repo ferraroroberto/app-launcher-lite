@@ -114,7 +114,7 @@ def _open_settings(page: Page, base_url: str) -> None:
     expect(page.locator("#paneSettings")).to_be_visible()
 
 
-def test_mint_shows_token_once_and_lists_it(
+def scenario_mint_shows_token_once_and_lists_it(
     authed_page: Page, base_url: str
 ) -> None:
     state: Dict[str, Any] = {"rows": []}
@@ -144,7 +144,7 @@ def test_mint_shows_token_once_and_lists_it(
     expect(authed_page.locator("#tokensEmpty")).to_be_hidden()
 
 
-def test_mint_requires_label(authed_page: Page, base_url: str) -> None:
+def scenario_mint_requires_label(authed_page: Page, base_url: str) -> None:
     state: Dict[str, Any] = {"rows": []}
     _wire(authed_page, state)
     _open_settings(authed_page, base_url)
@@ -155,7 +155,7 @@ def test_mint_requires_label(authed_page: Page, base_url: str) -> None:
     expect(authed_page.locator("#tokenMintResult")).to_be_hidden()
 
 
-def test_revoke_removes_row(authed_page: Page, base_url: str) -> None:
+def scenario_revoke_removes_row(authed_page: Page, base_url: str) -> None:
     rows: List[Dict[str, Any]] = [dict(_MINTED)]
     state: Dict[str, Any] = {"rows": rows}
     _wire(authed_page, state)

@@ -70,8 +70,7 @@ _PROBE_PAYLOAD = {
 }
 
 
-@pytest.fixture()
-def listeners_page(authed_page: Page, base_url: str) -> Page:
+def _open_listeners_page(authed_page: Page, base_url: str) -> Page:
     authed_page.route(
         "**/api/ports/probe",
         lambda route: route.fulfill(
@@ -95,8 +94,8 @@ def _parent_row(page: Page):
     return page.locator("#listenersList .listener-row.expandable")
 
 
-def test_parent_collapsed_by_default_and_toggles(listeners_page: Page) -> None:
-    page = listeners_page
+def scenario_parent_collapsed_by_default_and_toggles(authed_page: Page, base_url: str) -> None:
+    page = _open_listeners_page(authed_page, base_url)
 
     # Only the grouped parent gets the affordance; children start hidden.
     parent = _parent_row(page)
@@ -116,8 +115,8 @@ def test_parent_collapsed_by_default_and_toggles(listeners_page: Page) -> None:
     expect(_parent_row(page)).to_have_attribute("aria-expanded", "false")
 
 
-def test_childless_listener_keeps_flat_row(listeners_page: Page) -> None:
-    page = listeners_page
+def scenario_childless_listener_keeps_flat_row(authed_page: Page, base_url: str) -> None:
+    page = _open_listeners_page(authed_page, base_url)
 
     flat = page.locator(
         "#listenersList .listener-row:not(.child):not(.expandable)"
@@ -126,10 +125,10 @@ def test_childless_listener_keeps_flat_row(listeners_page: Page) -> None:
     expect(flat.locator(".listener-chevron")).to_have_count(0)
 
 
-def test_kill_works_collapsed_parent_and_expanded_child(
-    listeners_page: Page,
+def scenario_kill_works_collapsed_parent_and_expanded_child(
+    authed_page: Page, base_url: str,
 ) -> None:
-    page = listeners_page
+    page = _open_listeners_page(authed_page, base_url)
     killed_ports: list = []
 
     def _capture_kill(route) -> None:

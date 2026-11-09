@@ -69,7 +69,7 @@ def _mock_config(page: Page) -> dict:
     return state
 
 
-def test_copilot_model_select_lists_config_models_and_persists(
+def scenario_copilot_model_select_lists_config_models_and_persists(
     authed_page: Page, base_url: str
 ) -> None:
     """The options-card model <select> offers Default (auto) plus exactly the

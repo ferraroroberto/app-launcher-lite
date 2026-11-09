@@ -22,7 +22,7 @@ from playwright.sync_api import Page, expect
 pytestmark = pytest.mark.smoke
 
 
-def test_keys_popover_sends_escape_sequences(
+def scenario_keys_popover_sends_escape_sequences(
     authed_page: Page,
     base_url: str,
     launched_pty_session: str,
@@ -62,7 +62,7 @@ def test_keys_popover_sends_escape_sequences(
     expect(popover).to_be_hidden()
 
 
-def test_shift_toggle_sends_back_tab(
+def scenario_shift_toggle_sends_back_tab(
     authed_page: Page,
     base_url: str,
     launched_pty_session: str,
@@ -108,7 +108,7 @@ def test_shift_toggle_sends_back_tab(
     expect(shift).not_to_have_class(re.compile(r"\bactive\b"))
 
 
-def test_no_stale_ctrlc_quit_buttons(authed_page: Page, base_url: str) -> None:
+def scenario_no_stale_ctrlc_quit_buttons(authed_page: Page, base_url: str) -> None:
     """The ^C / Quit buttons are gone — only the new ⌨️ button remains."""
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     assert authed_page.locator("#terminalCtrlC").count() == 0

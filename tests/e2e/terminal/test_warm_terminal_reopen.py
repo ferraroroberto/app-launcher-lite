@@ -115,7 +115,7 @@ def _reopen_session_and_inspect(page: Page, sid: str) -> dict:
     )
 
 
-def test_warm_reopen_reuses_terminal_and_ws(
+def scenario_warm_reopen_reuses_terminal_and_ws(
     authed_page: Page,
     base_url: str,
     launched_pty_session: str,

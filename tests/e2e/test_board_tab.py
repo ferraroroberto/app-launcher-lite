@@ -14,6 +14,7 @@ by the in-process suite in tests/unit/board/ + tests/unit/board/test_board_drill
 from __future__ import annotations
 
 import copy
+import functools
 import json as _json
 import re
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e._flow import FLOW_TIMEOUT_S
 from tests.e2e.conftest import stable_read
 
 pytestmark = pytest.mark.smoke
@@ -131,7 +133,7 @@ def _switch_to_backlog(page: Page) -> None:
         page.locator("#boardColBacklog").click()
 
 
-def test_board_renders_columns_counts_and_cards(
+def scenario_board_renders_columns_counts_and_cards(
     authed_page: Page, base_url: str
 ) -> None:
     _mock_board(authed_page)
@@ -168,7 +170,7 @@ def test_board_renders_columns_counts_and_cards(
     expect(done.first).to_contain_text("closed")
 
 
-def test_board_refresh_button_posts_gitlab_refresh(
+def scenario_board_refresh_button_posts_gitlab_refresh(
     authed_page: Page, base_url: str
 ) -> None:
     _mock_board(authed_page)
@@ -193,7 +195,7 @@ def test_board_refresh_button_posts_gitlab_refresh(
     )
 
 
-def test_board_auto_refreshes_stale_gitlab_on_open(
+def scenario_board_auto_refreshes_stale_gitlab_on_open(
     authed_page: Page, base_url: str
 ) -> None:
     """Opening the tab with a glab cache older than the client's staleness
@@ -221,7 +223,7 @@ def test_board_auto_refreshes_stale_gitlab_on_open(
     )
 
 
-def test_board_fresh_gitlab_not_refreshed_on_open(
+def scenario_board_fresh_gitlab_not_refreshed_on_open(
     authed_page: Page, base_url: str
 ) -> None:
     """A fresh cache must NOT auto-refresh — tab-open stays free."""
@@ -242,7 +244,7 @@ def test_board_fresh_gitlab_not_refreshed_on_open(
     assert posts == [], f"fresh glab cache must not auto-refresh on open, got {posts}"
 
 
-def test_board_strip_click_scrolls_carousel_not_page(
+def scenario_board_strip_click_scrolls_carousel_not_page(
     authed_page: Page, base_url: str
 ) -> None:
     """Tapping a strip button pans the carousel horizontally without moving
@@ -289,7 +291,7 @@ def _mock_exchange(
     )
 
 
-def test_board_card_drawer_shows_exchange_and_posts_reply(
+def scenario_board_card_drawer_shows_exchange_and_posts_reply(
     authed_page: Page, base_url: str
 ) -> None:
     """#301: tapping a session card opens the drawer with the last exchange;
@@ -345,7 +347,7 @@ def test_board_card_drawer_shows_exchange_and_posts_reply(
     assert captured.get("body") == {"data": "go ahead", "submit": True}
 
 
-def test_board_reply_optimistically_moves_card_off_your_turn(
+def scenario_board_reply_optimistically_moves_card_off_your_turn(
     authed_page: Page, base_url: str
 ) -> None:
     """#461: sending a reply relocates the card into Bot's turn right
@@ -388,7 +390,7 @@ def test_board_reply_optimistically_moves_card_off_your_turn(
     expect(authed_page.locator("#boardColBot .board-count")).to_have_text("2")
 
 
-def test_board_card_drawer_shows_agent_native_exchange(
+def scenario_board_card_drawer_shows_agent_native_exchange(
     authed_page: Page, base_url: str
 ) -> None:
     """#457: a card opens its own structured native exchange, rather than
@@ -419,11 +421,7 @@ def test_board_card_drawer_shows_agent_native_exchange(
     expect(exchange).to_contain_text("Native exchange resolved.")
 
 
-@pytest.mark.parametrize("reason, expected_state, expected_text", [
-    ("no_exchange", "empty", "No exchange yet."),
-    ("capture_unparseable", "error", "Conversation preview unavailable"),
-])
-def test_board_drawer_distinguishes_empty_from_source_failure(
+def scenario_board_drawer_distinguishes_empty_from_source_failure(
     authed_page: Page, base_url: str, reason: str, expected_state: str,
     expected_text: str,
 ) -> None:
@@ -443,7 +441,7 @@ def test_board_drawer_distinguishes_empty_from_source_failure(
     expect(exchange).to_contain_text(expected_text)
 
 
-def test_backlog_start_button_posts_issue_start(
+def scenario_backlog_start_button_posts_issue_start(
     authed_page: Page, base_url: str
 ) -> None:
     """#301: a backlog card of a repo present in the projects folder carries
@@ -502,7 +500,7 @@ def test_backlog_start_button_posts_issue_start(
     assert "model" not in body
 
 
-def test_backlog_issue_tile_is_flat_separator_row_with_icon_only_actions(
+def scenario_backlog_issue_tile_is_flat_separator_row_with_icon_only_actions(
     authed_page: Page, base_url: str
 ) -> None:
     """#339: the backlog issue tile is a flat separator row (no card
@@ -552,7 +550,7 @@ def test_backlog_issue_tile_is_flat_separator_row_with_icon_only_actions(
     )
 
 
-def test_backlog_issue_in_progress_is_tinted_and_actions_disabled(
+def scenario_backlog_issue_in_progress_is_tinted_and_actions_disabled(
     authed_page: Page, base_url: str
 ) -> None:
     """#528: the shared active-issue marker makes an in-flight backlog row
@@ -594,7 +592,7 @@ def test_backlog_issue_in_progress_is_tinted_and_actions_disabled(
     )
 
 
-def test_backlog_issue_tile_truncates_a_long_title_instead_of_wrapping(
+def scenario_backlog_issue_tile_truncates_a_long_title_instead_of_wrapping(
     authed_page: Page, base_url: str
 ) -> None:
     """#337/#339 regression guard: a title too long to fit must be
@@ -652,7 +650,7 @@ def test_backlog_issue_tile_truncates_a_long_title_instead_of_wrapping(
     assert box["height"] < 26, f"title is {box['height']}px tall — looks like it wrapped to 2+ lines"
 
 
-def test_board_deep_link_opens_drawer(authed_page: Page, base_url: str) -> None:
+def scenario_board_deep_link_opens_drawer(authed_page: Page, base_url: str) -> None:
     """#301: ?board=<sid> lands on the Board with that card's drawer open —
     the target of the Slack-ping deep link."""
     _mock_board(authed_page)
@@ -665,7 +663,7 @@ def test_board_deep_link_opens_drawer(authed_page: Page, base_url: str) -> None:
     expect(drawer).to_contain_text("Merge fixed — tests green. Ship it?")
 
 
-def test_board_deep_link_resolves_via_state_sid(authed_page: Page, base_url: str) -> None:
+def scenario_board_deep_link_resolves_via_state_sid(authed_page: Page, base_url: str) -> None:
     """#307: a Slack ping's ?board=<sid> carries the hook's transcript UUID,
     not the card's session_id — resolve it via the card's state_sid instead,
     and expand the drawer keyed by the card's real session_id."""
@@ -697,7 +695,7 @@ def _mock_apps_with_app_launcher(page: Page) -> None:
     )
 
 
-def test_board_drawer_rename_first_icon_only_and_stop_kills_session(
+def scenario_board_drawer_rename_first_icon_only_and_stop_kills_session(
     authed_page: Page, base_url: str
 ) -> None:
     """#496 item 5 (+ round-2 on-device feedback): the reply box takes a
@@ -796,7 +794,7 @@ def test_board_drawer_rename_first_icon_only_and_stop_kills_session(
     expect(drawer).to_be_hidden()
 
 
-def test_backlog_cards_color_coded_from_shared_git_cache(
+def scenario_backlog_cards_color_coded_from_shared_git_cache(
     authed_page: Page, base_url: str
 ) -> None:
     """#496 item 4: a backlog card whose repo is dirty shows the red meta
@@ -828,7 +826,7 @@ def test_backlog_cards_color_coded_from_shared_git_cache(
     expect(meta).to_have_class(re.compile(r"\bgit-dirty\b"), timeout=15_000)
 
 
-def test_board_drawer_survives_git_status_poll_mid_interaction(
+def scenario_board_drawer_survives_git_status_poll_mid_interaction(
     authed_page: Page, base_url: str
 ) -> None:
     """#512: refreshGitStatus() (apps.js) must self-gate on
@@ -880,7 +878,7 @@ def test_board_drawer_survives_git_status_poll_mid_interaction(
     expect(rename).to_have_attribute("data-e2e-tag", "pre-poll")
 
 
-def test_board_columns_layout_matches_projection(
+def scenario_board_columns_layout_matches_projection(
     authed_page: Page, base_url: str
 ) -> None:
     """Phone (Android projection): the carousel shows one column per
@@ -909,3 +907,34 @@ def test_board_columns_layout_matches_projection(
             f"desktop column should sit in a 4-col grid: col={box_col['width']}, "
             f"container={box_container['width']}"
         )
+
+
+@pytest.mark.timeout(FLOW_TIMEOUT_S)
+def test_board_flow(run_flow) -> None:
+    """The Board tab: columns and cards, refresh, the card drawer and reply, backlog tiles and deep links.
+
+    Each scenario below ran as its own test before; ``run_flow`` gives each a fresh
+    browser context and reports every scenario that fails, not just the first.
+    """
+    run_flow(
+        scenario_board_renders_columns_counts_and_cards,
+        scenario_board_refresh_button_posts_gitlab_refresh,
+        scenario_board_auto_refreshes_stale_gitlab_on_open,
+        scenario_board_fresh_gitlab_not_refreshed_on_open,
+        scenario_board_strip_click_scrolls_carousel_not_page,
+        scenario_board_card_drawer_shows_exchange_and_posts_reply,
+        scenario_board_reply_optimistically_moves_card_off_your_turn,
+        scenario_board_card_drawer_shows_agent_native_exchange,
+        functools.partial(scenario_board_drawer_distinguishes_empty_from_source_failure, reason='no_exchange', expected_state='empty', expected_text='No exchange yet.'),
+        functools.partial(scenario_board_drawer_distinguishes_empty_from_source_failure, reason='capture_unparseable', expected_state='error', expected_text='Conversation preview unavailable'),
+        scenario_backlog_start_button_posts_issue_start,
+        scenario_backlog_issue_tile_is_flat_separator_row_with_icon_only_actions,
+        scenario_backlog_issue_in_progress_is_tinted_and_actions_disabled,
+        scenario_backlog_issue_tile_truncates_a_long_title_instead_of_wrapping,
+        scenario_board_deep_link_opens_drawer,
+        scenario_board_deep_link_resolves_via_state_sid,
+        scenario_board_drawer_rename_first_icon_only_and_stop_kills_session,
+        scenario_backlog_cards_color_coded_from_shared_git_cache,
+        scenario_board_drawer_survives_git_status_poll_mid_interaction,
+        scenario_board_columns_layout_matches_projection,
+    )
