@@ -46,6 +46,10 @@ _VISIBLE_CONSOLE_EXEMPT = {
 #: pass it on every spawn — ``test_vendored_verbatim_spawns_still_suppress_the_console``
 #: holds it to that, so the exemption can't hide a real regression.
 _VENDORED_VERBATIM_EXEMPT = {
+    "scripts/classify_e2e.py": (
+        "The scaffold's e2e router, vendored byte-for-byte and declared in "
+        ".fleet.toml [vendored]; its git reads use a locally derived _NO_WINDOW."
+    ),
     "src/build_info.py": (
         "The scaffold's build identity, vendored byte-for-byte and declared in "
         ".fleet.toml [vendored]; its git spawn uses a locally derived _NO_WINDOW."

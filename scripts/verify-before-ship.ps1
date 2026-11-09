@@ -182,16 +182,24 @@ try {
     # static assets -> Chromium smoke only, real UI/behaviour -> the full
     # suite, backend/docs-only -> no browser suite. Fail-safe: any
     # mixed/ambiguous/unrecognized diff runs the full suite. The path->tier
-    # rules live in scripts/classify_e2e.py (one reviewable place). On CI the
+    # rules live in .fleet.toml's [e2e] table (scripts/classify_e2e.py is the vendored mechanism). On CI the
     # full suite always runs -- the local gate is where routing is proven first.
     $tier = "full"; $e2eTarget = "tests/e2e"; $e2eBrowsers = ""; $routeReason = ""
     $sessionHostTouched = "unknown"
     if ($env:CI -eq "true") {
         $routeReason = "CI always runs the full e2e suite"
     } else {
-        $classifyOut = & $python (Join-Path $repoRoot "scripts\classify_e2e.py")
+        # The classifier's git reads must never take the optional index.lock: a gate
+        # run beside another git process would otherwise strand a 0-byte lock.
+        $env:GIT_OPTIONAL_LOCKS = "0"
+        try {
+            $classifyOut = & $python (Join-Path $repoRoot "scripts\classify_e2e.py")
+            $shTouchedOut = & $python (Join-Path $repoRoot "scripts\session_host_touched.py")
+        } finally {
+            Remove-Item Env:\GIT_OPTIONAL_LOCKS -ErrorAction SilentlyContinue
+        }
         $kv = @{}
-        foreach ($line in $classifyOut) {
+        foreach ($line in @($classifyOut) + @($shTouchedOut)) {
             if ($line -match '^(E2E_[A-Z_]+)=(.*)$') { $kv[$matches[1]] = $matches[2] }
         }
         if ($kv.ContainsKey("E2E_TIER") -and $kv["E2E_TIER"]) {
@@ -329,7 +337,7 @@ Write-Host ("[OK] Ready to ship -- all checks passed in {0:n1}s." -f $sw.Elapsed
 # A green gate + merge + tray.bat --restart still does not make a
 # session-host-path change live -- that process is deliberately excluded
 # from the reclaim sweep and can run stale code for
-# days with nothing else surfacing that. The classifier answers from CLAUDE.md's
+# days with nothing else surfacing that. scripts/session_host_touched.py answers from CLAUDE.md's
 # `## session-host` block (the list /api/version's stale_relevant also reads), not
 # from its e2e route labels, so the warning cannot drift from that list. On CI the
 # classifier is not run, so the answer stays "unknown" and nothing is printed.

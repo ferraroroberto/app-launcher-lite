@@ -20,13 +20,13 @@ It boots its own disposable webapp and session-host, so no tray is needed.
 
 ## Browser slice
 
-The browser slice is diff-proportionate, routed by `scripts/classify_e2e.py` against `main`:
+The browser slice is diff-proportionate, routed against `main` by the vendored `scripts/classify_e2e.py` from the `[e2e]` rule table in `.fleet.toml` (`tests/unit/tooling/test_classify_e2e.py` pins the table):
 
 - static-asset-only diff → Chromium-only smoke;
 - backend-only or docs-only diff → no browser suite;
 - any `.js`/`.css`/real-page/session-host/e2e-test change, or any ambiguous diff → the full suite, Chromium driving both a desktop and a phone (Android device-emulated) projection. This is an Android-only fork: no WebKit or iPhone engine.
 
-Routing is fail-safe: uncertainty escalates to full, never narrows. The chosen tier prints to the console and to `webapp/verify-progress.log`.
+Routing is fail-safe: uncertainty escalates to full, never narrows. The chosen tier prints to the console and to `webapp/verify-progress.log`. Separately, `scripts/session_host_touched.py` reads CLAUDE.md's `## session-host` block and makes the gate warn when the diff touched a path the `:8466` session-host loads, whatever tier it routed to.
 
 ## Dev-loop commands
 
