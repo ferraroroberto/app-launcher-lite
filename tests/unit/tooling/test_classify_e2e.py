@@ -1,8 +1,12 @@
-"""Unit tests for the diff-proportionate e2e router (issue #568).
+"""Unit tests for this repo's diff-proportionate e2e routing declaration.
 
-Pure path->tier classification; no git, no browser. Also pins the concrete
-#565 incident (a vendored SVG sprite + a new pure-Python unit test) that
-motivated the issue: it must route to the fast ``static`` / Chromium-only tier.
+The mechanism is project-scaffolding's `scripts/classify_e2e.py`, vendored
+byte-for-byte; its own suite proves the mechanism. These tests pin *this* repo's
+declaration: they load the real `.fleet.toml` `[e2e]` table and assert that
+representative paths land in the tier their rule intends, so an edit that silently
+under-routes a real browser surface fails here. Pure path->tier classification; no
+git, no browser. Also pins the vendored SVG sprite + pure-Python unit test diff that
+motivated routing: it must route to the fast ``static`` / Chromium-only tier.
 """
 
 from __future__ import annotations
@@ -11,9 +15,31 @@ import pathlib
 
 import pytest
 
-from scripts.classify_e2e import Category, _classify_one, classify
+from scripts.classify_e2e import (
+    Category,
+    E2EConfig,
+    _classify_one,
+    classify,
+    load_config,
+)
+from scripts.session_host_touched import session_host_touched
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
+REAL_FLEET_TOML = REPO_ROOT / ".fleet.toml"
+
+
+@pytest.fixture(scope="module")
+def cfg() -> E2EConfig:
+    return load_config(REAL_FLEET_TOML)
+
+
+def test_real_fleet_toml_declares_usable_e2e_table(cfg: E2EConfig) -> None:
+    """A table the classifier can't use would silently fail-safe every diff to full."""
+    assert cfg.source == "declared"
+    assert cfg.static_pytest_target == "tests/e2e/test_smoke.py"
+    assert cfg.static_browsers == ("chromium",)
+    assert cfg.full_pytest_target == "tests/e2e"
+    assert not cfg.surfaces, "no surfaces declared: every full diff runs the whole suite"
 
 
 # ------------------------------------------------------- per-file categories
@@ -67,81 +93,81 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
         ("app/cli/commands/launch.py", Category.FULL),  # app/** off static -> full (safe)
     ],
 )
-def test_classify_one(path: str, expected: Category) -> None:
-    cat, _label = _classify_one(path)
+def test_classify_one(cfg: E2EConfig, path: str, expected: Category) -> None:
+    cat, _label = _classify_one(path, cfg.rules)
     assert cat is expected, f"{path} -> {cat.name}, expected {expected.name}"
 
 
 # --------------------------------------------------------------- tier routing
-def test_static_only_routes_to_chromium_smoke() -> None:
+def test_static_only_routes_to_chromium_smoke(cfg: E2EConfig) -> None:
     """The #565 diff: vendored sprite + one pure-Python unit test."""
     r = classify([
         "app/webapp/static/_vendored/icons/icons-sprite.html",
         "tests/unit/tooling/test_icon_sprite_coverage.py",
-    ])
+    ], cfg)
     assert r.tier == "static"
     assert r.browsers == ["chromium"]
     assert r.pytest_target == "tests/e2e/test_smoke.py"
     assert r.reasons  # non-empty: names the triggering path
 
 
-def test_js_change_routes_to_full() -> None:
-    r = classify(["app/webapp/static/apps.js"])
+def test_js_change_routes_to_full(cfg: E2EConfig) -> None:
+    r = classify(["app/webapp/static/apps.js"], cfg)
     assert r.tier == "full"
-    assert r.browsers == ["chromium"]
+    assert r.browsers == []  # empty = the suite's own default projections
     assert r.pytest_target == "tests/e2e"
 
 
-def test_css_change_routes_to_full() -> None:
-    r = classify(["app/webapp/static/styles/base.css"])
+def test_css_change_routes_to_full(cfg: E2EConfig) -> None:
+    r = classify(["app/webapp/static/styles/base.css"], cfg)
     assert r.tier == "full"
 
 
-def test_mixed_static_and_js_routes_to_full() -> None:
+def test_mixed_static_and_js_routes_to_full(cfg: E2EConfig) -> None:
     """Fail-safe: a static asset AND a .js file -> full suite, not narrow."""
     r = classify([
         "app/webapp/static/_vendored/icons/icons-sprite.html",
         "app/webapp/static/apps.js",
-    ])
+    ], cfg)
     assert r.tier == "full"
 
 
-def test_backend_python_only_skips_browser() -> None:
-    r = classify(["src/board.py", "tests/unit/board/test_board_merge.py"])
+def test_backend_python_only_skips_browser(cfg: E2EConfig) -> None:
+    r = classify(["src/board.py", "tests/unit/board/test_board_merge.py"], cfg)
     assert r.tier == "skip"
     assert r.pytest_target == ""
 
 
-def test_docs_only_skips_browser() -> None:
-    r = classify(["README.md", "docs/architecture.mmd"])
+def test_docs_only_skips_browser(cfg: E2EConfig) -> None:
+    r = classify(["README.md", "docs/architecture.mmd"], cfg)
     assert r.tier == "skip"
 
 
-def test_unclassified_is_full() -> None:
-    r = classify(["random/thing.xyz"])
+def test_unclassified_is_full(cfg: E2EConfig) -> None:
+    r = classify(["random/thing.xyz"], cfg)
     assert r.tier == "full"
 
 
-def test_empty_diff_is_full() -> None:
+def test_empty_diff_is_full(cfg: E2EConfig) -> None:
     """No changed files -> can't prove narrow -> fail-safe full."""
-    r = classify([])
+    r = classify([], cfg)
     assert r.tier == "full"
     assert r.reasons
 
 
-def test_backslash_paths_are_normalized() -> None:
-    r = classify(["app\\webapp\\static\\icon-512.png"])
+def test_backslash_paths_are_normalized(cfg: E2EConfig) -> None:
+    r = classify(["app\\webapp\\static\\icon-512.png"], cfg)
     assert r.tier == "static"
 
 
-def test_session_host_python_forces_full() -> None:
+def test_session_host_python_forces_full(cfg: E2EConfig) -> None:
     """A backend .py *on* the session-host path still gets full coverage."""
-    r = classify(["src/session_host.py", "src/board.py"])
+    r = classify(["src/session_host.py", "src/board.py"], cfg)
     assert r.tier == "full"
 
 
 # --------------------------------------------------------- real-tree drift guard
-def test_real_session_host_files_route_full() -> None:
+def test_real_session_host_files_route_full(cfg: E2EConfig) -> None:
     """Every real `src/session_host*.py` on disk must classify FULL.
 
     Guards against layout drift: a new session-host module added on disk
@@ -155,65 +181,30 @@ def test_real_session_host_files_route_full() -> None:
     assert session_host_files, "expected src/session_host.py to exist on disk"
     for f in session_host_files:
         rel = f.relative_to(REPO_ROOT).as_posix()
-        cat, _label = _classify_one(rel)
+        cat, _label = _classify_one(rel, cfg.rules)
         assert cat is Category.FULL, f"{rel} -> {cat.name}, expected FULL (layout drift?)"
 
 
-def test_real_static_asset_routes_static() -> None:
+def test_real_static_asset_routes_static(cfg: E2EConfig) -> None:
     """Sanity: a real image under app/webapp/static/ still classifies STATIC."""
     real_png = REPO_ROOT / "app/webapp/static/icon-512.png"
     assert real_png.is_file(), "fixture file moved/renamed; update this test"
-    cat, _label = _classify_one("app/webapp/static/icon-512.png")
+    cat, _label = _classify_one("app/webapp/static/icon-512.png", cfg.rules)
     assert cat is Category.STATIC
 
 
-def test_real_webapp_js_routes_full() -> None:
+def test_real_webapp_js_routes_full(cfg: E2EConfig) -> None:
     """Sanity: a real app/webapp/static/*.js file still classifies FULL."""
     real_js = REPO_ROOT / "app/webapp/static/apps.js"
     assert real_js.is_file(), "fixture file moved/renamed; update this test"
-    cat, _label = _classify_one("app/webapp/static/apps.js")
+    cat, _label = _classify_one("app/webapp/static/apps.js", cfg.rules)
     assert cat is Category.FULL
 
 
-def test_run_git_disables_optional_index_lock(monkeypatch):
-    """#67: the router's git reads must never take the optional index.lock."""
-    import subprocess
-
-    from scripts import classify_e2e
-
-    seen = {}
-
-    def _capture(cmd, **kwargs):
-        seen.update(kwargs)
-        return subprocess.CompletedProcess(cmd, 0, "a.py\n", "")
-
-    monkeypatch.setattr(subprocess, "run", _capture)
-    monkeypatch.setenv("GIT_OPTIONAL_LOCKS", "1")
-    assert classify_e2e._run_git(["diff", "--name-only"]) == ["a.py"]
-    assert seen["env"]["GIT_OPTIONAL_LOCKS"] == "0"
-    assert seen["timeout"] == classify_e2e._GIT_TIMEOUT_S
-
-
-def test_run_git_timeout_reads_as_no_files(monkeypatch, capsys):
-    """A wedged git yields no paths, which routes the whole diff to the full suite."""
-    import subprocess
-
-    from scripts import classify_e2e
-
-    def _hang(cmd, **kwargs):
-        raise subprocess.TimeoutExpired(cmd, kwargs["timeout"])
-
-    monkeypatch.setattr(subprocess, "run", _hang)
-    assert classify_e2e._run_git(["diff", "--name-only"]) == []
-    assert "timed out" in capsys.readouterr().err
-
-
 # ------------------------------------------------ session-host touched warning
-def test_session_host_touched_reads_the_declared_list() -> None:
+def test_session_host_touched_reads_the_declared_list(cfg: E2EConfig) -> None:
     """`src/vt_snapshot.py` routes to no browser tier yet is loaded by the
     session-host, so the gate's "not live after restart" warning must fire."""
-    from scripts.classify_e2e import session_host_touched
-
-    assert classify(["src/vt_snapshot.py"]).tier == "skip"
+    assert classify(["src/vt_snapshot.py"], cfg).tier == "skip"
     assert session_host_touched(["src/vt_snapshot.py"]) == "yes"
     assert session_host_touched(["src/board.py", "README.md"]) == "no"

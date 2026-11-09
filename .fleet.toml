@@ -63,6 +63,165 @@ shot_baseline = { src = "scripts/shot_baseline.py", sha = "4a06ca84fc9c5005d4be7
 webapp_serve = { src = "app/webapp/serve.py", sha = "41ca8abd5a2755a06bd8a620a72967211161d58e", dest = "app/webapp/serve.py" }
 instruction_frontmatter = { src = "scripts/instruction_frontmatter.py", sha = "e55de9619b9625c5499e1b9077350f9860e6037b", dest = "scripts/instruction_frontmatter.py" }
 instruction_repeats = { src = "scripts/instruction_repeats.py", sha = "e55de9619b9625c5499e1b9077350f9860e6037b", dest = "scripts/instruction_repeats.py" }
+icons = { src = "app/webapp/static/_vendored/icons", sha = "4d75f1ebfae5c9d8462c55a90edd56f8b09157d4", dest = "app/webapp/static/_vendored/icons" }
+single_instance = { src = "app/tray/single_instance.py", sha = "da2e9350daee6ab9d25d399daca21663aa509030", dest = "app/tray/single_instance.py" }
+tray_watchdog = { src = "app/tray/watchdog.py", sha = "da2e9350daee6ab9d25d399daca21663aa509030", dest = "app/tray/watchdog.py" }
+classify_e2e = { src = "scripts/classify_e2e.py", sha = "da2e9350daee6ab9d25d399daca21663aa509030", dest = "scripts/classify_e2e.py" }
+
+
+# [e2e] -- diff-proportionate routing for scripts/verify-before-ship.ps1's browser
+# phase. scripts/classify_e2e.py is project-scaffolding's classifier, vendored
+# byte-for-byte; every routing decision for this repo lives here. Schema:
+# project-scaffolding docs/e2e-routing.md. Rules are tried top to bottom, first
+# match wins; a path no rule matches is "unclassified" and runs the whole suite, so
+# uncertainty escalates and never narrows. Backend src/ Python off the session-host
+# path is "none" on purpose (the non-e2e pytest suite covers it); do not route all of
+# src/ to full. tests/unit/tooling/test_classify_e2e.py pins this table.
+[e2e]
+static_pytest_target = "tests/e2e/test_smoke.py"
+static_browsers      = ["chromium"]
+full_pytest_target   = "tests/e2e"
+
+# Inert static assets: the Chromium smoke is enough.
+[[e2e.rule]]
+tier       = "static"
+prefix     = "app/webapp/static/"
+extensions = ["svg", "png", "jpg", "jpeg", "gif", "ico", "webp", "avif", "woff", "woff2", "ttf", "eot", "otf", "webmanifest"]
+label      = "static-asset"
+# A vendored HTML fragment (the icons sprite) is markup the smoke suite loads; real
+# pages (index.html) and everything else under static/ are browser code.
+[[e2e.rule]]
+tier       = "static"
+prefix     = "app/webapp/static/_vendored/"
+extensions = ["html"]
+label      = "static-asset"
+[[e2e.rule]]
+tier   = "full"
+prefix = "app/webapp/static/"
+label  = "webapp-static-code"
+# The session-host package sits inside app/webapp/, so its rule comes first and the
+# diff keeps the "session-host" label.
+[[e2e.rule]]
+tier   = "full"
+prefix = "app/webapp/session_host/"
+label  = "session-host"
+[[e2e.rule]]
+tier   = "full"
+prefix = "app/webapp/"
+label  = "webapp"
+[[e2e.rule]]
+tier  = "full"
+path  = "src/session_client.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier  = "full"
+path  = "src/launcher.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier  = "full"
+path  = "launcher.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier       = "full"
+prefix     = "src/session_host"
+extensions = ["py"]
+label      = "session-host/launcher"
+[[e2e.rule]]
+tier   = "full"
+prefix = "tests/e2e/"
+label  = "e2e-test"
+[[e2e.rule]]
+tier  = "full"
+path  = "tests/conftest.py"
+label = "shared-conftest"
+# The screenshot comparison is proven by a browser run, so it is a browser surface
+# despite living under scripts/. Must precede the scripts/ rule.
+[[e2e.rule]]
+tier  = "full"
+path  = "scripts/shot_baseline.py"
+label = "shot-baseline"
+[[e2e.rule]]
+tier       = "none"
+prefix     = "src/"
+extensions = ["py"]
+label      = "backend-python"
+[[e2e.rule]]
+tier       = "none"
+prefix     = "tests/"
+extensions = ["py"]
+label      = "non-e2e-test"
+[[e2e.rule]]
+tier       = "none"
+extensions = ["md"]
+label      = "docs"
+[[e2e.rule]]
+tier   = "none"
+prefix = "docs/"
+label  = "docs"
+[[e2e.rule]]
+tier   = "none"
+prefix = "scripts/"
+label  = "tooling/config"
+[[e2e.rule]]
+tier   = "none"
+prefix = "config/"
+label  = "tooling/config"
+[[e2e.rule]]
+tier   = "none"
+prefix = ".github/"
+label  = "tooling/config"
+[[e2e.rule]]
+tier       = "none"
+extensions = ["bat"]
+label      = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".fleet.toml"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".gitignore"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = "LICENSE"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = "AGENTS.md"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = "CLAUDE.md"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".static-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".docs-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".comment-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".instruction-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".doc-refs-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".dead-code-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".conventions-ratchet-baseline.json"
+label = "repo-meta"
 
 # [static_ratchet] -- the scaffold's baseline-and-ratchet static analysis. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/static_ratchet_gate.py, which wraps
