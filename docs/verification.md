@@ -12,6 +12,8 @@ C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/verify-b
 
 It boots its own disposable webapp and session-host, so no tray is needed.
 
+The last stdout line of a run is `GATE-RESULT: PASS` or `GATE-RESULT: FAIL` (failed stage, missing `.venv`, unhandled error, box lock timeout); exit codes are 0 and 1 (3 for the lock timeout). Never pipe the gate when its exit code matters (`| tail` reports `tail`'s status); a caller that must pipe asserts on that line, and a run without one is not a pass. `tests/unit/tooling/test_gate_result.py` pins it.
+
 ## Stages that always run
 
 - **Byte-compile** and the **non-e2e pytest suite**.

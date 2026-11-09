@@ -21,8 +21,37 @@
 # A tray on :8465 may be running or not — autoboot picks a free port for its
 # own webapp and adopts the tray's session-host on :8466 if one is up. Exits
 # non-zero on the first failure with the offending output left visible.
+#
+# The last stdout line is `GATE-RESULT: PASS` or `GATE-RESULT: FAIL`, on every
+# path that can still run code. Never pipe the gate when its exit code matters
+# (`... | tail -40` reports tail's status, so a red run reads green); a caller
+# that cannot avoid a pipe asserts on that line. A run with no such line is not
+# a pass. Exit codes stay 0 (pass) and 1 (anything else).
 
 $ErrorActionPreference = "Stop"
+
+# gate-verdict:begin
+# The verdict is the last stdout line of every path that can still run code. A
+# terminating error under the "Stop" preference above would otherwise print to
+# stderr only and exit 1, leaving a piped caller an empty, apparently clean run,
+# so the trap reports it on stdout first. Exit codes stay 0 (pass) and 1 (fail).
+function Write-GateResult($verdict) {
+    Write-Host "GATE-RESULT: $verdict"
+}
+
+function Complete-Gate([int]$Code) {
+    Write-GateResult $(if ($Code -eq 0) { "PASS" } else { "FAIL" })
+    exit $Code
+}
+
+trap {
+    Write-Host ""
+    Write-Host "[FAIL] the gate aborted on an unhandled error:" -ForegroundColor Red
+    Write-Host ("       {0}" -f $_.Exception.Message) -ForegroundColor Red
+    Complete-Gate 1
+}
+# gate-verdict:end
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $python = Join-Path $repoRoot ".venv\Scripts\python.exe"
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -56,7 +85,7 @@ function Fail($message) {
     Write-Host ("Failed after {0:n1}s." -f $sw.Elapsed.TotalSeconds) -ForegroundColor Red
     Log-Progress ("FAILED: {0} (after {1:n1}s)" -f $message, $sw.Elapsed.TotalSeconds)
     Remove-Item Env:\LAUNCHER_VERIFY_PROGRESS_LOG -ErrorAction SilentlyContinue
-    exit 1
+    Complete-Gate 1
 }
 
 if (-not (Test-Path $python)) {
@@ -350,4 +379,4 @@ if ($sessionHostTouched -eq "yes") {
     Write-Host "    one -- #635; null in either field means unknown, never a confident false.)" -ForegroundColor Yellow
     Write-Host "    See CLAUDE.md's restart section for the one supported way to restart :8466." -ForegroundColor Yellow
 }
-exit 0
+Complete-Gate 0
