@@ -61,6 +61,7 @@ route:
 from __future__ import annotations
 
 import difflib
+import os
 import re
 import subprocess
 import sys
@@ -578,6 +579,9 @@ _NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 # A git call that outlives this is wedged (a stale lock, a hung credential helper); an empty answer
 # escalates the route to `full`, where a hung gate would report nothing.
 _GIT_TIMEOUT_S = 120
+# A read-only git still refreshes the index and takes the optional index.lock; beside another git
+# in the checkout that can strand a 0-byte lock, invisible to reads but blocking add/commit/pull.
+_GIT_ENV_KEY = "GIT_OPTIONAL_LOCKS"
 
 
 def _run_git(args: list[str]) -> list[str]:
@@ -590,6 +594,7 @@ def _run_git(args: list[str]) -> list[str]:
             ["git", *args],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             stdin=subprocess.DEVNULL, creationflags=_NO_WINDOW, timeout=_GIT_TIMEOUT_S,
+            env={**os.environ, _GIT_ENV_KEY: "0"},
         )
     except (OSError, subprocess.TimeoutExpired):
         return []
@@ -630,6 +635,7 @@ def _git_text(args: list[str]) -> str | None:
             ["git", *args],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             stdin=subprocess.DEVNULL, creationflags=_NO_WINDOW, timeout=_GIT_TIMEOUT_S,
+            env={**os.environ, _GIT_ENV_KEY: "0"},
         )
     except (OSError, subprocess.TimeoutExpired):
         return None

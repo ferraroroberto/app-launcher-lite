@@ -66,7 +66,7 @@ instruction_repeats = { src = "scripts/instruction_repeats.py", sha = "e55de9619
 icons = { src = "app/webapp/static/_vendored/icons", sha = "4d75f1ebfae5c9d8462c55a90edd56f8b09157d4", dest = "app/webapp/static/_vendored/icons" }
 single_instance = { src = "app/tray/single_instance.py", sha = "da2e9350daee6ab9d25d399daca21663aa509030", dest = "app/tray/single_instance.py" }
 tray_watchdog = { src = "app/tray/watchdog.py", sha = "da2e9350daee6ab9d25d399daca21663aa509030", dest = "app/tray/watchdog.py" }
-classify_e2e = { src = "scripts/classify_e2e.py", sha = "da2e9350daee6ab9d25d399daca21663aa509030", dest = "scripts/classify_e2e.py" }
+classify_e2e = { src = "scripts/classify_e2e.py", sha = "3f15581f2188895a27f5a32083f7f7cdb7e93648", dest = "scripts/classify_e2e.py" }
 
 
 # [e2e] -- diff-proportionate routing for scripts/verify-before-ship.ps1's browser
