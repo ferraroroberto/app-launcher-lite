@@ -1,4 +1,12 @@
 {
   "version": 1,
-  "entries": []
+  "entries": [
+    {"key": "app/cli/commands/run_job_cmd.py", "counts": {"state-literal": 7}},
+    {"key": "app/webapp/routers/jobs.py", "counts": {"state-literal": 3, "state-set-repeat": 1}},
+    {"key": "app/webapp/routers/jobs_run.py", "counts": {"state-literal": 4}},
+    {"key": "src/jobs/history.py", "counts": {"state-literal": 2}},
+    {"key": "src/jobs/queue.py", "counts": {"state-literal": 5, "state-set-repeat": 1}},
+    {"key": "src/jobs/reap.py", "counts": {"state-literal": 3, "state-set-repeat": 1}},
+    {"key": "src/jobs/stats.py", "counts": {"state-literal": 3}}
+  ]
 }
