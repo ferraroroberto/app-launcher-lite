@@ -408,3 +408,12 @@ name   = "run-lifecycle"
 module = "src/jobs/run_state.py"
 type   = "RunState"
 derive = "derive_run_state"
+
+# [[state_machines]] -- the Board drawer's last-exchange pane. board-exchange-state.js owns the
+# four display states and the one derive function; board.js reads and writes the pane only
+# through it. Why and the state table: docs/board.md.
+[[state_machines]]
+name   = "board-exchange"
+module = "app/webapp/static/board-exchange-state.js"
+type   = "ExchangeState"
+derive = "deriveExchangeState"

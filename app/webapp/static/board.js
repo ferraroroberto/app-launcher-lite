@@ -25,6 +25,7 @@
 
 import { els, state } from './state.js';
 import { apiFailToast, authHeaders, escapeHtml, jsonApi, toast } from './api.js';
+import { ExchangeState, deriveExchangeState, setExchangeState } from './board-exchange-state.js';
 import { setTab } from './tabs.js';
 import { openSessionRename, sessionTitle, stopSession } from './sessions.js';
 import { applyLaunchSizePayload, handleLaunchResponse, openTerminal } from './terminal.js';
@@ -145,7 +146,7 @@ function buildDrawer(card) {
 
   const exchange = document.createElement('div');
   exchange.className = 'board-exchange';
-  exchange.dataset.state = 'loading';
+  setExchangeState(exchange, ExchangeState.LOADING);
   exchange.setAttribute('role', 'status');
   exchange.setAttribute('aria-live', 'polite');
   exchange.textContent = 'Reading last exchange…';
@@ -247,8 +248,8 @@ async function loadExchange(card, el) {
       { headers: authHeaders({ terminalToken: tt }) }
     );
     el.replaceChildren();
-    if (!body.available) {
-      el.dataset.state = body.reason === 'no_exchange' ? 'empty' : 'error';
+    const settled = deriveExchangeState(body);
+    if (settled !== ExchangeState.READY) {
       const reasons = {
         no_exchange: 'No exchange yet.',
         session_not_found: 'Session ended — refresh the Board.',
@@ -256,9 +257,9 @@ async function loadExchange(card, el) {
       };
       el.textContent = reasons[body.reason] ||
         'Conversation preview unavailable — open the terminal.';
+      setExchangeState(el, settled);
       return;
     }
-    el.dataset.state = 'ready';
     if (body.user && body.user.text) {
       const u = document.createElement('div');
       u.className = 'board-exchange-user';
@@ -271,10 +272,11 @@ async function loadExchange(card, el) {
       a.textContent = body.assistant.text;
       el.appendChild(a);
     }
+    setExchangeState(el, settled);
     el.scrollTop = el.scrollHeight;
   } catch (exc) {
-    el.dataset.state = 'error';
     el.textContent = 'Conversation preview unavailable — try again.';
+    setExchangeState(el, ExchangeState.ERROR);
   }
 }
 
