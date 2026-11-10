@@ -100,14 +100,19 @@ class TestRunHistory:
             f"/api/jobs/{created['id']}/runs/{run_id}/stream"
         ) as websocket:
             snapshot = websocket.receive_json()
-            assert snapshot == {"type": "snapshot", "output": "", "status": "pending"}
+            assert snapshot == {
+                "type": "snapshot",
+                "output": "",
+                "status": "pending",
+                "live": True,
+            }
             (run_dir / "output.log").write_bytes(b"hello live\n")
             delta = websocket.receive_json()
             assert delta["type"] == "chunk"
             assert delta["output"] == "hello live\n"
             jobs_mod.write_run_json(run_dir, status="success", exit_code=0)
             final = websocket.receive_json()
-            assert final == {"type": "status", "status": "success"}
+            assert final == {"type": "status", "status": "success", "live": False}
 
     def test_live_stream_honours_minted_tokens(
         self, webapp_client, mocked_jobs_side_effects
@@ -139,7 +144,11 @@ class TestRunHistory:
         with client.websocket_connect(path + "?token=" + full_raw) as websocket:
             assert websocket.receive_json()["type"] == "snapshot"
             jobs_mod.write_run_json(run_dir, status="success", exit_code=0)
-            assert websocket.receive_json() == {"type": "status", "status": "success"}
+            assert websocket.receive_json() == {
+                "type": "status",
+                "status": "success",
+                "live": False,
+            }
 
     def test_cross_run_search_returns_snippet_and_filters_job(
         self, webapp_client, mocked_jobs_side_effects

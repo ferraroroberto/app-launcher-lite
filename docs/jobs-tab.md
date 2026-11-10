@@ -474,6 +474,8 @@ Unpinned history is pruned to the most recent **20 runs per job** by the executo
 
 ### `run.json` schema
 
+The `status` string, the `killed` / `reaped` / `dry_run` flags and the pid fields below are read as one run state by `src/jobs/run_state.py`; no other module compares a `status` string. The state table, the derive rules and who reads them: [`docs/run-state.md`](run-state.md).
+
 | Field | Type | Written by | Purpose |
 | --- | --- | --- | --- |
 | `run_id` | str | webapp + executor | Sortable timestamp; matches the dir name |
@@ -663,7 +665,8 @@ If the **executor itself** dies before it reaches its own finalise (interrupt, r
 
 - **Where it runs.** Opportunistically on read, not a background sweep — every `GET /api/jobs` poll (`app/webapp/routers/jobs.py::_decorate_job`) and every `Board` "stuck" sweep (`src.board.jobs_attention`) call `reap_stranded_runs(job)` before deciding what to show. `src.jobs.queue.mutex_collision` calls the drain-less `finalize_dead_runs(job)` for the same reason mid-admission-check (draining there could spawn a queued sibling before the rest of that same collision sweep re-checks it).
 - **What counts as "provably dead".** Only a recorded `pid` that `psutil` confirms is gone (or has been recycled by Windows — a `pid_create_time` persisted alongside `pid` at spawn, and compared against the live process's actual `create_time()` within 1 s, rules out reuse). No `pid` yet, or a pid that's alive and unverifiable against a create-time hint, is left alone — a genuinely long-running job is never reconciled out from under itself.
-- **What gets swept.** Every non-terminal record in the job's history, not just the latest — an older `running` record superseded by a newer run is invisible to every behavioural consumer (mutex/streak/run-button all read only the latest), but still a lie if a user opens that specific historical run's detail view.
+- **A pid that never lands.** A pending or running record with no `pid` more than two minutes after `started_at` never got its child spawned; it is finalised as `status: "failed"` with `fail_reason: "executor_never_started"` (no `reaped` flag) and releases its mutex group like any other reap. The deadline is `SPAWN_DEADLINE_SECONDS` in `src/jobs/run_state.py`.
+- **What gets swept.** Every record still owned by an executor (pending or running) in the job's history, not just the latest — an older `running` record superseded by a newer run is invisible to every behavioural consumer (mutex/streak/run-button all read only the latest), but still a lie if a user opens that specific historical run's detail view.
 - **What a reap does.** Writes `status: "failed"`, `finished_at`, `duration_seconds` (mirroring the kill route) plus `reaped: true` — distinct from `killed: true`, since this was never killed, just lost track of — invalidates the stats cache, and drains the job's mutex group once if anything was reaped.
 - **What it doesn't replace.** The ⚠️ stuck marker (a live-but-slow run) is untouched — reap only fires on a confirmed-dead pid. Nor does it replace the [executor watchdog](#executor-watchdog--the-running-forever-backstop-issue-695) above: reap handles "the executor is gone and the record lied", the watchdog handles "the executor is still here, still waiting, and the child will never finish".
 

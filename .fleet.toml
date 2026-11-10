@@ -398,3 +398,13 @@ reason = "vendored components read tokens the app never defines (nav geometry, -
 [[design.accepted]]
 check  = "rendered-leg"
 reason = "tests/e2e/_geometry.py is not adopted: it would grow the e2e suite and the lite fork stays small (#47)"
+
+# [[state_machines]] -- the Jobs run lifecycle, declared once. src/jobs/run_state.py owns
+# the RunState enum and the one derive function; the conventions ratchet's state rules stop
+# reporting that module and keep reporting any other module that re-derives a run's mode.
+# Why and the state table: docs/run-state.md.
+[[state_machines]]
+name   = "run-lifecycle"
+module = "src/jobs/run_state.py"
+type   = "RunState"
+derive = "derive_run_state"

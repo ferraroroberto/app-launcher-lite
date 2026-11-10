@@ -138,7 +138,7 @@ function describeLastRun(job) {
     const ago = fmtAgo(toEpoch(job.last_run.started_at));
     const status = job.last_run.status || '?';
     const duration = formatDuration(job.last_run.duration_seconds);
-    if (job.running || status === 'running' || status === 'pending') {
+    if (job.last_run.live) {
       bits.push('running now' + (ago ? ' · started ' + ago + ' ago' : ''));
     } else {
       const tail = status +

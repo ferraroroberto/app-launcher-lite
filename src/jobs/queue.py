@@ -34,6 +34,13 @@ from src.jobs.history import (
     runs_dir,
     write_run_json,
 )
+from src.jobs.run_state import (
+    STATUS_PENDING,
+    STATUS_QUEUED,
+    RunState,
+    derive_run_state,
+    is_live,
+)
 from src.jobs.schtasks import spawn_run_job_detached
 from src.jobs.trigger import chain_trigger
 
@@ -133,7 +140,7 @@ def peek_mutex_queue(group: str) -> List[Dict[str, Any]]:
 
 def mutex_collision(jobs: List[Job], job: Job) -> Optional[Job]:
     """Return the *other* job in ``job.mutex_group`` that currently holds
-    the group (latest run is ``running`` or ``pending``), or ``None``.
+    the group (latest run is active: pending or running), or ``None``.
 
     Shared by the route's admission gate and the chain dispatcher so a
     chain-fired downstream gets the same queue-if-busy treatment as a
@@ -162,7 +169,7 @@ def mutex_collision(jobs: List[Job], job: Job) -> Optional[Job]:
         latest = latest_run(other.id)
         if latest is None:
             continue
-        if latest.get("status") in ("running", "pending"):
+        if is_live(derive_run_state(latest, now=datetime.now()).state):
             return other
     return None
 
@@ -192,7 +199,7 @@ def dispatch_chain_run(
     )
     meta["chained_from"] = upstream_id
     if holder is not None:
-        meta["status"] = "queued"
+        meta["status"] = STATUS_QUEUED
         meta["mutex_group"] = downstream.mutex_group
         meta["mutex_blocked_by"] = holder.id
         write_run_json(run_dir, **meta)
@@ -211,7 +218,7 @@ def dispatch_chain_run(
             f"upstream={upstream_id})"
         )
         return meta
-    meta["status"] = "pending"
+    meta["status"] = STATUS_PENDING
     write_run_json(run_dir, **meta)
     try:
         spawn_run_job_detached(downstream.id, run_dir.name, trigger, None)
@@ -243,7 +250,7 @@ def drain_mutex_queue(
     ``None`` when the queue was empty.
 
     Defensive double-spawn guard: the picked entry's run-dir must still
-    have ``status == "queued"``. If it's already running/success/failed
+    still be ``QUEUED``. If it's already running/success/failed
     a concurrent finaliser raced us — we skip the spawn but log and
     leave the queue otherwise untouched (the head was already popped).
     """
@@ -259,10 +266,11 @@ def drain_mutex_queue(
         return None
     run_dir = runs_dir(job_id) / run_id
     record = read_run(run_dir)
-    if record.get("status") != "queued":
+    head_state = derive_run_state(record, now=datetime.now()).state
+    if head_state is not RunState.QUEUED:
         logger.warning(
-            f"⚠️  mutex queue {group!r}: head {job_id}/{run_id} status "
-            f"{record.get('status')!r} (expected 'queued'); skipping spawn"
+            f"⚠️  mutex queue {group!r}: head {job_id}/{run_id} is "
+            f"{head_state.value} (expected queued); skipping spawn"
         )
         return None
     trigger = str(entry.get("trigger") or "manual")

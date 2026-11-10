@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -16,6 +17,7 @@ from src import api_tokens
 from src import jobs as jobs_mod
 from src.api_tokens import constant_time_equals
 from src.jobs.config import get_by_id, load_jobs
+from src.jobs.run_state import STATUS_PENDING, run_view
 
 router = APIRouter()
 
@@ -99,11 +101,13 @@ async def stream_job_run(websocket: WebSocket, job_id: str, run_id: str) -> None
     output_path = run_dir / "output.log"
     offset = 0
     first = True
-    live_statuses = {"queued", "pending", "running"}
     try:
         while True:
             record = await asyncio.to_thread(jobs_mod.read_run, run_dir)
-            status = str(record.get("status") or "pending")
+            # run.json lands just after the run dir; until then it is pending.
+            record = record or {"status": STATUS_PENDING}
+            view = run_view(record, now=datetime.now())
+            status = str(record.get("status") or STATUS_PENDING)
             try:
                 size = output_path.stat().st_size if output_path.is_file() else 0
             except OSError:
@@ -111,7 +115,12 @@ async def stream_job_run(websocket: WebSocket, job_id: str, run_id: str) -> None
             if first or size < offset:
                 snapshot = await asyncio.to_thread(jobs_mod.read_output_tail, run_dir)
                 await websocket.send_json(
-                    {"type": "snapshot", "output": snapshot, "status": status}
+                    {
+                        "type": "snapshot",
+                        "output": snapshot,
+                        "status": status,
+                        "live": view["live"],
+                    }
                 )
                 offset = size
                 first = False
@@ -131,10 +140,13 @@ async def stream_job_run(websocket: WebSocket, job_id: str, run_id: str) -> None
                             "type": "chunk",
                             "output": delta.decode("utf-8", errors="replace"),
                             "status": status,
+                            "live": view["live"],
                         }
                     )
-            if status not in live_statuses:
-                await websocket.send_json({"type": "status", "status": status})
+            if not view["open"]:
+                await websocket.send_json(
+                    {"type": "status", "status": status, "live": view["live"]}
+                )
                 await websocket.close(code=1000)
                 return
             await asyncio.sleep(0.1)
