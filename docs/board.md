@@ -95,6 +95,17 @@ Tapping a live session card opens an **inline drill-down drawer** on the card (`
 
 All reads happen only when the drawer opens — `GET /api/board`'s 5-second poll still performs no transcript parsing or LLM call. Display caps remain 6000 assistant characters and 1500 user characters. The response carries `source` (`launcher`) and a machine-readable unavailable `reason` (`session_not_found`, `no_exchange`, `capture_unparseable`); the drawer distinguishes a true `no_exchange` empty state from a sanitized source error. An unavailable result leaves an info-level log breadcrumb.
 
+**The exchange pane's state.** The pane is one declared machine, `board-exchange` in `.fleet.toml`, owned by `app/webapp/static/board-exchange-state.js`. It starts `loading` and settles exactly once; `board.css` reads the state from `data-state`.
+
+| State | Meaning | Reached from |
+|---|---|---|
+| `loading` | the drawer just opened and the fetch is in flight | (initial) |
+| `ready` | the API returned an exchange | `loading` |
+| `empty` | `available: false` with `reason: no_exchange` | `loading` |
+| `error` | any other unavailable reason, or the fetch/render threw | `loading` |
+
+`deriveExchangeState(body)` is the only code that maps the API answer to a state, and `setExchangeState(el, state)` is the only writer of the attribute: it refuses any move the table does not list, so a late response can never reopen or flip a settled pane. `tests/unit/board/test_board_exchange_state.py` drives the real module under Node (skipped when `node` is absent).
+
 **Replying to the live PTY.** The reply box is offered only for `alive && kind === 'pty'` cards (a detached console or state-only card has no reachable stdin). The reply proxies through `POST /api/coding/sessions/{sid}/input` — body `{data, submit}`, one call to the session-host, which owns framing + settle-then-submit internally via `PtySession.submit_input()` (it ports the compose bar's `framePaste`/`sendSubmit`/`bulkSettle`). `data` may be blank when `submit` is true — a bare submit against whatever is already sitting in the composer, with no text write — the recovery path for a message stranded by the settle race, otherwise reachable only by tapping the phone's own compose Send by hand. On success the drawer closes (`boardExpanded = null`, poll resumes) and `board.js::moveCardToBotTurn()` optimistically relocates the card into *Bot's turn* client-side, immediately — before the server-side prompt-submit hook has had time to flip `sessions-state.json`. No extra re-poll fires right away (it would almost always still see the pre-hook state and revert the optimistic move); the regular 5 s poll reconciles with ground truth as always. A **⚡** in the drawer opens the full-control terminal.
 
 **Delivery honesty.** `{"ok": true}` means the write (and, if requested, the submit) actually reached a live session — a dead/exited session reports 409 instead of a false 200, and the settle-then-submit sequence means `submit: true` in the response reflects that the CR was actually sent after the paste's ingest was given a chance to settle, not just that bytes were written. Bracketed-paste framing is applied only when the PTY's own output has announced DECSET 2004 is on (tracked off the raw output stream, never stripped from it) — a literal `\x1b[200~` sent blind to an agent that never asked for it is garbage, not a paste.
