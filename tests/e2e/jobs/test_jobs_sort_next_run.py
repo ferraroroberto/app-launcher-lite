@@ -193,6 +193,8 @@ def scenario_manual_run_state_is_distinct_from_next_scheduled_fire(
     running["last_run"] = {
         "run_id": "20260716T060156",
         "status": "running",
+        "state": "running",
+        "live": True,
         "started_at": "2026-07-16T06:01:57",
         "trigger": "manual",
         "duration_seconds": None,

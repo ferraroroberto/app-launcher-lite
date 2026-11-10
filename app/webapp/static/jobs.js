@@ -430,7 +430,7 @@ function formatRunParams(params) {
   }).join(' ');
 }
 
-function writeOutput(jobId, runId, text, status, extras) {
+function writeOutput(jobId, runId, text, status, extras, live) {
   const panel = panelEl(jobId);
   if (!panel) return;
   const label = panel.querySelector('[data-role="output-label"]');
@@ -441,19 +441,19 @@ function writeOutput(jobId, runId, text, status, extras) {
   extras = extras || runExtras.get(key) || {};
   if (label) {
     const bits = ['Output · ' + runId];
-    if (status) bits.push(status + (status === 'running' || status === 'pending' ? ' (live)' : ''));
+    if (status) bits.push(status + (live ? ' (live)' : ''));
     const cpu = extras && Number.isFinite(extras.cpu_seconds)
       ? Math.round(extras.cpu_seconds) + ' s CPU' : null;
     const rss = extras && Number.isFinite(extras.peak_rss_bytes)
       ? 'peak ' + formatBytes(extras.peak_rss_bytes) : null;
     const dur = extras && Number.isFinite(extras.duration_seconds)
       ? formatDuration(extras.duration_seconds) : null;
-    if (dur && status !== 'running' && status !== 'pending') bits.push(dur);
+    if (dur && !live) bits.push(dur);
     if (cpu) bits.push(cpu);
     if (rss) bits.push(rss);
     label.textContent = bits.join(' · ');
   }
-  renderKillButton(jobId, runId, status, extras);
+  renderKillButton(jobId, runId, live, extras);
   const isSameRun = tail.dataset.runId === runId;
   const wasAtBottom = !isSameRun ||
     (tail.scrollTop + tail.clientHeight >= tail.scrollHeight - 4);
@@ -607,7 +607,7 @@ async function refreshExpandedContent(jobId, opts) {
   const selected = runs.find(function (r) { return r.run_id === selectedRunId; });
   const panel = panelEl(jobId);
   const tail = panel ? panel.querySelector('[data-role="output-tail"]') : null;
-  const isLive = selected && (selected.status === 'running' || selected.status === 'pending');
+  const isLive = !!(selected && selected.live);
   const isFirstPaint = !tail || tail.dataset.runId !== selectedRunId;
   // Skip the output fetch when the selected run is final AND we've
   // already painted it — a static log doesn't need re-polling, which
@@ -639,7 +639,7 @@ async function refreshOutputForRun(jobId, runId) {
     duration_seconds: record.duration_seconds,
     webhook_payload: record.webhook_payload,
     artifacts: record.artifacts || [],
-  });
+  }, record.live);
 }
 
 function openLiveStream(jobId, runId) {
@@ -661,9 +661,9 @@ function openLiveStream(jobId, runId) {
     let frame;
     try { frame = JSON.parse(event.data); } catch (_) { return; }
     if (frame.type === 'snapshot') {
-      writeOutput(jobId, runId, frame.output || '', frame.status || 'running');
+      writeOutput(jobId, runId, frame.output || '', frame.status || '', null, frame.live);
     } else if (frame.type === 'chunk') {
-      appendOutput(jobId, runId, frame.output || '', frame.status || 'running');
+      appendOutput(jobId, runId, frame.output || '', frame.status || '');
     } else if (frame.type === 'status') {
       stopLiveStream();
       refreshOutputForRun(jobId, runId).catch(function () {});
@@ -710,17 +710,16 @@ async function toggleRunPin(jobId, run) {
   }
 }
 
-function renderKillButton(jobId, runId, status, extras) {
+function renderKillButton(jobId, runId, live, extras) {
   const panel = panelEl(jobId);
   if (!panel) return;
   const body = panel.querySelector('[data-role="history-body"]');
   if (!body) return;
   let killBtn = body.querySelector('[data-role="kill-btn"]');
   const job = state.jobs.find(function (j) { return j.id === jobId; });
-  const isLive = status === 'running' || status === 'pending';
   // Only show kill on the *latest* run of a stuck job — older runs
   // can't be running (status would already be final by definition).
-  const showKill = !!(job && job.stuck && isLive);
+  const showKill = !!(job && job.stuck && live);
   if (!showKill) {
     if (killBtn) killBtn.remove();
     return;
@@ -812,7 +811,7 @@ export async function runJobNow(job, options) {
         toast('Dry-run started for ' + job.name + '.', 'good', { icon: 'flask-conical' });
         job.running = true;
       }
-    } else if (res && res.status === 'queued') {
+    } else if (res && res.queued) {
       const blocker = res.mutex_blocked_by ? ' (behind ' + res.mutex_blocked_by + ')' : '';
       toast('Queued ' + job.name + blocker + '.', 'good', { icon: 'hourglass' });
     } else {

@@ -48,6 +48,9 @@ def _seed_run(
         "status": status,
         "started_at": started_at.isoformat(timespec="seconds"),
     }
+    if status == "running":
+        # A running run has spawned its child; a pid-less one is a never-started run.
+        fields["pid"] = 4242
     if finished_at is not None:
         fields["finished_at"] = finished_at.isoformat(timespec="seconds")
     if duration_seconds is not None:

@@ -453,3 +453,78 @@ class TestMutexCollisionReconciles:
         )
         blocker = jobs_mod.mutex_collision([holder, fresh], fresh)
         assert blocker is holder
+
+
+# ------------------------------------------- executor died before spawning the child
+
+
+class TestNeverStartedRun:
+    """A pending/running record with no pid past the spawn deadline is dead, not live."""
+
+    @staticmethod
+    def _stale() -> str:
+        return (datetime.now() - timedelta(minutes=10)).isoformat(timespec="seconds")
+
+    @pytest.mark.parametrize("status", ["pending", "running"])
+    def test_reaped_to_failed_with_reason(self, isolated_jobs, status):
+        _seed_run(
+            isolated_jobs, "solo", "20260101T000000",
+            status=status, started_at=self._stale(),
+        )
+        job = Job(id="solo", name="Solo", script_path="C:/nowhere/x.py")
+
+        reaped = jobs_reap_mod.finalize_dead_runs(job)
+
+        assert len(reaped) == 1
+        record = jobs_mod.read_run(isolated_jobs / "solo" / "20260101T000000")
+        assert record["status"] == "failed"
+        assert record["fail_reason"] == "executor_never_started"
+        assert record.get("finished_at")
+        assert "killed" not in record
+
+    def test_releases_its_mutex_group(self, isolated_jobs):
+        _seed_run(
+            isolated_jobs, "holder", "20260101T000000",
+            status="pending", started_at=self._stale(),
+        )
+        holder = Job(
+            id="holder", name="Holder", script_path="C:/nowhere/x.py", mutex_group="g"
+        )
+        other = Job(
+            id="other", name="Other", script_path="C:/nowhere/y.py", mutex_group="g"
+        )
+
+        assert jobs_queue_mod.mutex_collision([holder, other], other) is None
+
+    def test_fresh_pending_run_still_holds_its_group(self, isolated_jobs):
+        _seed_run(
+            isolated_jobs, "holder", "20260101T000000",
+            status="pending",
+            started_at=datetime.now().isoformat(timespec="seconds"),
+        )
+        holder = Job(
+            id="holder", name="Holder", script_path="C:/nowhere/x.py", mutex_group="g"
+        )
+        other = Job(
+            id="other", name="Other", script_path="C:/nowhere/y.py", mutex_group="g"
+        )
+
+        assert jobs_queue_mod.mutex_collision([holder, other], other) is holder
+
+
+def test_dead_pid_reap_writes_the_same_fields_as_before(isolated_jobs, monkeypatch):
+    """The on-disk shape of a reap is unchanged: no new key rides along."""
+    started = (datetime.now() - timedelta(minutes=5)).isoformat(timespec="seconds")
+    _seed_run(
+        isolated_jobs, "solo", "20260101T000000",
+        status="running", pid=4242, started_at=started,
+    )
+    monkeypatch.setattr(jobs_reap_mod, "is_pid_alive", lambda *a, **k: False)
+    job = Job(id="solo", name="Solo", script_path="C:/nowhere/x.py")
+
+    (record,) = jobs_reap_mod.finalize_dead_runs(job)
+
+    assert set(record) == {
+        "run_id", "job_id", "status", "pid", "started_at",
+        "finished_at", "duration_seconds", "reaped",
+    }

@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional
 
 from src import runtime_files
 from src._json_io import atomic_write_json, file_lock
+from src.jobs.run_state import STATUS_FAILED, RunState, derive_run_state
 
 if TYPE_CHECKING:
     from src.jobs.config import Job
@@ -151,7 +152,7 @@ def mark_run_failed(
         run_dir,
         finished_at=finished_at or datetime.now().isoformat(timespec="seconds"),
         exit_code=-1,
-        status="failed",
+        status=STATUS_FAILED,
         **extra,
     )
 
@@ -237,9 +238,12 @@ def latest_run(job_id: str) -> Optional[Dict[str, Any]]:
 
 
 def is_running(job_id: str) -> bool:
-    """Cheap check — is the most recent run still in ``running`` state?"""
+    """Cheap check — is the most recent run still in the ``RUNNING`` state?"""
     latest = latest_run(job_id)
-    return bool(latest and latest.get("status") == "running")
+    return bool(
+        latest
+        and derive_run_state(latest, now=datetime.now()).state is RunState.RUNNING
+    )
 
 
 def prune_runs(job_id: str, keep: int = MAX_RUNS_PER_JOB) -> int:

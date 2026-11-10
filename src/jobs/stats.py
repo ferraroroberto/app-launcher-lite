@@ -15,6 +15,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.jobs.config import Job
 from src.jobs.history import latest_run, list_runs
+from src.jobs.run_state import (
+    RunState,
+    derive_run_state,
+    is_failure,
+    is_real_fire,
+)
 
 # Process-local TTL cache. Reset per job by `invalidate_stats_cache` once a
 # run finalises so the row updates promptly without waiting out the TTL.
@@ -57,16 +63,13 @@ def cooldown_check(
     cooldown = job.cooldown_seconds
     if not cooldown:
         return None
+    reference = now or datetime.now()
     anchor: Optional[Dict[str, Any]] = None
     for run in list_runs(job.id):
         # skipped (cooldown no-ops) and dry-run records are
         # not real fires — counting them as the anchor would let a dry
         # verification reset the cooldown window.
-        if run.get("status") in (
-            "skipped",
-            "dry_run_success",
-            "dry_run_failed",
-        ):
+        if not is_real_fire(derive_run_state(run, now=reference).state):
             continue
         anchor = run
         break
@@ -75,7 +78,6 @@ def cooldown_check(
     started = _parse_iso(anchor.get("started_at"))
     if started is None:
         return None
-    reference = now or datetime.now()
     elapsed = (reference - started).total_seconds()
     remaining = cooldown - elapsed
     if remaining <= 0:
@@ -115,14 +117,15 @@ def _compute_stats(job_id: str, *, now: Optional[datetime] = None) -> Dict[str, 
     failed_recent = 0
     cutoff = now - timedelta(days=30)
     for r in runs:
-        status = r.get("status")
+        state = derive_run_state(r, now=now).state
         started = _parse_iso(r.get("started_at"))
-        if status in {"success", "failed"}:
+        succeeded = state is RunState.SUCCEEDED
+        if succeeded or is_failure(state):
             d = _duration_for(r)
             if d is not None:
                 completed_durations.append(d)
             if started and started >= cutoff:
-                if status == "success":
+                if succeeded:
                     success_recent += 1
                 else:
                     failed_recent += 1
@@ -242,7 +245,7 @@ def derived_runtime_ceiling_seconds(
 def is_stuck(
     job_id: str, *, p95_factor: float = 3.0, floor_seconds: float = 300.0
 ) -> bool:
-    """``True`` when the latest run is ``running`` past a sane threshold.
+    """``True`` when the latest run is ``RUNNING`` past a sane threshold.
 
     Threshold = :func:`stuck_threshold_seconds`. Surface-only — the UI
     shows ⚠️ and exposes a manual kill button. The *auto*-kill lives in
@@ -250,7 +253,10 @@ def is_stuck(
     the same helper but demands a minimum sample first.
     """
     latest = latest_run(job_id)
-    if not latest or latest.get("status") != "running":
+    if (
+        not latest
+        or derive_run_state(latest, now=datetime.now()).state is not RunState.RUNNING
+    ):
         return False
     started = _parse_iso(latest.get("started_at"))
     if not started:
@@ -263,14 +269,16 @@ def is_stuck(
 
 
 def consecutive_failed_runs(job_id: str) -> int:
-    """Count the contiguous ``failed`` runs at the top of the history.
+    """Count the contiguous failed runs (failed, killed or reaped) at the top of
+    the history.
 
-    Stops at the first non-failed (success / running / pending / unknown).
-    Used by the notification streak gate.
+    Stops at the first run that is not a failure (success / running / pending /
+    unknown). Used by the notification streak gate.
     """
     n = 0
+    now = datetime.now()
     for r in list_runs(job_id):
-        if r.get("status") != "failed":
+        if not is_failure(derive_run_state(r, now=now).state):
             break
         n += 1
     return n

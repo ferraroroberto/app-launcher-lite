@@ -61,6 +61,7 @@ from src.jobs.config import (
     validate_kind_shape,
 )
 from src.jobs.preflight import has_errors, preflight
+from src.jobs.run_state import STATUS_FAILED, derive_run_state, is_killable, run_view
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -156,6 +157,7 @@ def _decorate_job(
             "exit_code": latest.get("exit_code"),
             "trigger": latest.get("trigger"),
             "duration_seconds": latest.get("duration_seconds"),
+            **run_view(latest, now=datetime.now()),
         }
     else:
         payload["last_run"] = None
@@ -558,11 +560,11 @@ async def kill_job_run(job_id: str, run_id: str) -> Dict[str, Any]:
     if not run_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"unknown run {run_id}")
     record = await asyncio.to_thread(jobs_mod.read_run, run_dir)
-    status = record.get("status")
-    if status not in {"running", "pending"}:
+    state = derive_run_state(record, now=datetime.now()).state
+    if not is_killable(state):
         raise HTTPException(
             status_code=409,
-            detail=f"run is {status!r}, not killable",
+            detail=f"run is {record.get('status')!r}, not killable",
         )
     pid = record.get("pid")
     finished_at = datetime.now().isoformat(timespec="seconds")
@@ -579,7 +581,7 @@ async def kill_job_run(job_id: str, run_id: str) -> Dict[str, Any]:
     await asyncio.to_thread(
         jobs_mod.write_run_json,
         run_dir,
-        status="failed",
+        status=STATUS_FAILED,
         exit_code=-9,
         finished_at=finished_at,
         duration_seconds=duration,
@@ -642,7 +644,8 @@ async def get_job_runs(job_id: str) -> Dict[str, Any]:
     if get_by_id(cfg, job_id) is None:
         raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
     runs = await asyncio.to_thread(jobs_mod.list_runs, job_id)
-    return {"runs": runs}
+    now = datetime.now()
+    return {"runs": [{**r, **run_view(r, now=now)} for r in runs]}
 
 
 @router.get("/api/jobs/{job_id}/runs/{run_id}")
@@ -664,4 +667,5 @@ async def get_job_run(job_id: str, run_id: str) -> Dict[str, Any]:
         jobs_mod.read_webhook_payload, run_dir
     )
     record["artifacts"] = await asyncio.to_thread(jobs_mod.list_artifacts, run_dir)
+    record.update(run_view(record, now=datetime.now()))
     return {"run": record}

@@ -28,6 +28,12 @@ from fastapi import HTTPException
 
 from src import jobs as jobs_mod
 from src.jobs.config import Job, JobsConfig
+from src.jobs.run_state import (
+    STATUS_DRY_RUN_FAILED,
+    STATUS_DRY_RUN_SUCCESS,
+    STATUS_PENDING,
+    STATUS_QUEUED,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,10 +71,10 @@ async def _dry_run_check(job: Job, raw_params: Dict[str, Any]) -> Dict[str, Any]
 
             wcfg = await asyncio.to_thread(load_webapp_config)
             resolve_env_overlay(job.env, wcfg.secrets)
-        meta["status"] = "dry_run_success"
+        meta["status"] = STATUS_DRY_RUN_SUCCESS
         meta["note"] = "resolved: " + " ".join(argv)
     except (OSError, ValueError) as exc:
-        meta["status"] = "dry_run_failed"
+        meta["status"] = STATUS_DRY_RUN_FAILED
         meta["note"] = str(exc)
     jobs_mod.write_run_json(run_dir, **meta)
     jobs_mod.invalidate_stats_cache(job.id)
@@ -95,7 +101,7 @@ async def _dry_run_execute(job: Job, raw_params: Dict[str, Any]) -> Dict[str, An
     base_meta: Dict[str, Any] = jobs_mod.base_run_meta(
         job, "manual", started_at, run_dir.name
     )
-    base_meta.update(status="pending", dry_run=True)
+    base_meta.update(status=STATUS_PENDING, dry_run=True)
     if raw_params:
         base_meta["params"] = raw_params
     jobs_mod.write_run_json(run_dir, **base_meta)
@@ -143,7 +149,7 @@ async def _queue_behind(
 ) -> Dict[str, Any]:
     # Queue it. status=queued does not feed stats / streaks; the
     # finalising executor of the holder job will flip it to running.
-    base_meta["status"] = "queued"
+    base_meta["status"] = STATUS_QUEUED
     base_meta["mutex_group"] = job.mutex_group
     base_meta["mutex_blocked_by"] = holder.id
     jobs_mod.write_run_json(run_dir, **base_meta)
@@ -164,7 +170,8 @@ async def _queue_behind(
     return {
         "run_id": run_dir.name,
         "job_id": job.id,
-        "status": "queued",
+        "status": STATUS_QUEUED,
+        "queued": True,
         "mutex_group": job.mutex_group,
         "mutex_blocked_by": holder.id,
     }
@@ -219,7 +226,7 @@ async def _admit_and_spawn(
     if holder is not None:
         return await _queue_behind(job, run_dir, base_meta, holder, trigger, raw_params)
 
-    base_meta["status"] = "pending"
+    base_meta["status"] = STATUS_PENDING
     jobs_mod.write_run_json(run_dir, **base_meta)
     try:
         await asyncio.to_thread(

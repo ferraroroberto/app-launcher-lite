@@ -199,6 +199,7 @@ def scenario_jobs_row_renders_sparkline_and_duration_chip(
         "stuck": True,
         "last_run": {
             "run_id": "20260524T080000", "status": "running",
+            "state": "running", "live": True,
             "started_at": "2026-05-24T08:00:00", "duration_seconds": None,
         },
         "stats": {
