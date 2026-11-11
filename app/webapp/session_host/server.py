@@ -385,7 +385,7 @@ async def _json(request: Request) -> Dict[str, Any]:
 
 async def _force_repaint(session) -> None:
     """Nudge a full-screen TUI into repainting a clean frame after a
-    (re)connect (issue #128).
+    (re)connect.
 
     We skip the raw differential-ring replay for these agents, so the
     viewport is blank until the agent next draws. Toggle the PTY width by
@@ -446,7 +446,7 @@ async def _pump_from_client(
 
 async def _save_image(project_dir: str, file: UploadFile) -> str:
     """Persist an uploaded file under ``<project>/.launcher-tmp`` and return
-    its absolute path. Any type is stored (issue #366); oversize and empty
+    its absolute path. Any type is stored; oversize and empty
     uploads are rejected, and an odd-looking extension is stripped rather
     than written."""
     suffix = Path(file.filename or "").suffix.lower()

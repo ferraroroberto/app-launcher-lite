@@ -211,7 +211,7 @@ class TrayApp:
         """Bring up the loopback PTY session-host, ADOPTING one that already
         survived a tray restart instead of spawning a duplicate.
 
-        Linked-but-independent (project-scaffolding#35): it hosts the user's
+        Linked-but-independent: it hosts the user's
         Coding PTYs, which MUST survive `tray.bat --restart`. So it is spawned
         DETACHED via `cmd /c start` — re-parented out of this tray's process
         subtree so `taskkill /T` cannot reach it. (DETACHED_PROCESS /
@@ -255,8 +255,8 @@ class TrayApp:
 
         tray_lifecycle.ps1 is the repo-local vendored copy at
         scripts/tray_lifecycle.ps1 (lite fork: zero external dependencies).
-        Same resolved path as tray.bat's TRAY_PS (#433: this used to point at
-        a nonexistent repo-local path and silently no-op).
+        Same resolved path as tray.bat's TRAY_PS, so both resolve the one
+        vendored copy.
         """
         port = _session_host_port()
         if not registered_trays.port_listening(port):

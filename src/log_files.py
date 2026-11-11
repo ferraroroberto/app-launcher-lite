@@ -1,4 +1,4 @@
-"""Shared file-log-handler bootstrap for the webapp's side logs (issue #11).
+"""Shared file-log-handler bootstrap for the webapp's side logs.
 
 The webapp runs under ``--log-level warning`` and the tray spawns it with
 stdout/stderr DEVNULL'd, so anything meant to be readable after the fact needs

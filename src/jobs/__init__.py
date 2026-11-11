@@ -1,6 +1,6 @@
-"""Facade over the Jobs-tab backend (issue #315 split).
+"""Facade over the Jobs-tab backend.
 
-This module used to own everything itself; it now just re-exports the
+This module only re-exports the
 public surface of four focused modules so existing callers
 (``from src.jobs import X`` / ``from src import jobs as jobs_mod;
 jobs_mod.X(...)``) keep working unchanged:

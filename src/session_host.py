@@ -147,8 +147,7 @@ def _parse_started_pid(stdout: Optional[str]) -> Optional[int]:
 def _pid_alive(pid: int) -> bool:
     """True if ``pid`` names a live process (Windows, via ctypes).
 
-    Detached consoles are orphaned out of the host's process tree (issue
-    #130) so we no longer hold a ``Popen`` handle for them — liveness is a
+    Detached consoles are orphaned out of the host's process tree, so we hold no ``Popen`` handle for them — liveness is a
     bare PID probe. ``ctypes.windll`` is touched only at call time, keeping
     the module importable on non-Windows for ``py_compile``.
     """
@@ -332,7 +331,7 @@ class PtySession:
 
     # --------------------------------------------------------------- io
     def _maybe_capture_prompt(self, data: str) -> None:
-        """Accumulate input until the first submit, then derive a title (#266).
+        """Accumulate input until the first submit, then derive a title.
 
         Every keystroke and paste the browser sends routes through
         :meth:`write`, so this is the single chokepoint that sees the user's
@@ -386,8 +385,8 @@ class PtySession:
 
         ``False`` means the write never reached ``self._pty`` at all — the
         session had already exited, or the underlying write raised — so a
-        caller (the session-host's ``/input`` route, issue #607) can turn a
-        drop into an honest failure instead of the previous unconditional
+        caller (the session-host's ``/input`` route) can turn a
+        drop into an honest failure instead of an unconditional
         ``{"ok": true}`` regardless of outcome. An empty payload is trivially
         ``True``: there was nothing to deliver, so nothing was dropped.
         """
@@ -426,10 +425,10 @@ class PtySession:
         """Write ``data`` and, if ``submit``, follow it with a submitting CR.
 
         Ported from ``app/webapp/static/terminal-compose.js``'s
-        ``framePaste``/``sendSubmit``/``bulkSettle`` (issues #166/#450/#499)
-        for the HTTP ``/input`` path (issue #611), which previously wrote the
-        (unconditionally bracketed) text and the CR back-to-back with no
-        settle logic — Claude Code's composer classifies a bulk write as a
+        ``framePaste``/``sendSubmit``/``bulkSettle``
+        for the HTTP ``/input`` path: writing the (unconditionally bracketed)
+        text and the CR back-to-back with no settle logic fails because
+        Claude Code's composer classifies a bulk write as a
         paste, and a CR arriving mid-ingest is absorbed as a literal newline
         instead of Submit, stranding the message as an unsent
         ``[Pasted text #N]`` chip while the caller was told ``ok: true``.
@@ -442,7 +441,7 @@ class PtySession:
           literal ``\\x1b[200~`` sent to an agent that never asked for it is
           garbage, not a paste.
         - The CR is always its own separate ``write()`` call, never
-          concatenated onto the framed text (#166).
+          concatenated onto the framed text.
         - ``data`` blank + ``submit`` → a bare submit against whatever is
           already sitting in the composer, with no text write at all — the
           escape hatch for a message already stranded by this exact race
@@ -451,12 +450,12 @@ class PtySession:
           phone's own Send control).
         - Payloads at/above ``_BULK_SUBMIT_THRESHOLD_CHARS`` hold the CR
           until the session's output stream shows the paste was echoed and
-          has gone quiet (floor/quiet/cap — #499); shorter payloads submit
+          has gone quiet (floor/quiet/cap); shorter payloads submit
           immediately, matching ``sendSubmit``'s "short sends stay instant".
 
         Returns whether everything asked for reached the PTY — ``False`` on
-        the same drop conditions as :meth:`write` (matches #607's contract:
-        never claim delivery for a message that didn't land).
+        the same drop conditions as :meth:`write` (never claim delivery for a message
+        that didn't land).
         """
         if not data:
             if not submit:
@@ -523,7 +522,7 @@ class PtySession:
         rather than relying on the abnormal console-close path a bare
         force-terminate triggers. Only if the agent has not exited within
         the grace window do we force-terminate the ConPTY — the guarantee that a stop always ends
-        the session (issue #253).
+        the session.
 
         ``STOP_KILL`` force-terminates immediately (no graceful step);
         ``STOP_INTERRUPT`` sends Ctrl+C and leaves the session running.
@@ -624,7 +623,7 @@ class RemoteSession:
     Spawned in its own console window and deliberately **orphaned out of the
     session-host's process tree** (see :meth:`SessionManager.create_remote`),
     so it stays visible on the PC and survives a session-host *or* a
-    ``tray.bat --restart`` tear-down (issue #130) — that survival is the whole
+    ``tray.bat --restart`` tear-down — that survival is the whole
     point of the detached mode. The launcher keeps only the console PID, so the
     session shows up in the running-sessions list and can be killed from the
     phone — there is no PTY, no scrollback, and no WebSocket. The session is
@@ -744,7 +743,7 @@ def agent_child_env(session_id: str, agent: str) -> Dict[str, str]:
 
     The host's own environment minus :data:`_INHERITED_AGENT_MARKERS`, plus
     this session's ``APP_LAUNCHER_SESSION_ID``/``APP_LAUNCHER_AGENT`` stamp,
-    plus the **effective** ``PATH`` (issue #668).
+    plus the **effective** ``PATH``.
 
     That last part is what lets ``cmd /c <exe>`` find a CLI installed after
     this host process started: the inherited block is frozen at spawn, so
@@ -797,13 +796,13 @@ class SessionManager:
         its real terminal dimensions through the launch request so a
         full-screen differential TUI (ratatui-style) paints its *first*
         frame at the correct width instead of the legacy ``40×120`` — which
-        wrapped/cut on a portrait phone (issue #126). They are clamped to
+        wrapped/cut on a portrait phone. They are clamped to
         the same bounds as :meth:`PtySession.resize`; an omitted value
         falls back to the legacy default.
 
         ``history_lines`` bounds the headless-VT scrollback a full-screen
-        agent's session mirrors for a (re)connect (issue #435 follow-up,
-        user-configurable via Settings). ``None`` falls back to
+        agent's session mirrors for a (re)connect (user-configurable via
+        Settings). ``None`` falls back to
         :class:`~src.vt_snapshot.VtSnapshot`'s own default. Ignored for a
         non-fullscreen agent (no VT mirror is created at all).
         """
@@ -874,7 +873,7 @@ class SessionManager:
 
         The window is **orphaned out of the session-host's process tree** so a
         ``tray.bat --restart`` — which tears the tray subtree down with
-        ``taskkill /T`` — cannot cascade into it (issue #130); detached
+        ``taskkill /T`` — cannot cascade into it; detached
         sessions are meant to outlive a launcher / session-host restart, which
         is the entire point of the mode. We launch through a transient
         PowerShell ``Start-Process`` that exits the moment the console is up:
@@ -959,11 +958,11 @@ class SessionManager:
 
         The ``manual_title`` override works identically for
         :class:`PtySession` and :class:`RemoteSession` — the one title channel
-        that reaches a detached session (issue #458), and the only one the
+        that reaches a detached session, and the only one the
         launcher needs: it names the session in the UI, the window title, the
         Coding tab, and the Board without any PTY involvement. (Forwarding the
-        rename into the agent's own CLI — #503 — was removed in #555 as
-        unfixably racy against the live TUI; see that issue.)
+        rename into the agent's own CLI is deliberately not done: it is
+        unfixably racy against the live TUI.)
         """
         session = self.get(session_id)
         if session is None:

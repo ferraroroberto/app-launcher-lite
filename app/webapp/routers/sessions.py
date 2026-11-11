@@ -38,9 +38,8 @@ router = APIRouter()
 async def coding_sessions(request: Request) -> Dict[str, Any]:
     """List launcher-owned PTY sessions (public, token-gated).
 
-    Each session is joined with the shared cross-tab title (fleet-config#302,
-    via app-launcher#396) as ``shared_name``/``shared_name_source`` — the same
-    agent-aware claim walk the Board tab's ``merge_sessions()`` uses
+    Each session is joined with the shared cross-tab title as
+    ``shared_name``/``shared_name_source`` — the same agent-aware claim walk the Board tab's ``merge_sessions()`` uses
     (``board.attach_shared_names``), so a live session resolves to the same
     state row — and therefore shows the same title — on both tabs.
     """
@@ -98,7 +97,7 @@ async def stop_coding_session(sid: str, request: Request) -> Dict[str, Any]:
 
 @router.post("/api/coding/sessions/{sid}/rename")
 async def rename_coding_session(sid: str, request: Request) -> Dict[str, Any]:
-    """Set or clear a manual title override for a session (issue #458).
+    """Set or clear a manual title override for a session.
 
     Wins over every auto-derived title (``live_title``/``prompt_title``/
     ``shared_name``) in the client's precedence (``sessions.js::sessionTitle``)
@@ -124,7 +123,7 @@ async def rename_coding_session(sid: str, request: Request) -> Dict[str, Any]:
 
 @router.post("/api/coding/sessions/{sid}/mirror")
 async def mirror_coding_session(sid: str, request: Request) -> Dict[str, Any]:
-    """Open (or focus) the PC mirror window for an existing session (issue #282).
+    """Open (or focus) the PC mirror window for an existing session.
 
     Desktop parity with the launch flow: clicking a session row on a desktop
     browser should get the same dedicated Edge ``--app`` window a *new*-session
@@ -133,7 +132,7 @@ async def mirror_coding_session(sid: str, request: Request) -> Dict[str, Any]:
     A second click focuses the live window rather than spawning a duplicate
     (the HWND registry is keyed by sid; a duplicate would orphan the first).
     Stop still closes it — the open path registers the HWND exactly as the
-    launch path does (issue #20).
+    launch path does.
 
     The phone never calls this (it streams in-page). When local-window
     mirroring is disabled (``show_local_window`` false) the launch flow
@@ -172,7 +171,7 @@ async def session_image(
 
     ``?inline=1`` (compose bar open) tells the session-host to skip the
     paste-into-PTY step and just return the stored path so the browser
-    can drop it into the compose textarea for review (issue #41).
+    can drop it into the compose textarea for review.
     """
     cfg: WebappConfig = request.app.state.webapp_config
     inline = request.query_params.get("inline") in ("1", "true")
@@ -198,20 +197,18 @@ async def session_image(
 
 @router.post("/api/coding/sessions/{sid}/input")
 async def session_input(sid: str, request: Request) -> Dict[str, Any]:
-    """Write composed text into a session's PTY (private-network-only + passkey, #301).
+    """Write composed text into a session's PTY (private-network-only + passkey).
 
     The Board drawer's reply path for steering a running
     worker. Body: ``{"data": str, "submit": bool}``. One call to the
-    session-host, which now owns the whole framing + settle-then-submit
-    sequence (``PtySession.submit_input``, issue #611, ported from the
-    compose bar's ``framePaste``/``sendSubmit``/``bulkSettle`` — #166/#450/
-    #499): bracketed-paste framing only when the PTY's own output says
-    bracketed-paste mode is on, the submitting CR as its own separate write,
-    and — for a bulk payload — held back until the paste's ingest visibly
-    settles instead of racing it. Previously this endpoint wrote the text and
-    the CR back-to-back with no settle logic, which is why a bulk/multi-line
-    steer could sit unsubmitted as a ``[Pasted text #N]`` chip while the API
-    reported ``{"ok": true}`` (the incident #607 was filed over).
+    session-host, which owns the whole framing + settle-then-submit
+    sequence (``PtySession.submit_input``, mirroring the
+    compose bar's ``framePaste``/``sendSubmit``/``bulkSettle``): bracketed-paste
+    framing only when the PTY's own output says bracketed-paste mode is on,
+    the submitting CR as its own separate write, and — for a bulk payload — held back until the paste's ingest visibly
+    settles instead of racing it. Writing the text and the CR back-to-back
+    with no settle logic would leave a bulk/multi-line steer unsubmitted as a
+    ``[Pasted text #N]`` chip while the API reported ``{"ok": true}``.
 
     ``data`` may be blank when ``submit`` is true — a bare submit against
     whatever is already sitting in the composer, with no text write. This is
@@ -222,9 +219,8 @@ async def session_input(sid: str, request: Request) -> Dict[str, Any]:
 
     ``{"ok": true}`` means the write (and, if requested, the submit) were
     actually accepted by a live session — the session-host reports a dead/
-    exited session as a 409 instead of unconditionally claiming delivery
-    (issue #607), and that propagates through the ``except`` below rather
-    than a false 200.
+    exited session as a 409 instead of unconditionally claiming delivery,
+    and that propagates through the ``except`` below rather than a false 200.
     """
     cfg: WebappConfig = request.app.state.webapp_config
     body = await maybe_json(request)

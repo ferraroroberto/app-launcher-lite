@@ -1,6 +1,6 @@
 """Run-duration percentiles, health, and stuck-run detection for the Jobs tab.
 
-Split out of :mod:`src.jobs` (issue #315) — run-history file storage lives
+Split out of :mod:`src.jobs` — run-history file storage lives
 in :mod:`src.jobs.history`, schtasks sync + spawn helpers in
 :mod:`src.jobs.schtasks`, and the mutex queue in :mod:`src.jobs.queue`.
 """
@@ -213,7 +213,7 @@ def stuck_threshold_seconds(
 
     The one place the "too long for *this* job" heuristic is defined.
     :func:`is_stuck` (the surface-only ⚠️ badge) and the executor's
-    last-resort watchdog (issue #695) both read it, so the warning line
+    last-resort watchdog both read it, so the warning line
     and the auto-kill ceiling can never drift apart.
     """
     return _threshold_from_stats(
@@ -249,7 +249,7 @@ def is_stuck(
 
     Threshold = :func:`stuck_threshold_seconds`. Surface-only — the UI
     shows ⚠️ and exposes a manual kill button. The *auto*-kill lives in
-    the executor's watchdog (issue #695), which derives its ceiling from
+    the executor's watchdog, which derives its ceiling from
     the same helper but demands a minimum sample first.
     """
     latest = latest_run(job_id)

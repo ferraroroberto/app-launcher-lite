@@ -50,7 +50,7 @@ def copilot_flags_payload(cfg: WebappConfig) -> Dict[str, Any]:
 async def audit_off_loop(
     write: Callable[..., None], *args: Any, **kwargs: Any
 ) -> None:
-    """Run one ``src.audit`` write off the event loop (#660 → #661 → #674).
+    """Run one ``src.audit`` write off the event loop.
 
     Every audit entry point does synchronous ``open``/``write``/``close``:
     ``session_log``/``session_input`` on ``webapp/sessions/<sid>.log``,
@@ -58,14 +58,11 @@ async def audit_off_loop(
     webapp runs a **single** uvicorn worker (``app/webapp/event_loop.py``), so
     a slow write — disk contention, an AV scanner walking that directory —
     freezes every other live session's in-flight WS output: the "terminal
-    opens blank and never paints" class investigated in #610, and fixed for
-    the session-host's own handler in #639.
+    opens blank and never paints" class. The session-host's own
+    handler avoids it the same way.
 
-    Fixed one path at a time until it stopped being one path: #660 threaded
-    the WS proxy's writes, #661 the five remaining HTTP handlers in that same
-    router (behind a local helper), #674 the twenty sites across the four
-    *other* routers — at which point five callers made this the obvious home
-    rather than a helper copied per router.
+    Every router's audit calls (the WS proxy's writes and the HTTP handlers)
+    share this one helper rather than a copy per router.
 
     Deliberately no try/except: ``audit.session_log``/``session_input``
     already swallow their own ``OSError``, and ``audit_event`` going bang is a
@@ -120,14 +117,14 @@ def tsnet_host_from_cert(cert_path: Optional[Path] = None) -> Optional[str]:
 def mirror_url(request: Request, cfg: WebappConfig, sid: str) -> str:
     """The URL a launcher-spawned PC terminal window opens for ``sid``.
 
-    Self-signed / no cert → loopback, whose auth bypass the mirror rides
-    (issue #20/#241). With a Tailscale LE cert the loopback URL would hit a
+    Self-signed / no cert → loopback, whose auth bypass the mirror rides.
+    With a Tailscale LE cert the loopback URL would hit a
     hostname-mismatch interstitial (the cert names only the ts.net host), so
     the mirror targets the ts.net URL instead and carries its credentials
     explicitly: ``?token=`` bootstraps the bearer (same mechanism as the
     tunnel URL) and ``?tt=`` a server-minted terminal token when the passkey
     gate is configured. Trust-equivalent to the loopback bypass — the window
-    is spawned by this server, on this machine, for this user (issue #356);
+    is spawned by this server, on this machine, for this user;
     the SPA strips both params from the visible URL on boot.
     """
     ts_host = tsnet_host_from_cert()
@@ -150,24 +147,23 @@ def client_ip(request: Request) -> str:
 def should_mirror_to_pc(
     show_local_window: bool, request: Request, body: Dict[str, Any]
 ) -> bool:
-    """Whether a PTY launch should open the PC mirror window (issue #20).
+    """Whether a PTY launch should open the PC mirror window.
 
     The default is to mirror; only a caller that explicitly says it will
-    render the session itself skips it (issue #609):
+    render the session itself skips it:
 
     * **Phone** — non-loopback and no ``desktop`` flag: the PC has no window
       of its own, so mirror to one.
-    * **Desktop browser** — ``desktop: true`` in the launch body (issue
-      #241): mirror to a dedicated, independently-closable Edge window rather
-      than rendering the terminal inside the user's own browser. This
-      reverses issue #159's desktop-skips-mirror optimization for the PTY
-      case — the "redundant" in-page render was the very thing that let Stop
-      & Close tear down the controlling Chrome window, so the dedicated
+    * **Desktop browser** — ``desktop: true`` in the launch body:
+      mirror to a dedicated, independently-closable Edge window rather
+      than rendering the terminal inside the user's own browser. Skipping
+      the mirror for the PTY case is wrong — the "redundant" in-page render was the very
+      thing that let Stop & Close tear down the controlling Chrome window, so the dedicated
       window is the fix, not the redundancy. The flag (set client-side by
       ``isDesktopClient``) is what distinguishes a desktop from a phone
       regardless of loopback vs tunnel.
     * **Genuine in-page loopback browser** — ``in_page: true`` in the launch
-      body (issue #609): the SPA itself sets this whenever it's about to
+      body: the SPA itself sets this whenever it's about to
       render the session in-page (``applyLaunchSizePayload``'s non-desktop
       branch — a phone always takes this branch too, but the non-loopback
       check above already mirrors it before this is ever consulted). An
@@ -196,7 +192,7 @@ async def spawn_session_or_400(
     spawn_fn: Callable[..., Dict[str, Any]], /, *args: Any, **kwargs: Any
 ) -> Dict[str, Any]:
     """Run ``spawn_agent_session`` off the event loop, mapping its two
-    failure modes onto HTTP responses (issue #689).
+    failure modes onto HTTP responses.
 
     The shared *head* of every session-launch route, the counterpart to
     :func:`audit_session_start_and_maybe_mirror`'s tail: call sites

@@ -10,7 +10,7 @@ This module owns *shape*, not *storage* or *graph* concerns — see
 :mod:`src.jobs.config_chain` (the chain-cycle graph algorithm). Import
 from ``src.jobs.config`` in new code; it re-exports this module's public
 surface for backward compatibility, same pattern as the earlier
-``src.jobs`` facade split (issue #315).
+``src.jobs`` facade split.
 """
 
 from __future__ import annotations
@@ -174,7 +174,7 @@ def schedule_from_dict(raw: Any) -> Schedule:
 
 @dataclass
 class Param:
-    """One typed input declaration for a job (issue #67).
+    """One typed input declaration for a job.
 
     Used by ``src.jobs.argv.compose_argv`` at run-time to validate user
     input and project it into argv/env. Kind is closed (see
@@ -545,7 +545,7 @@ def _validate_cooldown(raw: Any) -> Optional[int]:
 
 
 def _validate_watchdog_seconds(field_name: str, raw: Any) -> Optional[int]:
-    """Parse + validate one of the executor watchdog ceilings (issue #695).
+    """Parse + validate one of the executor watchdog ceilings.
 
     ``None`` / missing → ``None`` ("use the default"). Otherwise an
     ``int`` in ``[0, MAX_WATCHDOG_SECONDS]``, with ``0`` preserved as
@@ -636,7 +636,7 @@ def _validate_mutex_group(raw: Any) -> Optional[str]:
 
 
 def env_from_dict(raw: Any) -> Dict[str, str]:
-    """Parse + validate a job's ``env`` overlay (issue #72).
+    """Parse + validate a job's ``env`` overlay.
 
     Missing / ``None`` → ``{}``. Keys must be UPPER_SNAKE_CASE (same shape
     as ``Param.env``); values must be strings — either literals or
@@ -675,7 +675,7 @@ def validate_kind_shape(
     kind: str, script_path: str, kind_config: Dict[str, Any]
 ) -> None:
     """Raise ``ValueError`` unless ``(kind, script_path, kind_config)`` is a
-    structurally valid combination (issue #70's job-kind registry).
+    structurally valid combination (the job-kind registry).
 
     Shared by :func:`job_from_dict`, :func:`src.jobs.config.update_job`, and
     the webapp's ``PUT /api/jobs/<id>`` route so the three call sites can't

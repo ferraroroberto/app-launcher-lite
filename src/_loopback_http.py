@@ -15,7 +15,7 @@ Each client declares a trivial :class:`LoopbackError` subclass (e.g.
 without catching another's; the shared ``status``-carrying ``__init__`` lives
 on the base.
 
-Every call also shares one pooled, keep-alive :data:`SESSION` (issue #605) —
+Every call also shares one pooled, keep-alive :data:`SESSION` —
 a bare ``requests.get``/``requests.request`` opens a fresh TCP connection per
 call, and each closed connection parks its ephemeral port in ``TIME_WAIT`` for
 ~120 s on Windows. The Board and Coding tabs poll the session-host

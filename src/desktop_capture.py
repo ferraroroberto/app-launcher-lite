@@ -1,4 +1,4 @@
-"""Screen view (#60, ported from app-launcher#1520): capture one monitor of the
+"""Screen view: capture one monitor of the
 PC's desktop for the phone.
 
 The webapp is the capturing process. It runs in the user's interactive
@@ -7,8 +7,8 @@ rights and no extra app. Nothing here belongs to the session-host.
 
 * **Physical pixels everywhere.** :func:`ensure_dpi_awareness` makes the
   process per-monitor-v2 DPI aware before the first monitor read or grab, so
-  monitor rects and captured sizes agree on a scaled display (Step 2/2, input,
-  #61, depends on it). Every public entry point calls it; it runs once.
+  monitor rects and captured sizes agree on a scaled display (input injection depends
+  on it). Every public entry point calls it; it runs once.
 * **One monitor, not the virtual desktop.** Pillow's ``ImageGrab.grab`` always
   grabs the primary or the whole virtual desktop and *then* crops to a bbox,
   so a per-monitor bbox costs the full 3840x2160 grab. :func:`grab_monitor`

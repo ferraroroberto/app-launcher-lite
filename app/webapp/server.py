@@ -156,7 +156,7 @@ class _VersionedStatic(StaticFiles):
 
 
 async def _reconcile_orphan_mirror_windows(app: FastAPI) -> None:
-    """On boot, close Edge mirror windows no live session backs (issue #199).
+    """On boot, close Edge mirror windows no live session backs.
 
     The in-memory HWND registry (``src.launcher._mirror_hwnds``) is dropped
     on every webapp restart, so mirrors opened before the restart can no
@@ -170,8 +170,8 @@ async def _reconcile_orphan_mirror_windows(app: FastAPI) -> None:
     pointed at an empty disposable session-host — would see an empty live list
     and ``WM_CLOSE`` every real ``app-launcher-mirror-*`` window on the desktop,
     killing the user's live session mirrors while the sessions survive headless
-    on the real ``:8466`` (issue #278). ``#260`` isolated the session-host but
-    left this window sweep machine-wide. Only the canonical instance owns the
+    on the real ``:8466``. Isolating the session-host alone
+    would leave this window sweep machine-wide. Only the canonical instance owns the
     desktop, so a disposable instance — identified by the
     ``LAUNCHER_SESSION_HOST_PORT`` override, which is set *only* by autoboot and
     never in production — skips the sweep entirely.

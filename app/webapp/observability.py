@@ -1,4 +1,4 @@
-"""Slow-request breadcrumbs for the webapp (issue #386).
+"""Slow-request breadcrumbs for the webapp.
 
 The webapp runs under ``--log-level warning`` and the tray spawns it with
 stdout/stderr DEVNULL'd, so when :8465 wedges there is zero evidence trail.

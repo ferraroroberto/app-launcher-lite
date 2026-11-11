@@ -81,7 +81,7 @@ def _probe_url(scheme: str, host: str, port: int) -> str:
 
 def check_tailscale_cert() -> None:
     """Auto-renew a Tailscale cert expiring within 30 days, before uvicorn
-    binds (project-scaffolding#89). No-op on a self-signed cert or when no
+    binds. No-op on a self-signed cert or when no
     cert exists; best-effort — a cert problem must never block startup.
     """
     script = PROJECT_ROOT / "scripts" / "gen_tailscale_cert.py"

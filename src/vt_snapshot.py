@@ -1,13 +1,13 @@
 """Headless VT100 screen mirror for full-screen (ratatui) PTY sessions.
 
 A ratatui-based agent (Copilot; see :mod:`src.agents`)
-re-emits its **entire transcript** on any winsize change (empirical probe,
-issue #430: ~65 KB for a long conversation, on a same-shape resize toggle).
-The session-host used to serve a (re)connecting client by toggling the PTY
-width by one column and back (``_force_repaint`` in
-``app/webapp/session_host/server.py``) so the agent would repaint at the current
-size — but that SIGWINCH is exactly what triggers the full re-emission,
-visible to every subscriber (issue #432).
+re-emits its **entire transcript** on any winsize change (empirical probe:
+~65 KB for a long conversation, on a same-shape resize toggle).
+Toggling the PTY width by one column and back
+(``_force_repaint`` in ``app/webapp/session_host/server.py``) so the agent
+repaints at the current size would serve a (re)connecting client, but that
+SIGWINCH is exactly what triggers the full re-emission, visible to every
+subscriber.
 
 :class:`VtSnapshot` avoids the SIGWINCH entirely: it parses the PTY's byte
 stream through a headless ``pyte`` screen (fed from the same reader thread
@@ -17,7 +17,7 @@ frame. On a WS (re)connect the server renders that screen straight to ANSI
 (SGR runs + cursor position) and sends it as the opening frame — no resize,
 no agent re-emission, no reconnect flash.
 
-``render()`` also prepends a bounded window of real scrollback (issue #435):
+``render()`` also prepends a bounded window of real scrollback:
 a plain :class:`pyte.Screen` only ever knows the current frame, so a client
 reconnecting cold (no prior xterm state of its own) landed on exactly one
 screen with nothing to scroll into. :class:`pyte.HistoryScreen` tracks lines
@@ -91,10 +91,10 @@ class _MirrorScreen(pyte.HistoryScreen):
     :class:`VtSnapshot` is a **passive mirror with no reply channel**: it
     parses the PTY's output stream but has no way to write back, and must
     not try. Same principle as the session-host's OSC 10/11/12 colour-reply
-    stripping (``_strip_color_osc``, issue #270) — a query answered by the
+    stripping (``_strip_color_osc``) — a query answered by the
     wrong party corrupts the stream.
 
-    Concretely this fixes a crash (issue #2). pyte dispatches *any* private
+    Concretely this fixes a crash. pyte dispatches *any* private
     CSI as ``handler(*params, private=True)`` (``pyte/streams.py``), but its
     own ``Screen.report_device_status(self, mode)`` accepts no such keyword,
     so a private DSR raises ``TypeError`` out of ``Stream.feed``. Copilot CLI
@@ -133,11 +133,11 @@ class VtSnapshot:
         transcript, and every subscriber queue, and it dies *before* marking
         the session exited or pushing EOF. The session therefore still reports
         alive and still accepts input while showing nothing at all, which is
-        precisely the silent, unrecoverable blank terminal of issue #2.
+        precisely the silent, unrecoverable blank terminal.
 
         Recovering is safe rather than merely tolerable: pyte reinitialises
         its parser coroutine whenever a handler raises (``_send_to_parser``,
-        upstream PR #101), so the *next* chunk parses from a clean state. Only
+        upstream pyte), so the *next* chunk parses from a clean state. Only
         the remainder of the offending chunk is lost.
         """
         with self._lock:
@@ -173,7 +173,7 @@ class VtSnapshot:
             self._screen.resize(rows, cols)
 
     def render(self) -> str:
-        """Render the reconnect payload: bounded scrollback history (#435)
+        """Render the reconnect payload: bounded scrollback history
         as plain scrolling text, followed by the current frame as ANSI
         (SGR runs + cursor state).
 
@@ -185,8 +185,8 @@ class VtSnapshot:
         natural line wrap: a row that fills every column leaves the
         cursor in xterm's "deferred autowrap" state, where an explicit
         CR+LF right after the last column produces an extra line feed
-        (proven empirically — see the vt_snapshot round-trip probe in
-        issue #432 — a naive ``\\r\\n`` join shifted the whole frame down
+        (proven empirically — see the vt_snapshot round-trip probe —
+        a naive ``\\r\\n`` join shifted the whole frame down
         by one line). Absolute positioning sidesteps deferred-wrap
         entirely and lands the frame on the live state regardless of how
         much history text scrolled before it.

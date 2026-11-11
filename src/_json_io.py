@@ -3,7 +3,7 @@
 Six call sites across ``src/`` each hand-rolled the same
 tempfile-then-``os.replace`` dance with their own suffix bikeshed. This
 module is the single place that owns it. It also owns the msvcrt-based
-file-lock-with-retry pattern (issue #520) that both ``src.jobs.queue`` and
+file-lock-with-retry pattern that both ``src.jobs.queue`` and
 ``src.jobs.history`` need for their own read-modify-write critical sections.
 """
 

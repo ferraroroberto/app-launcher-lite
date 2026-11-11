@@ -1,4 +1,4 @@
-"""Assembly logic for the Board tab's kanban columns (issue #300 / #164).
+"""Assembly logic for the Board tab's kanban columns.
 
 Four single-purpose columns (Phase 5, was five before the "Other" column —
 open MRs + failed/stuck jobs — was dropped): Backlog and Done hold issues
@@ -28,11 +28,11 @@ own their own module, and their public names are re-exported here so every
 A card's status is the hook row's own status — no transcript is parsed
 (Copilot's ``events.jsonl`` is not the Claude shape the removed parsers read).
 
-Degradation contract (#164 acceptance): a missing/corrupt/stale state file
+Degradation contract: a missing/corrupt/stale state file
 must never error — session cards fall back to ``unknown`` status and the
 GitLab columns render regardless.
 
-Shared session title (#396): the state row also carries ``name``/``name_source``
+Shared session title: the state row also carries ``name``/``name_source``
 (the agent's live session title, where one exists). ``merge_sessions`` copies
 those onto every card as ``shared_name``/``shared_name_source``, and
 :func:`attach_shared_names` runs the identical agent-aware claim walk for the
@@ -74,7 +74,7 @@ def build_board(
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Route the two sources into the four computed columns.
 
-    Each column holds one kind of card (#399, reduced to four in Phase 5):
+    Each column holds one kind of card:
     Backlog = open issues. Bot's turn = sessions working / unknown / idle
     (idle is dimmed client-side, not hidden — a session with nothing pending
     is still the bot holding a workspace, not an alert). Your turn =

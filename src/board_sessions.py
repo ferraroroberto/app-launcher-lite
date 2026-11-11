@@ -1,4 +1,4 @@
-"""Session-claim/merge logic for the Board tab (issue #408 split of ``board.py``).
+"""Session-claim/merge logic for the Board tab (split out of ``board.py``).
 
 Joins the **live session list** from the session-host
 (``session_client.list_sessions``) with the hook-written state rows
@@ -7,7 +7,7 @@ agent when a writer supplies those fields; agent-less rows fall back to an
 agent-gated normalized-cwd claim. Two legacy live sessions in one directory
 tie-break by most recent ``started_at``; the rest show ``unknown``.
 
-Shared session title (#396): the state row also carries ``name``/``name_source``
+Shared session title: the state row also carries ``name``/``name_source``
 (the agent's live session title, where one exists). :func:`merge_sessions`
 copies those onto every card as ``shared_name``/``shared_name_source``, and
 :func:`attach_shared_names` runs the identical agent-aware claim walk for the
@@ -98,17 +98,17 @@ def _match_state_row(
     agent-less rows have neither field and retain the normalized
     cwd fallback. Rows carrying a different launcher id are never allowed to
     fall back by cwd — that would reintroduce the same-session collision exact
-    identity exists to prevent (#455).
+    identity exists to prevent.
 
     The cwd fallback also requires the row's ``updated_at`` to be at-or-after
-    the session's own ``started_at`` (#482) — a row genuinely written by this
+    the session's own ``started_at`` — a row genuinely written by this
     session can never predate the session's existence, so an older row can
     only be some other, unrelated conversation's leftover state in the same
     directory (e.g. a race where this session's own row hasn't landed yet).
     Without this guard the "most recently updated" tie-break could hand a
     brand-new session an hours-old sibling's title.
 
-    ``ambiguous_cwd`` (#537): true when 2+ *live* sessions share this
+    ``ambiguous_cwd``: true when 2+ *live* sessions share this
     session's (cwd, agent) — set by :func:`_claim_walk` from the full live
     list, not just the rows still unclaimed. With only recency to go on, the
     cwd fallback has no way to tell which of several live siblings a given
@@ -165,7 +165,7 @@ def _claim_walk(
     The single source of the claim order — ``merge_sessions`` and
     ``attach_shared_names`` both resolve rows through it, so the Board and the
     Coding tab agree on which row belongs to which session. Returns ``(pairs, leftovers)`` where ``pairs``
-    is ``[(session, row-or-None, sid-or-None), ...]`` (fleet-config#242's
+    is ``[(session, row-or-None, sid-or-None), ...]`` (the
     ``state_sid`` — the claimed row's own key — rides alongside the row so
     ``merge_sessions`` can put it on the card) and ``leftovers`` the unclaimed
     rows.
@@ -190,7 +190,7 @@ def _claim_walk(
 
 def _claimed_transcript_paths(pairs: List[tuple]) -> "set[str]":
     """Transcript paths already backing a live, matched session's own row
-    (#613) — an unmatched row pointing at the same file is a superseded
+    — an unmatched row pointing at the same file is a superseded
     leftover of that same session (re-keyed when a worker moved from one
     issue to the next), not independent evidence of a second live process."""
     claimed: "set[str]" = set()
@@ -204,7 +204,7 @@ def _claimed_transcript_paths(pairs: List[tuple]) -> "set[str]":
 
 
 def _live_launcher_session_ids(live: List[Dict[str, Any]]) -> "set[str]":
-    """Every currently-alive session-host id (#613) — the session-host is the
+    """Every currently-alive session-host id — the session-host is the
     authority on which PTYs it owns, so a hook row whose own
     ``launcher_session_id`` is absent from this set is provably dead, however
     recently its transcript happened to be touched."""
@@ -219,8 +219,8 @@ def attach_shared_names(
     live: List[Dict[str, Any]], state_rows: Dict[str, Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     """Join live session-host sessions with the state file's shared session
-    title (fleet-config#302's ``name``/``name_source``), for the Coding tab's
-    Running-sessions list (#396).
+    title (``name``/``name_source``), for the Coding tab's
+    Running-sessions list.
 
     Uses the exact same agent-aware :func:`_claim_walk` as :func:`merge_sessions`
     — both consumers must resolve a given live session to the same state row,
@@ -418,7 +418,7 @@ def merge_sessions(
     Live-session cards also carry ``state_sid`` — the claimed state row's own
     key (``None`` when unmatched) — so a Slack ping's deep link, which only
     knows the hook's transcript UUID, can still resolve to the right card
-    (fleet-config#242 / #307). State-only cards don't get one: they have no
+    State-only cards don't get one: they have no
     session-host id and no drawer target, so a deep link to one is out of scope.
     """
     now = now or _now()

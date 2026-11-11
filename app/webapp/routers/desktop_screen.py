@@ -1,4 +1,4 @@
-"""Screen view (#60, ported from app-launcher#1520): the PC's desktop, live, on
+"""Screen view: the PC's desktop, live, on
 the phone.
 
 ``GET /api/screen/monitors`` lists the displays; ``WS /api/screen/ws`` streams

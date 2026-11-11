@@ -1,4 +1,4 @@
-"""Board tab — the fleet kanban's data plane (issues #300, #301 / #164 / #399).
+"""Board tab — the fleet kanban's data plane.
 
     GET  /api/board                       → the four computed columns (token-gated)
     POST /api/board/gitlab/refresh        → run the glab queries now (token-gated)
@@ -7,7 +7,7 @@
     POST /api/board/issues/start          → spawn /issue-start|yolo <N> in the
                                             issue's repo (private network + passkey)
 
-Split off a single-file god-router (issue #691, `/codebase-audit`), the way
+Split off a single-file god-router (a `/codebase-audit` finding), the way
 ``jobs.py`` and ``sessions.py`` already were: the shared launch helpers
 (repo resolution, the Copilot install guard, the degradation-safe session
 list) live in :mod:`app.webapp.routers.board_spawn`.
@@ -21,7 +21,7 @@ assembly is pure logic in :mod:`src.board`.
 
 The board + refresh routes are read-only repo/session metadata — the same gate
 class as ``GET /api/coding/sessions`` (bearer token, no passkey). The
-drill-down exchange and issue-start routes (#301) are terminal-grade and get
+drill-down exchange and issue-start routes are terminal-grade and get
 the passkey gate in ``middleware._terminal_guard_level``; the reply proxy
 lives beside its session siblings in ``routers/sessions.py``.
 
@@ -159,7 +159,7 @@ async def session_exchange(sid: str, request: Request) -> Dict[str, Any]:
 
 @router.post("/api/board/issues/start")
 async def start_issue(request: Request) -> Dict[str, Any]:
-    """One-tap ▶ Start / ⚡ YOLO on a backlog card (private network + passkey, #301).
+    """One-tap ▶ Start / ⚡ YOLO on a backlog card (private network + passkey).
 
     Body: ``{"repo": str, "number": int, "mode": "start"|"yolo",
     "rows": int, "cols": int, "title": str}``. The repo must
@@ -172,7 +172,7 @@ async def start_issue(request: Request) -> Dict[str, Any]:
     Coding model — there is no per-launch model override.
 
     The optional ``title`` (the Board card's issue title) auto-names the
-    session after the issue (#467) via the #458 manual-override path, so it is
+    session after the issue via the manual-override path, so it is
     recognizable in the Coding tab without waiting for the agent to self-name.
     The title is display data — it never reaches the command line.
     """

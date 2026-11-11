@@ -1,5 +1,5 @@
 """Declared session-host paths + touched-path diff, for `/api/version`'s
-staleness scoping (#635).
+staleness scoping.
 
 `_session_host_freshness()` in `app/webapp/routers/misc.py` used to flag the
 session-host `stale` the instant its loaded `git_sha` differed from the
@@ -7,7 +7,7 @@ repo's current `HEAD` — true after *any* merge anywhere in the repo, not just
 one that touched code the session-host actually loads. This module supplies
 the missing scope: which paths the session-host declares
 (`CLAUDE.md`'s `## session-host` block, project-scaffolding's deploy-coverage
-convention, `#629`) and whether the diff between two shas touched any of them.
+convention) and whether the diff between two shas touched any of them.
 
 Hand-rolled rather than importing `fleet-config`'s
 `skills/_lib/deploy_coverage.py` (which does the equivalent parse/intersect

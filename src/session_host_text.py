@@ -92,7 +92,7 @@ def cook_input_line(raw: str) -> str:
 
     The PTY input path carries raw bytes — printable characters, backspaces,
     arrow-key escape sequences, bracketed-paste markers. To title a session
-    from its first prompt (issue #266) we replay that stream into the text it
+    from its first prompt we replay that stream into the text it
     produces: apply backspace (DEL/BS), drop ESC-introduced control sequences
     (CSI ``ESC [ … final`` — which also covers ``ESC[200~``/``ESC[201~`` paste
     markers — and OSC ``ESC ] … BEL/ST``), and keep the printable remainder.
@@ -133,7 +133,7 @@ def cook_input_line(raw: str) -> str:
 def derive_prompt_title(text: str) -> str:
     """Derive a short, human-readable session title from a first prompt.
 
-    Deterministic and offline (no LLM, issue #266): collapse whitespace, drop
+    Deterministic and offline (no LLM): collapse whitespace, drop
     control chars, take the leading few words, cap the length. ``text`` should
     already be the cooked visible line from :func:`cook_input_line`.
     """

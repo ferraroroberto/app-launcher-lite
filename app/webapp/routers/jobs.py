@@ -1,5 +1,4 @@
-"""``/api/jobs`` surface — CRUD, agenda, pause/resume, run, kill, run-history
-(issue #47).
+"""``/api/jobs`` surface — CRUD, agenda, pause/resume, run, kill, run-history.
 
 The Jobs tab's API mirrors the Apps tab's shape (see
 ``app/webapp/routers/apps.py``): same bearer-token middleware, same
@@ -7,7 +6,7 @@ The Jobs tab's API mirrors the Apps tab's shape (see
 
 Trigger funnel: every run — manual (phone tap / Stream Deck via
 ``POST /api/jobs/<id>/run``), webhook (an external service via
-``POST /api/jobs/<id>/hook``, issue #73), and scheduled (Task Scheduler) —
+``POST /api/jobs/<id>/hook``), and scheduled (Task Scheduler) —
 goes through ``launcher.py run-job <id>``. The route pre-creates the run
 directory so it can return the new ``run_id`` immediately, then spawns
 the executor detached.
@@ -114,7 +113,7 @@ def _decorate_job(
     ``last7`` sparkline payload; ``stuck`` flags an over-long running run;
     ``queue_depth`` is the count of pending entries in this job's mutex
     queue (0 when no group); ``coverage`` flags a schedule that isn't
-    firing at all (issue #697) — a missing/disabled Task Scheduler entry or
+    firing at all — a missing/disabled Task Scheduler entry or
     an elapsed slot with no run record, read from one cached scan per poll.
     """
     payload = job.to_dict()
@@ -178,7 +177,7 @@ def _decorate_job(
 
 
 def _preflight_gate(job: Job, *, acknowledged: bool) -> List[Dict[str, str]]:
-    """Run save-time pre-flight (issue #69) and enforce the two-phase flow.
+    """Run save-time pre-flight and enforce the two-phase flow.
 
     * Any **error** raises ``HTTPException`` 400 carrying a structured
       ``problems`` list — the save is blocked regardless of acknowledgement.
@@ -233,7 +232,7 @@ async def get_jobs(request: Request) -> Dict[str, Any]:
 
 @router.get("/api/jobs/agenda")
 async def get_jobs_agenda(request: Request, days: int = 7) -> Dict[str, Any]:
-    """Upcoming scheduled fires over the next ``days`` (issue #230).
+    """Upcoming scheduled fires over the next ``days``.
 
     Backs the Jobs-tab agenda panel. Expands each non-paused job's schedule
     across ``[now, now+days)`` into a flat, time-sorted occurrence list (the
