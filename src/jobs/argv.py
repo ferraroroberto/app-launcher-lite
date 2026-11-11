@@ -1,4 +1,4 @@
-"""Compose argv + env from a job's typed parameter values (issue #67).
+"""Compose argv + env from a job's typed parameter values.
 
 A job's ``params`` declares the typed inputs; this module turns a
 ``{name: value}`` dict into ``(argv_tail, env_overlay)``. It is the

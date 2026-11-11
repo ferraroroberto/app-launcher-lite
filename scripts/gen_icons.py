@@ -4,7 +4,7 @@ This fork does **not** generate its icons. Upstream `app-launcher` builds them
 from `project-scaffolding`'s shared `brand_gen.render_set()` generator; the lite
 fork exists precisely to avoid carrying a `project-scaffolding` dependency, so
 the rendered assets are committed here byte-for-byte instead. That is a
-deliberate, permanent decision (issues #10, #28). The fleet design lint's
+deliberate, permanent decision. The fleet design lint's
 `app-icon-family` contract looks for a script that names the `brand_gen`
 generator and its `render_set(` call, and this one does, so the check passes
 without an exception. Should it ever fail again, record that as a

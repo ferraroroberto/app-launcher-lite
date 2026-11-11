@@ -1,4 +1,4 @@
-"""Windows event-loop shim for uvicorn (issue #388).
+"""Windows event-loop shim for uvicorn.
 
 On Windows, asyncio's default proactor event loop closes its listening
 socket the moment ``accept()`` raises any ``OSError`` (see CPython's
@@ -8,7 +8,7 @@ phone roaming off Wi-Fi) surfaces as exactly such an ``OSError`` (WinError
 64, "The specified network name is no longer available"). One aborted
 client and the listener is gone; the process stays alive but every
 subsequent connection fails, which is the ":8465 unresponsive until tray
-restart" wedge (#386/#388).
+restart" wedge.
 
 The selector event loop's accept path has no such failure mode -- verified
 empirically: 800 concurrent aborted connections against a bare

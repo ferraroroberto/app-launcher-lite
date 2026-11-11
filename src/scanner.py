@@ -68,7 +68,7 @@ class ProjectDir:
     ``project_dir`` is the directory the agent will be cwd'd into; ``id``
     is a stable slug of its name; ``name`` is the **bare on-disk folder
     name**, shown verbatim on the tile (no prettification — that's the
-    Coding-tab tile design from issue #45).
+    Coding-tab tile design).
     """
 
     id: str
@@ -487,7 +487,7 @@ def classify_bat(bat_path: Path) -> Optional[str]:
     Classification is mutually exclusive — the first match wins:
 
     * ``tray`` — filename stem is ``tray`` AND the body references
-      ``tray_lifecycle.ps1`` (issue #456), the one shared marker every
+      ``tray_lifecycle.ps1``, the one shared marker every
       fleet ``tray.bat`` carries (project-scaffolding's tray.bat.template).
       Checked first: a tray.bat never also matches the other signatures.
     * ``streamlit`` — body contains ``streamlit run``. Bats that *also*

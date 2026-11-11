@@ -38,17 +38,17 @@ class Agent:
     differently: it must **not** replay the raw scrollback ring on
     (re)connect — doing so dumps stale move-cursor/clear deltas into a
     fresh xterm and re-answers the agent's startup terminal queries (the
-    ``[?1;2c`` DA leak, issue #128) — and instead forces a clean repaint.
+    ``[?1;2c`` DA leak) — and instead forces a clean repaint.
 
     ``resume_token`` is the agent's *native* resume invocation, spliced
-    between the command and the flags for a Resume launch (issue #151) so
+    between the command and the flags for a Resume launch so
     the agent renders its own session picker over the PTY — the launcher
     never builds a session list of its own (Copilot's is ``--resume``).
     Empty means the agent has no resume path.
 
     ``native_name_flag`` is a spawn-time flag that gives a new session a
     picker-visible title. It is intentionally separate from a live rename:
-    the launcher must never type into a running agent TUI (#555). Empty means
+    the launcher must never type into a running agent TUI. Empty means
     the agent exposes no verified non-PTY naming mechanism.
     """
 
@@ -110,7 +110,7 @@ def quit_command_for(agent_id: str) -> str:
 
 
 def resume_command_for(agent_id: str) -> str:
-    """Return the agent's native resume token (issue #151).
+    """Return the agent's native resume token.
 
     Spliced between the command and the flags for a Resume launch so the
     agent shows its own session picker (Copilot ``--resume``). Returns an
@@ -123,7 +123,7 @@ def resume_command_for(agent_id: str) -> str:
 
 
 def native_session_name_flags_for(agent_id: str, title: str) -> str:
-    """Return safe spawn-time picker-name flags for ``title`` (issue #556).
+    """Return safe spawn-time picker-name flags for ``title``.
 
     The title originates outside the command line (for example, from a
     GitHub issue). Only pass it through ``cmd.exe`` when it contains no
@@ -143,8 +143,8 @@ def is_fullscreen(agent_id: str) -> bool:
     """Whether ``agent_id`` is a full-screen differential TUI.
 
     Drives the session-host's (re)connect handling: full-screen agents
-    skip the raw scrollback-ring replay and get a forced repaint instead
-    (issue #128). An unknown id is treated as non-fullscreen — the safe
+    skip the raw scrollback-ring replay and get a forced repaint instead.
+    An unknown id is treated as non-fullscreen — the safe
     inline default.
     """
     agent = SESSION_HOST_AGENTS.get(agent_id)
@@ -154,7 +154,7 @@ def is_fullscreen(agent_id: str) -> bool:
 def is_installed(agent_id: str) -> bool:
     """Whether ``agent_id``'s command resolves on the **effective** PATH.
 
-    Not the inherited one (issue #668): a CLI installed while the launcher
+    Not the inherited one: a CLI installed while the launcher
     is running writes its directory into the registry, which no running
     process ever re-reads — so ``shutil.which`` against ``os.environ`` would
     keep reporting "not installed" until Explorer restarted or the user
@@ -176,7 +176,7 @@ def detect_agents() -> List[Dict[str, object]]:
     SPA tell a differential TUI apart from an inline-scrolling agent so
     the phone terminal can pan the fixed canvas above the keyboard instead
     of reflowing — reflowing resizes the PTY and makes a differential TUI
-    repaint on every keyboard open/close (issue #264). The Coding tab
+    repaint on every keyboard open/close. The Coding tab
     disables an agent's launch button (with a hover hint) when
     ``available`` is ``False``.
     """

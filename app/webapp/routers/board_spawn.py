@@ -1,6 +1,6 @@
 """Shared launch helpers for the Board tab's routes.
 
-Split off ``app/webapp/routers/board.py`` (issue #691, a `/codebase-audit`
+Split off ``app/webapp/routers/board.py`` (a `/codebase-audit`
 maintainability finding), the same way ``jobs_run.py`` was split off
 ``jobs.py``. This module owns the launch-path pieces ``board.py`` calls
 through:
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 def _safe_list_sessions(port: int) -> List[Dict[str, Any]]:
     """Live sessions, or [] when the session-host is down — the board must
-    keep rendering the GitLab cards regardless (#164 degradation)."""
+    keep rendering the GitLab cards regardless."""
     try:
         return session_client.list_sessions(port)
     except session_client.SessionHostError as exc:

@@ -14,7 +14,7 @@ Used by the FastAPI ``/api/apps/{id}/launch`` route:
   tracks — visible on the PC, killable from the phone, but not streamed.
 - ``open_local_terminal_window`` opens the PC-side mirror window for a
   full-control session and (optionally) tracks its HWND so Stop & Close
-  can dismiss it via WM_CLOSE — issue #20.
+  can dismiss it via WM_CLOSE.
 
 The Coding tab chooses the mode via the ``/api/apps/{id}/launch``
 ``mode`` parameter (``pty`` | ``remote``) and the agent via ``agent``.
@@ -108,12 +108,12 @@ def spawn_agent_session(
     ``kind="pty"`` (default) spawns a launcher-owned ConPTY streamed to the
     phone; ``kind="remote"`` spawns a detached console window the host only
     tracks. ``rows``/``cols`` are the phone's real terminal dimensions, so a
-    ``pty`` session paints its first frame at the right width (issue #126);
+    ``pty`` session paints its first frame at the right width;
     they are ignored for ``remote`` (no PTY). ``history_lines`` bounds a
-    full-screen agent's reconnect scrollback (issue #435 follow-up,
-    Settings-tab configurable) — ``None`` falls back to the session-host's
+    full-screen agent's reconnect scrollback (Settings-tab
+    configurable) — ``None`` falls back to the session-host's
     own default; ignored for ``remote`` and for non-fullscreen agents.
-    ``label`` tags the session with a role (#245) that
+    ``label`` tags the session with a role that
     rides through ``to_api()`` and board cards; ``""`` for normal sessions.
     Returns the new session's API dict (``session_id``, ``kind``, ``agent``,
     ``name``, …). Raises :class:`session_client.SessionHostError` when the
@@ -158,7 +158,7 @@ def open_local_terminal_window(url: str, sid: Optional[str] = None) -> None:
     ``EnumWindows`` for a top-level window whose title contains
     ``app-launcher-mirror-<sid>`` (set by the mirror page on load) and
     stashes its HWND so :func:`close_mirror_window` can post
-    ``WM_CLOSE`` to it on Stop & Close — issue #20.
+    ``WM_CLOSE`` to it on Stop & Close.
     """
     _spawn_terminal_window(url)
     if sid:
@@ -244,7 +244,7 @@ def close_mirror_window(sid: str) -> bool:
 
     Tries the HWND stashed at spawn time first; when none is stashed or
     it's already dead, falls back to a fresh ``EnumWindows`` title-scan
-    for ``app-launcher-mirror-<sid>`` (issue #199). The close-time scan is
+    for ``app-launcher-mirror-<sid>``. The close-time scan is
     what makes Stop & Close survive a webapp restart — the in-memory
     ``_mirror_hwnds`` registry is wiped on every restart, and a lost
     spawn-time poll race never registers an HWND at all. Returns ``True``
@@ -316,7 +316,7 @@ def _bring_to_front(win32gui: Any, hwnd: int, tag: str) -> None:
 
 
 def focus_mirror_window(sid: str) -> bool:
-    """Foreground ``sid``'s existing mirror window if one is live (issue #282).
+    """Foreground ``sid``'s existing mirror window if one is live.
 
     Returns ``True`` when a live mirror window for ``sid`` was found (and a
     best-effort foreground attempted), ``False`` when none exists — in which
@@ -351,7 +351,7 @@ def focus_mirror_window(sid: str) -> bool:
 def open_or_focus_mirror_window(url: str, sid: str) -> str:
     """Focus ``sid``'s existing mirror window if live, else open a fresh one.
 
-    Returns ``"focused"`` or ``"opened"`` (issue #282). This is what makes a
+    Returns ``"focused"`` or ``"opened"``. This is what makes a
     desktop click on an existing session row behave like the new-session
     launch — a dedicated Edge window — without ever spawning a *second* window
     for the same session: the HWND registry is keyed by sid, so a duplicate
@@ -364,7 +364,7 @@ def open_or_focus_mirror_window(url: str, sid: str) -> str:
 
 
 def close_orphan_mirror_windows(live_sids: Iterable[str]) -> int:
-    """Close every Edge mirror window not backed by a live session (#199).
+    """Close every Edge mirror window not backed by a live session.
 
     Sweeps top-level windows whose title carries the mirror marker
     ``app-launcher-mirror-`` and ``WM_CLOSE``s any whose sid isn't in

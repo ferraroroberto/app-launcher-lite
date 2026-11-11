@@ -1,4 +1,4 @@
-"""Conversation previews for the Board drawer (issue #457).
+"""Conversation previews for the Board drawer.
 
 The source is the launcher-owned PTY's exact-id capture: no agent transcript
 is parsed, because Copilot's ``events.jsonl`` is not a shape this module reads.
@@ -150,12 +150,12 @@ def _nonempty_file(path: Path) -> bool:
 def _terminal_rows(raw: str, *, rows: int, cols: int) -> List[Tuple[str, str]]:
     """Replay a capture tail through a headless VT screen.
 
-    Built on :class:`src.vt_snapshot._MirrorScreen` — same private-DSR fix as
-    issue #2 (``ESC[?996n`` etc. would otherwise raise ``TypeError`` out of
+    Built on :class:`src.vt_snapshot._MirrorScreen` — same private-DSR fix
+    (``ESC[?996n`` etc. would otherwise raise ``TypeError`` out of
     pyte's dispatch) — and the ``feed`` call is guarded the same way, since
     this runs on a request path rather than a background reader thread: an
     unparseable capture must degrade to whatever rows were parsed before the
-    failure, never 500 the Board drill-down (issue #4).
+    failure, never 500 the Board drill-down.
     """
     screen = _MirrorScreen(cols, rows, history=_CAPTURE_HISTORY_LINES)
     try:

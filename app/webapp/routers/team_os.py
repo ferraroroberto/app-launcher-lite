@@ -1,6 +1,6 @@
 """Team OS tab — one-tap skill launch + read-only private-content browser.
 
-The Team OS tab (issue #102) is ~80% a clone of the Coding tab,
+The Team OS tab is ~80% a clone of the Coding tab,
 specialised to the skills in the sibling ``team-os`` repo:
 
     GET  /api/team-os/skills                  → list skills (public, token-gated)
@@ -209,7 +209,7 @@ async def _spawn_skill_session(
     The shared tail of the skill-launch and recap-launch routes: each has
     already resolved the copilot ``flags`` (model + the bare ``/<command>``)
     and the session ``kind``; this runs the spawn + audit + optional PC mirror
-    (issue #159) identically and returns the common response fields. The caller
+    identically and returns the common response fields. The caller
     prepends its own ``launched`` id.
     """
     # The phone passes its real terminal size: a skill streams
@@ -328,8 +328,8 @@ async def recap_status(request: Request) -> Dict[str, Any]:
 async def launch_recap(request: Request) -> Dict[str, Any]:
     """Launch a copilot session that invokes ``/weekly-recap`` (review) in team-os.
 
-    The Weekly-recap tile's 🚀 — the interactive **review** half of the recap
-    (issue #167 / team-os #15). Body: ``{"mode": "pty"|"remote", "model": str}``
+    The Weekly-recap tile's 🚀 — the interactive **review** half of the recap.
+    Body: ``{"mode": "pty"|"remote", "model": str}``
     (``model`` ∈ "" (Default) + ``copilot_models``). The drafting half runs
     headless on a schedule (the recap-draft Job), so this tile is review-only:
     no ``/weekly-recap draft`` and no resume. cwd is fixed to ``team_os_dir``;
@@ -375,11 +375,11 @@ async def launch_skill(skill_id: str, request: Request) -> Dict[str, Any]:
     Mirrors the Coding tab's coding launch (PTY streamed to the phone
     vs. detached console window, + PC mirror window + audit).
 
-    Resume (issue #151) reopens Copilot's own native session picker instead
+    Resume reopens Copilot's own native session picker instead
     of invoking the skill: it **drops the ``/<skill>`` prompt** and launches
     via the shared resume path (``build_resume_flags`` → ``--resume`` with no
     id, the same shape the Coding tab's ``apps.py`` uses). Resume is
-    orthogonal to Detached (issue #157, matching the Coding tab): the
+    orthogonal to Detached (matching the Coding tab): the
     requested ``mode`` still decides where the picker renders — a detached
     console window (``mode="remote"``) or a streamed PTY (``mode="pty"``).
     """
@@ -633,7 +633,7 @@ def _walk_files(
     ``memory`` and a top-level ``SKILL.md`` under ``skill``). When the
     category is derived from that leading directory, ``name`` drops it —
     the section header already shows it, so repeating it in the row just
-    wastes horizontal space (#118). Sorted by category then path.
+    wastes horizontal space. Sorted by category then path.
     """
     if not root.is_dir():
         return []

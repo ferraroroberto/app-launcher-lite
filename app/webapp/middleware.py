@@ -39,7 +39,7 @@ _WEBHOOK_HOOK_PATH = re.compile(r"/api/jobs/[^/]+/hook")
 
 
 def _is_webhook_hook_path(method: str, path: str) -> bool:
-    """``POST /api/jobs/<id>/hook`` (issue #73) authenticates itself via the
+    """``POST /api/jobs/<id>/hook`` authenticates itself via the
     job's provider-specific signature, never the bearer token — an external
     service (GitHub, Stripe, …) can't carry it, and the whole point is a URL
     that's safe to hand to a third party in plaintext.
@@ -143,7 +143,7 @@ def _terminal_guard_level(path: str) -> Optional[str]:
     ``"tailnet"`` — private-network-only (the WebAuthn ceremony endpoints).
     ``None``      — not a terminal endpoint; normal bearer-token rules apply.
 
-    Driven by :data:`_TERMINAL_GUARD_RULES` (issue #408).
+    Driven by :data:`_TERMINAL_GUARD_RULES`.
     """
     for predicate, level, _comment in _TERMINAL_GUARD_RULES:
         if predicate(path):
@@ -207,7 +207,7 @@ def ws_terminal_gate(
 
     The edge-header check runs before the loopback bypass: cloudflared dials
     the webapp over loopback, so a loopback address alone never proves the
-    caller is the PC (#60).
+    caller is the PC.
 
     ``label`` names the service in the close reason (``"terminal"`` /
     ``"screen"``); the legs and close codes are shared.
@@ -270,7 +270,7 @@ def terminal_reachability(request: Request) -> Dict[str, Any]:
 class BearerTokenMiddleware(BaseHTTPMiddleware):
     """Require Authorization: Bearer <token> on API endpoints (non-loopback only).
 
-    Two credential classes (issue #72): the legacy ``auth_token`` (full
+    Two credential classes: the legacy ``auth_token`` (full
     access, unchanged) and minted ``api_tokens`` records — full-scope
     (``"*"``) tokens behave like the legacy one; job-scoped tokens may
     only call ``POST /api/jobs/<id>/run`` on their allowed jobs. A

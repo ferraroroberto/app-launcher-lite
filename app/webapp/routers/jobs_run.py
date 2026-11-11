@@ -5,7 +5,7 @@ candidate flagged by ``/codebase-audit``). This module owns the parts of
 the run path that are reused across triggers:
 
 * :func:`_dry_run_check` / :func:`_dry_run_execute` — the two dry-run
-  modes (issue #69), used only by the manual ``POST /run`` route.
+  modes, used only by the manual ``POST /run`` route.
 * :func:`_admit_and_spawn` — cooldown + mutex admission, run-dir
   creation, spawn. The shared tail of every *real* fire, used by both
   the manual ``POST /run`` route (in ``jobs.py``) and the webhook

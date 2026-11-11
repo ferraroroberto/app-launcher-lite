@@ -5,7 +5,7 @@ with ``run.json`` (metadata) and ``output.log`` (combined stdout+stderr).
 Mirrors the audit pattern in :mod:`src.audit`. Pruned to
 :data:`MAX_RUNS_PER_JOB` per job.
 
-Split out of :mod:`src.jobs` (issue #315) — the schtasks sync layer lives in
+Split out of :mod:`src.jobs` — the schtasks sync layer lives in
 :mod:`src.jobs.schtasks`, the mutex queue in :mod:`src.jobs.queue`, and
 percentiles/health in :mod:`src.jobs.stats`; all three read run history
 through this module.
@@ -176,7 +176,7 @@ def write_webhook_payload(
     payload: Any,
 ) -> None:
     """Persist the triggering webhook's payload to ``run_dir / _webhook.json``
-    (issue #73) — so the run record is reproducible, mirroring ``run.json`` /
+    — so the run record is reproducible, mirroring ``run.json`` /
     ``output.log``. Written before the child spawns (the executor never
     touches this file), so it's present even for a run that lands in the
     mutex queue.

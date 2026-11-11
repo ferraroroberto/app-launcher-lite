@@ -1,15 +1,15 @@
-"""``$secret:<key>`` reference resolution for jobs (issue #72).
+"""``$secret:<key>`` reference resolution for jobs.
 
 One gitignored place for secret *values* — the ``secrets`` block in
 ``config/webapp_config.json`` — referenced from ``config/jobs.json`` by
 opaque ``$secret:<key>`` strings so the jobs registry never carries a
 real credential. Two consumers:
 
-* ``Job.env`` (this issue): a per-job env-var overlay whose values may be
+* ``Job.env``: a per-job env-var overlay whose values may be
   literals or ``$secret:`` references, resolved by the executor at fire
   time and merged into the child's environment.
-* ``webhook.secret`` (issue #73, which landed first as the in-line
-  analogue of this mechanism): :func:`src.jobs.webhook.resolve_secret`
+* ``webhook.secret`` (the in-line analogue of this mechanism):
+  :func:`src.jobs.webhook.resolve_secret`
   delegates here.
 
 Deliberately a leaf module — no imports from the jobs/webapp packages —

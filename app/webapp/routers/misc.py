@@ -59,26 +59,24 @@ async def index(request: Request) -> HTMLResponse:
 @router.get("/api/version")
 async def version(request: Request) -> Dict[str, Any]:
     """Build identity: this webapp process's own (stable, cached at module
-    load) plus a live staleness check of the session-host on ``:8466``
-    (#615).
+    load) plus a live staleness check of the session-host on ``:8466``.
 
     The session-host is deliberately excluded from ``tray.bat --restart``'s
-    reclaim sweep (project-scaffolding#35, to protect live PTYs), so it can
-    keep running code that is days old with nothing else surfacing that —
-    exactly what happened to #611's fix on 2026-07-27. ``session_host.stale``
+    reclaim sweep (to protect live PTYs), so it can
+    keep running code that is days old with nothing else surfacing that.
+    ``session_host.stale``
     compares the session-host's own loaded ``git_sha`` (captured once, at
     *its* process start) against ``deployed_sha`` — the repo's resolved
     default remote branch (``origin/HEAD``, normally ``origin/main``),
-    resolved fresh on every call. This is **not** ``head_sha`` (below): #641
-    found that comparing against the *live checkout's current branch tip*
-    reports a false ``stale_relevant=false`` whenever the primary checkout
+    resolved fresh on every call. This is **not** ``head_sha`` (below): comparing against the
+    *live checkout's current branch tip* reports a false ``stale_relevant=false`` whenever the primary checkout
     transiently sits on an unrelated feature branch (e.g. a worker occupying
     the tree mid-issue) that never contained the merged fix being checked
     for. ``deployed_sha`` instead tracks what's actually mergeable/shippable
     regardless of what the on-disk checkout happens to be doing right now.
     ``session_host.stale`` is a raw fact — it flips ``true`` after *any* merge
     anywhere in the repo, even one that never touched the paths the
-    session-host actually loads (#635). ``session_host.stale_relevant`` scopes
+    session-host actually loads. ``session_host.stale_relevant`` scopes
     that: ``true`` only when a declared session-host path (``CLAUDE.md``'s
     ``## session-host`` block) was touched between the loaded sha and
     ``deployed_sha`` — this is the field that should actually drive a restart
@@ -109,7 +107,7 @@ def _session_host_freshness(
     identity: Optional[Dict[str, Any]], deployed_sha: str
 ) -> Dict[str, Any]:
     """``{"reachable", "git_sha", "started_at", "stale", "stale_relevant"}``
-    (#615, scoped by #635, ref fixed by #641) from the session-host's own
+    from the session-host's own
     ``/healthz`` body and the repo's resolved ``deployed_sha`` (its default
     remote branch tip, e.g. ``origin/main`` — not the live checkout's current
     branch, which can transiently point anywhere).
@@ -160,7 +158,7 @@ def _session_host_path_relevance(host_sha: str, deployed_sha: str) -> Optional[b
 
 @router.get("/api/terminal-themes")
 async def terminal_themes() -> Dict[str, Any]:
-    """User-tunable xterm theme overrides (issue #381), VS Code-style.
+    """User-tunable xterm theme overrides, VS Code-style.
 
     Reads the machine-local ``webapp/terminal-themes.json`` — per-mode
     xterm theme keys plus an optional ``minimumContrastRatio`` knob, e.g.
@@ -202,7 +200,7 @@ async def healthz() -> Dict[str, Any]:
 
 @router.get("/api/system/load")
 async def system_load_reading() -> Dict[str, Any]:
-    """The page header's CPU reading (#65): the shared sampler's cached
+    """The page header's CPU reading: the shared sampler's cached
     sample, never a scan on request. A read also keeps the sampler awake."""
     return system_load.read()
 

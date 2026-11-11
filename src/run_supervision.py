@@ -1,20 +1,20 @@
 """Supervision machinery for a spawned job run — console tee, resource
 sampler, last-resort watchdog.
 
-Extracted from :mod:`app.cli.commands.run_job_cmd` (issue #14), which now
+Separate from :mod:`app.cli.commands.run_job_cmd`, which
 owns only invocation-building and the ``run-job`` CLI entry point. The
 three primitives here share one property that makes them a clean seam:
 each one is handed a live child (``pid`` / ``Popen``) plus, at most, the
 path of that run's ``output.log``, and touches none of the executor's
 other state — no registry, no run record, no chain/mutex bookkeeping.
 
-* :func:`tee_pipe_to_file_and_console` — the ``visible``-job output tee
-  (issue #694): ``output.log`` is the record, the console is lossy live
+* :func:`tee_pipe_to_file_and_console` — the ``visible``-job output tee:
+  ``output.log`` is the record, the console is lossy live
   display.
 * :class:`ResourceSampler` — peak RSS + accumulated CPU across the child's
   process tree, best-effort.
 * :class:`RunWatchdog` + :func:`resolve_watchdog_limits` — the last-resort
-  backstop that kills a wedged tree (issue #695).
+  backstop that kills a wedged tree.
 
 Everything here is best-effort by design: a failure inside supervision
 must never take down the run it is supervising, so ``psutil`` errors are
@@ -86,8 +86,8 @@ def _log_off_thread(name: str, level: int, msg: str, *args: Any) -> None:
     put into mark/select mode blocks every write to it indefinitely, with
     no exception and no timeout. Any breadcrumb emitted *by* the machinery
     that exists to survive a wedged console must therefore not be written
-    on that machinery's own thread; ``fleet-config#514`` is the same
-    lesson learned the expensive way (a stall watchdog that announced the
+    on that machinery's own thread — the lesson learned the
+    expensive way (a stall watchdog that announced the
     kill before performing it, and was captured by the very jam it was
     built to break). Fire-and-forget on a daemon thread: worst case the
     record is never written, which costs a log line, not a run.
@@ -149,7 +149,7 @@ def tee_pipe_to_file_and_console(pipe: Any, fh: Any) -> None:
     child closes the pipe (EOF at child exit); the caller then ``wait()``s.
 
     This thread does pipe-read → file-write only, so nothing the console
-    does can stop the child's pipe being drained (issue #694). Console
+    does can stop the child's pipe being drained. Console
     chunks go onto a bounded queue consumed by :func:`_console_writer_loop`;
     when that queue is full the chunk is **dropped** — the console is
     lossy live display, ``fh`` is the record.
@@ -289,7 +289,7 @@ def _fmt_seconds(seconds: float) -> str:
 
 
 class RunWatchdog:
-    """Last-resort thread that kills a wedged run (issue #695).
+    """Last-resort thread that kills a wedged run.
 
     Every *inner* safety net in a job's stack shares fate with the thing
     it guards — the visible-job console tee, ``claude_progress``'s own
@@ -418,7 +418,7 @@ class RunWatchdog:
     def _fire(self, reason: str, detail: str) -> None:
         """Kill the child's tree and record why — kill first, log after.
 
-        The ordering is the whole point (``fleet-config#514``): a
+        The ordering is the whole point: a
         breadcrumb emitted before the kill can be swallowed by the same
         wedge the kill exists to break, and then nothing happens at all.
         The race where the child exits normally a moment before this
@@ -447,7 +447,7 @@ def resolve_watchdog_limits(job: Job) -> Tuple[Optional[float], Optional[float]]
 
     Called on the **main** thread before :class:`RunWatchdog` starts, so
     the watchdog thread itself never reads config or run history — the
-    "nothing that can block, inside the thread" constraint of issue #695.
+    "nothing that can block, inside the thread" constraint.
 
     Both fields are tri-state on :class:`~src.jobs.config.Job`: ``None``
     means "use the default", a positive int is that many seconds, and

@@ -1,4 +1,4 @@
-"""Cross-job mutex queue for the Jobs tab (issue #68 PR #2).
+"""Cross-job mutex queue for the Jobs tab.
 
 When a job carries a ``mutex_group`` and another job in the same group is
 ``running`` or ``pending``, the fresh fire is queued rather than rejected.
@@ -6,7 +6,7 @@ The finalising executor pops the next entry on its way out and spawns it
 detached. Queue file lives at :data:`JOBS_QUEUE_PATH` (one JSON document,
 keyed by group → FIFO list of pending entries).
 
-Split out of :mod:`src.jobs` (issue #315) — run-history file storage lives
+Split out of :mod:`src.jobs` — run-history file storage lives
 in :mod:`src.jobs.history`, schtasks sync + spawn helpers in
 :mod:`src.jobs.schtasks`, and percentiles/health in :mod:`src.jobs.stats`.
 """
@@ -61,7 +61,7 @@ def _queue_file_lock() -> Iterator[None]:
     webapp process and a spawned ``run-job`` executor process — so the
     in-process :data:`_queue_lock` alone doesn't prevent two writers from
     reading the same pre-write state and one clobbering the other's
-    ``os.replace`` (issue #409). Thin wrapper around the shared
+    ``os.replace``. Thin wrapper around the shared
     :func:`src._json_io.file_lock` (same sidecar-lock pattern as
     ``src.jobs.history._run_json_lock``).
 
@@ -109,7 +109,7 @@ def enqueue_mutex(group: str, entry: Dict[str, Any]) -> None:
     Holds the in-process lock (fast-path for same-process races) nested
     inside the interprocess file lock (:func:`_queue_file_lock`), which is
     what actually serializes the read-modify-write across the webapp
-    process and a spawned executor process (issue #409).
+    process and a spawned executor process.
     """
     with _queue_lock, _queue_file_lock():
         state = _read_queue_file()

@@ -275,6 +275,7 @@ baseline = ".structure-ratchet-baseline.json"
 enabled         = true
 baseline        = ".comment-ratchet-baseline.json"
 history_phrases = true
+docstrings      = true
 
 # [instruction_ratchet] -- the scaffold's baseline-and-ratchet check on the agent
 # instruction files (CLAUDE.md, AGENTS.md, .claude/rules/*.md, every SKILL.md and the

@@ -19,7 +19,7 @@ Holds:
 
 Config only — turning those settings into the agent's actual CLI argv is
 launch logic, and lives in :mod:`src.launch_flags` (``build_*_flags``, split
-out in issue #691). That module imports this one; never the reverse.
+out). That module imports this one; never the reverse.
 """
 
 from __future__ import annotations
@@ -259,8 +259,8 @@ def _apply_session_host_override(cfg: WebappConfig) -> WebappConfig:
 
     The webapp subprocess reads its session-host port from config; the e2e
     pre-ship gate sets this env var so its disposable webapp connects to a
-    disposable, free-port session-host rather than adopting the live :8466
-    (issue #260). A missing/blank/invalid value leaves the configured port
+    disposable, free-port session-host rather than adopting the live :8466.
+    A missing/blank/invalid value leaves the configured port
     untouched, so normal runs are unaffected.
     """
     raw = os.environ.get(SESSION_HOST_PORT_ENV, "").strip()
@@ -284,7 +284,7 @@ def _apply_session_host_override(cfg: WebappConfig) -> WebappConfig:
 
 def _resolve_config_path(path: Optional[Path]) -> Path:
     """Resolve the config file path: explicit arg > ``LAUNCHER_WEBAPP_CONFIG``
-    env override (e2e-gate isolation, issue #441) > the repo default.
+    env override (e2e-gate isolation) > the repo default.
 
     Consulted by both :func:`load_webapp_config` and
     :func:`save_webapp_config` so the override is symmetric — a process

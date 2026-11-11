@@ -43,7 +43,7 @@ helpers live in :mod:`src.jobs.config_models`; the chain-cycle graph
 algorithm lives in :mod:`src.jobs.config_chain`. Both are re-exported
 here so existing callers (``from src.jobs.config import X``) keep
 working unchanged — same facade pattern as the earlier ``src.jobs``
-split (issue #315).
+split.
 
 ``DEFAULT_JOBS_PATH``/``load_jobs``/``save_jobs`` stay defined in *this*
 module rather than moving to a storage-only submodule: tests across the

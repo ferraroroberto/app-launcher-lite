@@ -1,4 +1,4 @@
-"""Registered Trays sequential autostart boot sequence (issue #456 part 2/2).
+"""Registered Trays sequential autostart boot sequence.
 
 Split off ``app/tray/tray.py`` (a single-file god-module flagged by
 ``/codebase-audit``). These are pure functions with no ``TrayApp`` state —
@@ -40,7 +40,7 @@ def _fleet_toml_port(repo_dir: Path) -> Optional[int]:
     """Read the ``port`` field out of ``repo_dir/.fleet.toml``.
 
     This is the fleet-wide anti-staleness-enforced convention every
-    tray-owning repo already keeps current (project-scaffolding#83/#148) —
+    tray-owning repo already keeps current —
     the only per-repo-agnostic readiness signal available here. PID-tree
     port discovery (as the Running Apps panel uses for launcher-spawned
     bats) does NOT work for a Registered Trays entry: every sister

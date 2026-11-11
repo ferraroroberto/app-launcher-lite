@@ -388,7 +388,7 @@ def is_pid_alive(
 
     The one implementation of this check: ``src.jobs.reap`` calls it on run
     records and ``src.app_runtime._is_alive`` on spawned-app instances
-    (issue #689 — it used to carry a line-for-line copy). When
+    (one shared implementation, no per-caller copy). When
     ``create_time_hint`` (an epoch float captured right after the process was
     spawned) is given, a live ``pid`` whose actual ``create_time()`` drifts
     beyond ``tolerance`` seconds from the hint is treated as a *different*

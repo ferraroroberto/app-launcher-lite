@@ -1,4 +1,4 @@
-"""Failure notifications for Jobs-tab runs (issue #66, issue #597).
+"""Failure notifications for Jobs-tab runs.
 
 A small protocol surface + concrete Pushover/Telegram implementations;
 the executor (:mod:`app.cli.commands.run_job_cmd`) calls
@@ -8,7 +8,7 @@ N-failure streak ticks over).
 
 Two independent channels share this one finalisation hook:
 
-* **Pushover (global, issue #66)** — every job, gated by the master
+* **Pushover (global)** — every job, gated by the master
   switch. Config keys live in :class:`src.webapp_config.WebappConfig`:
 
   * ``pushover_api_token`` / ``pushover_user_key`` — credentials.
@@ -18,7 +18,7 @@ Two independent channels share this one finalisation hook:
   * ``notify_failure_streak`` — extra fire when the consecutive-failure
     count equals this value (0 = disabled).
 
-* **Telegram (per-job, issue #597)** — only jobs with
+* **Telegram (per-job)** — only jobs with
   ``Job.alert_on_failure = True``, via the vendored :mod:`src.notify`
   Telegram primitive. Config keys:
 
@@ -109,7 +109,7 @@ class PushoverNotifier:
 
 class TelegramNotifier:
     """Adapts the vendored :class:`src.notify.TelegramNotifier` to the
-    ``Notifier`` protocol used by the executor (issue #597).
+    ``Notifier`` protocol used by the executor.
 
     ``title`` and ``body`` are joined into one plain-text message —
     Telegram has no separate subject line. Errors are logged and

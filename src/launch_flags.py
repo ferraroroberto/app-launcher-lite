@@ -1,6 +1,6 @@
 """Copilot command-line composition — the launch shape of the coding agent.
 
-Split off ``src/webapp_config.py`` (issue #691, a `/codebase-audit`
+Split off ``src/webapp_config.py`` (a `/codebase-audit`
 maintainability finding). That module owns *configuration*: the
 :class:`~src.webapp_config.WebappConfig` dataclass plus its load / save /
 validate plumbing. What lives here is not config plumbing at all — it is the
@@ -62,7 +62,7 @@ def build_copilot_flags(
 def build_resume_flags(
     cfg: WebappConfig, agent_id: str, model_override: Optional[str] = None,
 ) -> str:
-    """Compose the full flags string for a *Resume* launch (issue #151).
+    """Compose the full flags string for a *Resume* launch.
 
     Splices the agent's native resume token (see
     :func:`src.agents.resume_command_for`) ahead of the flags its resume

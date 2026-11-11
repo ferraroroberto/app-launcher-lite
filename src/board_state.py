@@ -1,4 +1,4 @@
-"""Hook-state-file IO for the Board tab (issue #408 split of ``board.py``).
+"""Hook-state-file IO for the Board tab (split out of ``board.py``).
 
 Reads the two files the hook/workflow writers maintain:
 
@@ -9,7 +9,7 @@ Reads the two files the hook/workflow writers maintain:
   ``~/.copilot/hooks/state/active-issues.json``): issue branches currently in
   flight across the fleet.
 
-Both share the same degradation contract (#164 acceptance): a
+Both share the same degradation contract: a
 missing/corrupt/stale file must never error — callers get an
 ``available: False`` shape with empty/``None`` fields instead of an
 exception, so a board render never breaks on a cold or torn state file.

@@ -64,7 +64,7 @@ def health(port: int) -> bool:
 
 
 def identity(port: int) -> Optional[Dict[str, Any]]:
-    """The session-host's ``/healthz`` body (``git_sha``/``started_at``, #615),
+    """The session-host's ``/healthz`` body (``git_sha``/``started_at``),
     or ``None`` when unreachable — the build-identity companion to
     :func:`health`'s plain up/down check, used by ``/api/version`` to report
     whether the session-host is running current code."""
@@ -126,7 +126,7 @@ def list_sessions(port: int) -> List[Dict[str, Any]]:
 
 
 def send_input(port: int, session_id: str, data: str, submit: bool = True) -> Dict[str, Any]:
-    """Write ``data`` and, if ``submit``, submit it (issue #611).
+    """Write ``data`` and, if ``submit``, submit it.
 
     One call, not two — the session-host now owns the whole framing +
     settle-then-submit sequence internally (``PtySession.submit_input``), so
@@ -156,7 +156,7 @@ def stop(port: int, session_id: str, mode: str = "quit") -> Dict[str, Any]:
 
 
 def rename(port: int, session_id: str, title: str) -> Dict[str, Any]:
-    """Set (empty ``title`` clears) a manual title override (issue #458)."""
+    """Set (empty ``title`` clears) a manual title override."""
     return _request(
         "POST", port, f"/sessions/{session_id}/rename", json={"title": title}
     )
@@ -171,7 +171,7 @@ def upload_image(
     inline: bool = False,
 ) -> Dict[str, Any]:
     """Upload an image into a session. With ``inline`` the session-host
-    skips pasting the path into the PTY and just returns it (issue #41)."""
+    skips pasting the path into the PTY and just returns it."""
     return _request(
         "POST",
         port,

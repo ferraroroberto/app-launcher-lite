@@ -1,4 +1,4 @@
-"""Missed-fire coverage for scheduled jobs (issue #697).
+"""Missed-fire coverage for scheduled jobs.
 
 ``alert_on_failure`` catches a run that *fails*; ``src.jobs.stats.is_stuck``
 catches a run that never *ends*. Nothing caught a run that never **starts** —

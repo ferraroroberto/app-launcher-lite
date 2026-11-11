@@ -23,7 +23,7 @@ calls it with ``pythonw launcher.py run-job <id>``; the webapp's
 ``POST /api/jobs/<id>/run`` route spawns the same command detached and
 returns the new ``run_id`` immediately.
 
-Split out of :mod:`src.jobs` (issue #315) — run-history file storage lives
+Split out of :mod:`src.jobs` — run-history file storage lives
 in :mod:`src.jobs.history`, the mutex queue in :mod:`src.jobs.queue`, and
 percentiles/health in :mod:`src.jobs.stats`.
 """
@@ -171,7 +171,7 @@ def spawn_run_job_detached(
     dispatch (``src/jobs/queue.py``). Returns the spawned PID — kept only
     for diagnostics; the run record is tracked via the filesystem.
 
-    Re-parented via ``cmd /c start`` (issue #416) rather than
+    Re-parented via ``cmd /c start`` rather than
     ``DETACHED_PROCESS``, mirroring ``app/tray/tray.py``'s
     ``_start_session_host()``: that function's own comment documents,
     empirically verified, that ``DETACHED_PROCESS``/``CREATE_NEW_PROCESS_GROUP``
@@ -182,14 +182,14 @@ def spawn_run_job_detached(
     its execution (including one the job's own work triggers, e.g. shipping
     an app-launcher issue via ``/issue-finish``).
 
-    ``params`` (issue #67) is the validated ``{name: value}`` payload from
+    ``params`` is the validated ``{name: value}`` payload from
     the run-now dialog. When present, it rides argv as
     ``--params-b64 <token>`` (:func:`src.jobs.argv.encode_params_token`):
     cmd.exe re-reads this command line, and only a base64url token is
     guaranteed to reach the executor (which re-validates) byte-for-byte.
     Schedule + Stream-Deck callers omit the arg entirely.
 
-    ``dry_run`` (issue #69 'execute' mode) appends ``--dry-run`` so the
+    ``dry_run`` (the 'execute' mode) appends ``--dry-run`` so the
     executor spawns the child with ``JOB_DRY_RUN=1`` and stamps the run
     record. Mutex queue / chain callers never set it.
     """
@@ -381,7 +381,7 @@ def sync_schtasks(
     names created (empty for ``schedule.type == "none"`` after the
     pre-existing tasks are deleted).
 
-    ``job.elevated`` jobs are skipped entirely (issue #352): their real
+    ``job.elevated`` jobs are skipped entirely: their real
     ``/RL HIGHEST`` entry can only be created by an already-elevated
     caller, which this webapp process never is. Deleting-then-failing-to
     recreate on every edit/pause/resume silently strands a job that the
@@ -743,7 +743,7 @@ def upcoming_fires(
     ``now=cursor`` returns a fire strictly after ``cursor`` (the
     ``candidate <= now`` roll-forward guarantees it), so advancing the
     cursor to each result enumerates the window without re-deriving any
-    cadence math (issue #230 reuses #229's tested helper).
+    cadence math.
 
     Returns ``[]`` for ``none`` / already-elapsed ``once`` and for the
     dense :data:`FREQUENT_SCHEDULE_TYPES` (``minutes`` / ``hourly``),
