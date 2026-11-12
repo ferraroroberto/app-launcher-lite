@@ -145,7 +145,7 @@ def scenario_pty_session_renders_with_both_stop_buttons(
     the full-control rows.
     """
     _navigate_collecting_errors(authed_page, base_url)
-    # The session was launched before navigation, so boot()'s initial
+    # The session was launched before navigation, so refetchAll()'s initial
     # fetchSessions should already include it; the SPA also re-polls on a
     # 5 s timer. Wait out one poll cycle as a fallback (no manual refresh
     # button to force an immediate fetch any more).

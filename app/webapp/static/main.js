@@ -1,4 +1,4 @@
-/* Entry point: wires every module together, runs boot(), drives polls.
+/* Entry point: wires every module together, runs refetchAll(), drives polls.
  *
  * Modules export named functions; this file is the only place that
  * sequences them. Each wireX() attaches DOM listeners exactly once;
@@ -167,7 +167,14 @@ async function fetchVersion() {
 }
 
 // --------------------------------------------------------- boot
-async function boot() {
+// One-time setup (URL params, pollers) is split from the refetch work: the
+// sign-in handler re-runs the refetch after a mid-session 401, and must not
+// stack a second set of pollers or lose the already-consumed ?terminal= param.
+let deepLinkSid = null;
+let deepLinkHandled = false;
+let pollersStarted = false;
+
+function parseUrlParams() {
   const fromUrl = consumeUrlParam('token');
   if (fromUrl) writeToken(fromUrl);
   // A launcher-spawned PC mirror window on the ts.net URL carries a
@@ -175,54 +182,17 @@ async function boot() {
   // ceremony-minted one. TTL mirrors the server's 12 h _TERMINAL_TOKEN_TTL.
   const ttFromUrl = consumeUrlParam('tt');
   if (ttFromUrl) writeTerminalToken(ttFromUrl, 12 * 3600);
-  const deepLinkSid = consumeUrlParam('terminal');
+  deepLinkSid = consumeUrlParam('terminal');
   // Only the launcher-spawned PC mirror window opens via the ?terminal=<sid>
   // deep-link; a human's own browser never does. Recording it here (before
   // the param is stripped from the URL) is what lets terminal.js tell a real
   // mirror apart from a desktop browser that merely connects over loopback.
   state.isMirrorWindow = !!deepLinkSid;
+}
 
-  try {
-    await fetchConfig();
-  } catch (exc) {
-    apiFailToast('Boot failed', exc);
-    return;
-  }
-  // Each remaining boot fetch fills one panel — none is load-bearing for
-  // the rest of the app, so a single failure must not abort boot() and take
-  // the deep-link branch below down with it: the PC mirror window's title
-  // marker + terminal connect depend on reaching it.
-  const safe = function (fn) { return fn().catch(function (exc) {
-    console.warn('boot: non-critical fetch failed', exc);
-  }); };
-  // The header's CPU reading fills alongside the rest of boot.
-  const load = safe(fetchSystemLoad);
-  await safe(fetchAgents);
-  await safe(fetchApps);
-  await safe(fetchSkills);
-  await safe(fetchSessions);
-  await safe(fetchListeners);
-  await safe(fetchRunningApps);
-  await safe(fetchStatus);
-  await safe(fetchVersion);
-  await safe(fetchWebauthnStatus);
-  // Git flags fill without a tap: one fetch at boot, then the slow
-  // poll below keeps them current while a git-reading tab is visible.
-  await safe(function () { return refreshGitStatus({ quiet: true }); });
-
-  // PC mirror window opened with ?terminal=<sid> — drop straight in.
-  if (deepLinkSid) {
-    const found = state.sessions.find(function (s) {
-      return s.session_id === deepLinkSid;
-    });
-    openTerminal(found || { session_id: deepLinkSid, name: deepLinkSid });
-  } else {
-    // ?board=<sid>: a Slack ping lands on that session's
-    // Board card, drawer open. Mutually exclusive with ?terminal= by
-    // construction (each link carries one param).
-    const boardSid = consumeUrlParam('board');
-    if (boardSid) openBoardCard(boardSid).catch(function () {});
-  }
+function startPollers(load) {
+  if (pollersStarted) return;
+  pollersStarted = true;
   setInterval(function () {
     fetchApps().catch(function () {});
   }, TUNNEL_POLL_MS);
@@ -265,8 +235,56 @@ async function boot() {
   }, GIT_STATUS_POLL_MS);
 }
 
+async function refetchAll() {
+  try {
+    await fetchConfig();
+  } catch (exc) {
+    apiFailToast('Boot failed', exc);
+    return;
+  }
+  // Each remaining boot fetch fills one panel — none is load-bearing for
+  // the rest of the app, so a single failure must not abort refetchAll() and take
+  // the deep-link branch below down with it: the PC mirror window's title
+  // marker + terminal connect depend on reaching it.
+  const safe = function (fn) { return fn().catch(function (exc) {
+    console.warn('boot: non-critical fetch failed', exc);
+  }); };
+  // The header's CPU reading fills alongside the rest of boot.
+  const load = safe(fetchSystemLoad);
+  await safe(fetchAgents);
+  await safe(fetchApps);
+  await safe(fetchSkills);
+  await safe(fetchSessions);
+  await safe(fetchListeners);
+  await safe(fetchRunningApps);
+  await safe(fetchStatus);
+  await safe(fetchVersion);
+  await safe(fetchWebauthnStatus);
+  // Git flags fill without a tap: one fetch at boot, then the slow
+  // poll below keeps them current while a git-reading tab is visible.
+  await safe(function () { return refreshGitStatus({ quiet: true }); });
+
+  // PC mirror window opened with ?terminal=<sid> — drop straight in.
+  if (!deepLinkHandled) {
+    deepLinkHandled = true;
+    if (deepLinkSid) {
+      const found = state.sessions.find(function (s) {
+        return s.session_id === deepLinkSid;
+      });
+      openTerminal(found || { session_id: deepLinkSid, name: deepLinkSid });
+    } else {
+      // ?board=<sid>: a Slack ping lands on that session's
+      // Board card, drawer open. Mutually exclusive with ?terminal= by
+      // construction (each link carries one param).
+      const boardSid = consumeUrlParam('board');
+      if (boardSid) openBoardCard(boardSid).catch(function () {});
+    }
+  }
+  startPollers(load);
+}
+
 // --------------------------------------------------------- wire + go
-setSignInHandler(boot);
+setSignInHandler(refetchAll);
 wireUsageLog();
 wireTabs();
 wireCopilotOptions();
@@ -285,4 +303,5 @@ wireTheme();
 // this paints the stored step on the Settings control and persists clicks.
 bindTextSize(document.getElementById('textSizeControl'), 'app-launcher');
 
-boot();
+parseUrlParams();
+refetchAll();
