@@ -497,6 +497,9 @@ function renderStatusLine(body) {
   } else if (body.gitlab && !body.gitlab.fetched_at) {
     parts.push('GitLab not fetched yet — tap ' + icon('refresh-cw'));
   }
+  if (body.gitlab && body.gitlab.truncated) {
+    parts.push(icon('triangle-alert') + ' GitLab list capped — some issues are not shown');
+  }
   if (body.sessions_state && !body.sessions_state.available) {
     parts.push('session state unavailable (hooks not writing yet)');
   } else if (body.sessions_state && body.sessions_state.stale) {

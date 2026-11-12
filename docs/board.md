@@ -21,7 +21,7 @@ Column assembly is pure logic in `src/board.py::build_board()`. Each column hold
 
 **Done is issues only:** a merged MR that closed an issue is already reflected by that issue showing closed, so there is no MR/issue pairing step — `src/gitlab_client.py::search_done_today()` is the closed-issues query. Group issues have no `closed_after` param, so it queries `state=closed&updated_after=<local midnight>` and filters client-side on `closed_at >= local midnight` (rows updated today but closed earlier, and rows with a null `closed_at`, are dropped).
 
-The GitLab queries (`src/gitlab_client.py`) go through `glab api`: `groups/<group>/issues?state=opened&order_by=updated_at&sort=desc&per_page=100` for Backlog and the `state=closed&updated_after=<midnight>` variant for Done, each with a 20 s per-call timeout. The group is URL-encoded as one path segment (`grp/sub` → `grp%2Fsub`); a non-empty `gitlab_host` rides glab's `GITLAB_HOST` env var for self-hosted instances. Repo short names come from `references.full` — the last path segment before the `#`/`!` marker, so subgroup projects resolve correctly.
+The GitLab queries (`src/gitlab_client.py`) go through `glab api`: `groups/<group>/issues?state=opened&order_by=updated_at&sort=desc&per_page=100` for Backlog and the `state=closed&updated_after=<midnight>` variant for Done, each with a 20 s per-call timeout. Neither query paginates: a response of a full 100 rows sets the snapshot's `truncated` flag and the status line shows "GitLab list capped", since the group may hold more than the Board displays. The group is URL-encoded as one path segment (`grp/sub` → `grp%2Fsub`); a non-empty `gitlab_host` rides glab's `GITLAB_HOST` env var for self-hosted instances. Repo short names come from `references.full` — the last path segment before the `#`/`!` marker, so subgroup projects resolve correctly.
 
 ## Data endpoints
 
@@ -34,7 +34,7 @@ All Board routes live in `app/webapp/routers/board.py` (the shared launch helper
 | `GET /api/board/sessions/{sid}/exchange` | private network + passkey | The last user↔assistant exchange from the agent-aware conversation-source hierarchy (drill-down drawer). |
 | `POST /api/board/issues/start` | private network + passkey | One-tap `/issue-start` / `/issue-yolo <N>` on a Backlog card. |
 
-The `GET /api/board` response is `{ generated_at, columns, gitlab: {fetched_at, error}, sessions_state: {available, stale, updated_at}, active_issues: {available, updated_at, count} }`. Each session card carries its raw session fields plus `project`, `status`, and `age_seconds`; each Backlog issue carries a boolean `in_progress`.
+The `GET /api/board` response is `{ generated_at, columns, gitlab: {fetched_at, error, truncated}, sessions_state: {available, stale, updated_at}, active_issues: {available, updated_at, count} }`. Each session card carries its raw session fields plus `project`, `status`, and `age_seconds`; each Backlog issue carries a boolean `in_progress`.
 
 ## The session-state file join
 

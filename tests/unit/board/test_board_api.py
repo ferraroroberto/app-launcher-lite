@@ -88,7 +88,9 @@ def test_api_board_shape_with_everything_absent(webapp_client):
     client, _app, _overrides = webapp_client
     body = client.get("/api/board").json()
     assert set(body["columns"]) == {"backlog", "bot_turn", "your_turn", "done"}
-    assert body["gitlab"] == {"fetched_at": None, "error": None}
+    assert body["gitlab"] == {
+        "fetched_at": None, "error": None, "truncated": False,
+    }
     assert body["sessions_state"]["available"] is False
     assert body["active_issues"]["available"] is False
     assert body["columns"]["backlog"] == []
