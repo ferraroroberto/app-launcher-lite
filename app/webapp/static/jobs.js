@@ -731,12 +731,15 @@ function renderKillButton(jobId, runId, live, extras) {
     killBtn.className = 'icon-btn danger jobs-kill-btn';
     killBtn.dataset.role = 'kill-btn';
     killBtn.innerHTML = icon('octagon-x') + ' Kill stuck run';
-    killBtn.addEventListener('click', function () { killRun(jobId, runId); });
+    // One listener reads the current ids off the button, so a re-render only
+    // updates the dataset and never stacks a second handler.
+    killBtn.addEventListener('click', function () {
+      killRun(killBtn.dataset.jobId, killBtn.dataset.runId);
+    });
     body.insertBefore(killBtn, body.querySelector('[data-role="output-label"]'));
-  } else {
-    // Re-bind in case runId has changed since the last render.
-    killBtn.onclick = function () { killRun(jobId, runId); };
   }
+  killBtn.dataset.jobId = jobId;
+  killBtn.dataset.runId = runId;
 }
 
 async function killRun(jobId, runId) {

@@ -51,7 +51,7 @@ def scenario_inpage_loopback_open_is_not_treated_as_mirror(
     sid = launched_pty_session
 
     # Land on the SPA with NO ?terminal deep-link — exactly how a desktop
-    # browser sits on the launcher. boot() then sets state.isMirrorWindow
+    # browser sits on the launcher. parseUrlParams() then sets state.isMirrorWindow
     # false, so even though the e2e harness connects from loopback the page
     # must not enter mirror mode.
     authed_page.goto(base_url, wait_until="domcontentloaded")
@@ -61,7 +61,7 @@ def scenario_inpage_loopback_open_is_not_treated_as_mirror(
     # off. The terminal must be opened *after* /api/status has resolved, or
     # both old and new code see a null status and compute isMirror=false,
     # making this test pass vacuously (it would no longer fail on the bug).
-    # fetchVersion() runs immediately after fetchStatus() in boot(), so the
+    # fetchVersion() runs immediately after fetchStatus() in refetchAll(), so the
     # build line carrying text proves the status (and its loopback reason) is
     # loaded.
     expect(authed_page.locator("#buildReadout")).to_contain_text(
