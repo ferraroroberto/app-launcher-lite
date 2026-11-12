@@ -1,9 +1,8 @@
 """Assembly logic for the Board tab's kanban columns.
 
-Four single-purpose columns (Phase 5, was five before the "Other" column —
-open MRs + failed/stuck jobs — was dropped): Backlog and Done hold issues
-only; Bot's turn and Your turn hold session cards only. See
-:func:`build_board` for the exact routing.
+Four single-purpose columns: Backlog and Done hold issues only; Bot's turn
+and Your turn hold session cards only. See :func:`build_board` for the exact
+routing.
 
 Two inputs, one board:
 

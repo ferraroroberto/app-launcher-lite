@@ -1,9 +1,7 @@
 """``POST /api/jobs/{job_id}/hook`` — webhook trigger.
 
-Split off ``app/webapp/routers/jobs.py`` (a single-file god-router
-candidate flagged by ``/codebase-audit``). Mounted into the parent
-``jobs.router`` via ``include_router`` so ``app/webapp/server.py``
-keeps registering a single ``jobs.router`` unchanged.
+Mounted into the parent ``jobs.router`` via ``include_router`` so
+``app/webapp/server.py`` registers a single ``jobs.router``.
 """
 
 from __future__ import annotations

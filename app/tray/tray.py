@@ -16,11 +16,11 @@ Menu:
     --
     Quit                       — stop the webapp and exit
 
-Split off a single-file god-module (``/codebase-audit``): Tailscale CLI
-discovery + hostname resolution live in :mod:`app.tray.tailscale`, and the
-Registered Trays sequential autostart boot sequence lives in
-:mod:`app.tray.registered_trays` — both pure functions with no ``TrayApp``
-state, imported here rather than owning their own copy of the logic.
+Tailscale CLI discovery + hostname resolution live in
+:mod:`app.tray.tailscale`, and the Registered Trays sequential autostart boot
+sequence lives in :mod:`app.tray.registered_trays` — both pure functions with
+no ``TrayApp`` state, imported here so this module owns only the tray menu and
+process lifecycle.
 """
 
 from __future__ import annotations

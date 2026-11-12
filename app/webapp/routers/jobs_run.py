@@ -1,8 +1,6 @@
 """Shared run-mechanics for the Jobs tab: dry-run modes + real admission+spawn.
 
-Split off ``app/webapp/routers/jobs.py`` (a single-file god-router
-candidate flagged by ``/codebase-audit``). This module owns the parts of
-the run path that are reused across triggers:
+This module owns the parts of the run path that are reused across triggers:
 
 * :func:`_dry_run_check` / :func:`_dry_run_execute` — the two dry-run
   modes, used only by the manual ``POST /run`` route.

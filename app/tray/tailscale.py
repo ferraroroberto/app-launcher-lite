@@ -1,10 +1,8 @@
 """Tailscale CLI discovery and tailnet-hostname resolution for the tray.
 
-Split off ``app/tray/tray.py`` (a single-file god-module flagged by
-``/codebase-audit``). These are pure functions with no ``TrayApp`` state —
-callers pass a debug-breadcrumb callback rather than this module owning a
-log path itself, so it stays decoupled from ``tray.py``'s own
-``PROJECT_ROOT``-derived paths.
+These are pure functions with no ``TrayApp`` state — callers pass a
+debug-breadcrumb callback rather than this module owning a log path itself,
+so it stays decoupled from ``tray.py``'s own ``PROJECT_ROOT``-derived paths.
 """
 
 from __future__ import annotations
