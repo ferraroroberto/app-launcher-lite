@@ -68,3 +68,18 @@ def test_external_card_status_is_the_hook_status(tmp_path: Path):
     assert cards[0]["kind"] == "external"
     assert cards[0]["status"] == "awaiting-input"
     assert cards[0]["age_seconds"] == 600
+
+
+def test_parse_iso_reads_a_naive_stamp_as_local_unless_told_utc():
+    from datetime import timezone
+
+    from src.board_state import parse_iso
+
+    local = parse_iso("2026-01-02T03:04:05")
+    utc = parse_iso("2026-01-02T03:04:05", naive_utc=True)
+    assert local is not None and utc is not None
+    assert utc.tzinfo is timezone.utc and utc.hour == 3
+    assert local == local.astimezone() and local.utcoffset() is not None
+    # An explicit offset or "Z" wins over the naive rule.
+    assert parse_iso("2026-01-02T03:04:05Z", naive_utc=False) == utc
+    assert parse_iso("") is None and parse_iso(None) is None and parse_iso("nope") is None

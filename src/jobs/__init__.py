@@ -71,6 +71,7 @@ from src.jobs.queue import (
     mutex_collision,
     peek_mutex_queue,
     pop_mutex_entry,
+    queue_run,
 )
 from src.jobs.reap import reap_stranded_runs
 from src.jobs.schtasks import (
@@ -136,6 +137,7 @@ __all__ = [
     "peek_mutex_queue",
     "mutex_collision",
     "dispatch_chain_run",
+    "queue_run",
     "drain_mutex_queue",
     "run_stats",
     "invalidate_stats_cache",

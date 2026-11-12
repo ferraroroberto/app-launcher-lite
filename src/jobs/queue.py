@@ -17,6 +17,7 @@ import json
 import logging
 from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 from threading import Lock
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
@@ -174,6 +175,37 @@ def mutex_collision(jobs: List[Job], job: Job) -> Optional[Job]:
     return None
 
 
+def queue_run(
+    run_dir: Path,
+    meta: Dict[str, Any],
+    job: Job,
+    holder: Job,
+    trigger: str,
+    params: Optional[Dict[str, Any]],
+) -> None:
+    """Park a pre-created run behind ``holder`` in ``job``'s mutex group.
+
+    The one place that stamps the run ``queued`` (with ``mutex_blocked_by``),
+    writes ``run.json`` and appends the queue entry, so the shape
+    :func:`drain_mutex_queue` consumes cannot drift between the route, the
+    chain dispatcher and the executor. ``meta`` is the run's base record
+    (mutated in place); ``params`` is carried only if non-empty.
+    """
+    meta["status"] = STATUS_QUEUED
+    meta["mutex_group"] = job.mutex_group
+    meta["mutex_blocked_by"] = holder.id
+    write_run_json(run_dir, **meta)
+    enqueue_mutex(
+        job.mutex_group,
+        {
+            "job_id": job.id,
+            "run_id": run_dir.name,
+            "trigger": trigger,
+            "params": params or None,
+        },
+    )
+
+
 def dispatch_chain_run(
     jobs: List[Job], downstream: Job, upstream_id: str
 ) -> Dict[str, Any]:
@@ -199,19 +231,7 @@ def dispatch_chain_run(
     )
     meta["chained_from"] = upstream_id
     if holder is not None:
-        meta["status"] = STATUS_QUEUED
-        meta["mutex_group"] = downstream.mutex_group
-        meta["mutex_blocked_by"] = holder.id
-        write_run_json(run_dir, **meta)
-        enqueue_mutex(
-            downstream.mutex_group,
-            {
-                "job_id": downstream.id,
-                "run_id": run_dir.name,
-                "trigger": trigger,
-                "params": None,
-            },
-        )
+        queue_run(run_dir, meta, downstream, holder, trigger, None)
         logger.info(
             f"🪢🪡 chain queued {downstream.id}/{run_dir.name} behind "
             f"{holder.id} (mutex_group={downstream.mutex_group!r}, "

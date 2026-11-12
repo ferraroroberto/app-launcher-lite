@@ -299,11 +299,9 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         cfg = self._get_config()
-        token = (getattr(cfg, "auth_token", "") or "").strip()
+        token = getattr(cfg, "auth_token", "")
         minted = getattr(cfg, "api_tokens", None) or []
-        # Auth is enforced when EITHER credential class is configured —
-        # a config with only minted tokens must not be an open gate.
-        if (not token and not minted) or is_loopback:
+        if not api_tokens.credential_required(token, minted) or is_loopback:
             return await call_next(request)
 
         if path in AUTH_EXEMPT_EXACT or any(
@@ -318,10 +316,10 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
         if not presented:
             presented = request.query_params.get("token", "").strip()
 
-        if presented and token and api_tokens.constant_time_equals(presented, token):
+        legacy_ok, match = api_tokens.check_credential(presented, token, minted)
+        if legacy_ok:
             return await call_next(request)
 
-        match = api_tokens.find_match(presented, minted)
         if match is not None:
             rejection = api_tokens.scope_rejection(match, request.method, path)
             if rejection is not None:

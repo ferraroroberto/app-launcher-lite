@@ -52,13 +52,13 @@ from src.jobs import (
     delete_schtasks,
     dispatch_chain_run,
     drain_mutex_queue,
-    enqueue_mutex,
     invalidate_stats_cache,
     mark_run_failed,
     mutex_collision,
     new_run_dir,
     new_run_id,
     prune_runs,
+    queue_run,
     read_output_tail,
     read_run,
     runs_dir,
@@ -68,7 +68,6 @@ from src.jobs.argv import compose_argv, decode_params_token
 from src.jobs.config import Job, get_by_id, load_jobs
 from src.jobs.run_state import (
     STATUS_FAILED,
-    STATUS_QUEUED,
     STATUS_RUNNING,
     STATUS_SKIPPED,
     STATUS_SUCCESS,
@@ -303,29 +302,16 @@ def _finalize_mutex_queue(
     if holder is None:
         return None
     run_dir = new_run_dir(job.id, new_run_id())
-    write_run_json(
-        run_dir,
-        **base_run_meta(
-            job,
-            args.trigger,
-            datetime.now().isoformat(timespec="seconds"),
-            run_dir.name,
-        ),
-        trigger_source="schtasks",
-        status=STATUS_QUEUED,
-        mutex_group=job.mutex_group,
-        mutex_blocked_by=holder.id,
-        **({"params": values} if values else {}),
+    meta = base_run_meta(
+        job,
+        args.trigger,
+        datetime.now().isoformat(timespec="seconds"),
+        run_dir.name,
     )
-    enqueue_mutex(
-        job.mutex_group,
-        {
-            "job_id": job.id,
-            "run_id": run_dir.name,
-            "trigger": args.trigger,
-            "params": values or None,
-        },
-    )
+    meta["trigger_source"] = "schtasks"
+    if values:
+        meta["params"] = values
+    queue_run(run_dir, meta, job, holder, args.trigger, values)
     logger.info(
         f"🪢 run-job {job.id}/{run_dir.name} queued behind {holder.id} "
         f"(mutex_group={job.mutex_group!r}, trigger=scheduled)"

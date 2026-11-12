@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import AbstractSet, Any, Dict, List, Optional, Tuple
 
-from src.board_state import STATE_STALE_AFTER, _age_seconds, _now, _parse_iso
+from src.board_state import STATE_STALE_AFTER, _age_seconds, _now, parse_iso
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ def _session_started(session: Dict[str, Any]) -> Optional[datetime]:
             return datetime.fromtimestamp(raw, tz=timezone.utc)
         except (OverflowError, OSError, ValueError):
             return None
-    return _parse_iso(raw)
+    return parse_iso(raw)
 
 
 def _session_agent(session: Dict[str, Any]) -> str:
@@ -128,7 +128,7 @@ def _match_state_row(
     for sid, row in unmatched.items():
         launcher_sid = str(row.get("launcher_session_id") or "")
         if launcher_sid and launcher_sid == session_id and _row_agent(row) == agent:
-            stamp = _parse_iso(row.get("updated_at")) or _EPOCH
+            stamp = parse_iso(row.get("updated_at")) or _EPOCH
             if exact_sid is None or stamp > exact_stamp:
                 exact_sid, exact_stamp = sid, stamp
     if exact_sid is not None:
@@ -149,7 +149,7 @@ def _match_state_row(
         row_cwd = _normalize_dir(row.get("cwd"))
         if row_cwd != project_dir_norm and not row_cwd.startswith(project_dir_norm + "/"):
             continue
-        stamp = _parse_iso(row.get("updated_at")) or _EPOCH
+        stamp = parse_iso(row.get("updated_at")) or _EPOCH
         if stamp < session_started:
             continue
         if best_sid is None or stamp > best_stamp:
@@ -323,7 +323,7 @@ def _live_card(
     project_dir = sess.get("project_dir")
 
     status = _card_status((row or {}).get("status"))
-    anchor = (_parse_iso(row.get("updated_at")) if row else None) or (
+    anchor = (parse_iso(row.get("updated_at")) if row else None) or (
         _session_started(sess)
     )
     project = (row or {}).get("project") or Path(str(project_dir or "")).name
@@ -357,7 +357,7 @@ def _external_card(
     live_launcher_session_ids: AbstractSet[str],
 ) -> Optional[Dict[str, Any]]:
     """The card for a state row with no live match, or None when not provably live."""
-    stamp = _parse_iso(row.get("updated_at"))
+    stamp = parse_iso(row.get("updated_at"))
     if stamp is None or now - stamp > STATE_STALE_AFTER:
         return None  # cold leftovers: not worth a card
     cwd = row.get("cwd")

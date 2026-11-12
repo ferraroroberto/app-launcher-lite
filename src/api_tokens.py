@@ -144,6 +144,40 @@ def find_match(presented: str, raw_list: Any) -> Optional[ApiToken]:
     return None
 
 
+def credential_required(auth_token: Any, raw_list: Any) -> bool:
+    """Whether the launcher is gated: the legacy token or any minted token is set.
+
+    A config with only minted tokens is still gated, never an open door.
+    """
+    return bool(str(auth_token or "").strip()) or bool(raw_list)
+
+
+def check_credential(
+    presented: str, auth_token: Any, raw_list: Any
+) -> Tuple[bool, Optional["ApiToken"]]:
+    """Classify a presented bearer as ``(legacy_ok, minted_match)``.
+
+    The one place that decides which credential class a bearer belongs to;
+    scope policy (what the minted match may then do) stays with the caller.
+    """
+    expected = str(auth_token or "").strip()
+    if presented and expected and constant_time_equals(presented, expected):
+        return True, None
+    return False, find_match(presented, raw_list)
+
+
+def full_scope_credential_ok(presented: str, auth_token: Any, raw_list: Any) -> bool:
+    """Open when ungated, else the legacy token or a full-scope minted token.
+
+    For endpoints the HTTP middleware never sees (WebSockets), where a
+    job-scoped token must not pass.
+    """
+    if not credential_required(auth_token, raw_list):
+        return True
+    legacy_ok, match = check_credential(presented, auth_token, raw_list)
+    return legacy_ok or (match is not None and scoped_job_ids(match) is None)
+
+
 def scoped_job_ids(token: ApiToken) -> Optional[List[str]]:
     """``None`` for a full-scope (``"*"``) token, else the allowed job ids."""
     if token.scope == "*":

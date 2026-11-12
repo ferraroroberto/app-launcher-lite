@@ -147,19 +147,8 @@ async def _queue_behind(
 ) -> Dict[str, Any]:
     # Queue it. status=queued does not feed stats / streaks; the
     # finalising executor of the holder job will flip it to running.
-    base_meta["status"] = STATUS_QUEUED
-    base_meta["mutex_group"] = job.mutex_group
-    base_meta["mutex_blocked_by"] = holder.id
-    jobs_mod.write_run_json(run_dir, **base_meta)
     await asyncio.to_thread(
-        jobs_mod.enqueue_mutex,
-        job.mutex_group,
-        {
-            "job_id": job.id,
-            "run_id": run_dir.name,
-            "trigger": trigger,
-            "params": raw_params or None,
-        },
+        jobs_mod.queue_run, run_dir, base_meta, job, holder, trigger, raw_params
     )
     logger.info(
         f"🪢 queued {job.id}/{run_dir.name} behind {holder.id} "

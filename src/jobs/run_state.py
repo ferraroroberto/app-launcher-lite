@@ -120,7 +120,12 @@ def is_executor_owned(record: Mapping[str, Any]) -> bool:
     return isinstance(status, str) and _BY_STATUS.get(status) in _LIVE
 
 
-def _parse_iso(value: Any) -> Optional[datetime]:
+def parse_iso(value: Any) -> Optional[datetime]:
+    """Parse a job-record timestamp; ``None`` for a missing or malformed one.
+
+    Job records stamp naive local time (``datetime.now().isoformat()``), so a
+    naive result is returned as-is and compared against naive ``now``.
+    """
     if not isinstance(value, str) or not value:
         return None
     try:
@@ -177,7 +182,7 @@ def derive_run_state(
         if pid_alive is False:
             return Derived(RunState.REAPED, FailReason.EXECUTOR_LOST)
         return Derived(state)
-    started = _parse_iso(record.get("started_at"))
+    started = parse_iso(record.get("started_at"))
     if started is not None:
         try:
             age = (now - started).total_seconds()

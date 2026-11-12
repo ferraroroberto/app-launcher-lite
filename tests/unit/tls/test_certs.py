@@ -16,16 +16,15 @@ def test_cert_paths_needs_both_files(tmp_path) -> None:
 
 
 def test_every_consumer_uses_the_one_implementation() -> None:
-    """The tray manager, the router helpers and both scripts import the same
+    """The tray manager, the router helpers and the cert script import the same
     functions; a local re-implementation would make one of these `is` checks fail."""
     from app.webapp import manager
     from app.webapp.routers import _helpers
-    from scripts import gen_tailscale_cert, run_named_tunnel
+    from scripts import gen_tailscale_cert
     from src.tls import certs
 
     assert manager.cert_paths is certs.cert_paths
     assert _helpers.cert_paths is certs.cert_paths
-    assert run_named_tunnel.cert_paths is certs.cert_paths
     assert _helpers.tailscale_hostname_from_cert is certs.tailscale_hostname_from_cert
     assert gen_tailscale_cert.tailscale_hostname_from_cert is certs.tailscale_hostname_from_cert
 

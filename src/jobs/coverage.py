@@ -62,6 +62,7 @@ from src import runtime_files
 from src._json_io import atomic_write_json
 from src.jobs import history as jobs_history
 from src.jobs.config import Job, load_jobs
+from src.jobs.run_state import parse_iso
 from src.jobs.schtasks import (
     FREQUENT_SCHEDULE_TYPES,
     registered_task_states,
@@ -125,15 +126,6 @@ def coverage_alerts_path() -> Path:
     return jobs_history.JOBS_RUNS_DIR / COVERAGE_ALERTS_FILENAME
 
 
-def _parse_iso(value: Any) -> Optional[datetime]:
-    if not isinstance(value, str) or not value:
-        return None
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None
-
-
 def _result(
     state: str,
     *,
@@ -185,14 +177,14 @@ def missed_fires(
     # schedule took effect (edit / resume): earlier days ran under another
     # schedule, so replaying this one against them invents missed fires.
     for stamp in (job.added_at, job.schedule_changed_at):
-        began = _parse_iso(stamp)
+        began = parse_iso(stamp)
         if began is not None and began > window_start:
             window_start = began
 
     runs = jobs_history.list_runs(job.id)  # newest first
     starts: List[datetime] = []
     for record in runs:
-        started = _parse_iso(record.get("started_at"))
+        started = parse_iso(record.get("started_at"))
         if started is not None:
             starts.append(started)
     # History is capped, so an absent record older than the oldest retained
