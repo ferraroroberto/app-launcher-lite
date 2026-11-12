@@ -1,4 +1,4 @@
-"""``shell-wsl`` job-kind — runs a ``.sh`` script via ``wsl
+"""``shell-wsl`` job-kind — runs a ``.sh`` script via ``wsl --exec
 bash``. Opt-in: ``validate()`` warns (doesn't block) when ``wsl.exe`` isn't
 resolvable on PATH, since WSL isn't installed on every machine this
 launcher runs on.
@@ -35,5 +35,8 @@ class ShellWslKind:
         self, job: Job, tail: List[str], param_env: Dict[str, str], run_dir: Path
     ) -> Tuple[List[str], Path, Dict[str, str]]:
         script = require_script(job, "Shell script")
-        argv = ["wsl", "bash", str(script)] + tail
+        # --exec hands the argv straight to bash; without it wsl.exe re-parses
+        # the whole command line through the distro's default shell, so an
+        # argument value would not reach the script as the literal it was.
+        argv = ["wsl", "--exec", "bash", str(script)] + tail
         return argv, script.parent, dict(param_env)

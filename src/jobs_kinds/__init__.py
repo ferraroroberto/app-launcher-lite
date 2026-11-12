@@ -12,7 +12,7 @@ Shipped kinds:
 * ``python`` / ``batch`` — today's ``.py`` / ``.bat`` behaviour, lifted
   out of the old switch unchanged.
 * ``powershell`` — a ``.ps1`` script via the absolute pwsh-5.1 path.
-* ``shell-wsl`` — a ``.sh`` script via ``wsl bash``.
+* ``shell-wsl`` — a ``.sh`` script via ``wsl --exec bash``.
 * ``inline-shell`` — a body stored directly in ``jobs.json``
   (``kind_config.script_body`` + ``kind_config.ext``), written to a temp
   file under the run dir and dispatched through the matching file-kind.
