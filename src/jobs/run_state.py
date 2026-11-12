@@ -69,7 +69,6 @@ class Derived(NamedTuple):
 
 _LIVE = frozenset({RunState.PENDING, RunState.RUNNING})
 _OPEN = _LIVE | {RunState.QUEUED}
-_TERMINAL = frozenset(RunState) - _OPEN - {RunState.UNKNOWN}
 _FAILURES = frozenset({RunState.FAILED, RunState.KILLED, RunState.REAPED})
 # Records that are not real fires: they must not anchor a cooldown window.
 _NOT_A_FIRE = frozenset(
@@ -95,11 +94,6 @@ def is_live(state: RunState) -> bool:
 def is_open(state: RunState) -> bool:
     """Not finished yet: queued behind a mutex group, or live."""
     return state in _OPEN
-
-
-def is_terminal(state: RunState) -> bool:
-    """Finished for good. ``UNKNOWN`` is neither open nor terminal."""
-    return state in _TERMINAL
 
 
 def is_killable(state: RunState) -> bool:

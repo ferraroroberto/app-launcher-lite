@@ -96,18 +96,15 @@ def test_derive_table(record, pid_alive, state, reason):
     assert got.reason == reason
 
 
-def test_unknown_is_neither_open_nor_terminal_nor_failure():
+def test_unknown_is_neither_open_nor_live_nor_failure():
     s = RunState.UNKNOWN
     assert not rs.is_open(s)
     assert not rs.is_live(s)
-    assert not rs.is_terminal(s)
     assert not rs.is_killable(s)
     assert not rs.is_failure(s)
 
 
 def test_helper_sets_partition_the_states():
-    for s in RunState:
-        assert not (rs.is_open(s) and rs.is_terminal(s)), s
     assert {s for s in RunState if rs.is_open(s)} == {
         RunState.QUEUED,
         RunState.PENDING,
@@ -143,7 +140,7 @@ def test_illegal_transition_refused_killed_run_stays_killed(tmp_path):
     # and a contradictory on-disk shape still derives as killed
     contradictory = {"status": "success", "killed": True}
     assert rs.derive_run_state(contradictory, now=NOW).state is RunState.KILLED
-    assert rs.is_terminal(RunState.KILLED) and not rs.is_open(RunState.KILLED)
+    assert not rs.is_open(RunState.KILLED)
 
 
 # state-machine-proof: run-lifecycle

@@ -51,10 +51,6 @@ from src.board_sessions import (  # noqa: F401 — re-exported for board.<name> 
     merge_sessions,
 )
 from src.board_state import (  # noqa: F401 — re-exported for board.<name> callers
-    STATE_STALE_AFTER,
-    _age_seconds,
-    _now,
-    _parse_iso,
     read_active_issues,
     read_sessions_state,
 )

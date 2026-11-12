@@ -23,9 +23,13 @@ The file is one JSON document, gitignored, with a committed
       ]
     }
 
-``script_path`` accepts either a ``.py`` Python script or a ``.bat``
-Windows batch file. The executor dispatches on the suffix (see
-``run_job_cmd``).
+Each job has a ``kind`` (``python``, ``batch``, ``powershell``,
+``shell-wsl``, ``inline-shell``, ``http-check``) resolved by
+:func:`src.jobs_kinds.resolve_kind`; a row with no explicit ``kind`` falls
+back to its ``script_path`` suffix (``.py`` / ``.bat``). ``script_path`` is
+unused by the kinds that carry no script on disk (``inline-shell``,
+``http-check``). The executor builds the invocation through the kind
+registry in :mod:`src.jobs_kinds`.
 
 Schedule types are a bounded set — no raw cron expressions:
 
@@ -35,6 +39,7 @@ Schedule types are a bounded set — no raw cron expressions:
 * ``daily``          — once a day at HH:MM           (``at: "HH:MM"``)
 * ``daily_times``    — N times a day at HH:MM list   (``at: ["HH:MM",…]``)
 * ``weekly``         — once a week                   (``day: "MON|…"``, ``at: "HH:MM"``)
+* ``once``           — a single one-off run          (``at: "YYYY-MM-DDTHH:MM"``)
 
 This module owns registry *storage* (load/save the JSON file) and CRUD
 (add/update/pause/resume/remove). The ``Schedule``/``Param``/``Job``/
@@ -50,7 +55,7 @@ module rather than moving to a storage-only submodule: tests across the
 suite monkeypatch ``src.jobs.config.DEFAULT_JOBS_PATH`` (and, in one
 case, ``src.jobs.config.load_jobs`` itself) directly, and a monkeypatch
 only takes effect on the module that owns the name being patched — see
-``src/jobs.py``'s docstring for the same gotcha on the ``src.jobs``
+``src/jobs/__init__.py``'s docstring for the same gotcha on the ``src.jobs``
 split.
 """
 
