@@ -158,8 +158,19 @@ class TestShellWslKind:
         sh.write_text("#!/bin/bash\necho hi\n")
         job = _job(script_path=str(sh), kind="shell-wsl")
         argv, cwd, env = ShellWslKind().build_argv(job, [], {}, tmp_path)
-        assert argv == ["wsl", "bash", str(sh)]
+        assert argv == ["wsl", "--exec", "bash", str(sh)]
         assert cwd == sh.parent
+
+    def test_build_argv_hands_args_to_bash_verbatim(self, tmp_path):
+        # Without --exec, wsl.exe re-parses its command line through the
+        # distro's default shell before bash ever sees the arguments.
+        sh = tmp_path / "demo.sh"
+        sh.write_text("#!/bin/bash\necho hi\n")
+        job = _job(script_path=str(sh), kind="shell-wsl")
+        tail = ["plain", "two words", "$HOME;`x`"]
+        argv, _, _ = ShellWslKind().build_argv(job, tail, {}, tmp_path)
+        assert argv[:3] == ["wsl", "--exec", "bash"]
+        assert argv[3:] == [str(sh)] + tail
 
     def test_validate_warns_when_wsl_missing(self, monkeypatch):
         monkeypatch.setattr(shutil, "which", lambda name: None)
@@ -180,7 +191,7 @@ class TestInlineShellKind:
         [
             (".bat", ["cmd.exe", "/c"]),
             (".ps1", [POWERSHELL_EXE, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"]),
-            (".sh", ["wsl", "bash"]),
+            (".sh", ["wsl", "--exec", "bash"]),
         ],
     )
     def test_build_argv_writes_body_and_delegates(self, tmp_path, ext, expected_prefix):
