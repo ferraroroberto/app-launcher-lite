@@ -1,9 +1,6 @@
 """Shared launch helpers for the Board tab's routes.
 
-Split off ``app/webapp/routers/board.py`` (a `/codebase-audit`
-maintainability finding), the same way ``jobs_run.py`` was split off
-``jobs.py``. This module owns the launch-path pieces ``board.py`` calls
-through:
+This module owns the launch-path pieces ``board.py`` calls through:
 
 * :func:`_safe_list_sessions` — the degradation-safe live-session read.
 * :func:`_resolve_repo_entry` — bare repo name → live projects-folder entry.

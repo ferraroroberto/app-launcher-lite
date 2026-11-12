@@ -1,9 +1,8 @@
 """Registered Trays sequential autostart boot sequence.
 
-Split off ``app/tray/tray.py`` (a single-file god-module flagged by
-``/codebase-audit``). These are pure functions with no ``TrayApp`` state —
-``port_listening`` is also reused by ``tray.py`` for its own session-host
-adoption check, since it's a general-purpose loopback-port probe.
+These are pure functions with no ``TrayApp`` state — ``port_listening`` is
+also reused by ``tray.py`` for its own session-host adoption check, since
+it's a general-purpose loopback-port probe.
 """
 
 from __future__ import annotations

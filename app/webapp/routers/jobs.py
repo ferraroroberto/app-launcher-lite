@@ -11,9 +11,8 @@ goes through ``launcher.py run-job <id>``. The route pre-creates the run
 directory so it can return the new ``run_id`` immediately, then spawns
 the executor detached.
 
-Split off a single-file god-router (``/codebase-audit``): the webhook
-route lives in :mod:`app.webapp.routers.jobs_webhook_routes` (mounted
-here via ``include_router`` so ``app/webapp/server.py`` still registers
+The webhook route lives in :mod:`app.webapp.routers.jobs_webhook_routes`
+(mounted here via ``include_router`` so ``app/webapp/server.py`` registers
 one ``jobs.router``), and the two dry-run modes plus the shared
 cooldown+mutex admission/spawn tail live in
 :mod:`app.webapp.routers.jobs_run` (imported by both this module and

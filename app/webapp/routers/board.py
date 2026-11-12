@@ -7,10 +7,8 @@
     POST /api/board/issues/start          → spawn /issue-start|yolo <N> in the
                                             issue's repo (private network + passkey)
 
-Split off a single-file god-router (a `/codebase-audit` finding), the way
-``jobs.py`` and ``sessions.py`` already were: the shared launch helpers
-(repo resolution, the Copilot install guard, the degradation-safe session
-list) live in :mod:`app.webapp.routers.board_spawn`.
+The shared launch helpers (repo resolution, the Copilot install guard, the
+degradation-safe session list) live in :mod:`app.webapp.routers.board_spawn`.
 
 ``GET /api/board`` is the 5s poll target, so it does only cheap work: the live
 session list from the session-host plus two state-file reads (in worker
