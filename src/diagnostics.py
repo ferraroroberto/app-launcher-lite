@@ -1,14 +1,9 @@
-"""Runtime diagnostics — log capture and listening-port introspection.
+"""Runtime diagnostics — listening-port introspection and process-tree kills.
 
-Two pieces, both pure data (no UI imports):
-
-- ``RingLogHandler`` keeps the last N formatted Python logging lines in
-  memory so a UI surface can show what the app has been doing without
-  parsing files. Attached once to the root logger from ``cli.main``.
-
-- ``list_app_listeners`` answers "which app servers are actually
-  listening, and on what ports?" using psutil. Used by the smart-kill
-  endpoint.
+Pure data (no UI imports): ``list_app_listeners`` answers "which app servers
+are actually listening, and on what ports?" using psutil and backs the
+smart-kill endpoint; ``kill_process_tree`` and ``is_pid_alive`` are the
+process helpers the executor and reaper share.
 """
 
 from __future__ import annotations
@@ -17,10 +12,8 @@ import logging
 import os
 import socket
 import ssl
-import threading
-from collections import deque
 from dataclasses import dataclass, field
-from typing import Callable, Deque, List, Optional
+from typing import Callable, List, Optional
 
 try:
     import psutil  # type: ignore
@@ -28,61 +21,6 @@ except ImportError:  # pragma: no cover — psutil is in requirements.txt
     psutil = None  # type: ignore
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_RING_CAPACITY = 500
-
-
-# --------------------------------------------------------------------- logging
-
-
-class RingLogHandler(logging.Handler):
-    """Thread-safe in-memory ring buffer of formatted log lines."""
-
-    def __init__(self, capacity: int = DEFAULT_RING_CAPACITY) -> None:
-        super().__init__()
-        self._buffer: Deque[str] = deque(maxlen=capacity)
-        self._lock = threading.Lock()
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            line = self.format(record)
-        except Exception:  # noqa: BLE001 — logging contract: never raise
-            self.handleError(record)
-            return
-        with self._lock:
-            self._buffer.append(line)
-
-    def lines(self) -> List[str]:
-        with self._lock:
-            return list(self._buffer)
-
-
-_handler_lock = threading.Lock()
-_handler: Optional[RingLogHandler] = None
-
-
-def app_log_handler() -> RingLogHandler:
-    """Return the singleton handler, creating it on first call."""
-    global _handler
-    with _handler_lock:
-        if _handler is None:
-            h = RingLogHandler()
-            h.setFormatter(
-                logging.Formatter(
-                    "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-                    datefmt="%H:%M:%S",
-                )
-            )
-            _handler = h
-        return _handler
-
-
-def attach_app_log_handler() -> None:
-    """Idempotently attach the ring handler to the root logger."""
-    h = app_log_handler()
-    root = logging.getLogger()
-    if h not in root.handlers:
-        root.addHandler(h)
 
 
 # ------------------------------------------------------------- port introspection

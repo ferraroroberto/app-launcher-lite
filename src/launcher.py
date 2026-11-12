@@ -64,7 +64,7 @@ _mirror_hwnds: Dict[str, int] = {}
 def spawn_bat(bat_path: Path) -> int:
     """Open a new visible CMD window that runs the bat and stays open.
 
-    Returns the PID of the spawned ``cmd /c start`` launcher process. The
+    Returns the PID of the spawned ``cmd /k`` console process. The
     actual app server runs as a descendant of it — the caller pairs this
     PID with :func:`src.diagnostics.listening_port_for_pid_tree` to learn
     which port the app eventually bound.
