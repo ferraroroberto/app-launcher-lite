@@ -20,7 +20,7 @@ import os
 import subprocess
 import threading
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import quote
 
 from src.subprocess_flags import NO_WINDOW
@@ -28,6 +28,9 @@ from src.subprocess_flags import NO_WINDOW
 logger = logging.getLogger(__name__)
 
 _GLAB_TIMEOUT_SECONDS = 20.0
+# Largest ``per_page`` GitLab accepts, so one request is as complete as a single
+# page can be. The queries do not paginate: a full page means the group may hold
+# more, and ``refresh`` records that as ``truncated`` for the Board to badge.
 _ISSUE_LIMIT = 100
 
 
@@ -118,14 +121,18 @@ def _group_path(group: str) -> str:
     return quote(group, safe="")
 
 
-def search_open_issues(group: str, host: str = "") -> List[Dict[str, Any]]:
+def search_open_issues(
+    group: str, host: str = ""
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """Open actionable issues, plus whether the page was full (more may exist)."""
     rows = _api(
         f"groups/{_group_path(group)}/issues"
         f"?state=opened&order_by=updated_at&sort=desc&per_page={_ISSUE_LIMIT}",
         host,
     )
     issues = [_norm_issue(r) for r in rows]
-    return [i for i in issues if _is_actionable(i["labels"])]
+    actionable = [i for i in issues if _is_actionable(i["labels"])]
+    return actionable, len(rows) >= _ISSUE_LIMIT
 
 
 def _local_midnight() -> datetime:
@@ -146,8 +153,10 @@ def _parse_iso(value: Any) -> Optional[datetime]:
     return parsed
 
 
-def search_done_today(group: str, host: str = "") -> List[Dict[str, Any]]:
-    """Closed issues since local midnight, newest first.
+def search_done_today(
+    group: str, host: str = ""
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """Closed issues since local midnight, newest first, plus a full-page flag.
 
     Group issues have no ``closed_after`` param, so the query uses
     ``state=closed&updated_after=<local midnight>`` and then filters
@@ -172,7 +181,7 @@ def search_done_today(group: str, host: str = "") -> List[Dict[str, Any]]:
             continue
         done.append({**issue, "state": "closed", "labels": []})
     done.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
-    return done
+    return done, len(closed) >= _ISSUE_LIMIT
 
 
 # ------------------------------------------------------------------ cache
@@ -182,6 +191,7 @@ _cache: Dict[str, Any] = {
     "fetched_at": None,
     "issues": [],
     "done": [],
+    "truncated": False,
     "error": None,
 }
 
@@ -208,17 +218,29 @@ def refresh(group: str, host: str = "") -> Dict[str, Any]:
             return dict(_cache)
     fetched_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     try:
-        issues = search_open_issues(group, host)
-        done = search_done_today(group, host)
+        issues, issues_truncated = search_open_issues(group, host)
+        done, done_truncated = search_done_today(group, host)
     except GlabError as exc:
         logger.warning("⚠️ glab refresh failed: %s", exc)
         with _lock:
             _cache["error"] = str(exc)
             return dict(_cache)
     with _lock:
-        _cache.update(fetched_at=fetched_at, issues=issues, done=done, error=None)
+        truncated = issues_truncated or done_truncated
+        _cache.update(
+            fetched_at=fetched_at,
+            issues=issues,
+            done=done,
+            truncated=truncated,
+            error=None,
+        )
         logger.info(
-            "✅ glab refresh: %d issues, %d done today", len(issues), len(done)
+            "✅ glab refresh: %d issues, %d done today%s",
+            len(issues),
+            len(done),
+            f" (page limit {_ISSUE_LIMIT} hit — Board may be incomplete)"
+            if truncated
+            else "",
         )
         return dict(_cache)
 
@@ -226,4 +248,4 @@ def refresh(group: str, host: str = "") -> Dict[str, Any]:
 def reset_cache() -> None:
     """Test helper — restore the pristine empty cache."""
     with _lock:
-        _cache.update(fetched_at=None, issues=[], done=[], error=None)
+        _cache.update(fetched_at=None, issues=[], done=[], truncated=False, error=None)

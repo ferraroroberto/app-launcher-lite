@@ -27,7 +27,7 @@ from app.tray.single_instance import cross_process_lock
 from app.webapp.event_loop import LOOP_FACTORY
 from src.app_config import DEFAULT_WEBAPP_PORT, webapp_port
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
-from src.tls.certs import cert_paths
+from src.tls.certs import CERT_CHECK_TIMEOUT_SECONDS, cert_paths
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ def check_tailscale_cert() -> None:
             [sys.executable, str(script), "--check"],
             capture_output=True,
             text=True,
-            timeout=90,
+            timeout=CERT_CHECK_TIMEOUT_SECONDS,
             cwd=str(PROJECT_ROOT),
             creationflags=NO_WINDOW,
         )

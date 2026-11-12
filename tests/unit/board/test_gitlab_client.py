@@ -89,6 +89,27 @@ def _gl_iso(moment: datetime) -> str:
     )
 
 
+def test_full_page_marks_snapshot_truncated(monkeypatch):
+    full_page = [
+        {**_REAL_ISSUE, "iid": n} for n in range(gitlab_client._ISSUE_LIMIT)
+    ]
+    monkeypatch.setattr(
+        gitlab_client.subprocess, "run",
+        _fake_run({"/issues?state=opened": full_page}),
+    )
+    snap = gitlab_client.refresh("gitlab-org")
+    assert snap["truncated"] is True
+    assert len(snap["issues"]) == gitlab_client._ISSUE_LIMIT
+
+
+def test_short_page_is_not_truncated(monkeypatch):
+    monkeypatch.setattr(
+        gitlab_client.subprocess, "run",
+        _fake_run({"/issues?state=opened": [_REAL_ISSUE]}),
+    )
+    assert gitlab_client.refresh("gitlab-org")["truncated"] is False
+
+
 # ---------------------------------------------------------- normalization
 
 
@@ -97,7 +118,8 @@ def test_norm_issue_maps_real_shape(monkeypatch):
         gitlab_client.subprocess, "run",
         _fake_run({"/issues?state=opened": [_REAL_ISSUE, _SUBGROUP_ISSUE]}),
     )
-    issues = gitlab_client.search_open_issues("gitlab-org")
+    issues, truncated = gitlab_client.search_open_issues("gitlab-org")
+    assert truncated is False
     assert issues[0] == {
         "kind": "issue",
         "repo": "gitlab-vscode-extension",
@@ -122,7 +144,7 @@ def test_audit_meta_label_filtered_from_issues(monkeypatch):
             "/issues?state=opened": [_REAL_ISSUE, ledger_issue],
         }),
     )
-    assert [i["number"] for i in gitlab_client.search_open_issues("g")] == [2323]
+    assert [i["number"] for i in gitlab_client.search_open_issues("g")[0]] == [2323]
 
 
 # ------------------------------------------------------- query construction
@@ -202,7 +224,7 @@ def test_done_today_filters_on_closed_at_since_local_midnight(monkeypatch):
             closed_at_null, audit_meta_closed, later_today,
         ]}, calls),
     )
-    done = gitlab_client.search_done_today("grp")
+    done, _truncated = gitlab_client.search_done_today("grp")
     # Newest first by updated_at; done cards are stripped to state+no labels.
     assert [(d["number"], d["state"], d["labels"]) for d in done] == [
         (13, "closed", []), (9, "closed", []),
@@ -315,5 +337,6 @@ def test_reset_cache_restores_pristine_state(monkeypatch):
     assert gitlab_client.snapshot()["issues"]
     gitlab_client.reset_cache()
     assert gitlab_client.snapshot() == {
-        "fetched_at": None, "issues": [], "done": [], "error": None,
+        "fetched_at": None, "issues": [], "done": [], "truncated": False,
+        "error": None,
     }

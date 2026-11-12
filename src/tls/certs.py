@@ -13,6 +13,11 @@ from typing import Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
+# Outer bound for the startup ``gen_tailscale_cert.py --check`` child. Sits above
+# the script's own 60 s ``tailscale cert`` limit so the script reports its own
+# timeout before the parent gives up on it.
+CERT_CHECK_TIMEOUT_SECONDS = 90
+
 
 def cert_dir(project_root: Optional[Path] = None) -> Path:
     return (project_root or PROJECT_ROOT) / "webapp" / "certificates"

@@ -106,6 +106,10 @@ _BULK_POLL_S = 0.05
 # than persisted: it dies with the session, so it needs no cleanup/pruning.
 _MANUAL_TITLE_MAX_CHARS = 60
 
+# Upper bound on a PTY's rows/cols. No real terminal comes near it; the clamp
+# keeps a bogus client value from sizing a huge ConPTY and VT mirror grid.
+_MAX_PTY_DIM = 1000
+
 # Stop modes accepted by SessionManager.stop / PtySession.stop.
 STOP_INTERRUPT = "interrupt"  # Ctrl+C into the PTY
 STOP_QUIT = "quit"            # type the agent's quit command (Copilot: /exit)
@@ -486,8 +490,8 @@ class PtySession:
         return self.write("\r")
 
     def resize(self, rows: int, cols: int) -> None:
-        rows = max(1, min(rows, 1000))
-        cols = max(1, min(cols, 1000))
+        rows = max(1, min(rows, _MAX_PTY_DIM))
+        cols = max(1, min(cols, _MAX_PTY_DIM))
         self.rows = rows
         self.cols = cols
         if self._vt is not None:
@@ -814,8 +818,8 @@ class SessionManager:
         if not directory.is_dir():
             raise OSError(f"Project directory not found: {project_dir}")
 
-        rows = max(1, min(int(rows), 1000))
-        cols = max(1, min(int(cols), 1000))
+        rows = max(1, min(int(rows), _MAX_PTY_DIM))
+        cols = max(1, min(int(cols), _MAX_PTY_DIM))
         session_id = uuid.uuid4().hex
         # `cmd /c` resolves the agent command (e.g. copilot.cmd)
         # off PATH the way a normal shell would; when the agent exits, cmd

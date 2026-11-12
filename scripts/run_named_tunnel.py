@@ -37,7 +37,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from app.webapp.event_loop import LOOP_FACTORY  # noqa: E402
 from src.app_config import resolve_webapp_port  # noqa: E402
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP  # noqa: E402
-from src.tls.certs import cert_paths  # noqa: E402
+from src.tls.certs import CERT_CHECK_TIMEOUT_SECONDS, cert_paths  # noqa: E402
 
 DEFAULT_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 SAMPLE_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.sample.yml"
@@ -69,7 +69,7 @@ def _spawn_uvicorn(port: int) -> subprocess.Popen:
             subprocess.run(
                 [str(_find_python()), str(check_script), "--check"],
                 capture_output=True,
-                timeout=90,
+                timeout=CERT_CHECK_TIMEOUT_SECONDS,
                 cwd=str(PROJECT_ROOT),
                 creationflags=NO_WINDOW,
             )

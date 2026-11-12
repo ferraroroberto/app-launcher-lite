@@ -61,7 +61,11 @@ router = APIRouter()
 
 
 def _gitlab_section(snap: Dict[str, Any]) -> Dict[str, Any]:
-    return {"fetched_at": snap.get("fetched_at"), "error": snap.get("error")}
+    return {
+        "fetched_at": snap.get("fetched_at"),
+        "error": snap.get("error"),
+        "truncated": bool(snap.get("truncated")),
+    }
 
 
 def _mark_active_backlog(
