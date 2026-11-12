@@ -1,4 +1,4 @@
-"""Start uvicorn + cloudflared on a named (persistent) tunnel.
+"""Start the webapp + cloudflared on a named (persistent) tunnel.
 
 Used by ``webapp_tunnel_named.bat`` for headless / no-tray use. The
 tray already does this same work as part of normal startup — only
@@ -6,7 +6,9 @@ reach for this script when running without the tray.
 
 Boots:
 
-  1. uvicorn (HTTPS if ``webapp/certificates/cert.pem`` exists)
+  1. the webapp, through :class:`app.webapp.manager.WebappManager` (adopts one
+     already listening, else spawns it — HTTPS if ``webapp/certificates/``
+     holds a cert pair)
   2. cloudflared tunnel --config webapp/cloudflared.yml run
 
 The persistent URL is written to ``webapp/last_tunnel_url.txt`` (with
@@ -18,97 +20,27 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-import signal
-import socket
 import subprocess
 import sys
 import threading
-import time
 from pathlib import Path
-from typing import Optional
-
-import yaml
 
 logger = logging.getLogger("run_named_tunnel")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.webapp.event_loop import LOOP_FACTORY  # noqa: E402
-from src.app_config import resolve_webapp_port  # noqa: E402
-from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP  # noqa: E402
-from src.tls.certs import CERT_CHECK_TIMEOUT_SECONDS, cert_paths  # noqa: E402
+from app.webapp.manager import WebappManager, load_config  # noqa: E402
+from src.app_config import load_app_config  # noqa: E402
+from src.subprocess_flags import NO_WINDOW_NEW_GROUP  # noqa: E402
+from src.tunnel.cloudflared import (  # noqa: E402
+    TUNNEL_CONFIG_PATH,
+    publish_tunnel_url,
+    read_hostname,
+    stop_cloudflared,
+)
 
-DEFAULT_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 SAMPLE_CONFIG = PROJECT_ROOT / "webapp" / "cloudflared.sample.yml"
-TUNNEL_URL_FILE = PROJECT_ROOT / "webapp" / "last_tunnel_url.txt"
-
-
-def _have_listener(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(0.2)
-        return s.connect_ex(("127.0.0.1", port)) == 0
-
-
-def _find_python() -> Path:
-    venv_py = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
-    if venv_py.exists():
-        return venv_py
-    venv_py = PROJECT_ROOT / ".venv" / "bin" / "python"
-    if venv_py.exists():
-        return venv_py
-    return Path(sys.executable)
-
-
-def _spawn_uvicorn(port: int) -> subprocess.Popen:
-    # Auto-renew a Tailscale cert expiring within 30 days before uvicorn
-    # binds; no-op on self-signed, never blocks.
-    check_script = PROJECT_ROOT / "scripts" / "gen_tailscale_cert.py"
-    if check_script.exists():
-        try:
-            subprocess.run(
-                [str(_find_python()), str(check_script), "--check"],
-                capture_output=True,
-                timeout=CERT_CHECK_TIMEOUT_SECONDS,
-                cwd=str(PROJECT_ROOT),
-                creationflags=NO_WINDOW,
-            )
-        except Exception as exc:
-            logger.warning(f"⚠️  tailscale cert check failed (ignored): {exc}")
-    certs = cert_paths(PROJECT_ROOT)
-    cmd = [
-        str(_find_python()),
-        "-m",
-        "app.webapp.serve",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        str(port),
-        "--log-level",
-        "warning",
-        # The selector loop keeps the listener alive after an aborted client
-        # connection; the default proactor loop drops it (event_loop.py).
-        "--loop",
-        LOOP_FACTORY,
-    ]
-    if certs is not None:
-        cert, key = certs
-        cmd.extend(["--ssl-keyfile", str(key), "--ssl-certfile", str(cert)])
-    logger.info(f"🚀 Starting uvicorn: {' '.join(cmd)}")
-    return subprocess.Popen(
-        cmd,
-        cwd=str(PROJECT_ROOT),
-        creationflags=NO_WINDOW_NEW_GROUP,
-    )
-
-
-def _wait_for_uvicorn(port: int, timeout: float = 15.0) -> bool:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if _have_listener(port):
-            return True
-        time.sleep(0.3)
-    return False
 
 
 def _spawn_cloudflared(config_path: Path) -> subprocess.Popen:
@@ -133,50 +65,6 @@ def _spawn_cloudflared(config_path: Path) -> subprocess.Popen:
     )
 
 
-def _read_hostname(config_path: Path) -> Optional[str]:
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError) as exc:
-        logger.warning(f"⚠️  Could not parse {config_path}: {exc}")
-        return None
-    ingress = data.get("ingress") or []
-    for entry in ingress:
-        if isinstance(entry, dict) and entry.get("hostname"):
-            return str(entry["hostname"]).strip()
-    return None
-
-
-def _read_auth_token() -> str:
-    try:
-        from src.webapp_config import load_webapp_config
-
-        return (load_webapp_config().auth_token or "").strip()
-    except Exception as exc:
-        logger.debug(f"could not read auth_token: {exc}")
-        return ""
-
-
-def _persist_tunnel_url(hostname: str) -> None:
-    url = f"https://{hostname}"
-    token = _read_auth_token()
-    if token:
-        from src.webapp_config import append_auth_token
-
-        url = append_auth_token(url, token)
-    try:
-        TUNNEL_URL_FILE.parent.mkdir(parents=True, exist_ok=True)
-        TUNNEL_URL_FILE.write_text(url + "\n", encoding="utf-8")
-        logger.info(f"📡 Tunnel URL → {TUNNEL_URL_FILE}")
-        logger.info(f"   {url}")
-        if token:
-            logger.info(
-                "🔐 auth_token is set — the URL above includes ?token=… so "
-                "the phone bootstraps on first load."
-            )
-    except OSError as exc:
-        logger.warning(f"⚠️  Could not write {TUNNEL_URL_FILE}: {exc}")
-
-
 def _stream(proc: subprocess.Popen) -> None:
     for line in proc.stdout or ():
         sys.stdout.write(line)
@@ -190,7 +78,7 @@ def main() -> int:
         datefmt="%H:%M:%S",
     )
 
-    config_path = Path(os.environ.get("CLOUDFLARED_CONFIG", str(DEFAULT_CONFIG)))
+    config_path = Path(os.environ.get("CLOUDFLARED_CONFIG", str(TUNNEL_CONFIG_PATH)))
     if not config_path.exists():
         logger.error(
             f"❌ {config_path} missing. Copy {SAMPLE_CONFIG.name} to "
@@ -198,7 +86,7 @@ def main() -> int:
         )
         return 1
 
-    hostname = _read_hostname(config_path)
+    hostname = read_hostname(config_path)
     if hostname:
         logger.info(f"🌍 Public hostname: https://{hostname}")
     else:
@@ -207,52 +95,32 @@ def main() -> int:
             "but last_tunnel_url.txt won't be updated."
         )
 
-    port = resolve_webapp_port()
-    uvicorn_proc: Optional[subprocess.Popen] = None
-    if _have_listener(port):
-        logger.info(f"🔗 Adopting existing webapp on :{port}")
-    else:
-        uvicorn_proc = _spawn_uvicorn(port)
-        if not _wait_for_uvicorn(port):
-            logger.error("❌ uvicorn failed to start within 15 s")
-            if uvicorn_proc is not None:
-                uvicorn_proc.terminate()
-            return 1
+    manager = WebappManager(load_config(load_app_config().webapp))
+    try:
+        manager.start()
+    except RuntimeError as exc:
+        logger.error(str(exc))
+        return 1
 
     cloudflared = _spawn_cloudflared(config_path)
     streamer = threading.Thread(target=_stream, args=(cloudflared,), daemon=True)
     streamer.start()
 
     if hostname:
-        _persist_tunnel_url(hostname)
+        url = publish_tunnel_url(hostname)
+        if url and "token=" in url:
+            logger.info(
+                "🔐 auth_token is set — the published URL includes ?token=… so "
+                "the phone bootstraps on first load."
+            )
 
     try:
         cloudflared.wait()
     except KeyboardInterrupt:
         logger.info("⏹️  Ctrl+C — shutting down")
     finally:
-        for proc, name in ((cloudflared, "cloudflared"), (uvicorn_proc, "uvicorn")):
-            if proc is None:
-                continue
-            try:
-                logger.info(f"🛑 Stopping {name} (pid={proc.pid})")
-                if sys.platform == "win32":
-                    try:
-                        proc.send_signal(signal.CTRL_BREAK_EVENT)
-                    except Exception:
-                        pass
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-            except Exception as exc:
-                logger.debug(f"{name} stop failed: {exc}")
-        try:
-            if TUNNEL_URL_FILE.exists():
-                TUNNEL_URL_FILE.unlink()
-        except OSError:
-            pass
+        stop_cloudflared(cloudflared)
+        manager.stop()  # leaves an adopted (external) webapp running
 
     return 0
 

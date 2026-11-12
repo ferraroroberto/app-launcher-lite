@@ -20,6 +20,7 @@ from src.jobs.run_state import (
     derive_run_state,
     is_failure,
     is_real_fire,
+    parse_iso,
 )
 
 # Process-local TTL cache. Reset per job by `invalidate_stats_cache` once a
@@ -27,15 +28,6 @@ from src.jobs.run_state import (
 _STATS_TTL_SECONDS = 30.0
 _stats_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 _stats_lock = Lock()
-
-
-def _parse_iso(value: Any) -> Optional[datetime]:
-    if not isinstance(value, str) or not value:
-        return None
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None
 
 
 def cooldown_check(
@@ -75,7 +67,7 @@ def cooldown_check(
         break
     if anchor is None:
         return None
-    started = _parse_iso(anchor.get("started_at"))
+    started = parse_iso(anchor.get("started_at"))
     if started is None:
         return None
     elapsed = (reference - started).total_seconds()
@@ -90,8 +82,8 @@ def _duration_for(record: Dict[str, Any]) -> Optional[float]:
     persisted = record.get("duration_seconds")
     if isinstance(persisted, (int, float)) and persisted >= 0:
         return float(persisted)
-    started = _parse_iso(record.get("started_at"))
-    finished = _parse_iso(record.get("finished_at"))
+    started = parse_iso(record.get("started_at"))
+    finished = parse_iso(record.get("finished_at"))
     if started and finished and finished >= started:
         return (finished - started).total_seconds()
     return None
@@ -118,7 +110,7 @@ def _compute_stats(job_id: str, *, now: Optional[datetime] = None) -> Dict[str, 
     cutoff = now - timedelta(days=30)
     for r in runs:
         state = derive_run_state(r, now=now).state
-        started = _parse_iso(r.get("started_at"))
+        started = parse_iso(r.get("started_at"))
         succeeded = state is RunState.SUCCEEDED
         if succeeded or is_failure(state):
             d = _duration_for(r)
@@ -266,7 +258,7 @@ def is_stuck(
         or derive_run_state(latest, now=datetime.now()).state is not RunState.RUNNING
     ):
         return False
-    started = _parse_iso(latest.get("started_at"))
+    started = parse_iso(latest.get("started_at"))
     if not started:
         return False
     threshold = stuck_threshold_seconds(

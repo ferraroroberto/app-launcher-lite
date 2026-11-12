@@ -252,6 +252,46 @@ class TestMutexQueueFile:
         assert "chrome" not in on_disk
         assert "db" in on_disk
 
+    def test_queue_run_stamps_the_record_and_enqueues_the_entry(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(jobs_history_mod, "JOBS_RUNS_DIR", tmp_path)
+        monkeypatch.setattr(
+            jobs_queue_mod, "JOBS_QUEUE_PATH", tmp_path / "_queue.json"
+        )
+        job = Job(id="b", name="B", script_path="C:\b.py", mutex_group="chrome")
+        holder = Job(id="a", name="A", script_path="C:\a.py", mutex_group="chrome")
+        run_dir = jobs_mod.new_run_dir(job.id, "run-1")
+        meta = {"job_id": job.id, "params": {"x": 1}}
+
+        jobs_mod.queue_run(run_dir, meta, job, holder, "manual", {"x": 1})
+
+        record = jobs_mod.read_run(run_dir)
+        assert record["status"] == "queued"
+        assert record["mutex_group"] == "chrome"
+        assert record["mutex_blocked_by"] == "a"
+        assert jobs_mod.peek_mutex_queue("chrome") == [
+            {
+                "job_id": "b",
+                "run_id": "run-1",
+                "trigger": "manual",
+                "params": {"x": 1},
+            }
+        ]
+
+    def test_queue_run_stores_empty_params_as_none(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(jobs_history_mod, "JOBS_RUNS_DIR", tmp_path)
+        monkeypatch.setattr(
+            jobs_queue_mod, "JOBS_QUEUE_PATH", tmp_path / "_queue.json"
+        )
+        job = Job(id="b", name="B", script_path="C:\b.py", mutex_group="chrome")
+        holder = Job(id="a", name="A", script_path="C:\a.py", mutex_group="chrome")
+        run_dir = jobs_mod.new_run_dir(job.id, "run-2")
+
+        jobs_mod.queue_run(run_dir, {"job_id": "b"}, job, holder, "scheduled", {})
+
+        assert jobs_mod.peek_mutex_queue("chrome")[0]["params"] is None
+
     def test_pop_empty_returns_none(self, tmp_path, monkeypatch):
         monkeypatch.setattr(jobs_history_mod, "JOBS_RUNS_DIR", tmp_path)
         monkeypatch.setattr(

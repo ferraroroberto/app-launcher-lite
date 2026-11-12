@@ -42,6 +42,8 @@ from typing import Any
 import uvicorn
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
+from app.webapp.event_loop import selector_loop_factory
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_APP = "app.webapp.server:app"
@@ -65,13 +67,6 @@ HYPERCORN = "hypercorn"
 UVICORN = "uvicorn"
 SERVERS = (HYPERCORN, UVICORN)
 ALPN_PROTOCOLS = ["h2", "http/1.1"]
-
-
-def selector_loop_factory() -> asyncio.AbstractEventLoop:
-    """The default loop: Windows' selector loop has no accept-wedge on an aborted client."""
-    if sys.platform == "win32":
-        return asyncio.SelectorEventLoop()
-    return asyncio.new_event_loop()
 
 
 def load_attr(target: str) -> Any:

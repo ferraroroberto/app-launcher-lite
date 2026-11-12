@@ -18,7 +18,7 @@ Usage:
     & .venv/Scripts/python.exe scripts/gen_tailscale_cert.py <host>.ts.net
 
     # Check and auto-renew if expiring within 30 days (called on startup by
-    # webapp.bat, the tray's webapp manager, and run_named_tunnel.py):
+    # webapp.bat and the webapp manager the tray and run_named_tunnel.py share):
     & .venv/Scripts/python.exe scripts/gen_tailscale_cert.py --check
 """
 from __future__ import annotations

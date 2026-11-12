@@ -28,15 +28,12 @@ from __future__ import annotations
 import datetime
 import logging
 import shutil
-import signal
 import subprocess
 import sys
 import threading
 import webbrowser
 from pathlib import Path
 from typing import Optional
-
-import yaml
 
 from app.tray import registered_trays, tailscale
 from app.tray.single_instance import SingleInstance
@@ -48,6 +45,13 @@ from app.webapp.manager import (
 )
 from src import AppConfig, runtime_files
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
+from src.tunnel.cloudflared import (
+    TUNNEL_CONFIG_PATH,
+    TUNNEL_URL_FILE,
+    publish_tunnel_url,
+    read_hostname,
+    stop_cloudflared,
+)
 from src.webapp_config import (
     DEFAULT_SESSION_HOST_PORT,
     append_auth_token,
@@ -57,8 +61,6 @@ from src.webapp_config import (
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-TUNNEL_URL_FILE = PROJECT_ROOT / "webapp" / "last_tunnel_url.txt"
-TUNNEL_CONFIG_PATH = PROJECT_ROOT / "webapp" / "cloudflared.yml"
 # The tray runs windowless (pythonw) with no console to log to, so the
 # Tailscale lookup leaves a breadcrumb here when it can't resolve a host.
 TS_DEBUG_LOG = PROJECT_ROOT / "webapp" / "tailscale_debug.log"
@@ -77,25 +79,6 @@ def _session_host_port() -> int:
     """The session-host port, from the same ``webapp_config.json`` knob that
     ``launcher.py session-host`` and every router honour."""
     return load_webapp_config().session_host_port or DEFAULT_SESSION_HOST_PORT
-
-
-def _read_tunnel_hostname(config_path: Path) -> Optional[str]:
-    """Pull the first ingress[].hostname out of the cloudflared config.
-
-    Returns None when the file is missing or unparseable — the tray
-    treats either case as "no tunnel" and skips spawning cloudflared.
-    """
-    if not config_path.exists():
-        return None
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError) as exc:
-        logger.warning(f"⚠️  Could not parse {config_path}: {exc}")
-        return None
-    for entry in data.get("ingress") or []:
-        if isinstance(entry, dict) and entry.get("hostname"):
-            return str(entry["hostname"]).strip()
-    return None
 
 
 def _build_icon():
@@ -190,7 +173,7 @@ class TrayApp:
         self.app_config = app_config
         self.instance = instance
         self.manager = WebappManager(load_config(app_config.webapp))
-        self.tunnel_hostname = _read_tunnel_hostname(TUNNEL_CONFIG_PATH)
+        self.tunnel_hostname = read_hostname(TUNNEL_CONFIG_PATH)
         self.tunnel_proc: Optional[subprocess.Popen] = None
         self.starter_exc: Optional[Exception] = None
 
@@ -353,40 +336,14 @@ class TrayApp:
             f"(pid={proc.pid})"
         )
 
-        url = f"https://{self.tunnel_hostname}"
-        token = (load_webapp_config().auth_token or "").strip()
-        if token:
-            url = append_auth_token(url, token)
-        try:
-            TUNNEL_URL_FILE.parent.mkdir(parents=True, exist_ok=True)
-            TUNNEL_URL_FILE.write_text(url + "\n", encoding="utf-8")
-        except OSError as exc:
-            logger.warning(f"⚠️  Could not write {TUNNEL_URL_FILE}: {exc}")
+        publish_tunnel_url(self.tunnel_hostname)
 
     def _stop_tunnel(self) -> None:
         proc = self.tunnel_proc
         self.tunnel_proc = None
         if proc is None:
             return
-        try:
-            logger.info(f"🛑 Stopping cloudflared (pid={proc.pid})")
-            if sys.platform == "win32":
-                try:
-                    proc.send_signal(signal.CTRL_BREAK_EVENT)
-                except Exception:
-                    pass
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-        except Exception as exc:  # noqa: BLE001
-            logger.debug(f"cloudflared stop failed: {exc}")
-        try:
-            if TUNNEL_URL_FILE.exists():
-                TUNNEL_URL_FILE.unlink()
-        except OSError:
-            pass
+        stop_cloudflared(proc)
 
     # -- menu actions ----------------------------------------------------
 

@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import quote
 
+from src.board_state import parse_iso
 from src.subprocess_flags import NO_WINDOW
 
 logger = logging.getLogger(__name__)
@@ -141,18 +142,6 @@ def _local_midnight() -> datetime:
     )
 
 
-def _parse_iso(value: Any) -> Optional[datetime]:
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
-
-
 def search_done_today(
     group: str, host: str = ""
 ) -> Tuple[List[Dict[str, Any]], bool]:
@@ -173,7 +162,7 @@ def search_done_today(
     )
     done: List[Dict[str, Any]] = []
     for row in closed:
-        closed_at = _parse_iso(row.get("closed_at"))
+        closed_at = parse_iso(row.get("closed_at"), naive_utc=True)
         if closed_at is None or closed_at < midnight:
             continue
         issue = _norm_issue(row)

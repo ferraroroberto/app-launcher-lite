@@ -14,7 +14,7 @@ missing/corrupt/stale file must never error — callers get an
 ``available: False`` shape with empty/``None`` fields instead of an
 exception, so a board render never breaks on a cold or torn state file.
 
-Also home to the small time/parse helpers (:func:`_now`, :func:`_parse_iso`,
+Also home to the small time/parse helpers (:func:`_now`, :func:`parse_iso`,
 :func:`_iso_z`, :func:`_age_seconds`) shared by :mod:`src.board_sessions` — every
 board-side timestamp flows through these same two tolerant parsers.
 """
@@ -38,8 +38,12 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _parse_iso(raw: Any) -> Optional[datetime]:
-    """Tolerant ISO-8601 parse; naive stamps are assumed local (job records)."""
+def parse_iso(raw: Any, *, naive_utc: bool = False) -> Optional[datetime]:
+    """Tolerant ISO-8601 parse to an aware datetime; ``None`` when unusable.
+
+    A naive stamp is local time by default (job records are written with
+    ``datetime.now()``); ``naive_utc=True`` reads it as UTC (GitLab's API).
+    """
     if not isinstance(raw, str) or not raw:
         return None
     try:
@@ -47,7 +51,9 @@ def _parse_iso(raw: Any) -> Optional[datetime]:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.astimezone()
+        parsed = (
+            parsed.replace(tzinfo=timezone.utc) if naive_utc else parsed.astimezone()
+        )
     return parsed
 
 
@@ -83,7 +89,7 @@ def read_sessions_state(path: Path, *, now: Optional[datetime] = None) -> Dict[s
     }
     stamps = [
         stamp
-        for stamp in (_parse_iso(row.get("updated_at")) for row in rows.values())
+        for stamp in (parse_iso(row.get("updated_at")) for row in rows.values())
         if stamp is not None
     ]
     newest = max(stamps) if stamps else None
@@ -120,7 +126,7 @@ def read_active_issues(path: Path, *, now: Optional[datetime] = None) -> Dict[st
             continue
         repo = row.get("repo")
         number = row.get("number")
-        started_at = _parse_iso(row.get("started_at"))
+        started_at = parse_iso(row.get("started_at"))
         if (
             not isinstance(repo, str)
             or not repo.strip()

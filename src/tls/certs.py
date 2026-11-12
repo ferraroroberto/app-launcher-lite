@@ -1,9 +1,8 @@
 """The webapp's TLS certificate pair: where it lives and what it is.
 
 One implementation for every consumer — the tray's webapp manager, the router
-helpers' mirror-URL logic, ``scripts/gen_tailscale_cert.py`` and
-``scripts/run_named_tunnel.py`` — so the lookup and the Tailscale discriminator
-cannot drift apart.
+helpers' mirror-URL logic and ``scripts/gen_tailscale_cert.py`` — so the lookup
+and the Tailscale discriminator cannot drift apart.
 """
 
 from __future__ import annotations

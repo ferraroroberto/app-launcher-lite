@@ -112,3 +112,31 @@ class TestConstantTimeEquals:
         assert api_tokens.constant_time_equals("contraseña", "contraseña")
         assert not api_tokens.constant_time_equals("contraseña", "contrasena")
         assert not api_tokens.constant_time_equals("ö", "o")
+
+
+class TestCredentialDecision:
+    """The one credential rule the HTTP middleware and the job-stream socket share."""
+
+    def test_ungated_config_requires_nothing(self):
+        assert not api_tokens.credential_required("  ", [])
+        assert api_tokens.full_scope_credential_ok("", "", [])
+
+    def test_minted_only_config_is_still_gated(self):
+        record, _ = _mint()
+        assert api_tokens.credential_required("", [record])
+        assert not api_tokens.full_scope_credential_ok("", "", [record])
+
+    def test_legacy_token_passes_and_is_classified(self):
+        assert api_tokens.check_credential("s3cret", " s3cret ", []) == (True, None)
+        assert api_tokens.full_scope_credential_ok("s3cret", "s3cret", [])
+        assert not api_tokens.full_scope_credential_ok("wrong", "s3cret", [])
+
+    def test_scoped_token_matches_but_is_refused_where_full_scope_is_required(self):
+        record, raw = _mint()
+        legacy_ok, match = api_tokens.check_credential(raw, "", [record])
+        assert not legacy_ok and match is not None and match.id == record["id"]
+        assert not api_tokens.full_scope_credential_ok(raw, "", [record])
+
+    def test_full_scope_token_passes(self):
+        record, raw = _mint(scope="*")
+        assert api_tokens.full_scope_credential_ok(raw, "", [record])
