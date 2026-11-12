@@ -136,7 +136,6 @@ function renderParamRow(param) {
 }
 
 function setParamsEditor(params) {
-  if (!els.jobParamsList) return;
   els.jobParamsList.innerHTML = '';
   (params || []).forEach(function (p) {
     els.jobParamsList.appendChild(renderParamRow(p));
@@ -144,7 +143,6 @@ function setParamsEditor(params) {
 }
 
 function readParamsEditor() {
-  if (!els.jobParamsList) return [];
   const rows = Array.from(els.jobParamsList.querySelectorAll('[data-role="job-param-row"]'));
   const seen = new Set();
   return rows.map(function (row) {
@@ -234,7 +232,6 @@ function renderMappingRow(name, path) {
 }
 
 function setMappingEditor(mapping) {
-  if (!els.jobWebhookMappingList) return;
   els.jobWebhookMappingList.innerHTML = '';
   Object.keys(mapping || {}).forEach(function (name) {
     els.jobWebhookMappingList.appendChild(renderMappingRow(name, mapping[name]));
@@ -242,7 +239,6 @@ function setMappingEditor(mapping) {
 }
 
 function readMappingEditor() {
-  if (!els.jobWebhookMappingList) return {};
   const rows = Array.from(
     els.jobWebhookMappingList.querySelectorAll('[data-role="job-webhook-mapping-row"]'),
   );
@@ -262,26 +258,25 @@ function readMappingEditor() {
 // the event allowlist and mapping editor only make sense once a provider
 // is chosen (mapping is meaningless with no payload shape to map from).
 function syncWebhookFields() {
-  if (!els.jobWebhookProvider) return;
   const provider = els.jobWebhookProvider.value;
   const enabled = !!provider;
-  if (els.jobWebhookSecretRow) els.jobWebhookSecretRow.hidden = !enabled;
-  if (els.jobWebhookEventsRow) els.jobWebhookEventsRow.hidden = provider !== 'github';
-  if (els.jobWebhookMappingSection) els.jobWebhookMappingSection.hidden = !enabled;
+  els.jobWebhookSecretRow.hidden = !enabled;
+  els.jobWebhookEventsRow.hidden = provider !== 'github';
+  els.jobWebhookMappingSection.hidden = !enabled;
 }
 
 // Returns null when disabled (provider unset) so buildJobPayload can clear
 // the job's webhook on save; otherwise the {provider, secret, mapping,
 // events} object the server expects.
 function buildWebhookField() {
-  const provider = els.jobWebhookProvider ? els.jobWebhookProvider.value : '';
+  const provider = els.jobWebhookProvider.value;
   if (!provider) return null;
-  const secret = els.jobWebhookSecretInput ? els.jobWebhookSecretInput.value.trim() : '';
+  const secret = els.jobWebhookSecretInput.value.trim();
   if (!secret) throw new Error('Webhook: secret is required');
   const mapping = readMappingEditor();  // may throw
   const out = { provider: provider, secret: secret, mapping: mapping };
   if (provider === 'github') {
-    const eventsRaw = els.jobWebhookEventsInput ? els.jobWebhookEventsInput.value.trim() : '';
+    const eventsRaw = els.jobWebhookEventsInput.value.trim();
     if (eventsRaw) {
       out.events = eventsRaw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
     }
@@ -314,7 +309,7 @@ export function openRunDialog(job, prefill, staleKeys) {
     host.appendChild(renderRunDialogField(p, prefill));
   });
 
-  if (els.jobRunDialogDryRun) setSwitch(els.jobRunDialogDryRun, false);
+  setSwitch(els.jobRunDialogDryRun, false);
   if (els.jobRunDialog.showModal) els.jobRunDialog.showModal();
 }
 
@@ -400,7 +395,7 @@ async function submitRunDialog(ev) {
     return;
   }
   const job = runDialogJob;
-  const dry = !!(els.jobRunDialogDryRun && els.jobRunDialogDryRun.getAttribute('aria-checked') === 'true');
+  const dry = els.jobRunDialogDryRun.getAttribute('aria-checked') === 'true';
   if (els.jobRunDialog.close) els.jobRunDialog.close();
   runDialogJob = null;
   await runJobNow(job, {
@@ -436,23 +431,13 @@ export function openJobDialog(job) {
   // Job-kind registry. Empty kind = "auto (from extension)",
   // the back-compat default every pre-existing job round-trips through.
   const kindConfig = (job && job.kind_config) || {};
-  if (els.jobKindInput) els.jobKindInput.value = (job && job.kind) || '';
-  if (els.jobInlineExtInput) {
-    els.jobInlineExtInput.value = kindConfig.ext || '.ps1';
-  }
-  if (els.jobInlineBodyInput) {
-    els.jobInlineBodyInput.value = kindConfig.script_body || '';
-  }
-  if (els.jobHttpUrlInput) els.jobHttpUrlInput.value = kindConfig.url || '';
-  if (els.jobHttpMethodInput) {
-    els.jobHttpMethodInput.value = kindConfig.method || 'GET';
-  }
-  if (els.jobHttpExpectStatusInput) {
-    els.jobHttpExpectStatusInput.value = kindConfig.expect_status || '';
-  }
-  if (els.jobHttpTimeoutInput) {
-    els.jobHttpTimeoutInput.value = kindConfig.timeout || '';
-  }
+  els.jobKindInput.value = (job && job.kind) || '';
+  els.jobInlineExtInput.value = kindConfig.ext || '.ps1';
+  els.jobInlineBodyInput.value = kindConfig.script_body || '';
+  els.jobHttpUrlInput.value = kindConfig.url || '';
+  els.jobHttpMethodInput.value = kindConfig.method || 'GET';
+  els.jobHttpExpectStatusInput.value = kindConfig.expect_status || '';
+  els.jobHttpTimeoutInput.value = kindConfig.timeout || '';
   syncKindFields();
 
   const sched = (job && job.schedule) || { type: 'none' };
@@ -473,25 +458,15 @@ export function openJobDialog(job) {
     els.jobScheduleTimes.value = '';
   }
   els.jobScheduleDay.value = sched.day || 'MON';
-  if (els.jobScheduleOnceAt) {
-    els.jobScheduleOnceAt.value =
-      (sched.type === 'once' && typeof sched.at === 'string') ? sched.at : '';
-  }
+  els.jobScheduleOnceAt.value =
+    (sched.type === 'once' && typeof sched.at === 'string') ? sched.at : '';
   syncScheduleFields();
 
-  if (els.jobCooldownInput) {
-    const cd = job && Number.isFinite(job.cooldown_seconds) ? job.cooldown_seconds : 0;
-    els.jobCooldownInput.value = cd > 0 ? String(cd) : '';
-  }
-  if (els.jobMutexGroupInput) {
-    els.jobMutexGroupInput.value = (job && job.mutex_group) || '';
-  }
-  if (els.jobAlertOnFailureInput) {
-    setSwitch(els.jobAlertOnFailureInput, !!(job && job.alert_on_failure));
-  }
-  if (els.jobConfirmInput) {
-    setSwitch(els.jobConfirmInput, !!(job && job.confirm));
-  }
+  const cd = job && Number.isFinite(job.cooldown_seconds) ? job.cooldown_seconds : 0;
+  els.jobCooldownInput.value = cd > 0 ? String(cd) : '';
+  els.jobMutexGroupInput.value = (job && job.mutex_group) || '';
+  setSwitch(els.jobAlertOnFailureInput, !!(job && job.alert_on_failure));
+  setSwitch(els.jobConfirmInput, !!(job && job.confirm));
   populateChainList(
     els.jobOnSuccessList,
     job ? (job.on_success || []) : [],
@@ -508,11 +483,9 @@ export function openJobDialog(job) {
   setParamsEditor(job ? job.params : []);
 
   const webhook = job && job.webhook;
-  if (els.jobWebhookProvider) els.jobWebhookProvider.value = webhook ? webhook.provider : '';
-  if (els.jobWebhookSecretInput) els.jobWebhookSecretInput.value = webhook ? webhook.secret : '';
-  if (els.jobWebhookEventsInput) {
-    els.jobWebhookEventsInput.value = (webhook && webhook.events) ? webhook.events.join(', ') : '';
-  }
+  els.jobWebhookProvider.value = webhook ? webhook.provider : '';
+  els.jobWebhookSecretInput.value = webhook ? webhook.secret : '';
+  els.jobWebhookEventsInput.value = (webhook && webhook.events) ? webhook.events.join(', ') : '';
   setMappingEditor(webhook ? webhook.mapping : {});
   syncWebhookFields();
 
@@ -526,7 +499,7 @@ function syncScheduleFields() {
   els.jobScheduleAtRow.hidden = !(t === 'daily' || t === 'weekly');
   els.jobScheduleTimesRow.hidden = t !== 'daily_times';
   els.jobScheduleDayRow.hidden = t !== 'weekly';
-  if (els.jobScheduleOnceRow) els.jobScheduleOnceRow.hidden = t !== 'once';
+  els.jobScheduleOnceRow.hidden = t !== 'once';
 }
 
 // Job-kind registry. "" (auto) and every file-kind
@@ -535,14 +508,13 @@ function syncScheduleFields() {
 // swaps it for url/method/expect-status/timeout. Args apply to every kind
 // except http-check (its build_argv never appends the composed tail).
 function syncKindFields() {
-  if (!els.jobKindInput) return;
   const k = els.jobKindInput.value;
   const isInline = k === 'inline-shell';
   const isHttpCheck = k === 'http-check';
-  if (els.jobScriptRow) els.jobScriptRow.hidden = isInline || isHttpCheck;
-  if (els.jobInlineShellFields) els.jobInlineShellFields.hidden = !isInline;
-  if (els.jobHttpCheckFields) els.jobHttpCheckFields.hidden = !isHttpCheck;
-  if (els.jobArgsRow) els.jobArgsRow.hidden = isHttpCheck;
+  els.jobScriptRow.hidden = isInline || isHttpCheck;
+  els.jobInlineShellFields.hidden = !isInline;
+  els.jobHttpCheckFields.hidden = !isHttpCheck;
+  els.jobArgsRow.hidden = isHttpCheck;
 }
 
 function buildSchedule() {
@@ -575,7 +547,7 @@ function buildSchedule() {
     return { type: 'weekly', day: els.jobScheduleDay.value, at: at };
   }
   if (t === 'once') {
-    const at = (els.jobScheduleOnceAt && els.jobScheduleOnceAt.value || '').trim();
+    const at = els.jobScheduleOnceAt.value.trim();
     if (!/^\d{4}-\d{2}-\d{2}T[0-2]\d:[0-5]\d$/.test(at)) {
       throw new Error('Once: pick a date and time');
     }
@@ -590,19 +562,14 @@ function buildSchedule() {
 let lastJobPayload = null;
 
 function clearPreflightProblems() {
-  if (els.jobPreflightProblems) {
-    els.jobPreflightProblems.innerHTML = '';
-    els.jobPreflightProblems.hidden = true;
-  }
-  if (els.jobSaveAnyway) els.jobSaveAnyway.hidden = true;
-  if (els.jobSaveBtn) {
-    els.jobSaveBtn.textContent = dialogTargetId ? 'Save and verify' : 'Add and verify';
-  }
+  els.jobPreflightProblems.innerHTML = '';
+  els.jobPreflightProblems.hidden = true;
+  els.jobSaveAnyway.hidden = true;
+  els.jobSaveBtn.textContent = dialogTargetId ? 'Save and verify' : 'Add and verify';
 }
 
 function renderPreflightProblems(problems) {
   const host = els.jobPreflightProblems;
-  if (!host) return;
   host.innerHTML = '';
   (problems || []).forEach(function (p) {
     const li = document.createElement('li');
@@ -624,26 +591,26 @@ function renderPreflightProblems(problems) {
 // carry their settings in kind_config and leave script_path empty; every
 // other kind (including "" / auto) is the plain script_path path.
 function buildKindFields() {
-  const kind = els.jobKindInput ? els.jobKindInput.value : '';
+  const kind = els.jobKindInput.value;
   if (kind === 'inline-shell') {
-    const ext = els.jobInlineExtInput ? els.jobInlineExtInput.value : '.ps1';
-    const body = els.jobInlineBodyInput ? els.jobInlineBodyInput.value : '';
+    const ext = els.jobInlineExtInput.value;
+    const body = els.jobInlineBodyInput.value;
     if (!body.trim()) throw new Error('Inline-shell needs a script body');
     return { kind: kind, script_path: '', kind_config: { script_body: body, ext: ext } };
   }
   if (kind === 'http-check') {
-    const url = els.jobHttpUrlInput ? els.jobHttpUrlInput.value.trim() : '';
+    const url = els.jobHttpUrlInput.value.trim();
     if (!url) throw new Error('HTTP check needs a URL');
     const kindConfig = { url: url };
-    const method = els.jobHttpMethodInput ? els.jobHttpMethodInput.value : '';
+    const method = els.jobHttpMethodInput.value;
     if (method && method !== 'GET') kindConfig.method = method;
-    const statusRaw = els.jobHttpExpectStatusInput ? els.jobHttpExpectStatusInput.value.trim() : '';
+    const statusRaw = els.jobHttpExpectStatusInput.value.trim();
     if (statusRaw) {
       const status = parseInt(statusRaw, 10);
       if (!Number.isFinite(status)) throw new Error('Expected status must be a number');
       kindConfig.expect_status = status;
     }
-    const timeoutRaw = els.jobHttpTimeoutInput ? els.jobHttpTimeoutInput.value.trim() : '';
+    const timeoutRaw = els.jobHttpTimeoutInput.value.trim();
     if (timeoutRaw) {
       const timeout = parseFloat(timeoutRaw);
       if (!Number.isFinite(timeout)) throw new Error('Timeout must be a number');
@@ -674,7 +641,7 @@ function buildJobPayload() {
   // means "leave unchanged," not "clear". "0" → same as empty
   // (treated as off). Negative or non-numeric → tell the user; the server
   // cap (>86400) we let the server reject so the limit lives in one place.
-  const cdRaw = els.jobCooldownInput ? els.jobCooldownInput.value.trim() : '';
+  const cdRaw = els.jobCooldownInput.value.trim();
   if (cdRaw) {
     const cd = parseInt(cdRaw, 10);
     if (!Number.isFinite(cd) || cd < 0) {
@@ -688,7 +655,7 @@ function buildJobPayload() {
   // Empty → omit (server treats as null); the server validates the shape
   // (lowercase alnum + _/-, starts with letter, <=32 chars) so the
   // 400 surfaces here as a normal toast.
-  const mg = els.jobMutexGroupInput ? els.jobMutexGroupInput.value.trim() : '';
+  const mg = els.jobMutexGroupInput.value.trim();
   if (mg) payload.mutex_group = mg;
   else if (dialogTargetId) payload.mutex_group = null;  // clear on edit
   // Chain edges. Always send both keys on submit so a
@@ -696,9 +663,9 @@ function buildJobPayload() {
   payload.on_success = readChainList(els.jobOnSuccessList, 'on_success');
   payload.on_failure = readChainList(els.jobOnFailureList, 'on_failure');
   // Alert-to-Telegram-on-failure. Always send so unchecking clears it.
-  payload.alert_on_failure = !!(els.jobAlertOnFailureInput && els.jobAlertOnFailureInput.getAttribute('aria-checked') === 'true');
+  payload.alert_on_failure = els.jobAlertOnFailureInput.getAttribute('aria-checked') === 'true';
   // Confirm-on-fire. Always send so unchecking clears it.
-  payload.confirm = !!(els.jobConfirmInput && els.jobConfirmInput.getAttribute('aria-checked') === 'true');
+  payload.confirm = els.jobConfirmInput.getAttribute('aria-checked') === 'true';
   // Webhook trigger. null clears an existing config when the
   // provider is set back to "None" on edit.
   payload.webhook = buildWebhookField();  // may throw
@@ -720,7 +687,7 @@ async function postJobPayload(payload) {
     // dialog open, show the warnings, and offer "Save anyway".
     if (res && res.saved === false) {
       renderPreflightProblems(res.warnings || []);
-      if (els.jobSaveAnyway) els.jobSaveAnyway.hidden = false;
+      els.jobSaveAnyway.hidden = false;
       return;
     }
     if (els.jobDialog.close) els.jobDialog.close();
@@ -738,7 +705,7 @@ async function postJobPayload(payload) {
     const detail = exc && exc.body && exc.body.detail;
     if (exc && exc.status === 400 && detail && detail.reason === 'preflight') {
       renderPreflightProblems(detail.problems || []);
-      if (els.jobSaveAnyway) els.jobSaveAnyway.hidden = true;
+      els.jobSaveAnyway.hidden = true;
       return;
     }
     apiFailToast('Save failed', exc);
@@ -766,66 +733,39 @@ async function saveJobAnyway() {
 // -------------------------------------------------------------- wiring
 
 export function wireJobDialogs() {
-  if (els.jobsAddBtn) {
-    els.jobsAddBtn.addEventListener('click', function () { openJobDialog(null); });
-    // The ➕ Add job button lives in the Registered-jobs card's <summary>, so a
-    // click there would also toggle the <details>. Stop the click at the actions
-    // container — same trick the Running-sessions card uses (sessions.js).
-    const headerActions = els.jobsAddBtn.closest('.jobs-header-actions');
-    if (headerActions) {
-      headerActions.addEventListener('click', function (ev) { ev.stopPropagation(); });
-    }
+  els.jobsAddBtn.addEventListener('click', function () { openJobDialog(null); });
+  // The ➕ Add job button lives in the Registered-jobs card's <summary>, so a
+  // click there would also toggle the <details>. Stop the click at the actions
+  // container — same trick the Running-sessions card uses (sessions.js).
+  const headerActions = els.jobsAddBtn.closest('.jobs-header-actions');
+  if (headerActions) {
+    headerActions.addEventListener('click', function (ev) { ev.stopPropagation(); });
   }
-  if (els.jobForm) {
-    els.jobForm.addEventListener('submit', submitJobDialog);
-  }
-  if (els.jobSaveAnyway) {
-    els.jobSaveAnyway.addEventListener('click', function () {
-      saveJobAnyway().catch(function () {});
-    });
-  }
-  if (els.jobCancel) {
-    els.jobCancel.addEventListener('click', function () {
-      if (els.jobDialog.close) els.jobDialog.close();
-    });
-  }
-  if (els.jobScheduleType) {
-    els.jobScheduleType.addEventListener('change', syncScheduleFields);
-  }
-  if (els.jobKindInput) {
-    els.jobKindInput.addEventListener('change', syncKindFields);
-  }
-  if (els.jobParamsAdd) {
-    els.jobParamsAdd.addEventListener('click', function () {
-      if (els.jobParamsList) {
-        els.jobParamsList.appendChild(renderParamRow(null));
-      }
-    });
-  }
-  if (els.jobWebhookProvider) {
-    els.jobWebhookProvider.addEventListener('change', syncWebhookFields);
-  }
-  if (els.jobWebhookMappingAdd) {
-    els.jobWebhookMappingAdd.addEventListener('click', function () {
-      if (els.jobWebhookMappingList) {
-        els.jobWebhookMappingList.appendChild(renderMappingRow(null, null));
-      }
-    });
-  }
-  if (els.jobRunForm) {
-    els.jobRunForm.addEventListener('submit', submitRunDialog);
-  }
-  if (els.jobRunCancel) {
-    els.jobRunCancel.addEventListener('click', function () {
-      if (els.jobRunDialog && els.jobRunDialog.close) els.jobRunDialog.close();
-      runDialogJob = null;
-    });
-  }
+  els.jobForm.addEventListener('submit', submitJobDialog);
+  els.jobSaveAnyway.addEventListener('click', function () {
+    saveJobAnyway().catch(function () {});
+  });
+  els.jobCancel.addEventListener('click', function () {
+    if (els.jobDialog.close) els.jobDialog.close();
+  });
+  els.jobScheduleType.addEventListener('change', syncScheduleFields);
+  els.jobKindInput.addEventListener('change', syncKindFields);
+  els.jobParamsAdd.addEventListener('click', function () {
+    els.jobParamsList.appendChild(renderParamRow(null));
+  });
+  els.jobWebhookProvider.addEventListener('change', syncWebhookFields);
+  els.jobWebhookMappingAdd.addEventListener('click', function () {
+    els.jobWebhookMappingList.appendChild(renderMappingRow(null, null));
+  });
+  els.jobRunForm.addEventListener('submit', submitRunDialog);
+  els.jobRunCancel.addEventListener('click', function () {
+    if (els.jobRunDialog.close) els.jobRunDialog.close();
+    runDialogJob = null;
+  });
   // Alert-on-failure + Require-confirmation + Dry-run role="switch"
   // buttons — no native checkbox toggling any more, so the
   // click has to flip aria-checked.
   [els.jobAlertOnFailureInput, els.jobConfirmInput, els.jobRunDialogDryRun].forEach(function (btn) {
-    if (!btn) return;
     btn.addEventListener('click', function () {
       setSwitch(btn, btn.getAttribute('aria-checked') !== 'true');
     });
