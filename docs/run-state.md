@@ -4,7 +4,7 @@ A Jobs run has real modes (waiting, pending, running, succeeded, failed, killed,
 
 ## Why it is declared
 
-Each reader used to decide on its own which strings mean "live", and they disagreed: the `running` field of `GET /api/jobs` counted only `running`, the mutex gate and the reaper counted `running` and `pending`, the output stream counted `queued` too, and the Jobs tab patched the first row client-side. The disagreement hid a real defect: the reaper only reconciled a record that carried a `pid`, and the pid is written only after the child spawns, so a record whose executor died before that point stayed live forever and held its mutex group until someone tapped Kill. A declared state turns that into a derived `failed` with a reason.
+A run's liveness is read in several places: the `running` field of `GET /api/jobs`, the mutex gate, the reaper, the output stream and the Jobs tab. They must agree on which `status` strings mean "live", so one mapping from the record's facts to a mode serves all of them. The mapping also covers a record whose executor died before the child spawned: the pid is written only after the spawn, so a reaper that reconciled only records carrying a `pid` would leave such a record live forever, holding its mutex group until someone tapped Kill. `derive_run_state` turns it into a derived `failed` with a reason.
 
 ## States
 
