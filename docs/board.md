@@ -85,7 +85,7 @@ The frontend precedence lives in one place — `sessions.js`'s `sessionTitle()` 
 
 A card's `status` is the hook row's own status, mapped by `src/board_sessions.py::_card_status()`: `working` and `idle` pass through, the writer's `needs-you` becomes `awaiting-input` (the only status that routes to **Your turn**), and anything else — a missing row, an unrecognised value — is `unknown`. The raw `needs-you` string never reaches a card.
 
-No transcript content is read. The Board used to parse Claude Code's transcript JSONL to override a stale hook status and to split `needs-you` further; Copilot's `events.jsonl` is a different format (typed `user.message` / `assistant.message` / `tool.execution_start` events), so those parsers never matched anything the Copilot hooks point at, and the layer was removed rather than ported. The only thing a transcript path is still used for is the external-row liveness check above, which stats the file's mtime and is format-agnostic.
+No transcript content is read. A transcript path is only used for the external-row liveness check above, which stats the file's mtime and is format-agnostic.
 
 ## The drill-down drawer and its PTY-write path
 
