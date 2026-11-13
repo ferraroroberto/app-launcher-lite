@@ -61,7 +61,7 @@ def scenario_inpage_loopback_open_is_not_treated_as_mirror(
     # off. The terminal must be opened *after* /api/status has resolved, or
     # both old and new code see a null status and compute isMirror=false,
     # making this test pass vacuously (it would no longer fail on the bug).
-    # fetchVersion() runs immediately after fetchStatus() in refetchAll(), so the
+    # fetchVersion() runs after fetchStatus() in refetchAll(), so the
     # build line carrying text proves the status (and its loopback reason) is
     # loaded.
     expect(authed_page.locator("#buildReadout")).to_contain_text(
