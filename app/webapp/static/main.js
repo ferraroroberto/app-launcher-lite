@@ -251,34 +251,40 @@ async function refetchAll() {
   }); };
   // The header's CPU reading fills alongside the rest of boot.
   const load = safe(fetchSystemLoad);
+  // openTerminal() reads exactly these four: the agent registry and session
+  // list (fullscreen handling), the status (reachability gate) and the
+  // passkey state (token gate). The deep link opens once they have settled,
+  // not behind the panel fetches below, which each take seconds under load.
   await safe(fetchAgents);
+  await safe(fetchSessions);
+  await safe(fetchStatus);
+  await safe(fetchWebauthnStatus);
+
+  // PC mirror window opened with ?terminal=<sid> — drop straight in.
+  if (!deepLinkHandled && deepLinkSid) {
+    deepLinkHandled = true;
+    const found = state.sessions.find(function (s) {
+      return s.session_id === deepLinkSid;
+    });
+    openTerminal(found || { session_id: deepLinkSid, name: deepLinkSid });
+  }
+
   await safe(fetchApps);
   await safe(fetchSkills);
-  await safe(fetchSessions);
   await safe(fetchListeners);
   await safe(fetchRunningApps);
-  await safe(fetchStatus);
   await safe(fetchVersion);
-  await safe(fetchWebauthnStatus);
   // Git flags fill without a tap: one fetch at boot, then the slow
   // poll below keeps them current while a git-reading tab is visible.
   await safe(function () { return refreshGitStatus({ quiet: true }); });
 
-  // PC mirror window opened with ?terminal=<sid> — drop straight in.
   if (!deepLinkHandled) {
     deepLinkHandled = true;
-    if (deepLinkSid) {
-      const found = state.sessions.find(function (s) {
-        return s.session_id === deepLinkSid;
-      });
-      openTerminal(found || { session_id: deepLinkSid, name: deepLinkSid });
-    } else {
-      // ?board=<sid>: a Slack ping lands on that session's
-      // Board card, drawer open. Mutually exclusive with ?terminal= by
-      // construction (each link carries one param).
-      const boardSid = consumeUrlParam('board');
-      if (boardSid) openBoardCard(boardSid).catch(function () {});
-    }
+    // ?board=<sid>: a Slack ping lands on that session's
+    // Board card, drawer open. Mutually exclusive with ?terminal= by
+    // construction (each link carries one param).
+    const boardSid = consumeUrlParam('board');
+    if (boardSid) openBoardCard(boardSid).catch(function () {});
   }
   startPollers(load);
 }

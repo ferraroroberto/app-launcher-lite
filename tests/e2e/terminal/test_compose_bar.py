@@ -62,6 +62,34 @@ def _open_terminal(page: Page, base_url: str, sid: str) -> None:
     )
 
 
+# Boot fetches that fill panels unrelated to the terminal. A deep-linked
+# terminal must not wait on any of them.
+_UNRELATED_BOOT_FETCHES = re.compile(
+    r".*/api/(apps|apps/running|team-os/skills|ports/probe|version"
+    r"|coding/git-status)(\?.*)?$"
+)
+
+
+def scenario_terminal_opens_while_unrelated_boot_fetches_stall(
+    authed_page: Page, base_url: str, launched_pty_session: str
+) -> None:
+    """The ``?terminal=<sid>`` overlay opens without waiting on unrelated panels.
+
+    Under full-suite load each boot fetch takes seconds, and the deep link used
+    to open only after every one of them had settled, so ``#terminalOverlay``
+    missed its 10 s wait. Holding those requests in flight makes the stall
+    deterministic: the overlay may depend only on config, agents, sessions,
+    status and the passkey state.
+    """
+    held: list = []
+    authed_page.route(_UNRELATED_BOOT_FETCHES, lambda route: held.append(route))
+    authed_page.goto(
+        f"{base_url}/?terminal={launched_pty_session}", wait_until="domcontentloaded"
+    )
+    expect(authed_page.locator("#terminalOverlay")).to_be_visible(timeout=10_000)
+    assert held, "no unrelated boot fetch was held — the route pattern matches nothing"
+
+
 def scenario_compose_button_hidden_in_mirror(
     authed_page: Page, base_url: str, launched_pty_session: str
 ) -> None:
@@ -340,6 +368,7 @@ def test_terminal_input_flow(run_flow) -> None:
     browser context and reports every scenario that fails, not just the first.
     """
     run_flow(
+        scenario_terminal_opens_while_unrelated_boot_fetches_stall,
         scenario_compose_button_hidden_in_mirror,
         scenario_compose_send_forwards_text_to_pty,
         scenario_compose_send_submits_cr_in_its_own_frame,
