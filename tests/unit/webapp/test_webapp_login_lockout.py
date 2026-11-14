@@ -6,6 +6,7 @@ here waits or sends a real Telegram message.
 
 from __future__ import annotations
 
+import logging
 import threading
 from types import SimpleNamespace
 from typing import List
@@ -14,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from app.webapp.routers import auth as auth_router
 from src.login_lockout import LoginLockout
-from src.notify import TelegramNotifier
+from src.notify import NotifierError, TelegramNotifier
 
 PASSWORD = "hunter2"
 TOKEN = "secret-token"
@@ -42,7 +43,11 @@ class FakeNotifier:
         self.threads.append(threading.get_ident())
 
 
-def _arm(app, clock: FakeClock, notifier: FakeNotifier | None = None, *, spawn=None):
+def _inline(fn):
+    fn()
+
+
+def _arm(app, clock: FakeClock, notifier=None, *, spawn=_inline):
     """Replace the app's lock-out with one on the fake clock (and fake notifier)."""
     app.state.webapp_config.auth_password = PASSWORD
     app.state.webapp_config.auth_token = TOKEN
@@ -51,7 +56,7 @@ def _arm(app, clock: FakeClock, notifier: FakeNotifier | None = None, *, spawn=N
         on_alert = auth_router.make_login_alert(
             lambda: app.state.webapp_config,
             build=lambda _cfg: notifier,
-            spawn=spawn or (lambda fn: fn()),
+            spawn=spawn,
         )
     app.state.login_lockout = LoginLockout(clock=clock, on_alert=on_alert)
 
@@ -186,7 +191,7 @@ class TestAlert:
             sent.set()
 
         notifier.send_text = send_text  # type: ignore[method-assign]
-        _arm(app, FakeClock(), notifier, spawn=auth_router._start_thread)
+        _arm(app, FakeClock(), notifier, spawn=None)
         for _ in range(3):
             _wrong(client)
         assert sent.wait(timeout=5)
@@ -197,11 +202,26 @@ class TestAlert:
         notifier = FakeNotifier()
 
         def boom(text: str) -> None:
-            raise auth_router.NotifierError("down")
+            raise NotifierError("down")
 
         notifier.send_text = boom  # type: ignore[method-assign]
         _arm(app, FakeClock(), notifier)
         assert [_wrong(client).status_code for _ in range(3)] == [401] * 3
+
+    def test_no_alert_channel_is_reported_unconfigured(self, webapp_client, caplog):
+        client, app, _ = webapp_client
+        app.state.webapp_config.auth_password = PASSWORD
+        app.state.webapp_config.auth_token = TOKEN
+        app.state.login_lockout = LoginLockout(
+            clock=FakeClock(),
+            on_alert=auth_router.make_login_alert(
+                lambda: app.state.webapp_config, build=lambda _cfg: None, spawn=_inline
+            ),
+        )
+        with caplog.at_level(logging.WARNING, logger="src.login_alert"):
+            for _ in range(3):
+                _wrong(client)
+        assert "unconfigured" in caplog.text and "3 wrong passwords" in caplog.text
 
 
 class TestAlertNotifier:
