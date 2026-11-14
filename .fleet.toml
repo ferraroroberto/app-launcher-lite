@@ -51,7 +51,7 @@ structure_band = { src = "scripts/structure_band.py", sha = "3b708fd3c54ab7b93b0
 box_lock_gate = { src = "scripts/box_lock_gate.ps1", sha = "de5b351ecbc58f0908bc1cbdcdf76fd41f36005d", dest = "scripts/box_lock_gate.ps1" }
 comment_ratchet = { src = "scripts/comment_ratchet.py", sha = "1ed07ddb5002d4513adf0ce45f1bfaf68f3acc32", dest = "scripts/comment_ratchet.py" }
 instruction_ratchet = { src = "scripts/instruction_ratchet.py", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "scripts/instruction_ratchet.py" }
-doc_refs_ratchet = { src = "scripts/doc_refs_ratchet.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/doc_refs_ratchet.py" }
+doc_refs_ratchet = { src = "scripts/doc_refs_ratchet.py", sha = "a68f6e49393f0ef0b94ab3c79f4338a50d89fa49", dest = "scripts/doc_refs_ratchet.py" }
 dead_code_ratchet = { src = "scripts/dead_code_ratchet.py", sha = "4d0b0ff30e23eb95c73c4b0b1517ec6a43d3a836", dest = "scripts/dead_code_ratchet.py" }
 conventions_ratchet = { src = "scripts/conventions_ratchet.py", sha = "ab06ad732591d4edab00774ee93a455189c14577", dest = "scripts/conventions_ratchet.py" }
 conventions_readers = { src = "scripts/conventions_readers.py", sha = "ab06ad732591d4edab00774ee93a455189c14577", dest = "scripts/conventions_readers.py" }
@@ -305,6 +305,7 @@ repeated_text_words = 12
 # `port` above is the webapp's :8465, the only port the ratchet resolves by itself.
 [doc_refs_ratchet]
 enabled    = true
+trees    = true
 baseline   = ".doc-refs-ratchet-baseline.json"
 allow_refs = [":8466"]
 
