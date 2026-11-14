@@ -70,6 +70,8 @@ icons = { src = "app/webapp/static/_vendored/icons", sha = "4d75f1ebfae5c9d8462c
 single_instance = { src = "app/tray/single_instance.py", sha = "da2e9350daee6ab9d25d399daca21663aa509030", dest = "app/tray/single_instance.py" }
 tray_watchdog = { src = "app/tray/watchdog.py", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "app/tray/watchdog.py" }
 classify_e2e = { src = "scripts/classify_e2e.py", sha = "3f15581f2188895a27f5a32083f7f7cdb7e93648", dest = "scripts/classify_e2e.py" }
+toast = { src = "app/webapp/static/_vendored/toast", sha = "9435d994dfc621809d9bee30240675a2423013e4", dest = "app/webapp/static/_vendored/toast" }
+build-watch = { src = "app/webapp/static/_vendored/build-watch", sha = "9435d994dfc621809d9bee30240675a2423013e4", dest = "app/webapp/static/_vendored/build-watch" }
 
 
 # [e2e] -- diff-proportionate routing for scripts/verify-before-ship.ps1's browser

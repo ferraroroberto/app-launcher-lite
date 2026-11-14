@@ -279,7 +279,6 @@ export const els = {
   sessionRenameInput: document.getElementById('sessionRenameInput'),
   sessionRenameCancel: document.getElementById('sessionRenameCancel'),
 
-  toast: document.getElementById('toast'),
 
   terminalOverlay: document.getElementById('terminalOverlay'),
   terminalBar: document.querySelector('.terminal-bar'),

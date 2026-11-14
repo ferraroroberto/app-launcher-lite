@@ -7,7 +7,7 @@
 
 import { els, state, TOKEN_KEY } from './state.js';
 import { requestSignIn } from './_vendored/sign-in/sign-in.js';
-import { icon } from './_vendored/icons/icons.js';
+import { showToast as toast } from './_vendored/toast/toast.js';
 
 // --------------------------------------------------------------- tokens
 // Read a `?<name>=<value>` deep-link param once, strip it from the visible
@@ -168,23 +168,9 @@ export function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
-let toastTimer = null;
-// opts.icon (a Lucide glyph name) renders a leading icon before the escaped
-// message; without it the toast stays plain text as before.
-export function toast(msg, kind, opts) {
-  const iconName = opts && opts.icon;
-  if (iconName) {
-    els.toast.innerHTML = icon(iconName) + ' ' + escapeHtml(msg);
-  } else {
-    els.toast.textContent = msg;
-  }
-  els.toast.className = 'toast ' + (kind || '');
-  els.toast.hidden = false;
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(function () {
-    els.toast.hidden = true;
-  }, kind === 'error' ? 4500 : 2200);
-}
+// The fleet's vendored toast: toast(msg, kind, { icon }) — only 'error' tints,
+// every other kind renders neutral.
+export { toast };
 
 // Toast a failed API call as "<prefix>: <message>" (error styling) — unless
 // exc is an AuthRequiredError, in which case the sign-in sheet already went
