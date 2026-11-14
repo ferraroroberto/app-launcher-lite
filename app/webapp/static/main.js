@@ -25,6 +25,7 @@ import { icon } from './_vendored/icons/icons.js';
 import { setSwitch } from './_vendored/switch/switch.js';
 import { bindTextSize } from './_vendored/text-size/text-size.js';
 import { buildReadoutText } from './_vendored/page-foot/page-foot.js';
+import { initBuildWatch } from './_vendored/build-watch/build-watch.js';
 
 // --------------------------------------------------------- settings panel
 // One edit-mode state, two switches: the Settings-head toggle and the
@@ -233,6 +234,9 @@ function startPollers(load) {
     if (state.tab !== 'coding' && state.tab !== 'board') return;
     refreshGitStatus({ quiet: true }).catch(function () {});
   }, GIT_STATUS_POLL_MS);
+  // "New version available · Reload" when a deploy lands under an open page;
+  // /api/version is auth-gated, so it reads through the bearer-token jsonApi.
+  initBuildWatch({ fetchJson: jsonApi });
 }
 
 async function refetchAll() {
