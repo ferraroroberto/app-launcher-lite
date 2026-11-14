@@ -45,3 +45,6 @@ webapp/e2e-autoboot-webapp-config.json
 # --- Interactive-terminal scratch (image uploads land here) --------------
 .launcher-tmp/
 .proof/
+
+# The app password hash (src/password.py)
+config/app_password.json

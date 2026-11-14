@@ -41,6 +41,7 @@
 /src/build_info.py
 /src/login_lockout.py
 /src/notify
+/src/password.py
 /src/runtime_data.py
 /src/usage_log.py
 /tests/e2e/_browser_sweep.py

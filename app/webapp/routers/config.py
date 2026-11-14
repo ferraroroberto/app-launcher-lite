@@ -18,7 +18,7 @@ from app.webapp.routers._helpers import (
     copilot_flags_payload,
     maybe_json,
 )
-from src import boot_autostart
+from src import boot_autostart, password
 from src.app_config import resolve_webapp_port
 from src.launch_flags import build_copilot_flags
 from src.webapp_config import (
@@ -52,7 +52,7 @@ async def get_config(request: Request) -> Dict[str, Any]:
         "terminal_history_lines_min": MIN_TERMINAL_HISTORY_LINES,
         "terminal_history_lines_max": MAX_TERMINAL_HISTORY_LINES,
         "copilot": copilot_flags_payload(cfg),
-        "auth_password_set": bool(cfg.auth_password),
+        "auth_password_set": password.is_configured(legacy=cfg.auth_password),
         # Boot-autostart toggle: live-queried, not stored in
         # webapp_config.json — the Startup-folder wrapper bat's presence
         # *is* the state, so a stale cached bool can never drift from it.

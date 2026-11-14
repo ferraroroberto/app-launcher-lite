@@ -8,6 +8,19 @@ we want to validate the gate, not bypass it.
 
 from __future__ import annotations
 
+from src import password
+
+
+class TestStoredHash:
+    def test_stored_hash_replaces_the_legacy_password(self, webapp_client, tmp_path, monkeypatch):
+        monkeypatch.setenv(password.ENV_VAR, str(tmp_path / "app_password.json"))
+        client, app, _ = webapp_client
+        app.state.webapp_config.auth_password = "hunter2"
+        app.state.webapp_config.auth_token = "secret-token"
+        password.set_password("4321")
+        assert client.post("/api/login", json={"password": "4321"}).status_code == 200
+        assert client.post("/api/login", json={"password": "hunter2"}).status_code == 401
+
 
 class TestLogin:
     def test_503_when_no_password_configured(self, webapp_client):

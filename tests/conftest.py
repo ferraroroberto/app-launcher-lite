@@ -16,6 +16,7 @@ import importlib
 import json
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Iterator
@@ -26,6 +27,12 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+# The login password hash (src/password.py) is read on every login, so a run
+# must never see the live config/app_password.json: point it at a file that
+# does not exist. Assigned, not defaulted, so no outer value reaches the live
+# file; servers the suite spawns inherit it.
+os.environ["APP_PASSWORD_FILE"] = str(Path(tempfile.mkdtemp(prefix="app-launcher-lite-password-")) / "app_password.json")
 
 
 @pytest.fixture(autouse=True)

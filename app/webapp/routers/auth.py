@@ -22,7 +22,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from app.webapp.middleware import LOOPBACK_HOSTS, via_cloudflare
 from app.webapp.routers._helpers import PROJECT_ROOT, maybe_json
-from src.api_tokens import constant_time_equals
+from src import password
 from src.log_files import ensure_file_log_handler
 from src.login_lockout import LockoutAlert, LoginLockout, retry_after_header
 from src.notify import Notifier, NotifierError, TelegramConfig, build_notifier
@@ -126,9 +126,9 @@ async def login(request: Request) -> Dict[str, Any]:
             detail="too many attempts",
             headers=retry_after_header(wait),
         )
-    if not cfg.auth_password:
+    if not password.is_configured(legacy=cfg.auth_password):
         auth_logger.info(
-            f"⚠️  Login attempt from {client_host} but no auth_password configured"
+            f"⚠️  Login attempt from {client_host} but no password configured"
         )
         raise HTTPException(
             status_code=503, detail="password auth not configured"
@@ -142,7 +142,7 @@ async def login(request: Request) -> Dict[str, Any]:
         )
     body = await maybe_json(request)
     presented = str(body.get("password") or "")
-    if not presented or not constant_time_equals(presented, cfg.auth_password):
+    if not password.check_password(presented, legacy=cfg.auth_password):
         if not is_pc:
             lockout.record_failure(client_host)
         auth_logger.warning(
