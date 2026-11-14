@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import ipaddress
 import logging
-import threading
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Request
@@ -24,8 +23,9 @@ from app.webapp.middleware import LOOPBACK_HOSTS, via_cloudflare
 from app.webapp.routers._helpers import PROJECT_ROOT, maybe_json
 from src import password
 from src.log_files import ensure_file_log_handler
+from src.login_alert import build_login_alert
 from src.login_lockout import LockoutAlert, LoginLockout, retry_after_header
-from src.notify import Notifier, NotifierError, TelegramConfig, build_notifier
+from src.notify import Notifier, TelegramConfig, build_notifier
 from src.webapp_config import WebappConfig
 
 auth_logger = logging.getLogger("launcher.auth")
@@ -71,43 +71,24 @@ def _build_alert_notifier(cfg: WebappConfig) -> Optional[Notifier]:
     return build_notifier("telegram", TelegramConfig(cfg.telegram_bot_token, chat_id))
 
 
-def _start_thread(target: Callable[[], None]) -> None:
-    threading.Thread(target=target, daemon=True, name="login-alert").start()
-
-
 def make_login_alert(
     get_config: Callable[[], WebappConfig],
     *,
     build: Callable[[WebappConfig], Optional[Notifier]] = _build_alert_notifier,
-    spawn: Callable[[Callable[[], None]], None] = _start_thread,
+    spawn: Optional[Callable[[Callable[[], None]], None]] = None,
 ) -> Callable[[LockoutAlert], None]:
-    """``on_alert`` for the lock-out: send one Telegram message from a thread.
+    """``on_alert`` for the lock-out, sent by the vendored login alert.
 
-    The login request returns at once; the message names the app, the client
-    address and the failure count, never a password or the token. The config
-    is read when the alert fires so an edited chat id applies without a restart.
+    The config is read when the alert fires, so an edited chat id applies
+    without a restart. ``spawn`` replaces the alert's send thread in tests.
     """
 
-    def alert_owner(alert: LockoutAlert) -> None:
-        notifier = build(get_config())
-        if notifier is None:
-            auth_logger.info("ℹ️ Login alert not sent: no Telegram bot/chat configured")
-            return
-        held = f" (+{alert.suppressed} more held back)" if alert.suppressed else ""
-        text = (
-            f"🚨 {APP_NAME}: {alert.failures} wrong passwords in a row "
-            f"from {alert.key}{held}"
-        )
+    def notifier() -> Optional[Notifier]:
+        return build(get_config())
 
-        def send() -> None:
-            try:
-                notifier.send_text(text)
-            except NotifierError as exc:
-                auth_logger.warning(f"⚠️ Login alert not delivered: {type(exc).__name__}")
-
-        spawn(send)
-
-    return alert_owner
+    if spawn is None:
+        return build_login_alert(APP_NAME, notifier)
+    return build_login_alert(APP_NAME, notifier, run=spawn)
 
 
 router = APIRouter()
