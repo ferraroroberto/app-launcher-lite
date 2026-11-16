@@ -125,7 +125,6 @@ terminal.js reads these. The opt-in override after the dark
      is the off-track fill; --toggle-track is no longer read. */
   --toggle-knob: #ffffff;
   --on: var(--success);
-  color-scheme: light;
   /* --bottom-tabs-* geometry (height/margin/pill-height/padding/gap/icon/
      label) is intentionally undefined here — nav-tabs.css's
      own canonical var(..., fallback) defaults (61/21/53/4/4/20/11px) are
@@ -166,7 +165,6 @@ terminal.js reads these. The opt-in override after the dark
   --tabbar-pill: rgba(255, 255, 255, 0.14);
   --tabbar-shadow: 0 10px 30px -6px rgba(0, 0, 0, 0.6);
   --toggle-knob: var(--ink);
-  color-scheme: dark;
 }
 
 /* Light terminal screen: the terminal always follows the app theme
