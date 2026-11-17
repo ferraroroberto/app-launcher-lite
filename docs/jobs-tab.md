@@ -1,18 +1,16 @@
 # Jobs tab — reference
 
-The launcher's third surface — a remote-fireable definition + trigger + history layer for one-shot Python scripts and scheduled jobs. Each job is defined once, then any trigger (phone tap, Stream Deck button, schedule) funnels through one executor and produces a uniform run record.
+The launcher's remote-fireable layer for scripts and scheduled jobs. A job is defined once in `config/jobs.json`; every trigger (phone tap, Stream Deck button, Task Scheduler slot, webhook, chain) funnels through one executor and produces a uniform run record with status, duration and output log.
 
-## Why a third surface
-
-The Apps tab launches long-running services (Streamlit, FastAPI siblings, tunnels). The Coding tab launches coding agents in project folders. Both have completely different lifecycles from one-shot scripts: the latter run, exit, and need a "did it work?" record. The Stream Deck can already fire them from the desk, but with no status feedback and no remote trigger. Jobs is the missing piece — same fire-and-forget contract, but reachable from the phone and tied into a uniform history.
+The Apps tab launches long-running services and the Coding tab launches Copilot sessions; neither fits a one-shot script that runs, exits and needs a "did it work?" record. Jobs is that surface.
 
 ## Architecture
 
 ```
    phone tap  --+
  Stream Deck  --+--> POST /api/jobs/<id>/run --+
-   schedule   --+                              +--> launcher.py run-job <id>
- (Task Sched) ----------------------------------+         |
+   webhook    --+                              +--> launcher.py run-job <id>
+   schedule   --+ (Task Scheduler) -------------+         |
                                                           +-- resolve interpreter
                                                           +-- capture output + exit code
                                                           +-- write run record
@@ -20,13 +18,11 @@ The Apps tab launches long-running services (Streamlit, FastAPI siblings, tunnel
                                               webapp/jobs/<id>/<run>/  <-- history
 ```
 
-The single executor is `app/cli/commands/run_job_cmd.py` (`launcher.py run-job <id>`). Task Scheduler calls it directly; the webapp's `POST /api/jobs/<id>/run` route pre-creates the run dir, returns the new `run_id` immediately, then spawns the executor detached so the request never blocks.
-
-Everything that supervises a **live child** — the `visible`-job console tee, the resource sampler, and the last-resort watchdog — lives one module over in `src/run_supervision.py`. Each of those is handed a `pid`/`Popen` plus at most that run's `output.log` path and touches none of the executor's other state, so the seam is clean: `run_job_cmd.py` owns invocation-building, admission control, finalisation, chain dispatch, and the CLI entry point.
+The single executor is `app/cli/commands/run_job_cmd.py` (`launcher.py run-job <id>`). Task Scheduler calls it directly; the webapp's `POST /api/jobs/<id>/run` pre-creates the run directory, returns the `run_id` at once, then spawns the executor detached so the request never blocks.
 
 ## Data model — `config/jobs.json`
 
-Gitignored. Committed template at `config/jobs.sample.json`. Separate file from `apps.json` because the shape is materially different (schedule, run lifecycle).
+Gitignored; the committed template is `config/jobs.sample.json`. It is separate from `apps.json` because the shape differs (schedule, run lifecycle). Add and edit jobs through the Jobs tab or `POST`/`PUT /api/jobs`, which validate and re-sync Task Scheduler; a hand edit skips both.
 
 ```json
 {
@@ -34,18 +30,15 @@ Gitignored. Committed template at `config/jobs.sample.json`. Separate file from 
     {
       "id": "reporting-daily",
       "name": "Daily Reporting",
-      "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\launch_reporting.bat",
+      "script_path": "E:\\automation\\reporting\\run_report.bat",
       "args": "auto",
-      "schedule": { "type": "daily", "at": "06:00" },
-      "added_at": "2026-05-23T07:00:00"
+      "schedule": { "type": "daily", "at": "06:00" }
     },
     {
-      "id": "linkedin-scrape",
-      "name": "LinkedIn Scrape",
-      "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\scrape_comments.py",
-      "args": "",
-      "schedule": { "type": "daily_times", "at": ["06:00", "12:00", "18:00"] },
-      "added_at": "2026-05-23T07:00:00"
+      "id": "scrape",
+      "name": "Scrape",
+      "script_path": "E:\\automation\\scraper\\scrape.py",
+      "schedule": { "type": "daily_times", "at": ["06:00", "12:00", "18:00"] }
     }
   ]
 }
@@ -53,26 +46,22 @@ Gitignored. Committed template at `config/jobs.sample.json`. Separate file from 
 
 ### Job kinds
 
-Dispatch goes through a small registry, `src/jobs_kinds/` — one module per kind, each contributing a `validate()` (save-time pre-flight) and a `build_argv()` (the actual invocation). `app/cli/commands/run_job_cmd.py::build_invocation` just resolves which kind a job is and delegates; there is no `if suffix == …` ladder anymore.
-
-A job's `kind` field selects the module. **`kind` is optional** — when absent, the kind is inferred from `script_path`'s suffix (`.py` → `python`, `.bat` → `batch`), exactly the two cases that worked before this registry existed. Every pre-existing `jobs.json` row keeps dispatching identically with no migration. New kinds (`powershell`, `shell-wsl`, `inline-shell`, `http-check`) always require an explicit `kind` — suffix-inference never expands beyond `.py`/`.bat`.
+`src/jobs_kinds/` holds one module per kind, each with a `validate()` (save-time pre-flight) and a `build_argv()` (the invocation). `kind` is optional: absent, it is inferred from `script_path`'s suffix (`.py` → `python`, `.bat` → `batch`). Every other kind needs an explicit `kind`.
 
 | `kind` | `script_path` | `kind_config` | How it runs | cwd |
 | --- | --- | --- | --- | --- |
-| `python` (or omitted, `.py` suffix) | required, `.py` | — | `<venv>/python.exe <script> <args>`, `PYTHONPATH = <project root>` | project root (dir containing the resolved `.venv`) |
-| `batch` (or omitted, `.bat` suffix) | required, `.bat` | — | `cmd.exe /c <script> <args>` | `script_path.parent` |
-| `powershell` | required, `.ps1` | — | `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <script> <args>` (absolute pwsh-5.1 path) | `script_path.parent` |
-| `shell-wsl` | required, `.sh` | — | `wsl --exec bash <script> <args>` | `script_path.parent` |
-| `inline-shell` | must be empty | `{script_body, ext}` | body written to `webapp/jobs/<id>/<run>/_inline<ext>`, then dispatched through whichever of the three shapes above matches `ext` (`.ps1`/`.bat`/`.sh`) | matches the delegated kind |
-| `http-check` | must be empty | `{url, method?, expect_status?, timeout?}` | `python -m src.jobs_kinds.http_check_probe --url … --method … --expect-status … --timeout …` — a tiny built-in probe, no external script | project root |
+| `python` | required, `.py` | — | `<venv>/python.exe <script> <args>`, `PYTHONPATH = <project root>` | project root (the dir holding the resolved `.venv`) |
+| `batch` | required, `.bat` | — | `cmd.exe /c <script> <args>` | `script_path.parent` |
+| `powershell` | required, `.ps1` | — | `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <script> <args>` | `script_path.parent` |
+| `shell-wsl` | required, `.sh` | — | `wsl bash <script> <args>` | `script_path.parent` |
+| `inline-shell` | empty | `{script_body, ext}` | body written to `webapp/jobs/<id>/<run>/_inline<ext>`, then run as the kind matching `ext` (`.ps1` / `.bat` / `.sh`) | matches the delegated kind |
+| `http-check` | empty | `{url, method?, expect_status?, timeout?}` | `python -m src.jobs_kinds.http_check_probe`, a built-in probe with no external script | project root |
 
-`python`'s venv walk-up (`src.jobs.schtasks.resolve_venv_python`) starts from `script_path.parent` and falls back to `sys.executable` if no ancestor `.venv\Scripts\python.exe` is found — the PYTHONPATH bit fixes the "out-of-tree script imports project packages" gotcha (see global CLAUDE.md). `shell-wsl` is opt-in: pre-flight surfaces a warning (not a blocking error) when `wsl.exe` isn't resolvable on PATH.
+`python`'s venv walk-up (`src.jobs.spawn.resolve_venv_python`) starts at `script_path.parent` and falls back to `sys.executable` when no ancestor `.venv\Scripts\python.exe` exists; setting `PYTHONPATH` lets an out-of-tree script import its project's packages. `shell-wsl` is opt-in: pre-flight warns (does not block) when `wsl.exe` is not on PATH.
 
-`args` is split on whitespace and appended to every kind's argv tail except `http-check` (its probe takes fixed flags only). If you need an argument containing spaces, put it inside the script/wrapper rather than relying on shell quoting.
+`args` is split on whitespace and appended to every kind's argv except `http-check`. An argument containing spaces belongs inside the script or wrapper, not in `args`.
 
-#### `inline-shell` — a body instead of a file
-
-For a script small enough that a standalone file on disk is more ceremony than the job is worth. `kind_config.script_body` carries the literal contents; `kind_config.ext` (`.ps1` / `.bat` / `.sh`) picks which of the three native shapes runs it:
+`inline-shell` suits a script too small to deserve a file. The body lands in the run's own directory beside `run.json` and `output.log`, so the exact script that ran is preserved:
 
 ```json
 {
@@ -87,274 +76,129 @@ For a script small enough that a standalone file on disk is more ceremony than t
 }
 ```
 
-At fire time the body is written to `webapp/jobs/<id>/<run_id>/_inline<ext>` — inside the run's own directory, so it's preserved alongside `run.json` / `output.log` for reproducibility (not a throwaway temp file elsewhere) — then dispatched exactly like a `powershell`/`batch`/`shell-wsl` job pointed at that file.
+`http-check` polls a URL and succeeds or fails on the status code; `method` defaults to `GET`, `expect_status` to `200`, `timeout` to `10` seconds. The probe's output lands in `output.log` like any script's.
 
-#### `http-check` — a synthetic kind, no script at all
-
-Polls a URL and succeeds/fails on the response status — the "executor" is `src/jobs_kinds/http_check_probe.py`, a tiny script invoked via `python -m` (no user-authored script needed):
-
-```json
-{
-  "id": "launcher-health-check",
-  "name": "Launcher health check",
-  "kind": "http-check",
-  "kind_config": { "url": "https://127.0.0.1:8465/api/version", "expect_status": 200 },
-  "schedule": { "type": "hourly", "every": 1 }
-}
-```
-
-`method` defaults to `GET`, `expect_status` to `200`, `timeout` to `10` seconds. The probe's stdout (status/timing/body-tail) lands in `output.log` exactly like any other job's script output — it reuses the executor's normal `subprocess.Popen`/tee/resource-sampler/exit-code machinery, nothing kind-specific.
-
-#### Adding a new kind
-
-1. Add a module under `src/jobs_kinds/` implementing the `JobKind` protocol (`base.py`): `name`, `validate(job) -> List[Problem]`, `build_argv(job, tail, param_env, run_dir) -> (argv, cwd, env_overlay)`.
-2. Register it in `src/jobs_kinds/__init__.py`'s `KINDS` dict.
-3. If it needs settings, read them from `job.kind_config` (a free-form dict) — no change to the `Job` dataclass required.
-
-That's the whole surface — the executor, pre-flight, and router never need to know a new kind exists.
+A new kind is a module under `src/jobs_kinds/` implementing the `JobKind` protocol in `base.py` (`name`, `validate(job)`, `build_argv(job, tail, param_env, run_dir)`), registered in the `KINDS` dict of `src/jobs_kinds/__init__.py`. Settings live in the free-form `job.kind_config`; the executor, pre-flight and router need no change.
 
 ### Schedule types
 
-A deliberately bounded set — no raw cron expressions, no Quartz-style strings. Adding a new schedule shape is a code change, not a config change.
+A bounded set, no raw cron. A new shape is a code change.
 
 | `type` | Fields | Materialises as |
 | --- | --- | --- |
-| `none` | — | No Task Scheduler entry (manual / Stream Deck only) |
-| `minutes` | `every: int (>0)` | one task with `/SC MINUTE /MO <every>` |
-| `hourly` | `every: int (1..23)` | one task with `/SC HOURLY /MO <every>` |
-| `daily` | `at: "HH:MM"` | one task with `/SC DAILY /ST <at>` |
-| `daily_times` | `at: ["HH:MM", …]` | **N tasks**, one per HH:MM, suffixed `-1`, `-2`, … |
-| `weekly` | `day: "MON"…"SUN"`, `at: "HH:MM"` | one task with `/SC WEEKLY /D <day> /ST <at>` |
-| `once`   | `at: "YYYY-MM-DDTHH:MM"`          | one task with `/SC ONCE /SD <YYYY/MM/DD> /ST <HH:MM>` — self-cleaning, see below |
+| `none` | — | No Task Scheduler entry (manual, webhook, Stream Deck only) |
+| `minutes` | `every: int (>0)` | one task, `/SC MINUTE /MO <every>` |
+| `hourly` | `every: int (1..23)` | one task, `/SC HOURLY /MO <every>` |
+| `daily` | `at: "HH:MM"` | one task, `/SC DAILY /ST <at>` |
+| `daily_times` | `at: ["HH:MM", …]` | **N tasks**, one per time, suffixed `-1`, `-2`, … |
+| `weekly` | `day: "MON"…"SUN"`, `at: "HH:MM"` | one task, `/SC WEEKLY /D <day> /ST <at>` |
+| `once` | `at: "YYYY-MM-DDTHH:MM"` | one task, `/SC ONCE /SD <YYYY/MM/DD> /ST <HH:MM>`, self-cleaning |
 
-`daily_times` is the one schedule type that fans out into multiple Task Scheduler entries. It exists because "every 6 hours at 06:00 / 12:00 / 18:00 (skip midnight)" doesn't fit any single preset cleanly — `hourly /MO 6` would also fire at 00:00, and three separate jobs would clutter the Jobs tab. The fan-out is invisible to the user: one row in `jobs.json` → one row in the Jobs tab → three wake-ups per day under the hood.
+`daily_times` is the only fan-out: "06:00 / 12:00 / 18:00, skip midnight" fits no single preset. The user sees one row; Task Scheduler holds three entries.
 
-### Visible console
+**`once`** fires one time and removes itself. `at` is the format `<input type="datetime-local">` emits. The slash date form is the locale-independent input `schtasks` accepts everywhere. When a `once` job fires from Task Scheduler the executor removes the entry and flips the registry's schedule to `none`; a manual fire leaves the schedule intact.
 
-A job can carry `"visible": true` (omitted / `false` is the default). It changes two things, both aimed at a job you want to *watch* run on the PC while still capturing output for remote run-history:
+**Pause / resume.** Pause is a state marker: the live `schedule` becomes `none` (so the sync layer deletes the entries) and the original is parked under `paused_schedule`; resume restores it byte for byte. `POST /api/jobs/<id>/pause` and `/resume`; pausing a manual-only job is a `400`, pausing a paused job is a no-op.
 
-```json
-{
-  "id": "weekly-audit",
-  "name": "Weekly Audit",
-  "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\weekly_audit.bat",
-  "schedule": { "type": "weekly", "day": "THU", "at": "22:00" },
-  "visible": true
-}
-```
+### Per-job flags
 
-- **Interpreter.** The scheduled task's `/TR` runs under `python.exe` (console subsystem) instead of the default silent `pythonw.exe`, so a console window appears when the task fires in the logged-on session. `src.jobs.task_run_command(job_id, visible=…)` picks the interpreter via `src.jobs._launcher_python(visible=…)`, which resolves the launcher venv's `python.exe`/`pythonw.exe` with a PATH fallback.
-- **Output tee.** The executor spawns the child with `stdout=PIPE` and streams its combined output to **both** `output.log` (the remote run-history record, unchanged) and the launcher's own console (`sys.stdout.buffer`, guarded). A pythonw / detached fire has no console, so the console half is never started while the file half always works. A non-visible job keeps the original direct-to-file spawn — no pipe, no reader, byte-for-byte unchanged.
-- **The console half is best-effort and lossy; the file half is the record.** The thread reading the child's pipe writes to `output.log` and nothing else — console chunks go onto a bounded queue (`CONSOLE_QUEUE_MAX_CHUNKS`, ~256 KB) drained by a separate daemon thread, and a full queue **drops** the chunk. That is deliberate: a console that stops *draining* — a Windows console put into mark/select mode by a click is the classic trigger — blocks `write()` indefinitely with no exception and no timeout. When that write sat on the reader thread it stopped the child's pipe being drained, the pipe filled, and the whole process tree deadlocked (a real 5-hour `running` hang, with `output.log` frozen mid-character at exactly 6 × 4096 bytes). At EOF the reader waits `CONSOLE_DRAIN_TIMEOUT_SECONDS` for the console writer and then moves on regardless. Dropping is never silent — a run that drops emits a `console tee fell behind — dropped N chunk(s)` warning, from a throwaway thread because the root logger's `StreamHandler` writes to `stderr`, i.e. that same wedged console. So: watch the console for live progress, read `output.log` for what actually happened.
+- **`visible: true`** runs the scheduled task under `python.exe` instead of `pythonw.exe`, so a console window shows when it fires in the logged-on session. The executor spawns the child with a pipe and tees the combined output to `output.log` and the console. The console half is best-effort and lossy (a bounded queue drops chunks when the console stops draining, e.g. a window in mark mode, which would otherwise deadlock the process tree); `output.log` is the record. Only scheduled fires have a console to tee to.
+- **`elevated: true`** is for a target that needs admin. `/RL HIGHEST` can only be set by an already-elevated caller and the webapp is never elevated, so the launcher never creates the entry (it still deletes a stale non-elevated one). Register it by hand from an elevated shell and treat it as externally managed:
 
-`visible` round-trips through `POST`/`PUT` like `confirm` and is omitted from the stored row when false. It only affects **scheduled** fires meaningfully — a webapp/Stream-Deck fire spawns the executor detached with no console regardless, so the tee's console half no-ops there (the log half still works).
+  ```
+  schtasks /Create /F /TN "\AppLauncherLite\<id>" /TR '"<repo>\.venv\Scripts\pythonw.exe" "<repo>\launcher.py" run-job <id>' /SC HOURLY /MO 8 /RL HIGHEST
+  ```
 
-### Elevated (admin) jobs
+  Single-quote the `/TR` value in PowerShell. The job sheet shows a `🔒 external schedule` flag; Run now, pause and resume are refused (`409`), the dry-run check still works.
+- **`session_less: true`** opts out of Windows' default `LogonType=InteractiveToken` principal, under which Task Scheduler silently drops a trigger that comes due while nobody is logged on, and `StartWhenAvailable` does not catch it up (that flag covers a powered-off machine, not a signed-out one). An S4U principal needs elevation, so the launcher never creates or deletes the entry; `GET /api/jobs` returns the generated PowerShell as `registration_command` on such a row, to paste into an elevated shell. It is mutually exclusive with `visible` (session 0 has no desktop); setting both is a `400`. The coverage scan reads `Logon Mode` and reports `principal_interactive` when the entry is still interactive-only; an unreadable value is `unknown`. Pause and resume are refused (`409`); Run now still works. The sheet shows `🌙 logged-out`.
+- **`cooldown_seconds`** debounces rapid manual fires (`null`/`0` = off, else `1..86400`). The window is measured from the most recent non-skipped run's start, so a rejected fire never slides the window. A manual fire inside it gets `429` with `Retry-After` and a JSON body `{detail: "cooldown", retry_after_seconds, cooldown_seconds}`, and leaves no run directory. A scheduled fire inside it is admitted by the executor itself and recorded as `status: "skipped"`, `note: "cooldown"`; skipped runs are left out of stats and failure streaks. Chain fires and dry runs are exempt.
+- **`confirm: true`** requires an explicit confirmation: `POST /api/jobs/<id>/run` returns `403 confirmation required` unless the request carries `?confirmed=1`. The UI asks through the confirm sheet and then adds it. A Stream Deck button on such a job must bake `?confirmed=1` in. A dry-run `check` is exempt; a dry-run `execute` is not.
+- **`rerun_safe: true`** is the owner's statement that an unattended re-run is safe. It is read only by the chief's failed-run re-run, which is planned (not active until fleet-config-lite ships the chief). A strict JSON boolean; refused together with `confirm` or `elevated`.
+- **`max_runtime_seconds` / `no_output_seconds`** tune the watchdog (see "Stopping and reconciling runs").
+- **`env`** is a per-job environment overlay (see "Per-job secrets & env").
 
-A job can carry `"elevated": true` (omitted / `false` is the default) for a script whose target needs admin rights to do its work — e.g. restarting an app whose manifest requires elevation (`Start-Process`/`subprocess.Popen` from a non-elevated context fails silently: "the operation was canceled by the user", the signature of a blocked UAC prompt with nothing present to click "Yes").
-
-```json
-{
-  "id": "hwinfo-restart",
-  "name": "HWiNFO restart",
-  "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\hwinfo_restart.py",
-  "schedule": { "type": "hourly", "every": 8 },
-  "elevated": true
-}
-```
-
-**The launcher never *creates* a Task Scheduler entry for an elevated job.** `/RL HIGHEST` — Task Scheduler's own silent elevation, needed so the scheduled fire runs elevated with no interactive UAC prompt — can only be set by an already-elevated *calling* process (empirically verified: an admin account running non-elevated gets `ERROR: Access is denied` on the `/Create` call; being in the Administrators group is not enough, the token itself must be elevated). The launcher's webapp always runs non-elevated, so `sync_schtasks()` never issues a `/Create` the moment `job.elevated` is true, on `POST /api/jobs`, `PUT /api/jobs/<id>` (any field edit), `pause`, or `resume`. It still *deletes* any stale `\AppLauncherLite\<id>*` entry first — otherwise a job that used to be non-elevated leaves its old un-elevated scheduled task behind, still firing on its old schedule indefinitely. An elevated job's real Task Scheduler entry is treated as **externally-managed**: everything else (registry row, run history, stats, the computed `next_run` sortable field) keeps working normally, but the entry itself must be registered and updated by hand, from an elevated shell:
-
-```
-schtasks /Create /F /TN "\AppLauncherLite\hwinfo-restart" /TR '"C:\path\to\app-launcher-lite\.venv\Scripts\pythonw.exe" "C:\path\to\app-launcher-lite\launcher.py" run-job hwinfo-restart' /SC HOURLY /MO 8 /RL HIGHEST
-```
-
-(Single-quote the `/TR` value in PowerShell — double-quoted strings there don't pass embedded `"` through literally.) The Jobs tab marks an elevated job with a `🔒 external schedule` pill next to its schedule chip so it's visually obvious which jobs the app isn't managing. The row remains tappable for run history, and edit mode still offers the side-effect-free dry-run check. Run-now and pause/resume are omitted and their API endpoints return `409`: the non-elevated launcher cannot honor those actions safely against an externally managed `/RL HIGHEST` task. `elevated` round-trips through `POST`/`PUT` like `visible` and is omitted from the stored row when false. There's no dedicated UI checkbox yet (same as `visible`) — set it directly in `config/jobs.json` or via the API.
-
-### Cooldown
-
-A job can declare a per-job `cooldown_seconds`: a debounce window that prevents rapid manual fires (phone double-tap, Stream Deck button mash) from spawning overlapping runs of the same script.
-
-```json
-{
-  "id": "reporting-daily",
-  "name": "Daily Reporting",
-  "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\launch_reporting.bat",
-  "args": "auto",
-  "schedule": { "type": "daily", "at": "06:00" },
-  "cooldown_seconds": 120
-}
-```
-
-- **Range.** `null` (or omitted) and `0` both mean "no cooldown". Otherwise the value must be an `int` in `[1, 86400]` — the upper bound (one day) catches obvious typos like millisecond values; bools are rejected explicitly because `bool` is a subclass of `int` in Python.
-- **Anchor.** The window is measured from the **most recent non-skipped run's** `started_at`. Skipped records are deliberately ignored: anchoring on them would turn the fixed cooldown into a sliding debounce, where every rejected mash-fire pushed the next allowed fire further away.
-- **Manual fires inside the window** (phone tap, Stream Deck, any `POST /api/jobs/<id>/run`) are rejected at the route with `HTTP 429`. Response:
-  - `Retry-After: <seconds>` header (HTTP-standard, for unsophisticated clients).
-  - JSON body: `{"detail": {"detail": "cooldown", "retry_after_seconds": <int>, "cooldown_seconds": <int>}}`.
-  - No run dir is created — a rejected manual fire leaves zero on-disk footprint.
-  - The UI surfaces a toast: *"⏭ Skipped — cooled down for N more s."*
-- **Scheduled fires inside the window** (Task Scheduler firing the executor directly) cannot be intercepted at the route, so the executor itself performs the same admission check. It writes a `skipped` run record (no spawn, no `output.log`) and exits 0. The record carries `status="skipped"`, `note="cooldown"`, `cooldown_seconds`, `cooldown_remaining_seconds`, and `cooldown_anchor_run_id` for audit clarity. Skipped records do **not** contribute to p50/p95/success-rate stats and do **not** count toward the failure-streak notification gate.
-
-### `once` schedule + pause/resume
-
-#### `once`
-
-A `once` schedule fires exactly one time at the named instant, then deletes itself. The `at` is ISO-style `YYYY-MM-DDTHH:MM` (no seconds, no timezone) — the format that `<input type="datetime-local">` emits, so the dialog round-trips without conversion.
-
-```json
-{ "schedule": { "type": "once", "at": "2026-06-01T14:30" } }
-```
-
-- **schtasks fan-out:** one task with `/SC ONCE /SD <YYYY/MM/DD> /ST <HH:MM>`. The slash date form is the locale-independent input schtasks accepts everywhere; the dashed / dotted forms are locale-dependent and silently no-op outside en-US.
-- **Self-cleaning:** when a `once` job fires via Task Scheduler (`trigger="scheduled"`), the executor's finalisation removes the schtasks entry and flips the registry's `schedule` to `type: "none"` so the row stops advertising a past-tense "once" instant. **Manual fires of a `once` job leave the schedule intact** so a deferred future fire is still possible.
-
-#### Pause / resume
-
-Any schedule can be paused. Pause is a **state marker, not a new schedule shape** — the live `schedule` flips to `none` (so the schtasks resync layer deletes the entries) and the original is parked under `paused_schedule`. Resume restores it byte-for-byte.
-
-```json
-{
-  "schedule":        { "type": "none" },
-  "paused_schedule": { "type": "daily", "at": "06:00" }
-}
-```
-
-- **Endpoints:** `POST /api/jobs/<id>/pause` and `POST /api/jobs/<id>/resume`. Pause on a manual-only job returns `400 cannot pause a job whose schedule is 'none'` (no parked payload would survive a load → save cycle anyway). Pause is idempotent: pausing an already-paused job is a no-op so accidentally pressing ⏸ twice doesn't lose the parked payload.
-- **`schedule_chip`** for a paused job reads "paused — was <original chip>" so the user can see at a glance both that the schedule isn't ticking and what it will restore to.
-- **UI:** a `⏸` button on every row whose live or parked schedule isn't `none`; pressing toggles pause/resume. The button's icon and label switch with the state.
+`visible`, `elevated`, `session_less`, `confirm` and `rerun_safe` round-trip through `POST`/`PUT` and are omitted from the stored row when false. `visible`, `elevated` and `session_less` have no UI checkbox: set them in `config/jobs.json` or through the API.
 
 ### DAG chaining
 
-A job can declare downstream consequences:
+```json
+{ "id": "scrape", "name": "Scrape", "script_path": "...", "on_success": ["transform"], "on_failure": ["alert-failure"] }
+```
+
+After a run finalises, the executor reloads the registry, picks `on_success` or `on_failure` by `status`, and dispatches each downstream through the same mutex-aware admission path the route uses. The downstream record carries `trigger="chain:<upstream_id>"` and `chained_from`.
+
+- **Cycle guard.** `add_job` and `update_job` run a DFS over `on_success ∪ on_failure` and reject a cycle, naming its path; a self-chain has its own error.
+- **Reference guard.** Every entry must name an existing job id, caught at save time.
+- **Cascade strip.** Deleting a job removes its id from every other job's chain lists.
+- **Mutex groups** apply to chain fires; **cooldown** does not.
+
+### Mutex groups
+
+A job can declare a `mutex_group` (lowercase alnum plus `_`/`-`, starts with a letter, at most 32 characters; "Exclusive group" in the editor). Two jobs in one group never run at the same time: a fire that finds a member `running` or `pending` is **queued**, not rejected, and the head's finalisation starts the next queued entry.
+
+- **Three admission points, one implementation** (`src.jobs.queue.admit_and_spawn`): manual/webhook/API fires at `_admit_and_spawn` in `app/webapp/routers/jobs_run.py`, chain fires at `dispatch_chain_run`, and scheduled fires in the executor (`_finalize_mutex_queue`), because Task Scheduler launches `run-job` without touching the webapp. The executor gate applies only to a scheduled fire with no `--run-id`, so a drained entry is not re-queued, and it runs after the cooldown gate.
+- **Queue file.** `webapp/jobs/_queue.json`: group → FIFO list of `{job_id, run_id, trigger, params}`, replaced atomically, empty groups pruned.
+- **Queued records** carry `status: "queued"`, `mutex_group` and `mutex_blocked_by`, and are left out of stats and failure streaks.
+- **Drain** happens in the executor's finalisation and after the kill endpoint signals a stuck head. Before spawning the head the drain re-reads its `run.json` and refuses unless it is still `queued`, so a racing finaliser cannot double-fire it.
+- **Failed spawns record why.** An `OSError` (`spawn_error` / `chain_spawn_error`) or a refused argv (`ArgvRejected`) finalises the run as `failed`, `exit_code: -1`, with a `refused` flag; the route answers `500` or `400 refused: <reason>`.
+- Single host only.
+
+### Parameters
+
+A job can declare typed inputs. With none, **Run now** fires immediately; with some, it opens a dialog and the executor composes the values into argv and env.
 
 ```json
 {
   "id": "scrape",
   "name": "Scrape",
-  "script_path": "...",
-  "on_success": ["transform"],
-  "on_failure": ["alert-failure"]
-}
-```
-
-After the executor finalises a run, it loads the current registry (so a user edit between spawn and finalise takes effect on the next chain hop without a webapp restart), picks `on_success` if `status == "success"` or `on_failure` if `status == "failed"`, and dispatches each downstream via the same mutex-aware admission path the route uses. The downstream run carries `trigger="chain:<upstream_id>"` and `chained_from=<upstream_id>` on its `run.json`.
-
-- **Cycle guard.** Both `add_job` and `update_job` run a DFS over the union of `on_success ∪ on_failure` and reject any change that introduces a cycle. The error message names the cycle path (e.g. `chain cycle detected: a → b → a`). Self-chains are rejected with a separate, clearer error.
-- **Reference guard.** Every entry must point at an existing job id. A typo'd downstream is rejected at save time, so the dialog catches it instead of letting the chain silently no-op forever.
-- **Cascade strip on delete.** Deleting a job strips its id from every other job's `on_success` / `on_failure` so the registry stays referentially clean (no dangling ids).
-- **Interaction with mutex groups.** Chain fires go through `dispatch_chain_run`, which runs the same `mutex_collision` check as the route. A chained downstream that hits a busy mutex group lands in the queue with `status="queued"` and waits for drain like any other queued entry.
-- **Interaction with cooldown.** Chain fires are intentionally exempt from cooldown — they're an explicit downstream consequence, not a user click. (Mirrors the executor's `scheduled`-only cooldown check from the other side.)
-
-### Mutex groups
-
-A job can declare a `mutex_group` — a free-form lowercase identifier (alnum + `_`/`-`, must start with a letter, ≤32 chars). Two jobs sharing a `mutex_group` are not allowed to have overlapping in-flight runs: when one is already `running` or `pending`, a fresh fire of any other member is **queued** rather than rejected, and the head run's finalisation pops the next queued entry and spawns it detached.
-
-```json
-{
-  "id": "linkedin-scrape",
-  "name": "LinkedIn Scrape",
-  "script_path": "...",
-  "mutex_group": "chrome-profile"
-}
-```
-
-- **Admission points.** Every fire is gated before it runs, on whichever side of the process boundary it arrives: manual / webhook / API fires at `_admit_and_spawn` (`app/webapp/routers/jobs_run.py`), chain fires at `dispatch_chain_run` (`src/jobs/queue.py`), and **schtasks fires in the executor itself** (`_finalize_mutex_queue`, `app/cli/commands/run_job_cmd.py`) — Task Scheduler launches `run-job` directly and never touches the webapp, so without that third gate the weekly fleet chain, the main reason the feature exists, ran unserialized. The executor gate is scoped to `trigger == "scheduled"` **with no `--run-id`**: every already-admitted path pre-creates its run dir and passes `--run-id`, so the discriminator is what stops a drained entry (which replays its original `trigger="scheduled"`) being pushed straight back onto the queue it was just released from. Mirrors the `scheduled`-only cooldown gate next to it, and runs *after* it — a cooled-down fire is a no-op and shouldn't occupy a queue slot.
-- **Queue file.** `webapp/jobs/_queue.json` — one JSON document, keyed by group → FIFO list of `{job_id, run_id, trigger, params}`. Mutations go through `os.replace` so the file is always a complete document. Empty groups are pruned out so the file stays tidy.
-- **`status: "queued"`.** Queued runs land in history with `status="queued"`, `mutex_group`, and `mutex_blocked_by` (the id of the job currently holding the group). Queued runs do **not** contribute to p50/p95/success-rate stats and do **not** count toward the failure-streak gate. The route returns `{run_id, job_id, status: "queued", mutex_group, mutex_blocked_by}` so the UI can render a queue toast.
-- **Drain triggers.** The mutex queue drains in two places: (1) the executor's finalisation block, after the head's `run.json` flips to `success`/`failed`; (2) the kill endpoint, after a stuck head is signalled (otherwise killing the head would wedge the queue with no finaliser to drain it).
-- **Double-spawn guard.** Just before spawning the drained head, `drain_mutex_queue` re-reads the head's `run.json` and refuses to spawn if its `status` is not `queued`. A concurrent finaliser racing us advances the queue forward (the head is popped) but does not double-fire the executor.
-- **Cross-host coordination.** Single-host only. Multi-host coordination is explicitly out of scope (see the umbrella issue).
-
-### Parameters
-
-A job can declare typed inputs collected at run-time. With no `params`, a tap on ▶ fires immediately (today's behaviour). With one or more `params`, ▶ opens a small dialog so the user supplies values; the executor composes them into argv (and env) safely.
-
-```json
-{
-  "id": "linkedin-scrape",
-  "name": "LinkedIn Scrape",
-  "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\scrape_comments.py",
-  "args": "",
-  "schedule": { "type": "none" },
+  "script_path": "E:\\automation\\scraper\\scrape.py",
   "params": [
     { "name": "since", "kind": "date", "flag": "--since" },
-    { "name": "tier", "kind": "enum",
-      "options": ["smb", "mid", "enterprise"],
-      "default": "smb", "flag": "--tier" },
-    { "name": "verbose", "kind": "bool", "flag": "--verbose",
-      "default": false }
+    { "name": "tier", "kind": "enum", "options": ["smb", "mid"], "default": "smb", "flag": "--tier" },
+    { "name": "verbose", "kind": "bool", "flag": "--verbose", "default": false }
   ]
 }
 ```
 
-Submitting the dialog with `since = 2026-06-01`, `tier = mid`, `verbose = true` runs:
+`since = 2026-06-01`, `tier = mid`, `verbose = true` yields the argv tail `--since 2026-06-01 --tier mid --verbose`.
 
-<!-- bare-command-exempt: the argv the executor composes for another project's job script, which that project's own interpreter runs -->
-```
-python scrape_comments.py --since 2026-06-01 --tier mid --verbose
-```
+| Field | Type | Notes |
+| --- | --- | --- |
+| `name` | snake_case, unique per job | keys the input and labels the dialog field |
+| `kind` | `string` \| `int` \| `enum` \| `bool` \| `date` | anything else fails validation |
+| `default` | kind-typed, optional | pre-fills the dialog; makes the param non-required unless `required: true` |
+| `required` | bool, optional | defaults to `false` with a `default`, else `true` |
+| `options` | non-empty string list | required iff `kind: enum`; renders as a `<select>` |
+| `flag` | `--…`, optional | emits `<flag> <value>` (just `<flag>` for a truthy bool); absent means positional |
+| `env` | UPPER_SNAKE_CASE, optional | the value goes to the env overlay instead of argv; exclusive with `flag` |
 
-#### Param schema
+A bool needs `flag` or `env`. Params compose in declaration order, so the list controls argv layout; the free-form `args` string follows as a tail.
 
-| Field      | Type                                                   | Notes                                                                                 |
-|------------|--------------------------------------------------------|---------------------------------------------------------------------------------------|
-| `name`     | snake_case string, unique within the job               | identifier used to key user input and to label the dialog field                       |
-| `kind`     | one of `string` \| `int` \| `enum` \| `bool` \| `date` | bounded; anything else fails validation                                               |
-| `default`  | kind-typed, optional                                   | pre-fills the dialog; presence makes the param non-required unless `required: true`   |
-| `required` | bool, optional                                         | defaults to `false` when `default` is set, else `true`                                |
-| `options`  | non-empty list of strings, required iff `kind: enum`   | renders as a `<select>`                                                               |
-| `flag`     | string (`--…`), optional                               | when set, emits `<flag> <value>` (or just `<flag>` for truthy bool); absent → positional |
-| `env`      | UPPER_SNAKE_CASE string, optional                      | when set, value lands in the executor's env overlay instead of argv (mutually exclusive with `flag`) |
+**cmd.exe-unsafe values.** A value bound for a `.bat` dispatch or the `cmd /c start` re-parent hop is tokenised again by `cmd.exe`. `src.jobs.argv.reject_cmd_unsafe` refuses any of `"&|^<>` and any `%name%`-shaped substring (cmd would expand it to the PC's own environment variable, an information leak for a webhook-mapped value). A bare `%` such as URL encoding passes. A refused value raises `ArgvRejected` and the run route and webhook route answer `400 refused: <reason>`.
 
-Bool params require either `flag` or `env` — they have no useful positional encoding.
-
-#### Composition rules
-
-- Params iterate in declaration order; positional + flag args interleave in that order, so the list controls argv layout.
-- `kind: bool` with `flag` emits just `<flag>` when truthy and is omitted when falsy.
-- `env`-mapped params contribute to the env overlay, never argv.
-- The legacy free-form `args` field is composed **after** the param-driven argv as a whitespace-split tail. Existing jobs continue to work unchanged.
-
-#### Re-run from history
-
-A run record persists the typed payload as `params: {name: value}`. Each row in the runs list grows a small ↻ button that opens the run dialog **pre-filled** with that record's values. If the job's schema has changed since the run (a param was removed or renamed), the dialog drops the unknown keys and surfaces a yellow note before letting the user submit.
+**Re-run from history.** A run record keeps its `params`; the ↻ button on a history row reopens the dialog pre-filled, dropping keys the schema no longer has and saying so.
 
 ## Webhook-target jobs
 
-Phone tap, Stream Deck, and schedule are all *pull* triggers — something the
-user owns decides to fire the job. A webhook is the *push* direction: an
-external service (GitHub, Stripe, IFTTT/Zapier/a custom script) POSTs
-straight into `POST /api/jobs/<id>/hook` and the job fires, with the payload
-turned into the same typed `params` a manual run would supply.
+A webhook is the push direction: an external service POSTs to `POST /api/jobs/<id>/hook` and the job fires, with the payload mapped onto typed `params`.
 
 ### Security boundary — no bearer, ever
 
-`/hook` sits **outside** the bearer-token gate entirely (`app/webapp/middleware.py`'s
-`_is_webhook_hook_path`) — an external service can't be handed the SPA's
-all-powerful bearer, and baking it into a third-party integration's URL store
-would be the same blast radius as leaking the token outright. Instead the
-route trusts **only** the job's own provider-specific signature:
+`/hook` sits outside the bearer-token gate (`is_webhook_hook_path` in `src/middleware/routes.py`): an external service cannot be handed the SPA's bearer. The route trusts only the job's own provider signature:
 
-- **`github`** — `X-Hub-Signature-256: sha256=<hex>`, an HMAC-SHA256 of the
-  raw request body, compared in constant time.
-- **`stripe`** — `Stripe-Signature: t=<epoch>,v1=<hex>`, HMAC-SHA256 of
-  `f"{t}.{body}"`; `t` must be within 300 s (Stripe's own SDK default) of
-  now, rejecting a replayed-but-otherwise-valid signature.
-- **`generic`** — `X-Webhook-Token: <secret>`, a plain constant-time
-  compare. The catch-all for IFTTT, Zapier, or any custom script.
+- **`github`**: `X-Hub-Signature-256: sha256=<hex>`, HMAC-SHA256 of the raw body, compared in constant time.
+- **`stripe`**: `Stripe-Signature: t=<epoch>,v1=<hex>`, HMAC-SHA256 of `"{t}.{body}"`; `t` must be within 300 s of now, so a replayed signature fails.
+- **`generic`**: `X-Webhook-Token: <secret>`, a constant-time compare, for IFTTT, Zapier or a custom script.
 
-A request that fails signature verification (or names an unknown/missing
-provider secret) gets a `401` and **writes no run record at all** — nothing
-touches disk until the signature is verified. This means the `/hook` URL
-itself is safe to hand to the external service in plaintext.
+A failed verification, or an unknown provider secret, gets `401` and writes no run record, so the hook URL is safe to hand over in plaintext.
 
 ### Job shape
 
 ```json
 {
   "id": "gh-push-deploy",
-  "name": "Deploy on GitHub push",
-  "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\deploy.py",
+  "name": "Deploy on push",
+  "script_path": "E:\\automation\\deploy\\deploy.py",
   "params": [
     { "name": "repo", "kind": "string", "flag": "--repo" },
     { "name": "branch", "kind": "string", "flag": "--branch" }
@@ -362,10 +206,7 @@ itself is safe to hand to the external service in plaintext.
   "webhook": {
     "provider": "github",
     "secret": "$secret:gh_deploy",
-    "mapping": {
-      "repo": "$.repository.full_name",
-      "branch": "$.ref"
-    },
+    "mapping": { "repo": "$.repository.full_name", "branch": "$.ref" },
     "events": ["push"]
   }
 }
@@ -373,446 +214,270 @@ itself is safe to hand to the external service in plaintext.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `provider` | `"github"` \| `"stripe"` \| `"generic"` | Selects the verification scheme above |
-| `secret` | string | A literal value, or `$secret:<key>` resolved against `webapp_config.json`'s `secrets` block at fire time (see below) |
-| `mapping` | `{param_name: jsonpath}` | Keys **must match a name in this job's `params`** — resolution reuses the exact same `compose_argv` composition a manual run goes through, so there is no separate argv-building logic for a webhook fire |
-| `events` | list of strings, GitHub only | `X-GitHub-Event` allowlist; empty (or omitted) accepts every event. A filtered-out event returns `204` with no run record |
+| `provider` | `github` \| `stripe` \| `generic` | selects the verification scheme |
+| `secret` | string | a literal, or `$secret:<key>` resolved against `webapp_config.json`'s `secrets` block at fire time |
+| `mapping` | `{param_name: jsonpath}` | keys must match this job's `params`; resolution reuses the manual run's argv composition |
+| `events` | string list, GitHub only | `X-GitHub-Event` allowlist; empty accepts all; a filtered event returns `204` with no record |
 
-### Payload → params mapping
+`mapping` values are a JSONPath-lite dot path (`$.repository.full_name`, `$.commits[0].id`). A path that does not resolve for one event's shape is omitted, so one mapping can list fields from several event types. A mapping key naming no declared param is a `400` with no run record. A mapped value refused as cmd-unsafe is a `400` at fire time.
 
-`mapping` values are a small JSONPath-lite dot-path: `$.repository.full_name`,
-with optional list indices (`$.commits[0].id`). A path that doesn't resolve
-against a *particular* event's shape is silently omitted from the mapped
-params — not fatal — so one job's mapping can list fields from several event
-types without erroring on whichever one didn't fire. A mapping key that
-doesn't match any declared `Param` name **does** fail (`400`, no run record)
-— the same "unknown param" rejection a manual run's bad payload gets.
-
-Two worked examples:
-
-- **GitHub `push`** — `{"repo": "$.repository.full_name", "branch": "$.ref"}`
-  against a standard push payload.
-- **Stripe `payment_intent.succeeded`** — `{"intent_id": "$.data.object.id"}`
-  pulls the PaymentIntent id out of the event envelope.
-
-### Secrets — the shared `secrets` block
-
-`config/webapp_config.json` carries a `secrets: {key: value}` dict (gitignored,
-alongside the existing `pushover_*` secrets). `$secret:<key>` in a job's
-`webhook.secret` — and in any `Job.env` value, see "Per-job secrets & env"
-below — resolves against it at fire time (`src.jobs.secrets`). A literal string
-works too — `jobs.json` is already gitignored — but `$secret:` keeps the
-secret in one place instead of duplicated across every job that shares it, and
-lets it rotate without touching `jobs.json`. The older block under the
-legacy key `webhook_secrets` still loads and is renamed to `secrets` on save.
-
-### Run record
-
-A verified webhook fire dispatches through the same admission path (cooldown
-+ mutex-group check) as a manual run, then writes the run exactly like any
-other: `trigger: "webhook"`, `trigger_source: "webhook:<provider>"`, and the
-mapped `params`. The raw payload is additionally persisted to
-`_webhook.json` in the run's own directory — provider, the `X-GitHub-Event` /
-`content-type` headers (never the signature or secret), and the parsed JSON
-body — so the run is fully reproducible. `GET /api/jobs/<id>/runs/<run_id>`
-surfaces it as `webhook_payload`; the Jobs-tab UI renders it in a collapsed
-"🪝 Webhook payload" `<details>` under the output pane for the selected run.
-
-### UI
-
-A job with `webhook` configured shows a `🪝 <provider>` chip next to its
-schedule chip. The job editor's **Webhook** section has a provider picker
-(none/GitHub/Stripe/generic), a secret field, a GitHub-only event-allowlist
-field, and a mapping editor (param-name / JSONPath row pairs, `+ Add mapping`)
-— structurally identical to the Parameters editor just above it. Switching
-the provider back to "None" and saving clears the job's webhook.
+A verified fire goes through the same cooldown and mutex admission as a manual run and writes `trigger: "webhook"`, `trigger_source: "webhook:<provider>"` and the mapped `params`. The raw payload (provider, event and content-type headers, never the signature or secret, and the parsed body) is kept in the run directory's `_webhook.json` and surfaces as `webhook_payload` in the run detail, shown in a collapsed "Webhook payload" block. A job with a webhook carries a `🪝 <provider>` chip; the editor's Webhook section has the provider picker, secret, event allowlist and a mapping editor.
 
 ## Task Scheduler — `\AppLauncherLite\` namespace
 
-All Jobs-tab schtasks entries live under one Task Scheduler folder, `\AppLauncherLite\` by default. It is deliberately not upstream app-launcher's `\AppLauncher\`: both apps can run on one machine, and a shared folder would make a job id present in both registries a single task that whichever app synced last points at its own launcher.
+Every schtasks entry the Jobs tab creates lives under the `\AppLauncherLite\` folder, so it can share a machine with the full app-launcher's `\AppLauncher\`. The folder name is `config.json`'s `task_namespace` (default `AppLauncherLite`, read at startup).
 
-The folder name is the `task_namespace` key in `config/config.json` (one folder name of letters, digits, `_`, `.` or `-`; anything else is rejected at load). It is read once per process, so a change needs a webapp restart. A machine whose tasks already sit under another folder sets the key to that name; the launcher never moves tasks between folders, so existing entries move by hand: `schtasks /Delete` each old task, then save each scheduled job in the Jobs tab to re-register it under the new folder. Tasks outside the configured folder are never listed, counted by the coverage check, or deleted. The naming rule:
-
-- Single-task schedules → `\AppLauncherLite\<job_id>`
-- `daily_times` → `\AppLauncherLite\<job_id>-1`, `-2`, … (one per HH:MM)
-
-Sync is idempotent: on every create/edit, the launcher deletes every existing `\AppLauncherLite\<job_id>*` task first, then re-creates from the current schedule. Edits never leave stale entries behind. Delete-via-API removes both the registry row and every matching schtasks entry.
-
-The `/TR` (task run) command stored in Task Scheduler is quoted so paths containing spaces survive Task Scheduler's own tokenisation:
-
-```
-"E:\automation\app-launcher\.venv\Scripts\pythonw.exe" "E:\automation\app-launcher\launcher.py" run-job <job_id>
-```
-
-An `elevated: true` job (see "Elevated (admin) jobs") is never *created/recreated* by the launcher — its Task Scheduler entry (created by hand with `/RL HIGHEST`) is externally-managed. A stale non-elevated entry from a prior schedule is still deleted, though.
-
-Scheduled runs use `pythonw.exe` (silent — no console window appears on schedule fire). The repo's own `.venv` is preferred; a missing `.venv` falls back to `pythonw.exe` on PATH. A job with `"visible": true` (see "Visible console") instead runs under `python.exe` so a window appears on fire.
-
-To inspect what's actually scheduled:
+- Single-task schedules are `\AppLauncherLite\<job_id>`; `daily_times` is `…\<job_id>-1`, `-2`, ….
+- Sync is idempotent: each create or edit deletes every `\AppLauncherLite\<job_id>*` entry, then re-creates from the current schedule. Deleting a job removes the row and every entry.
+- The stored `/TR` is quoted so paths with spaces survive: `"<repo>\.venv\Scripts\pythonw.exe" "<repo>\launcher.py" run-job <job_id>`. Scheduled runs use `pythonw.exe` (no window) unless the job is `visible`; a missing `.venv` falls back to `pythonw.exe` on PATH.
+- Entries the launcher creates carry Windows' default interactive-token principal, so they do not fire while logged out. `session_less` is the opt-out; it cannot be applied from this process.
+- `elevated` and `session_less` entries are externally managed (see "Per-job flags").
 
 ```powershell
 schtasks /Query /TN "\AppLauncherLite\reporting-daily" /FO LIST /V
-schtasks /Query /FO CSV /NH | findstr "AppLauncher"
+schtasks /Query /FO CSV /NH | findstr "AppLauncherLite"
 ```
+
+**`next_run` cache.** One bulk `schtasks /Query /FO LIST /V` fills `{task_name: {next_run, enabled}}` for every entry under the namespace, cached for 30 s (`_NEXT_RUN_TTL_SECONDS` in `src/jobs/schtasks.py`), so `GET /api/jobs` runs at most one `schtasks` call per window. A failed query caches as `None`, distinct from `{}` ("no tasks"), so one bad query cannot flag every job as missing its entry. `sync_schtasks` and `delete_schtasks` invalidate it.
 
 ## Run history — `webapp/jobs/<job_id>/<run_id>/`
 
-Every run produces a directory with two canonical files, an artifact directory,
-and one extra file for a webhook-triggered run:
-
 | File | Content |
 | --- | --- |
-| `run.json` | One run's full metadata (schema below) |
-| `output.log` | Combined stdout+stderr, raw bytes |
-| `artifacts/` | Files the child deliberately preserves through `JOB_ARTIFACT_DIR` |
-| `_webhook.json` | The triggering webhook's payload + a safe header subset (webhook-triggered runs only — see "Webhook-target jobs" below) |
+| `run.json` | one run's metadata (schema below) |
+| `output.log` | combined stdout and stderr, raw bytes |
+| `artifacts/` | files the child keeps through `JOB_ARTIFACT_DIR` |
+| `outbox/` | files the child sent to the owner (see below) |
+| `_webhook.json` | the triggering webhook's payload and safe headers (webhook runs only) |
 
-`run_id` is a sortable timestamp (`YYYYmmddTHHMMSS`); collisions within the same second append `-2`, `-3`, … The executor exports the absolute artifact-directory path as `JOB_ARTIFACT_DIR`; a script copies or writes any CSV, JSON report, image, or other result it wants preserved there. The run detail API lists immediate files as `{name, size, mtime}`, and the guarded download route resolves the requested filename before serving it. Parent traversal and nested paths return HTTP 400.
+`run_id` is a sortable timestamp (`YYYYmmddTHHMMSS`); a same-second collision appends `-2`, `-3`. A script writes whatever it wants kept into `JOB_ARTIFACT_DIR`; the run detail lists those files and the download route is path-jailed (parent traversal and nested paths return `400`). Unpinned history is pruned to the newest **20 runs per job** when a run ends; a run with `pinned: true` is exempt, and its artifacts follow its directory.
 
-Unpinned history is pruned to the most recent **20 runs per job** by the executor at the end of each run. A run with `pinned: true` is excluded from that quota and survives until explicitly unpinned; its artifacts follow the run directory, so there is no separate artifact-retention policy.
+Status goes `pending` (webapp pre-create) → `running` (executor takes over) → `success` | `failed`; the full set is in [job-run-state.md](job-run-state.md). The runs list refreshes on a 4 s poll; selecting a live run opens `WS /api/jobs/<id>/runs/<rid>/stream`, which sends a current-tail snapshot, incremental chunks and a final status frame. Finished output is fetched once over JSON.
 
-`status` transitions: `pending` (webapp pre-create) → `running` (executor takes over) → `success` | `failed`. The runs list remains on the Jobs tab's lightweight 4 s refresh. Selecting a live run opens `/api/jobs/<id>/runs/<rid>/stream`: the server sends one current-tail snapshot, incremental output chunks, then a final status frame and closes. Finalized output is fetched once over JSON and never streamed.
+### Sending files to the owner — the job outbox
+
+A job has no hosted session, so it cannot use a session's outbox. The executor gives the child `APP_LAUNCHER_JOB_ID` and `APP_LAUNCHER_JOB_RUN_ID` beside `JOB_ARTIFACT_DIR`, and removes `APP_LAUNCHER_SESSION_ID` and `APP_LAUNCHER_AGENT` from the inherited environment so a job never drops files into an unrelated session's chat.
+
+```bash
+curl -k -X POST "https://127.0.0.1:8465/api/jobs/$APP_LAUNCHER_JOB_ID/runs/$APP_LAUNCHER_JOB_RUN_ID/outbox" -H 'Content-Type: application/json' -d '{"path": "shot.png", "caption": "screen"}'
+```
+
+The file passes the session outbox's guards, caps and refusals (see [interactive-terminal.md](interactive-terminal.md)) and is copied into the run's `outbox/`. It may come from `JOB_ARTIFACT_DIR` (a relative path resolves against it) or an `outbox_scratch_roots` folder. The POST is loopback-only and only a `running` run takes a file. Refusals: `loopback_only` 403, `bad_request` 400, `job_not_found` / `run_not_found` 404, `run_not_running` 409, then the shared `out_of_root` 403, `not_found` 404, `not_a_file` 422, `too_large` 413, `type_not_allowed` / `content_mismatch` 415. The selected run's panel shows "N sent files" with a **Show** button that loads them as Chat file cards; the list and bytes are Tailscale + passkey and load only on that tap.
 
 ### `run.json` schema
 
-The `status` string, the `killed` / `reaped` / `dry_run` flags and the pid fields below are read as one run state by `src/jobs/run_state.py`; no other module compares a `status` string. The state table, the derive rules and who reads them: [`docs/run-state.md`](run-state.md).
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `run_id`, `job_id` | str | sortable timestamp (matches the dir) and the FK to `config/jobs.json` |
+| `name` | str | job name at run time (denormalised; survives renames) |
+| `trigger` | `manual` \| `scheduled` \| `webhook` \| `chain:<upstream_id>` | where the run was fired from |
+| `trigger_source` | `api` \| `schtasks` \| `webhook:<provider>` | provenance; absent on a direct CLI fire |
+| `trigger_ip`, `trigger_ua` | str | API fires only: caller address and `User-Agent` |
+| `trigger_token_id`, `trigger_token_label` | str | fires authenticated by a minted token: its id and label, never the secret |
+| `script_path`, `args` | str | resolved at spawn time |
+| `params` | object | typed payload, only when non-empty |
+| `started_at`, `finished_at` | ISO 8601 | `finished_at` only on the final write |
+| `status` | see [job-run-state.md](job-run-state.md) | final value lands at executor exit |
+| `exit_code` | int | `-9` is reserved for `/kill`; input to the derived `outcome` |
+| `pid`, `pid_create_time` | int, float | child PID persisted at spawn (so kill works even if the executor crashes) and its create time (so a recycled pid is told apart) |
+| `executor_pid`, `executor_create_time` | int, float | the executor itself, stamped when it flips to `running` |
+| `duration_seconds` | float | wall-clock seconds, 3 d.p. |
+| `peak_rss_bytes`, `cpu_seconds` | int, float | peak resident set and CPU summed over the process tree, sampled at about 1 Hz |
+| `killed` | bool | finalised via `/kill` (a human) |
+| `reaped` | bool | finalised because the pid was provably dead and the executor never finalised it |
+| `end_time_unknown` | bool | a reaped record whose end time could not be established; `finished_at` and `duration_seconds` are then omitted |
+| `watchdog`, `watchdog_reason` | bool, `no_output` \| `max_runtime` | the executor watchdog tore the run down |
+| `note` | str | one-liner for a non-obvious finalisation (`cooldown`, an invocation error, a watchdog message) |
+| `pinned` | bool | keep-forever flag |
 
-| Field | Type | Written by | Purpose |
-| --- | --- | --- | --- |
-| `run_id` | str | webapp + executor | Sortable timestamp; matches the dir name |
-| `job_id` | str | both | FK to `config/jobs.json` |
-| `name` | str | both | Job name at the time of the run (denormalised on purpose — survives renames) |
-| `trigger` | `"manual"` \| `"scheduled"` \| `"webhook"` \| `"chain:<upstream_id>"` | both | Where the run was fired from |
-| `trigger_source` | `"api"` \| `"schtasks"` \| `"webhook:<provider>"` | webapp / executor | Provenance: `"api"` on every `POST /run` fire, `"schtasks"` on a Task Scheduler fire, `"webhook:github"`-style on a webhook fire. Absent on older records and direct CLI fires |
-| `trigger_ip` | str | webapp | API fires only — `request.client.host` of the caller |
-| `trigger_ua` | str | webapp | API fires only — the caller's `User-Agent` |
-| `trigger_token_id` / `trigger_token_label` | str | webapp | API fires authenticated by a minted scoped token (see "Scoped API tokens") — the token's id + label, never the secret. Absent for the legacy `auth_token` and loopback callers |
-| `script_path` | str | both | Resolved at spawn time |
-| `args` | str | both | Whitespace-split into argv |
-| `params` | object | webapp + executor | Typed-parameter payload; only written when non-empty |
-| `started_at` | ISO 8601 | both | `pending` write or `running` re-write |
-| `status` | `"pending"` \| `"running"` \| `"success"` \| `"failed"` | both | Final value lands at executor exit |
-| `finished_at` | ISO 8601 | executor | Only on final write |
-| `exit_code` | int | executor | `-9` is reserved for `/kill` (`SIGKILL` analogue) |
-| `pid` | int | executor | The child PID, persisted at spawn so the kill endpoint works even if the executor itself crashes between spawn and `wait()` |
-| `pid_create_time` | float (epoch) | executor | Captured immediately after spawn — lets the reap check (below) tell "still this process" apart from a since-recycled pid; absent on older records |
-| `duration_seconds` | float | executor | Wall-clock seconds the child ran for; rounded to 3 d.p. |
-| `peak_rss_bytes` | int | executor | Peak resident-set size summed across the process tree (parent + recursive children) — sampled at ~1 Hz |
-| `cpu_seconds` | float | executor | Accumulated user + system CPU across the tree — sum of per-PID maxima |
-| `killed` | bool | kill endpoint | `True` only when finalised via `/kill` |
-| `reaped` | bool | reap check | `True` only when finalised automatically because the recorded pid was provably dead and the executor never finalised it — distinct from `killed`, which means a human tapped Kill |
-| `watchdog` | bool | executor | `True` only when the executor's last-resort watchdog tore the run down — distinct again from `killed` (a human) and `reaped` (nobody; the executor had already died) |
-| `watchdog_reason` | `"no_output"` \| `"max_runtime"` | executor | Which signal breached. Only written alongside `watchdog: true` |
-| `note` | str | executor | Human one-liner for a non-obvious finalisation — `"cooldown"` on a skipped fire, an invocation error, or `"watchdog: no output for 68min"` |
-| `pinned` | bool | run update endpoint | Keep-forever flag; omitted/false for normal retention |
+Plain files are the canonical store, readable with `cat`. `webapp/jobs/_index.sqlite` is a derived mirror: `runs` for queryable metadata and an FTS5 table for cross-run output search. `src/jobs/index.py` rebuilds it from the `run.json` / `output.log` pairs when it is missing, corrupt or has an older `PRAGMA user_version`; deleting it is the supported repair.
 
-Plain files remain the canonical store — same pattern as session transcripts and audit logs. A future LLM/human can `cat` a run record without any tooling. `webapp/jobs/_index.sqlite` is only a derived mirror: `runs` stores queryable metadata and `output_fts` maps FTS5 rowids to run rowids for cross-run grep. `src/jobs/index.py` rebuilds it from every `run.json` / `output.log` pair when the file is missing, corrupt, or carries an older `PRAGMA user_version`; deleting it and reloading the Jobs tab is the supported repair path. Canonical writes update the mirror after the atomic JSON swap, and finalization captures the completed output plus artifact presence.
+## Authoring safety
 
-## Authoring safety — pre-flight on save
+### Pre-flight on save
 
-Adding a job used to be a leap of faith: the first scheduled fire was when you found out the path was wrong or the venv didn't walk up. `src/jobs/preflight.py::preflight(job)` front-loads those checks at save time so the dialog can surface problems *before* the schedule starts ticking. It is a **pure function** (no subprocess, no globals) — both so it is trivially unit-testable and so a request handler never shells out to `schtasks.exe`.
+`src/jobs/preflight.py::preflight(job)` is a pure function (no subprocess, no `schtasks`) that checks a job before its schedule starts. An **error** blocks the save with `400`; a **warning** saves once acknowledged.
 
-Two severities:
+1. `script_path` exists: error.
+2. A `.py` job has an ancestor `.venv\Scripts\python.exe`: warning (the executor would fall back to `sys.executable`).
+3. A `.bat` job names a `.venv` interpreter or `activate` path that resolves: warning (best-effort text scan).
 
-- **error** — the job cannot run as configured; the save is **blocked** with HTTP 400.
-- **warning** — the job will run, but probably not the way the author expects; it **saves once acknowledged**.
+`POST /api/jobs` and `PUT /api/jobs/<id>` run it on the effective job: errors give `400 {"detail": {"reason": "preflight", "problems": [...]}}`; unacknowledged warnings give `200 {"saved": false, "warnings": [...]}` and the dialog offers **Save anyway**; with `"acknowledge_warnings": true` or no problems the row saves and warnings are echoed. A `Problem` is `{level, field, message}`. There is no `schtasks` round-trip check, which would put a shell-out on the request path.
 
-Checks performed:
+### Dry-run
 
-1. **`script_path` exists** → *error* if the file is missing (the single most common authoring mistake).
-2. **`.py` venv walk-up** → *warning* when no ancestor `.venv\Scripts\python.exe` is found; the executor will fall back to `sys.executable`. Mirrors the executor's own `resolve_venv_python` (now living in `src/jobs.py`) so the check matches runtime behaviour exactly.
-3. **`.bat` embedded `.venv` reference** → *warning* when the wrapper names a `.venv` interpreter / `activate` path that doesn't resolve (best-effort text scan).
+`POST /api/jobs/<id>/run` accepts `dry_run`:
 
-**Not a check** — `args` splitting: the executor uses plain `str.split()` (whitespace only, no shell quoting), so any non-empty string splits cleanly under that contract; there is nothing to validate at save time. Jobs that need arguments containing spaces should embed them in the `.bat` / `.py` wrapper instead — see the `build_invocation` docstring in `app/cli/commands/run_job_cmd.py`.
+- **`"check"`** (kebab **Dry-run check**) resolves the full invocation (script exists, venv walk-up, param composition) without spawning anything and writes a synthetic record, `dry_run_success` or `dry_run_failed` with the reason in `note`.
+- **`"execute"`** (the Dry run toggle in the run dialog) runs the real executor with `JOB_DRY_RUN=1`; scripts that honour it suppress side effects. The record is stamped `dry_run: true`.
 
-### Two-phase flow (errors block, warnings confirm)
-
-`POST /api/jobs` and `PUT /api/jobs/<id>` both run pre-flight on the effective job:
-
-- **Error present** → `400 {"detail": {"reason": "preflight", "problems": [...]}}`. Nothing is persisted.
-- **Warnings only, not acknowledged** → `200 {"saved": false, "warnings": [...]}`. Nothing is persisted; the dialog stays open showing the warnings with a **Save anyway** button.
-- **Warnings acknowledged** (`"acknowledge_warnings": true` in the body) **or no problems** → the row is saved and the response is `{"job": ..., "saved": true, "warnings": [...]}` (the warnings are echoed back so the UI can still note them).
-
-Each `Problem` is `{level, field, message}` — `field` (currently always `script_path`) lets the dialog place the message next to the offending input.
-
-**Deferred** (not implemented): the schtasks `/TR` round-trip check and the schtasks id-collision query. Both would require shelling out to `schtasks.exe` from the request path; the `/TR` string carries only launcher-internal paths (never user input), so the value is low and the cost — forcing schtasks mocking into every create test — is high.
-
-## Dry-run
-
-Once a job is saved, dry-run lets you verify it without committing to a full-effect fire. `POST /api/jobs/<id>/run` accepts an optional `dry_run` field with two modes:
-
-- **`"check"`** (mode 2 — the 🧪 row button, edit-mode only): resolves the full invocation (`script_path` exists, venv walk-up, param composition) **without spawning the child**. Writes a synthetic record with `status: dry_run_success` (or `dry_run_failed` carrying the resolution error in `note`) and no `exit_code`. This is the "would this even start?" check; it deliberately bypasses the executor funnel because nothing is ever spawned.
-- **`"execute"`** (mode 1 — the **Dry-run** checkbox in the run-now dialog): spawns the child through the real executor but with `JOB_DRY_RUN=1` in its environment. Scripts that opt in (`if os.environ.get("JOB_DRY_RUN"): …`) suppress their side effects. The run record is stamped `dry_run: true` so history shows the distinction.
-
-Both modes **bypass cooldown and the mutex queue** — a dry run is an explicit verification action, so pressing 🧪 should never be answered with "cooled down" or "queued". Dry-run records (`dry_run_success` / `dry_run_failed`, and any record stamped `dry_run`) are **excluded from the cooldown anchor** so a verification never resets a job's cooldown window. The history list marks dry runs with a `🧪 dry` chip.
-
-## Confirm-on-fire
-
-A job can carry an optional `confirm: true` flag (the **⚠️ Require confirmation before running** checkbox in the editor). When set, a manual fire must be explicit:
-
-- `POST /api/jobs/<id>/run` returns `403 {"detail": "confirmation required"}` unless the request carries `?confirmed=1`. This keeps the gate honest against a direct curl or a stray Stream Deck press — a Stream Deck button targeting a `confirm` job has to bake `?confirmed=1` in deliberately.
-- The UI's run-now path (`▶` and the run-now dialog's Run button) shows a confirm prompt and then sends `?confirmed=1`.
-- A dry-run **`"check"`** is **exempt** (it has no side effects); a dry-run **`"execute"`** is **not** (it spawns the child), so it is gated like any other real fire.
-
-The flag round-trips through `POST` / `PUT` and is omitted from the stored row when false (like the other optional fields).
+Both bypass cooldown and the mutex queue, and dry-run records never anchor a cooldown. History marks them with a `🧪 dry` chip.
 
 ## API surface
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
-| `GET /api/jobs` | bearer-token | List jobs, decorated with `schedule_chip`, `target_kind`, `next_run`, `next_run_epoch` / `next_run_iso` (computed), `last_run`, `running`, `run_count`, `pinned_count` |
-| `GET /api/jobs/agenda?days=7` | bearer-token | Upcoming fires over the next `days` (1..14), grouped client-side: `{occurrences, frequent, days, generated_epoch}` |
-| `POST /api/jobs` | bearer-token | Create — body `{name, script_path, args?, schedule?}` |
-| `PUT /api/jobs/<id>` | bearer-token | Edit (re-syncs schtasks) |
-| `DELETE /api/jobs/<id>` | bearer-token | Remove + delete schtasks entries |
-| `POST /api/jobs/<id>/run` | bearer-token | Trigger now (returns `run_id`, spawns executor detached) |
-| `POST /api/jobs/<id>/hook` | **provider signature only — never the bearer** | Trigger from an external service; see "Webhook-target jobs" below |
-| `GET /api/jobs/<id>/runs` | bearer-token | Newest-first run history |
-| `GET /api/jobs/runs/search?q=<text>&job=<id?>&status=<s?>&since=<iso?>` | bearer-token | FTS5 cross-run output search, newest first, with a concise snippet |
-| `GET /api/jobs/<id>/runs/<run_id>` | bearer-token | One run's metadata + output tail (last 64 KB) + artifact list + `webhook_payload` |
-| `PUT /api/jobs/<id>/runs/<run_id>` | bearer-token | Set `{pinned: true|false}` |
-| `GET /api/jobs/<id>/runs/<run_id>/artifacts/<filename>` | bearer-token | Download one strictly path-jailed artifact |
-| `WS /api/jobs/<id>/runs/<run_id>/stream` | bearer-token | Live-only snapshot → delta chunks → final status; token travels in the WS query string |
-| `POST /api/jobs/<id>/runs/<run_id>/kill` | bearer-token | Terminate a stuck run's process tree, finalise `run.json` (`status: failed`, `exit_code: -9`, `killed: true`) |
+| `GET /api/jobs` | bearer | list jobs with `schedule_chip`, `target_kind`, `next_run`, `next_run_epoch` / `next_run_iso`, `last_run`, `running`, `run_count`, `pinned_count`, `coverage`, `script_missing`, `rerun_safe` |
+| `GET /api/jobs/agenda?days=7` | bearer | upcoming fires over `days` (1..14): `{occurrences, frequent, days, generated_epoch}` |
+| `POST /api/jobs` | bearer | create |
+| `PUT /api/jobs/<id>` | bearer | edit (re-syncs schtasks) |
+| `DELETE /api/jobs/<id>` | bearer | remove the row and its schtasks entries |
+| `POST /api/jobs/<id>/run` | bearer | trigger now; returns `run_id`, spawns the executor detached |
+| `POST /api/jobs/<id>/hook` | provider signature only, never the bearer | trigger from an external service |
+| `GET /api/jobs/<id>/runs` | bearer | newest-first history |
+| `GET /api/jobs/runs/search?q=&job=&status=&since=` | bearer | FTS5 cross-run output search with snippets |
+| `GET /api/jobs/<id>/runs/<run_id>` | bearer | metadata, last 64 KB of output, artifact list, `webhook_payload`, `sent_files` count |
+| `PUT /api/jobs/<id>/runs/<run_id>` | bearer | set `{pinned}` |
+| `GET /api/jobs/<id>/runs/<run_id>/artifacts/<filename>` | bearer | download one path-jailed artifact |
+| `POST /api/jobs/<id>/runs/<run_id>/outbox` | loopback only | a running job sends `{path, caption?}` to the owner |
+| `GET /api/jobs/<id>/runs/<run_id>/outbox[/<entry_id>]` | Tailscale + passkey | a run's sent files and one file's bytes |
+| `WS /api/jobs/<id>/runs/<run_id>/stream` | bearer (token in the query string) | live tail |
+| `POST /api/jobs/<id>/runs/<run_id>/kill` | bearer | terminate a stuck run's process tree |
 
-## Operational signal
+## What the list shows
 
-The row carries five lightweight signals on top of the schedule chip and last-run line, recomputed on every `/api/jobs` poll:
+Each row is the shared action row: the job avatar (the green alive badge while it runs), the name, one meta line ("in 5m · Every 15 min", "running now · Daily 03:00", "Was daily 07:00" when paused), chips for exceptions only, a seven-dot sparkline, and a kebab (Run now, Pause/Resume, Dry-run check, Edit, Remove). Tapping the row opens the job sheet (the detail pane on wide layouts) with details, runs and output. Everything below is recomputed on each `/api/jobs` poll.
 
-- **Duration chip** — `p50 4.2s · p95 11s` over completed runs of this job. Hidden when there are no completed runs yet.
-- **Sparkline** — `●●●○●●●` over the last 7 runs, oldest-left. Green = success, red = failed, amber = running/pending, grey = unknown.
-- **Success rate / 30 d** — appears in the meta line when there has been at least one completed run in the last 30 days (`72% / 30d`).
-- **⚠️ stuck marker** — the latest run is in `running` status and has been running for more than `max(p95 × 3, 300 s)`. The marker is *surface only* — auto-kill is intentionally out of scope; a human still chooses to act.
-- **⚠ not firing pill** — the schedule isn't producing runs at all: a missing/disabled Task Scheduler entry, or an elapsed slot with no run record. See [Missed-fire coverage](#missed-fire-coverage-issue-697); the pill renders only for a confirmed `problem`, never for `unknown`.
-- **CPU / peak RSS** — surfaced on the selected run's output label inside the expanded panel (`Output · <rid> · success · 47 s CPU · peak 1.3 GB`).
-- **Tap-to-copy log** — tapping the selected run's output pane copies the whole log to the clipboard (toast `📋 Copied log`), so an error trace is one tap away from pasting into a report / chat. A manual text selection inside the pane is left alone (auto-copy is suppressed while a selection exists), and the empty placeholder is a no-op.
+- **Sparkline.** The last seven runs, oldest left: green success, red failed, amber not confirmed, a hollow ring deferred, grey unknown, the accent colour for a run in progress.
+- **Chips.** **failed**, **script missing** (a non-paused job whose script no longer exists) and **not firing** in danger; **stuck** and **not confirmed** in attention; **paused** neutral. A healthy job has none. The header reads "N failing" and "N not firing" in their tones, else "N jobs".
+- **Details.** `p50 4.2s · p95 11s` over completed runs, a 30-day success rate, and CPU / peak RSS on the selected run's output label. Tapping the output pane copies the whole log (a manual selection suppresses it).
+- **Stuck.** The latest run has been `running` for more than `max(p95 × 3, 300 s)`. The chip is surface-only; the sheet's **Kill stuck run** is the human's choice. The watchdog below is the automatic backstop.
+- **Order and countdown.** `src.jobs.next_fire(schedule, *, now)` computes the next fire from the bounded schedule shape (paused and `none` give `None`) and `/api/jobs` exposes it as `next_run_epoch` / `next_run_iso`, deliberately apart from the locale-formatted, lexically sorted `schtasks` string. The client sorts ascending by it, with manual-only and paused jobs last; the sliders button opens a Sort and filter sheet that switches to A–Z, persisted in `localStorage` (`launcher.jobsSort`). Each scheduled row opens its meta line with `in 3h` (`due` once past).
+- **Schedule agenda.** The **Next up** card shows the next three distinct jobs; its header opens a **Schedule** sheet grouping the week's fires by day (`app/webapp/static/jobs/jobs-agenda.js`). `src.jobs.upcoming_fires` enumerates fires by walking `next_fire`; dense `minutes` / `hourly` jobs are summarised in a footer rather than enumerated. Tapping a fire opens that job's sheet.
 
-## List order + countdown
+`src/jobs/__init__.py::run_stats(job_id)` feeds these: `p50`, `p95`, `success_rate_30d` (`None` with no known outcomes), `unconfirmed_30d`, `completed_count` and `last7`, cached 30 s per job and invalidated when a run finalises.
 
-As the registry grows, the question that matters at a glance is *"what fires next?"* — which name order can't answer (it interleaves cadences). So:
+## Terminal outcomes — `outcome` vs `status`
 
-- **Computed next-fire timestamp.** `src.jobs.next_fire(schedule, *, now)` derives the next wall-clock fire purely from the bounded schedule shape — `daily_times` picks the earliest upcoming slot, `weekly` rolls to the next matching weekday, `once` returns its instant only if still future, and `none` (which includes a *paused* job, whose active schedule is parked as `none`) returns `None`. It is exposed as `next_run_epoch` (int seconds) + `next_run_iso` on `/api/jobs`. This is deliberately **separate from** the schtasks `next_run` string, which is a locale-formatted, lexically-sorted best-effort value — fine to display, useless to sort by.
-- **Default Next-run order.** The client (`app/webapp/static/jobs.js` `sortedJobs`) sorts ascending by `next_run_epoch`; jobs with no next fire (manual-only / paused) sink to the bottom, tie-broken by name. A header toggle (`#jobsSortBtn`) flips to classic A–Z; the choice persists in `localStorage` (`launcher.jobsSort`, default `next`).
-- **Countdown chip.** Each scheduled row shows a relative `⏱ in 3h` chip next to its cadence chip, recomputed in place on every poll. No chip for jobs with no next fire. Replaces the old `next: <schtasks string>` text in the meta line so "next" has exactly one home.
+`status` on disk is binary: `success` for exit 0, `failed` otherwise. A non-zero exit is not always a failure, so `src/jobs/outcome.py` classifies the exit code into a derived `outcome` (`success`, `failed`, `unconfirmed`, `deferred`) plus an `outcome_reason`, and `jobs_history.read_run()` adds both to every record it reads. They are derived on read, never persisted, so old records re-render with no migration and `status` keeps its meaning.
 
-## Schedule agenda
+- **`unconfirmed`** means the run's delivery was never established, which is its own fact and not a failure. A block of codes (114 to 130) reserved by a scheduled-agent runner is classified in `src/jobs/outcome.py`; an ordinary script's own exit codes are never unconfirmed.
+- **`deferred`** is declared per job, never globally, in `config/jobs.json`: `"exit_outcomes": {"3": "deferred"}`. It is for a child that exits non-zero on purpose, such as a task that has nothing to do in a session without a desktop. Only `deferred` is declarable, exit `0` cannot be, and a malformed declaration fails the row's load. It overrides the table for that job's declared codes only.
+- A run this launcher killed, reaped or watchdogged is always `failed`.
 
-A foldable **🗓️ Schedule** panel sits above Registered jobs (collapsed by default, same `<details>` chrome as the other foldable panels). It answers *"what's planned over the next few days?"* without a desktop-style 2D calendar grid — the deliberate mobile-native substitute is a **day-grouped agenda list**.
+Where it shows: `unconfirmed` is an attention dot and a **not confirmed** chip, a `?` glyph in history, and an `unconfirmed` card in the Board's Other column; `deferred` is a hollow ring, a clock glyph, no chip and no alert. Both are excluded from `success_rate_30d` and the p50/p95 pool, and both break a failure streak instead of extending it. Chaining still keys on the persisted `status`.
 
-- **Occurrence expansion.** `src.jobs.upcoming_fires(schedule, *, start, end, cap=200)` enumerates every fire in a window by walking `next_fire` forward (each call returns a fire strictly after the cursor), so it reuses the list-order countdown logic rather than re-deriving cadence math. Dense `minutes` / `hourly` cadences (`FREQUENT_SCHEDULE_TYPES`) are **not** enumerated — they'd flood the window — and return `[]` here.
-- **Endpoint.** `GET /api/jobs/agenda?days=7` (clamp 1..14) expands each non-paused job into `{occurrences, frequent, days, generated_epoch}`: `occurrences` is a flat, time-sorted list of `{job_id, name, fire_epoch, fire_iso, cadence}`; `frequent` summarises the minutes/hourly jobs as one `{job_id, name, cadence}` row each. No schtasks, no per-job decoration.
-- **Panel.** `app/webapp/static/jobs.js` fetches lazily when the panel opens (re-fetched on each open; nothing polls it) and groups `occurrences` by calendar day under `Today` / `Tomorrow` / `Wed 18 Jun` headers, each row `HH:MM · name · cadence`. Frequent jobs render as a muted footer; an empty window shows "No scheduled runs in the next 7 days." Tapping a row calls `revealJob` — it expands that job in the Registered-jobs list below and scrolls it into view (the agenda is a read-only lens, not a second control surface).
+## Stopping and reconciling runs
 
-### `run_stats` shape
+**Stuck-run kill.** `POST /api/jobs/<id>/runs/<rid>/kill` returns `404` for an unknown job or run and `409` unless the run is `running` or `pending`. It reads the persisted `pid`, terminates the parent and every recursive child with `psutil`, waits 5 s, kills the survivors, and finalises `status: failed`, `exit_code: -9`, `killed: true`. If the executor already exited the route still finalises the record, which is the bug the button fixes.
 
-`src/jobs.py::run_stats(job_id)` is the single helper feeding all of the above:
+**Executor watchdog.** The manual kill and the reap below do not cover a run wedged while its executor is alive. `RunWatchdog` in `app/cli/commands/run_job_supervision.py` is a daemon thread beside the resource sampler, watching two signals: `output.log` has not grown for `no_output_seconds` (size, not mtime, since Windows does not refresh a directory entry while a handle is open; a failed `stat` skips the tick), or wall-clock exceeds `max_runtime_seconds`. A breach kills the child's tree through `src.diagnostics.kill_process_tree`; the closed pipe then lets the executor finalise normally, so the watchdog only records why it fired.
 
-```python
-{
-  "p50": 4.2,                            # seconds, completed runs only
-  "p95": 11.7,
-  "success_rate_30d": 0.72,              # None when zero completed in 30 d
-  "completed_count": 18,
-  "last7": [{"status": "success", "run_id": "20260524T080000"}, ...]
-}
-```
+Both fields are optional per job and tri-state: absent means the default, a positive int is that many seconds, and an explicit `0` disables that signal. Defaults: `no_output_seconds` is 1 hour (a job that prints only at the end is common), and `max_runtime_seconds` is `src.jobs.stats.derived_runtime_ceiling_seconds(job_id)`, the same `max(p95 × 3, 300 s)` as the stuck chip, but only once the job has `WATCHDOG_MIN_COMPLETED_RUNS` (5) completed runs; below that there is no runtime ceiling, because a false chip costs a glance and a false auto-kill of a healthy first run is unrecoverable. Both limits are resolved on the main thread before the loop starts, and the kill happens before the breadcrumb is logged (on a throwaway thread, since the log handler writes to the console a wedge may have jammed). A child that exited just before a breach is never reported as watchdog-killed.
 
-Process-local 30 s TTL cache per job id; invalidated explicitly when a run finalises (`invalidate_stats_cache(job_id)`).
+The run finalises `failed` with `watchdog: true`, `watchdog_reason` and a `note`, and the run row shows one "who ended this" chip: `watchdog <reason>`, `killed` or `reaped` (`endedChip` in `app/webapp/static/jobs/run-row.js`). It feeds `on_failure` and the notifications like any failure; there is no auto-retry.
 
-### Stuck-run kill
+**Stranded-run reap.** If the executor itself dies (reboot, OOM, killed shell) nothing writes a terminal status. `src/jobs/reap.py` reconciles on read: every `GET /api/jobs` poll and every Board stuck sweep calls `reap_stranded_runs(job)`, and `src.jobs.queue.mutex_collision` calls the drain-less `finalize_dead_runs`.
 
-```
-POST /api/jobs/<id>/runs/<rid>/kill
-```
-
-- 404 when job or run is unknown.
-- 409 when the run's status is not `running` or `pending`.
-- Finalises `run.json` first, to `status: failed`, `exit_code: -9`, `killed: true`, `finished_at: now`, with `duration_seconds` derived from `started_at`.
-- Then loads the persisted `pid` from `run.json` and uses `psutil` to:
-  1. `terminate()` the parent + every recursive child,
-  2. `wait_procs` with a 5 s grace,
-  3. `kill()` whatever survived.
-- Drains the run's mutex queue once. The `pid` is the job's child, so the executor survives it and wakes from `wait()`; because `killed` is already on the record it skips its own notification, `on_failure` chain and mutex drain.
-
-If the executor has already exited (orphan pid), the route still finalises the record — the UI is the authoritative "is this run done?" surface, and a stale `running` row that nothing is actually executing is the bug the kill button fixes.
-
-### Executor watchdog — the running-forever backstop
-
-The kill button above is manual, and the reap below only fires on a *provably dead* pid. Neither covers a run that hangs without dying: a long weekly job that freezes on the visible-job tee's console-backpressure deadlock would sit `running` in the Jobs UI for **hours** until someone noticed and tapped Kill. The inner safety net that should catch it — `claude_progress.py`'s own 45-minute stall watchdog, several layers downstream inside the orchestrator that job spawns — can itself deadlock if it emits its "killing the stalled run" message *before* calling the kill, because that emit blocks on the same jammed pipe chain.
-
-The lesson generalises: **every inner safety layer shares fate with the thing it guards.** The executor is the one layer whose health depends on nothing the child does — it needs only to keep a thread ticking and be able to call `kill_process_tree` — so that is where the backstop belongs, and it assumes nothing about *why* a run is stuck.
-
-`src/run_supervision.py::RunWatchdog` is a daemon thread started alongside the resource sampler in `run_job_cmd.py::_spawn_and_wait`, watching two signals:
-
-- **No output growth** — `output.log` hasn't gained a byte for longer than `no_output_seconds`. Size, not mtime: Windows doesn't refresh a file's directory-entry timestamp while a handle is open, so mtime reads as frozen for a perfectly healthy run. A `stat` that fails is treated as *unknown* and skips the tick — never as "no growth".
-- **Total runtime** — wall-clock since spawn exceeds `max_runtime_seconds`.
-
-Either breach calls `src.diagnostics.kill_process_tree` on the child's whole tree. That also unwedges the main thread for free: the child's pipe closes, the tee loop hits EOF, `proc.wait()` returns, and the executor's ordinary finalisation runs — so the watchdog never finalises a run itself, it only records *why* it fired.
-
-**Per-job configuration.** Both `max_runtime_seconds` and `no_output_seconds` are optional `Job` fields (`config/jobs.json`, settable through `POST`/`PUT /api/jobs`), and both are **tri-state**: absent means "use the default", a positive int is that many seconds, and an explicit `0` **disables that signal** for the job. Zero is deliberately *not* folded into "unset" the way `cooldown_seconds` folds it — for a watchdog, "off" and "use the default" are opposite instructions.
-
-**Defaults.**
-
-- `no_output_seconds` → 1 hour (`WATCHDOG_DEFAULT_NO_OUTPUT_SECONDS`). Generous on purpose: a job that prints nothing until it finishes is common and must not be killed for being quiet.
-- `max_runtime_seconds` → `src.jobs.stats.derived_runtime_ceiling_seconds(job_id)`, the same `max(p95 × 3, 300 s)` heuristic behind the ⚠️ stuck badge (`stuck_threshold_seconds`, now the single definition both read). **But only once the job has at least `WATCHDOG_MIN_COMPLETED_RUNS` (5) completed runs on record** — below that it returns `None` and the run gets *no* runtime ceiling. A false ⚠️ costs a glance; a false auto-kill of a healthy first-ever run is not recoverable, so thin history is reported as unknown rather than collapsed onto the 300 s floor. Give such a job a ceiling by setting `max_runtime_seconds` explicitly.
-
-**Discipline inside the thread.** Both ceilings are resolved on the *main* thread before it starts (`resolve_watchdog_limits`), so the loop itself touches nothing but `Path.stat`, `Popen.poll`, and a bounded `Event.wait` — no config load, no run-history read, no notifier. It does not log inline either: the root logger writes to `stderr`, which for a `visible` job is the same console a wedge may already have jammed, so the kill happens **first** and the breadcrumb goes out afterwards on a throwaway daemon thread (`_log_off_thread`). That ordering follows from the rule that a stall watchdog must never block on its own log line before it kills. A child that exited on its own a moment before a breach is caught by a `poll()` check and is never reported as watchdog-killed.
-
-**Finalisation.** `status: "failed"`, plus `watchdog: true`, `watchdog_reason`, and a human `note` — its own state, not folded into a normal failure or a manual kill. The Jobs UI run row renders one "who ended this" chip: ⏳ `watchdog <reason>`, or 🛑 `killed` for the manual path (`endedChip` in `app/webapp/static/jobs.js`); a run that ended by itself gets no chip. A watchdog kill is otherwise an ordinary failed run — it feeds the `on_failure` chain, the failure-streak gate, and the notification config exactly like any other failure. There is no auto-retry.
-
-### Stranded-run reap
-
-If the **executor itself** dies before it reaches its own finalise (interrupt, reboot, OOM, a parent shell killing its process tree) — not just the child it's tracking — nothing ever writes a terminal status, and the record stays `running` forever even after the recorded pid is long gone. `src/jobs/reap.py` automates the same reconciliation the kill route already does by hand for that exact case:
-
-- **Where it runs.** Opportunistically on read, not a background sweep — every `GET /api/jobs` poll (`app/webapp/routers/jobs.py::_decorate_job`) and every `Board` "stuck" sweep (`src.board.jobs_attention`) call `reap_stranded_runs(job)` before deciding what to show. `src.jobs.queue.mutex_collision` calls the drain-less `finalize_dead_runs(job)` for the same reason mid-admission-check (draining there could spawn a queued sibling before the rest of that same collision sweep re-checks it).
-- **What counts as "provably dead".** Only a recorded `pid` that `psutil` confirms is gone (or has been recycled by Windows — a `pid_create_time` persisted alongside `pid` at spawn, and compared against the live process's actual `create_time()` within 1 s, rules out reuse). No `pid` yet, or a pid that's alive and unverifiable against a create-time hint, is left alone — a genuinely long-running job is never reconciled out from under itself.
-- **A pid that never lands.** A pending or running record with no `pid` more than two minutes after `started_at` never got its child spawned; it is finalised as `status: "failed"` with `fail_reason: "executor_never_started"` (no `reaped` flag) and releases its mutex group like any other reap. The deadline is `SPAWN_DEADLINE_SECONDS` in `src/jobs/run_state.py`.
-- **What gets swept.** Every record still owned by an executor (pending or running) in the job's history, not just the latest — an older `running` record superseded by a newer run is invisible to every behavioural consumer (mutex/streak/run-button all read only the latest), but still a lie if a user opens that specific historical run's detail view.
-- **What a reap does.** Writes `status: "failed"`, `finished_at`, `duration_seconds` (mirroring the kill route) plus `reaped: true` — distinct from `killed: true`, since this was never killed, just lost track of — invalidates the stats cache, and drains the job's mutex group once if anything was reaped.
-- **What it doesn't replace.** The ⚠️ stuck marker (a live-but-slow run) is untouched — reap only fires on a confirmed-dead pid. Nor does it replace the [executor watchdog](#executor-watchdog--the-running-forever-backstop-issue-695) above: reap handles "the executor is gone and the record lied", the watchdog handles "the executor is still here, still waiting, and the child will never finish".
-
-### `next_run` cache
-
-The original v1 issued one `schtasks /Query` per job per `/api/jobs` poll — N+1 fork+exec on Windows. The decoration layer now reads `next_run` out of a single process-local snapshot:
-
-- One bulk `schtasks /Query /FO LIST /V` populates `{task_name: {next_run, enabled}}` for every entry under `\AppLauncherLite\` — `next_run` backs the countdown, `enabled` backs the [missed-fire coverage](#missed-fire-coverage-issue-697) structural check, so both read one query.
-- The snapshot is cached for **30 s** (`_NEXT_RUN_TTL_SECONDS` in `src/jobs/schtasks.py`).
-- A *failed* query caches as `None`, distinct from `{}` ("the query worked and there are no `\AppLauncherLite\` tasks") — without that distinction one failed query would flag every scheduled job as missing its entry.
-- `sync_schtasks` and `delete_schtasks` call `invalidate_next_run_cache()` at the end so user edits show up on the next poll without waiting out the TTL. That also drops the derived coverage scan, which reads this same snapshot.
-
-Net effect: `GET /api/jobs` performs at most one `schtasks` invocation per cache window regardless of job count.
+- *Provably dead* means a recorded `pid` that `psutil` confirms gone or recycled (`pid_create_time` compared within 1 s). No `pid`, or an alive pid, is left alone.
+- *A dead child is not a dead run.* While the stamped `executor_pid` is alive the reap is deferred (log line `reap deferred`); a reap needs both dead. The write re-checks under the run lock so a late exit code still wins.
+- It sweeps every non-terminal record in the job's history, not just the latest.
+- It writes `failed` with `reaped: true`, invalidates the stats cache, drains the mutex group once and fires the failure alert.
+- `finished_at` comes from `output.log`'s last-write mtime when that is after `started_at`; otherwise it and `duration_seconds` are omitted and `end_time_unknown: true` is set, which also keeps the run out of p50/p95. Stamping "now" would fold hours of discovery gap into the duration.
 
 ## Failure notifications
 
-Set the Pushover keys in `config/webapp_config.json` and flip `notify_on_failure: true` — the executor will fire a single push per failed run (master switch defaults off, so the feature ships dormant).
-
-```json
-{
-  "pushover_api_token": "azGDORePK8gMaC0QOYAMyEEuzJnyUi",
-  "pushover_user_key":  "uQiRzpo4DXghDmr9QzzfQu27cmVRsG",
-  "notify_on_failure":     true,
-  "notify_failure_streak": 3
-}
-```
+Set the Pushover keys in `config/webapp_config.json` and flip `notify_on_failure: true`; the executor then pushes once per failed run. The master switch defaults off, so the feature ships dormant.
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `pushover_api_token` / `pushover_user_key` | `""` | Both must be set for any push to fire; otherwise the notifier short-circuits as a no-op |
-| `notify_on_failure` | `false` | Master switch — even with creds present, nothing is sent until this flips on |
-| `notify_failure_streak` | `0` | When > 0, also fires a separate "🔁 N consecutive failures" push when the streak ticks to exactly this count. Useful when individual-failure pushes are muted via Pushover quiet hours |
+| `pushover_api_token` / `pushover_user_key` | `""` | both required; otherwise the notifier is a no-op |
+| `notify_on_failure` | `false` | master switch |
+| `notify_failure_streak` | `0` | when above 0, also pushes "N consecutive failures" as the streak reaches exactly N |
+| `notify_failure_summary` | `false` | pipe the last ~500 characters of `output.log` through the local LLM hub for a one-line root-cause prefix; hub down falls back to the raw tail |
 
-The push body always includes: the raw output tail (last 500 chars), then a footer `— job=<id> run=<rid> exit=<code>`. Pushover caps individual messages at ~1024 chars; longer bodies are truncated server-side, so the tail is what the executor budgets toward.
+Not every `failed` run is announced as one: a code meaning "delivery never established" pushes as `❓ <job> — not confirmed` at `warning` severity (Pushover priority 0, no quiet-hours bypass) with the code's meaning in the footer; `killed`, `reaped` and `watchdog` runs are always failures; a `deferred` run is silent. The body is the optional summary, the output tail, and a footer `— job=<id> run=<rid> exit=<code>` with `(reaped — end time not confirmed)` or `(watchdog: <note>)` appended when applicable. The whole path sits in one `try`/`except`: bad credentials, a Pushover 5xx or an unreachable hub log at `WARNING` and never block the executor's exit.
 
-The notifier path is wrapped in a single `try`/`except` — credentials misconfigured, Pushover 5xx: none of those can block the executor's normal exit. Errors land in the launcher log at `WARNING`.
-
-### Per-job Telegram alerts
-
-`notify_on_failure` above is global — every job, one shared Pushover channel. A job can additionally carry an `alert_on_failure: true` flag (the **🔔 Alert to Telegram if failed** toggle in the editor, sitting just above **Require confirmation before running**) that fires a Telegram message on *that job's* failed runs only, independent of the global switch — opt-in per job so a shared Telegram chat isn't spammed by every job's failures.
-
-The channel is the fleet's vendored `src/notify/` Telegram primitive (byte-identical to `whatsapp-radar` and `home-automation`'s copies, sourced from `project-scaffolding`) — one Bot API `sendMessage` HTTPS POST via stdlib `urllib`. Set both credentials in `config/webapp_config.json`:
-
-```json
-{
-  "telegram_bot_token": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
-  "telegram_chat_id":   "987654321"
-}
-```
-
-| Key | Default | Effect |
-| --- | --- | --- |
-| `telegram_bot_token` / `telegram_chat_id` | `""` | Both must be set for any alert to fire; otherwise the notifier short-circuits as a no-op |
-| `Job.alert_on_failure` | `false` | Per-job opt-in — set from the editor's toggle, or `"alert_on_failure": true` in `config/jobs.json` |
-
-The message is short and job-scoped: `❌ <job name> failed` as the title, `<timestamp> — run=<rid> exit=<code>` as the body — no streak logic (that is a Pushover-specific enrichment on the global channel). Same swallow-on-error contract as Pushover: a misconfigured token or a Telegram-side failure is logged at `WARNING` and never blocks the executor's normal exit. A job with the toggle on shows a 🔔 bell icon next to its name in the Jobs tab list.
+A failed run publishing a mailbox event for the fleet chief is planned with the chief and not active until fleet-config-lite ships it.
 
 ## Missed-fire coverage
 
-Failure alerting covers a run that **failed**; the ⚠️ stuck marker covers one that never **ended**. `src/jobs/coverage.py` covers the third case — a run that never **started**. A job whose Task Scheduler entry is missing, disabled, or was never created simply doesn't fire, and the absence is otherwise invisible: the row keeps showing its old stats and nothing alerts. This is not hypothetical — `config-map` and `sota-watch` shipped launchers plus "runs weekly unattended" docs with *no registered task at all* for weeks, found only by a manual coherence review.
+Alerting covers a run that failed and the stuck chip covers one that never ended; `src/jobs/coverage.py` covers one that never **started** (a missing, disabled or never-created Task Scheduler entry). Two halves, both from data the tab already reads:
 
-Two halves, both answered from data the tab already reads:
+- **Structural.** Every non-paused scheduled job needs an **enabled** `\AppLauncherLite\<id>` entry (every fan-out slot for `daily_times`), read from the same cached bulk query as `next_run`.
+- **Behavioural.** The schedule is expanded across the last `COVERAGE_WINDOW_DAYS` (3) via `upcoming_fires` and each elapsed slot is matched against run records.
 
-- **Structural** — every non-paused, scheduled job must have a matching, **enabled** `\AppLauncherLite\<id>` entry (every fan-out slot for `daily_times`). This is what catches a deleted entry immediately, without waiting for the missed slot itself. It reads the *same* 30 s cached bulk `schtasks /Query` the `next_run` column already pays for (see [`next_run` cache](#next_run-cache)) — one batched query per cycle, never an N+1 shell-out storm.
-- **Behavioural** — the schedule is expanded across the last `COVERAGE_WINDOW_DAYS` (3) via `upcoming_fires`, and each elapsed slot is matched against the on-disk run records.
-
-The never-flag rules are the load-bearing half — a coverage check that cries wolf gets muted, and then it protects nothing:
+The never-flag rules keep it from crying wolf:
 
 | Rule | Why |
 | --- | --- |
-| Paused jobs and `schedule: none` jobs report `exempt` | There is no schedule to miss |
-| `minutes` / `hourly` skip the behavioural half | Too dense to enumerate (same `FREQUENT_SCHEDULE_TYPES` the agenda summarises). The structural half still covers them, and that is what detects a deleted entry |
-| A slot counts as missed only once it is 15 min past (`MISSED_FIRE_GRACE_SECONDS`) | Task Scheduler starts late; a machine waking from sleep starts very late |
-| **Any** run record near the slot counts as a fire | Including `skipped` — a cooldown no-op *did* fire, it just declined to do work — and a manual run that happened to cover the slot |
-| The window never reaches past `added_at` or `schedule_changed_at` (the last schedule edit or resume), nor past the oldest retained run when history is at its 20-run cap | A pruned record is not evidence of a missed fire, and earlier days ran under another schedule or none |
-| A failed `schtasks` query reports `unknown`, never "missing" | One bad query must not flag every job. An unestablished fact gets its own state and is never folded into the passing *or* the failing one |
+| Paused and `schedule: none` jobs are `exempt` | nothing to miss |
+| `minutes` / `hourly` skip the behavioural half | too dense to enumerate; the structural half still catches a deleted entry |
+| A slot is missed only 15 min after it (`MISSED_FIRE_GRACE_SECONDS`) | Task Scheduler starts late, a waking machine very late |
+| Any run record near the slot counts as a fire | including `skipped` (a cooldown no-op did fire) and a manual run |
+| The window never reaches past `added_at` or the oldest retained run at the 20-run cap | a pruned record is not evidence |
+| A failed `schtasks` query is `unknown`, never "missing" | an unestablished fact gets its own state |
 
-**Surfaces.** `GET /api/jobs` decorates each row with a `coverage` object — `{state, detail, problems, missing_tasks, disabled_tasks, missed_count, missed_fires}`, where `state` is `ok` / `problem` / `unknown` / `exempt`. Only `problem` renders: a red **⚠ not firing** pill on the row's chip line, titled with the detail.
+`GET /api/jobs` decorates each row with `coverage` (`{state, detail, problems, missing_tasks, disabled_tasks, missed_count, missed_fires}`, `state` one of `ok` / `problem` / `unknown` / `exempt`); only `problem` renders, as a **not firing** pill. A lifespan tick re-scans on an interval so alerting does not depend on the tab being open, and is skipped on a disposable instance (the autoboot webapp, identified by `LAUNCHER_SESSION_HOST_PORT`). Pings reuse the global Pushover channel gated by `notify_on_failure` and are de-duplicated through `webapp/jobs/coverage-alerts.json`: a job re-alerts when its problem signature changes or the class's repeat interval passes, and a recovered job is dropped so its next break alerts at once.
 
-**Alerting** reuses the exact channels the failure path uses — global Pushover gated by `notify_on_failure`, per-job Telegram gated by `Job.alert_on_failure` — because a coverage problem is a job problem, not a new notification surface. A background tick in the webapp's lifespan re-scans on an interval (the whole point being that it does *not* depend on the Jobs tab being open); it is skipped entirely on a disposable instance (the e2e / verify-before-ship autoboot webapp, identified by `LAUNCHER_SESSION_HOST_PORT`) so a throwaway instance never pushes a real alert. Pings are de-duplicated through `webapp/jobs/coverage-alerts.json`: a job re-alerts only when its problem *signature* changes or 24 h have passed, and a job whose coverage recovers is dropped from the state so its next break alerts immediately.
+**Script missing.** Pre-flight proves a script existed at save time; `GET /api/jobs` adds `script_missing` per row (`true` only when the path is established absent; paused jobs, scriptless kinds and an unanswerable path read `false`) and the row shows a **script missing** chip. Nothing edits `jobs.json`.
+
+Each problem class has its own wording, in `src/jobs/coverage.py::PROBLEM_ANNOUNCEMENTS`, most root-causal first, because one shared "never fired" title teaches readers to dismiss the channel:
+
+| Class | Title | Severity | Re-ping |
+| --- | --- | --- | --- |
+| `task_missing` | 🕳️ *name* — Task Scheduler entry missing | `error` | 24 h |
+| `task_disabled` | 🚫 *name* — Task Scheduler entry disabled | `error` | 24 h |
+| `offset_pinned_trigger` | 🕐 *name* — trigger pinned to a UTC offset (drifts at DST) | `warning` | 24 h |
+| `missed_fire` | 🕳️ *name* — scheduled run never fired | `error` | 24 h |
+| `principal_interactive` | 🔒 *name* — will not fire while logged out | `warning` | 7 d |
+
+`offset_pinned_trigger` is a `StartBoundary` carrying a UTC offset (`…+01:00` or `…Z`, read from one `schtasks /Query /XML` of the namespace folder): the job runs, but an hour off the wall clock after each daylight-saving change, and its missed slots are not reported separately. `principal_interactive` is a conditional risk, so it is a weekly warning that is quieter but never muted. With several classes present the title and severity come from the highest-precedence one, the body lists all, and the repeat interval is the shortest. An unknown class falls back to a vague "schedule coverage problem".
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `jobs_coverage_interval_minutes` | `60` | Minutes between background coverage scans. `0` disables the tick entirely — the `/api/jobs` badge still computes lazily on poll. On by default because it pushes nothing on its own: alerts still route through the two opt-in gates above |
+| `jobs_coverage_interval_minutes` | `60` | minutes between background scans; `0` disables the tick (the badge still computes on poll) |
 
 ## Per-job secrets & env
 
-A job can declare an `env: {NAME: value}` overlay in `config/jobs.json` (or via the create/edit API — the field round-trips through both routes). The executor merges it into the child's environment at fire time, after `os.environ` and before the typed-param env (so a per-run param can override a static value). Values are either literals or `$secret:<key>` references resolved against `webapp_config.json`'s `secrets` block — the same mechanism `webhook.secret` uses:
+A job can declare `env: {NAME: value}` in `config/jobs.json` or through the create/edit API. The executor merges it into the child's environment after `os.environ` and before the typed-param env, so a per-run param can override it. A value is a literal or a `$secret:<key>` reference resolved against `webapp_config.json`'s gitignored `secrets` block (`src.jobs.secrets`), the same mechanism as `webhook.secret`:
 
 ```json
-{
-  "id": "linkedin-sync",
-  "name": "LinkedIn sync",
-  "script_path": "C:\\path\\to\\your\\projects-root\\example-project\\sync.py",
-  "env": {"LINKEDIN_API_KEY": "$secret:linkedin_api"}
-}
+{ "id": "sync", "name": "Sync", "script_path": "E:\\automation\\sync\\sync.py", "env": {"API_KEY": "$secret:sync_api"} }
 ```
 
-`jobs.json` and every API response carry only the opaque reference — the real value lives in the gitignored `secrets` block and appears nowhere else. An unresolvable reference finalises the run as `failed` with `note: "secret '<key>' not found"` (and the 🧪 dry-run "check" mode catches it without firing anything). Env names are UPPER_SNAKE_CASE, same shape as a `Param`'s `env` mapping.
+`jobs.json` and every API response carry only the reference. An unresolvable reference finalises the run `failed` with `note: "secret '<key>' not found"`, and the dry-run check catches it without firing. Env names are UPPER_SNAKE_CASE. A rotated secret changes in one place.
 
 ## Scoped API tokens
 
-The Settings tab's **API tokens** panel mints bearer tokens whose scope is a specific job (or `"*"` via the API). A job-scoped token can call exactly one thing — `POST /api/jobs/<id>/run` for its allowed jobs — and is rejected with a precise 403 everywhere else, so the URL baked into a Stream Deck button no longer unlocks the whole SPA if the deck config leaks. Records live in `webapp_config.json`'s `api_tokens` list as `{id, label, salt, hash, scope, created_at, last_used_at}`: only a salted SHA-256 hash is stored, the raw token is shown exactly once at mint time (with a copy button and, when the tunnel URL is known, a ready-to-paste run URL). Revoking a token deletes its record; the legacy `auth_token` keeps working unchanged with implicit `"*"` scope, and rotating a deck token never touches the phone's login. Endpoints: `GET /api/tokens`, `POST /api/tokens {label, jobs: [ids]}`, `DELETE /api/tokens/<id>` — all reachable only with full-scope auth.
+Settings > **API tokens** mints bearer tokens scoped to one job (or `"*"` through the API). A job-scoped token can call only `POST /api/jobs/<id>/run` for its allowed jobs and gets a precise `403` everywhere else, so a leaked Stream Deck export unlocks one job, not the SPA. Records live in `api_tokens` as `{id, label, salt, hash, scope, created_at, last_used_at}`: only a salted SHA-256 hash is stored and the raw token is shown once at mint time, with a copy button and a ready-to-paste run URL when the tunnel URL is known. Revoking deletes the record; the legacy `auth_token` keeps working with implicit `"*"` scope. Endpoints `GET /api/tokens`, `POST /api/tokens {label, jobs: [ids]}`, `DELETE /api/tokens/<id>` need full-scope auth. A run fired by a token records its id and label (`trigger_token_*`); the history shows a `🎛` chip.
 
 ## Security boundary
 
-Jobs sit on the **Apps tab side** of the launcher's security model — not the interactive-terminal side:
+Jobs sit on the Apps-tab side of the launcher's security model, not the interactive-terminal side:
 
-- `POST /api/jobs/<id>/run` is bearer-token gated and reachable over the Cloudflare tunnel. That is the whole point — a Stream Deck button hits the same HTTPS endpoint the phone uses. Both the legacy `auth_token` and a minted job-scoped token (see "Scoped API tokens" above) pass the gate; the scoped kind passes *only* here.
-- `POST /api/jobs/<id>/hook` is the one exception — it is exempt from the bearer gate entirely and authenticates itself via the job's own provider signature instead. See "Webhook-target jobs" above.
-- The per-run WebSocket is an output-only tail, not an interactive terminal. It carries the same bearer-token boundary as the Jobs HTTP APIs and remains Cloudflare-reachable; the private-network + passkey terminal gate does not apply.
-- The `id` is checked against the registry on every call — the launcher cannot be coerced into running an arbitrary script path. Mutating `config/jobs.json` is the only way to register a new target.
+- `POST /api/jobs/<id>/run` is bearer-gated and reachable over a public tunnel, which is the point: a Stream Deck button hits the same HTTPS endpoint as the phone. The legacy `auth_token` and a job-scoped token both pass; the scoped one passes only here.
+- `POST /api/jobs/<id>/hook` is exempt from the bearer and authenticates through the job's provider signature.
+- The per-run WebSocket is an output-only tail under the same bearer boundary, not an interactive terminal; the Tailscale + passkey gate does not apply.
+- The `id` is checked against the registry on every call, so the launcher cannot be coerced into running an arbitrary path; editing `config/jobs.json` is the only way to register a target.
 
 ## Stream Deck recipe
 
-A Stream Deck "Website / System" action calls the run endpoint directly — no plugin needed:
+A Stream Deck "Website / System" action calls the run endpoint directly, no plugin:
 
 ```
-URL:    https://launcher.<your-domain>/api/jobs/reporting-daily/run?token=<job-scoped-token>
+URL:    https://<host-reachable-from-the-deck>/api/jobs/reporting-daily/run?token=<job-scoped-token>
 Method: POST
 ```
 
-Mint the token in **Settings → API tokens**, scoped to exactly this job — the mint result shows the ready-to-paste run URL when the tunnel is up. Stream Deck stores button URLs in plaintext, so a scoped token caps what a leaked deck export can do: fire this one job, nothing else. Revoke + re-mint to rotate it without touching the SPA's own `auth_token` (which also still works in the URL if you accept the wider blast radius). Use a tunnel URL (Cloudflare named tunnel or `<host>.<tailnet>.ts.net:8465`) — not loopback. The Stream Deck shows ✓ / ✗ based on the HTTP status; the SPA shows the run in history on the next poll, with a 🎛 chip carrying the token's label.
+Mint the token in **Settings → API tokens**, scoped to exactly this job. Deck configs store button URLs in plaintext, so a scoped token caps a leak at firing that one job; revoke and re-mint to rotate it without touching the SPA's `auth_token`. Use a tunnel or Tailscale URL (`<host>.<tailnet>.ts.net:8465`), not loopback. The deck shows ✓ / ✗ from the HTTP status and the history shows the run with a token chip.
 
-## Why not …
+## Design notes
 
-- **A DB as the canonical run store.** Files stay simpler and cold-reader friendly. SQLite is used only as a rebuildable metadata/FTS mirror so cross-run search and aggregate reads do not repeatedly walk the filesystem.
-- **A custom scheduler daemon / APScheduler.** Windows already has a scheduler; running a second one inside the launcher process couples job firing to the launcher's lifecycle. With Task Scheduler the schedules survive a tray restart, a reboot, and a launcher uninstall (until the user cleans up `\AppLauncherLite\` themselves).
-- **A live PTY per job.** One-shot scripts do not need input or terminal emulation. The lightweight output-only WebSocket tails `output.log`; interactive-terminal infrastructure remains reserved for Coding.
-- **Raw cron expressions.** The five presets cover real use without inviting the standard "did I get the day-of-week field right?" pitfall.
+- **Files, not a database, are the canonical run store.** Cold-reader friendly; SQLite is only a rebuildable metadata and FTS mirror.
+- **Task Scheduler, not an in-process scheduler.** Schedules survive a tray restart, a reboot and an uninstall; a second scheduler would couple firing to the launcher's lifecycle.
+- **No live PTY per job.** A one-shot script needs no input; the output-only WebSocket tails `output.log` and terminal infrastructure stays with Coding.
+- **No raw cron.** The presets cover real use without the day-of-week-field pitfall.
 
 ## Verification
 
-The pre-ship gate (`C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/verify-before-ship.ps1`) runs the unit suite (`tests/unit/jobs/`) plus the e2e Jobs-tab checks in the `test_jobs_flow` of `tests/e2e/jobs/test_jobs_sort_next_run.py`. All schtasks calls are mocked at the runner-callable seam (`src.jobs._run_schtasks`) so the unit suite never invokes real Task Scheduler.
+The pre-ship gate (`C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/verify-before-ship.ps1`) runs the unit and API suites for jobs plus the e2e Jobs-tab smoke check. Every `schtasks` call is mocked at the runner seam (`src.jobs._run_schtasks`), so tests never touch the real Task Scheduler.
 
-Live verification after restart of `:8465`:
+Live check after a restart of `:8465`:
 
 ```powershell
-# Confirm \AppLauncherLite\ tasks materialised correctly
-schtasks /Query /FO CSV /NH | findstr "AppLauncher"
-
-# Trigger a run from the CLI (same path the webapp uses)
-curl -k -X POST "https://127.0.0.1:8465/api/jobs/reporting-daily/run"
-
-# Inspect the run record
+schtasks /Query /FO CSV /NH | findstr "AppLauncherLite"
+curl.exe -k -X POST "https://127.0.0.1:8465/api/jobs/reporting-daily/run"
 type webapp\jobs\reporting-daily\<latest>\run.json
 type webapp\jobs\reporting-daily\<latest>\output.log
 ```

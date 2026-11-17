@@ -9,7 +9,7 @@ showing its old stats and no alert existed for "expected a run, saw none".
 Two independent halves, both answered from data the Jobs tab already reads:
 
 * **Structural** — every non-paused, scheduled job must have a matching,
-  enabled ``\\<namespace>\\<id>`` Task Scheduler entry. This is the cheap
+  enabled ``\\AppLauncherLite\\<id>`` Task Scheduler entry. This is the cheap
   half that would have caught both real incidents (``config-map`` and
   ``sota-watch`` shipped launchers + "runs weekly unattended" docs with no
   registered task at all, for weeks), and it fires the moment the entry
@@ -19,13 +19,18 @@ Two independent halves, both answered from data the Jobs tab already reads:
   one batched query per cycle, never an N+1 shell-out storm.
 * **Behavioural** — expand the schedule across a recent window and check
   each expected fire against the on-disk run history.
+* **Principal** (``session_less`` jobs only) — an entry that
+  exists, is enabled, and is *still* registered ``Interactive only`` passes
+  both halves above and silently does nothing whenever the machine sits
+  logged out. Read from the same cached bulk query as the structural half.
 
 Never-flag rules (the acceptance criterion is "no false positives across a
-normal week"), all enforced in :func:`missed_fires` / :func:`coverage_for`:
+normal week"), all enforced in :func:`behavioural_coverage` /
+:func:`coverage_for`:
 
 * Paused jobs and ``schedule: none`` jobs are **exempt** — no state at all.
 * ``minutes``/``hourly`` jobs skip the behavioural half: their cadence is too
-  dense to enumerate (:data:`~src.jobs.schtasks.FREQUENT_SCHEDULE_TYPES`,
+  dense to enumerate (:data:`~src.jobs.next_fire.FREQUENT_SCHEDULE_TYPES`,
   same reason the agenda summarises them). The structural half still covers
   them, which is what actually detects a deleted entry.
 * A slot only counts as missed once it is ``MISSED_FIRE_GRACE_SECONDS`` past
@@ -33,19 +38,39 @@ normal week"), all enforced in :func:`missed_fires` / :func:`coverage_for`:
 * **Any** run record near the slot counts as a fire, whatever its status —
   including ``skipped`` (a cooldown no-op *did* fire, it just declined to do
   work) and a manual run that happened to cover the slot.
-* The window never reaches back past the job's ``added_at`` or the moment its
-  current schedule took effect (``schedule_changed_at``: an edit or a resume),
-  nor past the oldest retained run when history is at its :data:`MAX_RUNS_PER_JOB` cap —
+* The window never reaches back past the job's ``added_at``, nor past the
+  oldest retained run when history is at its :data:`MAX_RUNS_PER_JOB` cap —
   a pruned record is not evidence of a missed fire.
 * A failed ``schtasks`` query yields ``unknown``, never "missing". An
   unestablished fact gets its own state and is never folded into the
   passing *or* the failing one.
+* A job with **no run records at all** yields ``unknown``, never
+  "missed fire". :func:`src.jobs.history.list_runs` returns
+  ``[]`` both for a job that genuinely never ran and for a checkout with no
+  run history to read, and the behavioural half cannot tell those apart —
+  so it says so. Run history counts as evidence only where some exists;
+  a job with *some* history that skipped a slot is still a ``problem``. The
+  same rule as the ``schtasks`` one above, applied to the other half: a
+  checkout that holds a real ``jobs.json`` but an incomplete or empty run
+  history (e.g. a worktree that tracks no run files) must read as
+  ``unknown``, not as a job that silently never fires.
 
 Alerting reuses the exact channels the failure path uses
-(:func:`app.cli.commands.run_job_cmd._maybe_notify_failure`): global Pushover
+(:func:`src.notifications.notify_failure`): global Pushover
 gated by ``WebappConfig.notify_on_failure``, per-job Telegram gated by
 ``Job.alert_on_failure``. De-duplicated through a small on-disk state file so
 a standing problem pings once, not once per check cycle.
+
+**Each problem class is announced in its own words** (table in
+:data:`PROBLEM_ANNOUNCEMENTS`) rather than a single shared title — "scheduled
+run never fired" reads as an observed failure and is only true of
+``missed_fire``; the other three are structural risks about whether the
+entry *could* fire, and a ``session_less`` backup that is in fact running on
+time must never be announced as never having fired. Severity and re-ping cadence
+follow the class too: a hard failure stays ``error`` at
+:data:`COVERAGE_ALERT_REPEAT_SECONDS`, while a conditional risk that needs a
+human at an elevated shell drops to ``warning`` at
+:data:`COVERAGE_ALERT_REPEAT_SECONDS_LOW` — quieter, never silent.
 """
 
 from __future__ import annotations
@@ -56,19 +81,19 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Lock
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 from src import runtime_files
 from src._json_io import atomic_write_json
 from src.jobs import history as jobs_history
 from src.jobs.config import Job, load_jobs
-from src.jobs.run_state import parse_iso
+from src.jobs.next_fire import FREQUENT_SCHEDULE_TYPES, upcoming_fires
 from src.jobs.schtasks import (
-    FREQUENT_SCHEDULE_TYPES,
+    registered_task_principals,
     registered_task_states,
     task_names_for,
-    upcoming_fires,
 )
+from src.jobs.schtasks_offsets import registered_task_offset_pins
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +122,11 @@ _coverage_lock = Lock()
 # Re-ping a still-broken job at most this often, so a job left broken over a
 # weekend doesn't fire an alert every check cycle.
 COVERAGE_ALERT_REPEAT_SECONDS = 24 * 3600.0
+# Re-ping interval for a *conditional* structural risk — one where the job is
+# still firing today and the remediation needs a human at an elevated shell.
+# The condition keeps being reported; it just doesn't earn a
+# daily high-priority ping, which is how a channel gets muted.
+COVERAGE_ALERT_REPEAT_SECONDS_LOW = 7 * 24 * 3600.0
 
 #: Where the alert de-duplication state lives. Sits beside the per-job run
 #: directories rather than in config — it is derived, disposable state, and
@@ -111,6 +141,98 @@ STATE_EXEMPT = "exempt"
 PROBLEM_TASK_MISSING = "task_missing"
 PROBLEM_TASK_DISABLED = "task_disabled"
 PROBLEM_MISSED_FIRE = "missed_fire"
+#: A ``session_less`` job whose Task Scheduler entry is still
+#: registered ``Interactive only`` — it exists and looks healthy to every
+#: other check, and silently does nothing whenever the box sits logged out.
+#: Either it was never hand-registered from an elevated shell, or something
+#: re-registered it with Windows' default principal.
+PROBLEM_PRINCIPAL_INTERACTIVE = "principal_interactive"
+#: An entry whose trigger ``StartBoundary`` carries a UTC offset. It fires at a
+#: fixed UTC instant, so it drifts an hour off the wall clock at every
+#: daylight-saving change, and the run history then disagrees with the
+#: schedule on every slot. Reported as itself rather than as the missed fires
+#: it causes.
+PROBLEM_OFFSET_PINNED_TRIGGER = "offset_pinned_trigger"
+
+
+class Announcement(NamedTuple):
+    """How one problem class is announced on the phone.
+
+    ``title`` is a format string taking ``{name}`` (the job's display name).
+    ``severity`` maps to a Pushover priority in
+    :class:`src.notifications.PushoverNotifier`; ``repeat_seconds`` is how
+    long a standing problem of this class waits before re-pinging.
+    """
+
+    title: str
+    severity: str
+    repeat_seconds: float
+
+
+#: Per-class alert vocabulary, ordered **most root-causal first**.
+#:
+#: Every class used to borrow one hardcoded title — "scheduled run never
+#: fired" — which is a plain lie for three of the four: only
+#: :data:`PROBLEM_MISSED_FIRE` is a fact about a run that didn't happen. The
+#: other three are structural risks about whether the entry *could* fire, and
+#: ``principal_interactive`` in particular describes a *future* condition (the
+#: box sitting logged out) on a job that is firing on time today. Announcing
+#: a healthy backup as "never fired" trains the reader to dismiss the channel,
+#: and then a real missed fire lands in a channel nobody reads.
+#:
+#: A title must therefore state what was actually *observed*, and no class may
+#: borrow another's vocabulary.
+PROBLEM_ANNOUNCEMENTS: Tuple[Tuple[str, Announcement], ...] = (
+    (
+        PROBLEM_TASK_MISSING,
+        Announcement(
+            "🕳️ {name} — Task Scheduler entry missing",
+            "error",
+            COVERAGE_ALERT_REPEAT_SECONDS,
+        ),
+    ),
+    (
+        PROBLEM_TASK_DISABLED,
+        Announcement(
+            "🚫 {name} — Task Scheduler entry disabled",
+            "error",
+            COVERAGE_ALERT_REPEAT_SECONDS,
+        ),
+    ),
+    (
+        PROBLEM_OFFSET_PINNED_TRIGGER,
+        Announcement(
+            "🕐 {name} — trigger pinned to a UTC offset (drifts at DST)",
+            "warning",
+            COVERAGE_ALERT_REPEAT_SECONDS,
+        ),
+    ),
+    (
+        PROBLEM_MISSED_FIRE,
+        Announcement(
+            "🕳️ {name} — scheduled run never fired",
+            "error",
+            COVERAGE_ALERT_REPEAT_SECONDS,
+        ),
+    ),
+    (
+        PROBLEM_PRINCIPAL_INTERACTIVE,
+        Announcement(
+            "🔒 {name} — will not fire while logged out",
+            "warning",
+            COVERAGE_ALERT_REPEAT_SECONDS_LOW,
+        ),
+    ),
+)
+
+#: Used when a ``problem`` verdict carries a class this table doesn't know —
+#: a new constant added without its announcement. Deliberately vague rather
+#: than wrong: it says a coverage problem exists and lets the body speak.
+FALLBACK_ANNOUNCEMENT = Announcement(
+    "🕳️ {name} — schedule coverage problem",
+    "error",
+    COVERAGE_ALERT_REPEAT_SECONDS,
+)
 
 _MISSING = object()
 
@@ -133,6 +255,8 @@ def _result(
     problems: Optional[List[str]] = None,
     missing_tasks: Optional[List[str]] = None,
     disabled_tasks: Optional[List[str]] = None,
+    interactive_tasks: Optional[List[str]] = None,
+    offset_pinned_tasks: Optional[List[str]] = None,
     missed: Optional[List[datetime]] = None,
 ) -> Dict[str, Any]:
     """The JSON-serialisable coverage payload attached to a job row."""
@@ -143,6 +267,8 @@ def _result(
         "problems": problems or [],
         "missing_tasks": missing_tasks or [],
         "disabled_tasks": disabled_tasks or [],
+        "interactive_tasks": interactive_tasks or [],
+        "offset_pinned_tasks": offset_pinned_tasks or [],
         "missed_count": len(missed),
         "missed_fires": [
             f.isoformat(timespec="minutes")
@@ -151,40 +277,71 @@ def _result(
     }
 
 
-def missed_fires(
+def _no_history_detail() -> str:
+    """The honest "cannot establish" line for a job with zero run records.
+
+    Two materially different diagnoses, so two messages:
+
+    * The run-history store holds no per-job history at all — either the
+      directory is absent or nothing has ever been recorded under it. That is
+      the git-worktree shape that caused the false alerts, and naming the
+      resolved path is the breadcrumb that identifies the stray checkout on
+      sight, since :data:`src.jobs.history.JOBS_RUNS_DIR` is derived from the
+      module's own ``PROJECT_ROOT``.
+    * The store is live for other jobs but has nothing for this one.
+
+    Either way the verdict is ``unknown`` — this only picks the wording.
+    """
+    store = jobs_history.JOBS_RUNS_DIR
+    try:
+        populated = any(child.is_dir() for child in store.iterdir())
+    except OSError:
+        populated = False
+    if populated:
+        return (
+            "no run history for this job — a missed fire and a missing "
+            "history are indistinguishable"
+        )
+    return f"no run history at all under {store} — coverage not established"
+
+
+def behavioural_coverage(
     job: Job,
     *,
     now: Optional[datetime] = None,
     window_days: int = COVERAGE_WINDOW_DAYS,
     grace_seconds: float = MISSED_FIRE_GRACE_SECONDS,
-) -> List[datetime]:
-    """Expected fires of ``job`` in the recent window with no run record.
+) -> Tuple[List[datetime], Optional[str]]:
+    """The behavioural half's verdict: ``(missed fires, unknown reason)``.
 
-    Oldest first. Empty for the dense
-    :data:`~src.jobs.schtasks.FREQUENT_SCHEDULE_TYPES`, for a schedule with
-    no computable fires, and whenever the usable window collapses (see the
-    module docstring's never-flag rules — the window is clamped by
-    ``added_at``, ``schedule_changed_at`` and by the oldest retained run once history is at its
-    :data:`~src.jobs.history.MAX_RUNS_PER_JOB` cap).
+    Exactly one of the two is ever meaningful. ``(missed, None)`` is an
+    established answer — the run history was usable and these slots are
+    genuinely uncovered (``[]`` meaning "all covered", or nothing to check).
+    ``([], reason)`` means the question could not be answered at all, and the
+    caller must report ``unknown`` rather than either passing or failing the
+    job (see the module docstring's never-flag rules).
+
+    Missed slots are oldest first. Both lists are empty for the dense
+    :data:`~src.jobs.next_fire.FREQUENT_SCHEDULE_TYPES`, for a schedule with
+    no computable fires, and whenever the usable window collapses — the
+    window is clamped by ``added_at`` and by the oldest retained run once
+    history is at its :data:`~src.jobs.history.MAX_RUNS_PER_JOB` cap. Those
+    are not ``unknown``: nothing was expected, so nothing is unestablished.
     """
     if job.schedule.type in FREQUENT_SCHEDULE_TYPES:
-        return []
+        return [], None
     now = now or datetime.now()
     deadline = now - timedelta(seconds=grace_seconds)
     window_start = now - timedelta(days=window_days)
 
-    # Clamp to the later of when the job was added and when its current
-    # schedule took effect (edit / resume): earlier days ran under another
-    # schedule, so replaying this one against them invents missed fires.
-    for stamp in (job.added_at, job.schedule_changed_at):
-        began = parse_iso(stamp)
-        if began is not None and began > window_start:
-            window_start = began
+    added = jobs_history.parse_stamp(job.added_at)
+    if added is not None and added > window_start:
+        window_start = added
 
     runs = jobs_history.list_runs(job.id)  # newest first
     starts: List[datetime] = []
     for record in runs:
-        started = parse_iso(record.get("started_at"))
+        started = jobs_history.parse_stamp(record.get("started_at"))
         if started is not None:
             starts.append(started)
     # History is capped, so an absent record older than the oldest retained
@@ -195,23 +352,36 @@ def missed_fires(
             window_start = oldest
 
     if deadline <= window_start:
-        return []
+        return [], None
+
+    fires = upcoming_fires(job.schedule, start=window_start, end=deadline)
+    if not fires:
+        return [], None
+    if not runs:
+        # Slots elapsed and not one run record exists to check them against.
+        # "Never fired" and "no history here to read" look identical from
+        # here, so neither is claimed.
+        detail = _no_history_detail()
+        logger.debug(f"coverage for {job.id} not established: {detail}")
+        return [], detail
 
     starts.sort()
     early = timedelta(seconds=MISSED_FIRE_EARLY_TOLERANCE_SECONDS)
     late = timedelta(seconds=grace_seconds)
     missed: List[datetime] = []
-    for fire in upcoming_fires(job.schedule, start=window_start, end=deadline):
+    for fire in fires:
         covered = any(fire - early <= s <= fire + late for s in starts)
         if not covered:
             missed.append(fire)
-    return missed
+    return missed, None
 
 
 def coverage_for(
     job: Job,
     task_states: Optional[Dict[str, Optional[bool]]],
     *,
+    principals: Optional[Dict[str, Optional[bool]]] = None,
+    offset_pins: Any = _MISSING,
     now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """Coverage verdict for one job.
@@ -221,13 +391,79 @@ def coverage_for(
     half reports ``unknown`` instead of inventing missing tasks. A per-task
     ``None`` value means "registered, enabled-state unreadable": not a
     problem, because the task demonstrably exists.
+
+    ``principals`` is :func:`src.jobs.schtasks.registered_task_principals`'
+    output, read from the same cached snapshot. It is only consulted for a
+    ``session_less`` job, where "the entry exists and is
+    enabled" is *not* sufficient: an entry left on the default
+    ``InteractiveToken`` principal passes every other check here and still
+    does nothing whenever the machine sits logged out. Same tri-state rule
+    as everything else — an unreadable principal yields ``unknown``, never a
+    confident pass.
+
+    Either half may come back unestablished, and the precedence is: a real
+    problem first (it rests on its own evidence and outranks the other
+    half's silence), then ``unknown`` if *either* half could not establish
+    its fact, then ``ok``. So a job whose Task Scheduler entry is missing is
+    still a ``problem`` even with no run history to read, which
+    is the shape of the incidents this check exists for.
+
+    ``offset_pins`` is :func:`src.jobs.schtasks.registered_task_offset_pins`'
+    output. Left out, the pinned-offset check is skipped; passed as ``None``
+    (the XML query failed) it yields ``unknown`` for a ``session_less`` job,
+    the only kind whose registration script could have pinned an offset.
     """
     if job.is_paused or job.schedule.type == "none":
         return _result(STATE_EXEMPT, detail="no active schedule")
 
+    structural_unknown = task_states is None
+    missing, disabled = _structural_gaps(job, task_states)
+    interactive, principal_unknown = _interactive_principals(job, principals)
+    pinned, pin_unknown = _offset_pinned_tasks(job, offset_pins)
+
+    missed, behavioural_unknown = behavioural_coverage(job, now=now)
+    if pinned:
+        # A pinned trigger fires at the wrong wall-clock hour, so every slot
+        # looks missed; the pin is the cause and the only thing to report.
+        missed = []
+
+    problems, bits = _problem_bits(missing, disabled, interactive, pinned, missed)
+    if problems:
+        return _result(
+            STATE_PROBLEM,
+            detail="; ".join(bits),
+            problems=problems,
+            missing_tasks=missing,
+            disabled_tasks=disabled,
+            interactive_tasks=interactive,
+            offset_pinned_tasks=pinned,
+            missed=missed,
+        )
+    unresolved: List[str] = []
+    if structural_unknown:
+        unresolved.append("Task Scheduler query failed — coverage not established")
+    if pin_unknown:
+        unresolved.append(
+            "Task Scheduler trigger times unreadable — pinned UTC offset "
+            "not established"
+        )
+    if principal_unknown:
+        unresolved.append(
+            "Task Scheduler logon mode unreadable — session-less principal "
+            "not established"
+        )
+    if behavioural_unknown:
+        unresolved.append(behavioural_unknown)
+    if unresolved:
+        return _result(STATE_UNKNOWN, detail="; ".join(unresolved))
+    return _result(STATE_OK, detail="schedule registered and firing")
+
+
+def _structural_gaps(job: Job, task_states: Optional[Dict[str, Optional[bool]]]) -> Tuple[List[str], List[str]]:
+    """``(missing, disabled)`` Task Scheduler entries of ``job``; both empty
+    when the query failed, which the caller reports as unknown."""
     missing: List[str] = []
     disabled: List[str] = []
-    structural_unknown = task_states is None
     if task_states is not None:
         for name in task_names_for(job):
             enabled = task_states.get(name, _MISSING)
@@ -235,9 +471,52 @@ def coverage_for(
                 missing.append(name)
             elif enabled is False:
                 disabled.append(name)
+    return missing, disabled
 
-    missed = missed_fires(job, now=now)
 
+def _interactive_principals(
+    job: Job, principals: Optional[Dict[str, Optional[bool]]],
+) -> Tuple[List[str], bool]:
+    """``(interactive-only entries, principal unknown)`` for ``job``.
+
+    Only meaningful for a job that declared it must run session-less. A task
+    already reported missing is skipped: the structural half owns that, and
+    "missing" plus "wrong principal" for one entry is one problem told twice.
+    """
+    interactive: List[str] = []
+    principal_unknown = False
+    if job.session_less:
+        if principals is None:
+            principal_unknown = True
+        else:
+            for name in task_names_for(job):
+                capable = principals.get(name, _MISSING)
+                if capable is _MISSING:
+                    continue
+                if capable is False:
+                    interactive.append(name)
+                elif capable is None:
+                    principal_unknown = True
+    return interactive, principal_unknown
+
+
+def _offset_pinned_tasks(job: Job, offset_pins: Any) -> Tuple[List[str], bool]:
+    """``(entries whose trigger carries a UTC offset, pin unknown)`` for ``job``."""
+    if offset_pins is _MISSING:
+        return [], False
+    if offset_pins is None:
+        return [], job.session_less
+    return [n for n in task_names_for(job) if offset_pins.get(n) is True], False
+
+
+def _problem_bits(
+    missing: List[str],
+    disabled: List[str],
+    interactive: List[str],
+    pinned: List[str],
+    missed: List[datetime],
+) -> Tuple[List[str], List[str]]:
+    """``(problem classes, detail phrases)`` for the gaps found, in order."""
     problems: List[str] = []
     bits: List[str] = []
     if missing:
@@ -252,28 +531,29 @@ def coverage_for(
             f"{len(disabled)} Task Scheduler entr"
             f"{'y' if len(disabled) == 1 else 'ies'} disabled"
         )
+    if interactive:
+        problems.append(PROBLEM_PRINCIPAL_INTERACTIVE)
+        bits.append(
+            f"{len(interactive)} Task Scheduler entr"
+            f"{'y is' if len(interactive) == 1 else 'ies are'} still "
+            "'Interactive only' — will not fire while logged out; "
+            "re-register from an elevated shell"
+        )
+    if pinned:
+        problems.append(PROBLEM_OFFSET_PINNED_TRIGGER)
+        bits.append(
+            f"{len(pinned)} Task Scheduler entr"
+            f"{'y has' if len(pinned) == 1 else 'ies have'} a trigger pinned to "
+            "a UTC offset — fires an hour off at daylight-saving changes; "
+            "re-register from an elevated shell"
+        )
     if missed:
         problems.append(PROBLEM_MISSED_FIRE)
         bits.append(
             f"{len(missed)} scheduled fire{'' if len(missed) == 1 else 's'} "
             f"produced no run (last {missed[-1].isoformat(timespec='minutes')})"
         )
-
-    if problems:
-        return _result(
-            STATE_PROBLEM,
-            detail="; ".join(bits),
-            problems=problems,
-            missing_tasks=missing,
-            disabled_tasks=disabled,
-            missed=missed,
-        )
-    if structural_unknown:
-        return _result(
-            STATE_UNKNOWN,
-            detail="Task Scheduler query failed — coverage not established",
-        )
-    return _result(STATE_OK, detail="schedule registered and firing")
+    return problems, bits
 
 
 def scan_coverage(
@@ -286,11 +566,20 @@ def scan_coverage(
     """
     jobs = load_jobs().jobs if jobs is None else jobs
     task_states = registered_task_states()
+    # Same cached snapshot as the line above — no second shell-out.
+    principals = registered_task_principals()
+    offset_pins = registered_task_offset_pins()
     now = now or datetime.now()
     out: Dict[str, Dict[str, Any]] = {}
     for job in jobs:
         try:
-            out[job.id] = coverage_for(job, task_states, now=now)
+            out[job.id] = coverage_for(
+                job,
+                task_states,
+                principals=principals,
+                offset_pins=offset_pins,
+                now=now,
+            )
         except OSError as exc:
             logger.debug(f"coverage scan skipped {job.id}: {exc}")
             out[job.id] = _result(
@@ -299,20 +588,23 @@ def scan_coverage(
     return out
 
 
-def coverage_map(*, fresh: bool = False) -> Dict[str, Dict[str, Any]]:
+def coverage_map(max_age: Optional[float] = None) -> Dict[str, Dict[str, Any]]:
     """:func:`scan_coverage` behind a process-local TTL cache.
 
     ``/api/jobs`` decorates every row from one cached scan per poll rather
-    than re-deriving per job.
+    than re-deriving per job. Invalidated on demand by
+    :func:`invalidate_coverage_cache`, not by forcing a fresh scan here.
+    ``max_age`` rescans earlier than the TTL: the jobs snapshot tick
+    warms it before it expires, so a poll never pays the scan.
     """
     global _coverage_cache
     monotonic = time.monotonic()
-    if not fresh:
-        with _coverage_lock:
-            if _coverage_cache is not None:
-                ts, snapshot = _coverage_cache
-                if monotonic - ts < _COVERAGE_TTL_SECONDS:
-                    return snapshot
+    limit = _COVERAGE_TTL_SECONDS if max_age is None else max_age
+    with _coverage_lock:
+        if _coverage_cache is not None:
+            ts, snapshot = _coverage_cache
+            if monotonic - ts < limit:
+                return snapshot
     snapshot = scan_coverage()
     with _coverage_lock:
         _coverage_cache = (monotonic, snapshot)
@@ -355,7 +647,7 @@ def _write_alert_state(state: Dict[str, Any]) -> None:
     try:
         runtime_files.make_dirs(path.parent)
         atomic_write_json(path, state)
-    except (OSError, ValueError) as exc:
+    except OSError as exc:
         logger.warning(f"⚠️  coverage alert state not persisted: {exc}")
 
 
@@ -366,9 +658,46 @@ def _signature(result: Dict[str, Any]) -> str:
             ",".join(result.get("problems", [])),
             ",".join(sorted(result.get("missing_tasks", []))),
             ",".join(sorted(result.get("disabled_tasks", []))),
+            ",".join(sorted(result.get("offset_pinned_tasks", []))),
             str(result.get("missed_count", 0)),
         ]
     )
+
+
+def announcement_for(problems: Any) -> Announcement:
+    """How to announce a ``problem`` verdict carrying *problems*.
+
+    The **title and severity** come from the highest-precedence class present
+    in :data:`PROBLEM_ANNOUNCEMENTS` — a missing Task Scheduler entry explains
+    a missed fire, so it outranks it, and the alert body already spells out
+    every detected class, so nothing is lost by the title naming one.
+
+    The **repeat interval** is the shortest of every class present, not the
+    title's. A job holding both a conditional risk and a hard failure must
+    keep the hard failure's daily cadence; today the low-cadence class sorts
+    last so this is also what precedence would give, but that is incidental
+    and a future reordering must not quietly stretch an outage's re-ping.
+
+    An empty or unrecognised list yields :data:`FALLBACK_ANNOUNCEMENT` — a
+    ``problem`` state always deserves *some* announcement, and a vague one
+    beats borrowing another class's wording.
+    """
+    present = set(problems or ())
+    chosen: Optional[Announcement] = None
+    repeat: Optional[float] = None
+    for problem, announcement in PROBLEM_ANNOUNCEMENTS:
+        if problem not in present:
+            continue
+        if chosen is None:
+            chosen = announcement
+        repeat = (
+            announcement.repeat_seconds
+            if repeat is None
+            else min(repeat, announcement.repeat_seconds)
+        )
+    if chosen is None:
+        return FALLBACK_ANNOUNCEMENT
+    return chosen._replace(repeat_seconds=repeat)
 
 
 def check_and_alert(
@@ -421,13 +750,14 @@ def check_and_alert(
                 if state.pop(job.id, None) is not None:
                     dirty = True
                 continue
+            announcement = announcement_for(result.get("problems"))
             signature = _signature(result)
             prior = state.get(job.id) or {}
             last_epoch = prior.get("last_alert_epoch")
             recent = (
                 prior.get("signature") == signature
                 and isinstance(last_epoch, (int, float))
-                and (wall - last_epoch) < COVERAGE_ALERT_REPEAT_SECONDS
+                and (wall - last_epoch) < announcement.repeat_seconds
             )
             state[job.id] = {
                 "signature": signature,
@@ -440,7 +770,7 @@ def check_and_alert(
             if recent:
                 continue
 
-            title = f"🕳️ {job.name} — scheduled run never fired"
+            title = announcement.title.format(name=job.name)
             body = (
                 f"{result.get('detail', '')}\n"
                 f"— job={job.id} schedule={job.schedule.chip()}"
@@ -451,11 +781,11 @@ def check_and_alert(
             if getattr(cfg, "notify_on_failure", False):
                 push = notifier or build_notifier_from_config(cfg)
                 if not isinstance(push, NoopNotifier):
-                    push.notify(title, body, severity="error")
+                    push.notify(title, body, severity=announcement.severity)
             if job.alert_on_failure:
                 tg = telegram_notifier or build_telegram_notifier_from_config(cfg)
                 if not isinstance(tg, NoopNotifier):
-                    tg.notify(title, body, severity="error")
+                    tg.notify(title, body, severity=announcement.severity)
             alerted.append(job.id)
 
         if dirty:

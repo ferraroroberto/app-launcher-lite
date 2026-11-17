@@ -19,21 +19,35 @@ import shutil
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from src import runtime_files
 from src._json_io import atomic_write_json, file_lock
-from src.jobs.run_state import STATUS_FAILED, RunState, derive_run_state
-
-if TYPE_CHECKING:
-    from src.jobs.config import Job
+from src.jobs.config import exit_outcomes_for
+from src.jobs.outcome import run_outcome
+from src.jobs.run_status import RunStatus, run_status
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 JOBS_RUNS_DIR = PROJECT_ROOT / "webapp" / "jobs"
 MAX_RUNS_PER_JOB = 20
+
+
+def parse_stamp(value: Any) -> Optional[datetime]:
+    """A run record's or job's ISO stamp as a datetime, or ``None`` when absent or unreadable.
+
+    The stamps are written by ``datetime.now().isoformat()``, so they are naive
+    local time and compare against ``datetime.now()``; the value is returned as
+    parsed, with no zone applied.
+    """
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def runs_dir(job_id: str) -> Path:
@@ -100,6 +114,31 @@ def write_run_json(run_dir: Path, **fields: Any) -> None:
     ``killed=True``, a later natural finalise is not allowed to overwrite the
     terminal outcome (:data:`_KILL_OWNED_FIELDS`) back to success.
     """
+    _merge_run_json(run_dir, fields, only_if=None)
+
+
+def write_run_json_if(
+    run_dir: Path,
+    only_if: Callable[[Dict[str, Any]], bool],
+    **fields: Any,
+) -> bool:
+    """:func:`write_run_json`, applied only when ``only_if`` accepts the record
+    as it stands *under the run lock*.
+
+    A caller that decided from an earlier read (the stranded-run reaper) can
+    otherwise overwrite what another process wrote in the gap. Returns whether
+    the merge happened; a missing or unreadable record is passed to ``only_if``
+    as ``{}``.
+    """
+    return _merge_run_json(run_dir, fields, only_if=only_if)
+
+
+def _merge_run_json(
+    run_dir: Path,
+    fields: Dict[str, Any],
+    *,
+    only_if: Optional[Callable[[Dict[str, Any]], bool]],
+) -> bool:
     target = run_dir / "run.json"
     incoming = {k: v for k, v in fields.items() if v is not None}
     with _run_json_lock(run_dir):
@@ -109,6 +148,8 @@ def write_run_json(run_dir: Path, **fields: Any) -> None:
                 existing = json.loads(target.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 existing = {}
+        if only_if is not None and not only_if(existing):
+            return False
         # A write that is not itself (re)asserting the kill must not clobber a
         # kill already on record.
         if existing.get("killed") and not incoming.get("killed"):
@@ -124,37 +165,12 @@ def write_run_json(run_dir: Path, **fields: Any) -> None:
         sync_run(run_dir, existing)
     except Exception as exc:  # noqa: BLE001 — derived mirror never blocks canonical I/O
         logger.warning("⚠️ Jobs index sync failed for %s: %s", run_dir, exc)
+    # The polls' in-memory snapshot recomputes this job on its next
+    # read rather than waiting for a tick. Same local-import reason as above.
+    from src.jobs.snapshot import mark_dirty
 
-
-def base_run_meta(
-    job: "Job", trigger: str, started_at: str, run_id: str
-) -> Dict[str, Any]:
-    """The run-record header every writer (executor, routes, chain dispatcher)
-    starts from, so a new header field is added here and nowhere else."""
-    return dict(
-        run_id=run_id,
-        job_id=job.id,
-        name=job.name,
-        trigger=trigger,
-        script_path=job.script_path,
-        args=job.args,
-        started_at=started_at,
-    )
-
-
-def mark_run_failed(
-    run_dir: Path, *, finished_at: Optional[str] = None, **extra: Any
-) -> None:
-    """Finalise ``run_dir`` as a ``failed`` record that never produced an exit
-    code (``-1``): the spawn or pre-spawn step failed. ``extra`` merges in any
-    other fields (a ``note``, a full header) in the same write."""
-    write_run_json(
-        run_dir,
-        finished_at=finished_at or datetime.now().isoformat(timespec="seconds"),
-        exit_code=-1,
-        status=STATUS_FAILED,
-        **extra,
-    )
+    mark_dirty(run_dir.parent.name)
+    return True
 
 
 # Header names safe to persist verbatim alongside a webhook run — never the
@@ -206,15 +222,49 @@ def read_webhook_payload(run_dir: Path) -> Optional[Dict[str, Any]]:
         return None
 
 
-def read_run(run_dir: Path) -> Dict[str, Any]:
-    """Read ``run.json`` from ``run_dir``. Missing file → empty dict."""
+def read_run(
+    run_dir: Path, exit_outcomes: Optional[Dict[int, str]] = None
+) -> Dict[str, Any]:
+    """Read ``run.json`` from ``run_dir``, decorated with its outcome.
+
+    Missing/malformed file → empty dict.
+
+    The two derived keys are added here, at the one place every
+    reader of a run record passes through, so the Jobs list, the run history,
+    the Board's job cards and the stats aggregates cannot disagree about what a
+    run's exit code meant:
+
+    * ``outcome`` — ``status`` widened with ``"unconfirmed"`` for the exit codes
+      fleet-config's scheduled-run adapter uses to say "this may well have
+      delivered, but nobody established that", and with ``"deferred"`` for
+      an exit code the job itself declares a designed deferral. See
+      :mod:`src.jobs.outcome`.
+    * ``outcome_reason`` — the code's one-line meaning, or ``None`` for an exit
+      code the adapter does not define.
+
+    Derived on read rather than persisted on write: the records already on disk
+    showing a false red re-render correctly with no migration, and ``status``
+    on disk keeps its original meaning.
+
+    ``exit_outcomes`` is the owning job's own exit-code declaration;
+    omitted, it is looked up from the registry by the run dir's parent name
+    (``webapp/jobs/<job_id>/<run_id>``), so every caller gets it for free.
+    """
     target = run_dir / "run.json"
     if not target.exists():
         return {}
     try:
-        return json.loads(target.read_text(encoding="utf-8"))
+        record = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
+    if not isinstance(record, dict):
+        return {}
+    if exit_outcomes is None:
+        exit_outcomes = exit_outcomes_for(run_dir.parent.name)
+    outcome, reason = run_outcome(record, exit_outcomes)
+    record["outcome"] = outcome
+    record["outcome_reason"] = reason
+    return record
 
 
 def list_runs(job_id: str) -> List[Dict[str, Any]]:
@@ -222,11 +272,12 @@ def list_runs(job_id: str) -> List[Dict[str, Any]]:
     base = runs_dir(job_id)
     if not base.is_dir():
         return []
+    exit_outcomes = exit_outcomes_for(job_id)
     runs: List[Dict[str, Any]] = []
     for child in sorted(base.iterdir(), reverse=True):
         if not child.is_dir():
             continue
-        run = read_run(child)
+        run = read_run(child, exit_outcomes)
         run.setdefault("run_id", child.name)
         runs.append(run)
     return runs
@@ -238,12 +289,9 @@ def latest_run(job_id: str) -> Optional[Dict[str, Any]]:
 
 
 def is_running(job_id: str) -> bool:
-    """Cheap check — is the most recent run still in the ``RUNNING`` state?"""
+    """Cheap check — is the most recent run still in ``running`` state?"""
     latest = latest_run(job_id)
-    return bool(
-        latest
-        and derive_run_state(latest, now=datetime.now()).state is RunState.RUNNING
-    )
+    return run_status(latest) is RunStatus.RUNNING
 
 
 def prune_runs(job_id: str, keep: int = MAX_RUNS_PER_JOB) -> int:

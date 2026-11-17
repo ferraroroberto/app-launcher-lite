@@ -1,4 +1,4 @@
-"""Save-time pre-flight for Jobs-tab authoring safety.
+"""Save-time pre-flight for Jobs-tab authoring safety (save-time checks only).
 
 Adding a job is a leap of faith without it: the first scheduled fire is when
 you discover the path was wrong, the venv didn't walk up, or the args
@@ -25,7 +25,7 @@ config shape, …) live one per module under :mod:`src.jobs_kinds`
 (does ``script_path`` exist) and delegates everything else to the
 resolved kind's ``validate()``.
 
-Not checked here: the schtasks ``/TR`` round-trip check
+Not covered here: the schtasks ``/TR`` round-trip check
 and the schtasks id-collision query. Both require shelling out to
 ``schtasks.exe`` from the request path; the ``/TR`` string carries only
 launcher-internal paths (never user input), so the value is low and the

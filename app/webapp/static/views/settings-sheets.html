@@ -1,0 +1,356 @@
+    <!-- Settings sheets (#1435): one per Settings row, on the vendored modal
+         shell (header back + ✕, one full-width Done). Fields save as they
+         change; settings-sheets.js opens, stacks and closes them. -->
+    <!-- The coding agent: GitHub Copilot CLI, this fork's only one.
+         claude-options.js fills the pickers from GET /api/config's `copilot`
+         block and saves each change through POST /api/config; the flags
+         line is the server's own, read-only. -->
+    <dialog id="copilotSheet" class="detail-dialog settings-sheet" data-track-view="sheet.copilot" aria-labelledby="copilotSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="copilot.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="copilotSheetTitle" tabindex="-1" autofocus>GitHub Copilot</h2>
+          <button data-track="copilot.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <div class="opt-group">
+            <div class="opt-row">
+              <span class="opt-name">Model</span>
+              <select data-track="copilot.model" id="copilotModel" class="select-native" aria-label="Copilot model" aria-describedby="copilotModelHelp"></select>
+            </div>
+            <p id="copilotModelHelp" class="field-help">Default lets Copilot pick the model. Effort applies only with a model picked here: the default model refuses it.</p>
+            <div class="opt-row">
+              <span class="opt-name">Effort</span>
+              <select data-track="copilot.effort" id="copilotEffort" class="select-native" aria-label="Copilot reasoning effort"></select>
+            </div>
+            <div class="opt-row">
+              <span class="opt-name">Context</span>
+              <select data-track="copilot.context" id="copilotContext" class="select-native" aria-label="Copilot context window"></select>
+            </div>
+            <div class="toggles">
+              <span class="switch-row"><span>Autopilot</span><button data-track="copilot.autopilot" type="button" id="copilotAutopilot" class="toggle" role="switch" aria-checked="false" aria-label="Copilot autopilot"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+              <span class="switch-row"><span>Skip permission prompts</span><button data-track="copilot.skip-permissions" type="button" id="copilotSkipPerms" class="toggle" role="switch" aria-checked="false" aria-label="Skip Copilot permission prompts"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+            </div>
+            <p class="opt-hint">Sign in with <code>/login</code> inside the session. Every new Coding, Team OS and Board launch uses these.</p>
+            <div id="copilotFlagsPreview" class="flags-preview" aria-label="Launch command">copilot</div>
+          </div>
+          <div class="opt-group">
+            <h3 class="opt-group-title">Models offered</h3>
+            <label class="stacked">
+              <span>Model ids, one per line</span>
+              <textarea id="copilotModels" class="input-native" rows="4" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="copilotModelsHelp"></textarea>
+            </label>
+            <p id="copilotModelsHelp" class="field-help">The models every picker offers beside Default. Which ids work depends on your Copilot plan, so list the ones your account may use. Saved when you leave the field; keep at least one.</p>
+          </div>
+        </div>
+        <div class="detail-actions">
+          <button data-track="copilot.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- GitLab: where the Board's issues and merge requests come from, read
+         through glab. Both save as they change. -->
+    <dialog id="gitlabSheet" class="detail-dialog settings-sheet" data-track-view="sheet.gitlab" aria-labelledby="gitlabSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="gitlab.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="gitlabSheetTitle" tabindex="-1" autofocus>GitLab</h2>
+          <button data-track="gitlab.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <label class="stacked">
+            <span>GitLab group</span>
+            <input id="gitlabGroup" type="text" class="input-native" placeholder="my-group or my-group/sub" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="gitlabGroupHelp">
+          </label>
+          <p id="gitlabGroupHelp" class="field-help">The group whose issues and merge requests the Board lists, subgroups included.</p>
+          <label class="stacked">
+            <span>GitLab host (blank = gitlab.com)</span>
+            <input id="gitlabHost" type="text" class="input-native" placeholder="gitlab.example.com" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="gitlabHostHelp">
+          </label>
+          <p id="gitlabHostHelp" class="field-help">A self-hosted instance's host name. glab must be signed in to it on this PC (<code>glab auth login</code>).</p>
+        </div>
+        <div class="detail-actions">
+          <button data-track="gitlab.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- The chief (#1435): model and worker cap from the Board's old
+         dialog (PUT /api/board/chief/settings, passkey-gated), the
+         auto-compact threshold (#1298) and the doorbell switch
+         (fleet-config#1457, #1645's chief_doorbell), both POST /api/config. -->
+    <dialog id="chiefSheet" class="detail-dialog settings-sheet" data-track-view="sheet.chief" aria-labelledby="chiefSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="chief.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="chiefSheetTitle" tabindex="-1" autofocus>Chief</h2>
+          <button data-track="chief.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <div class="row">
+            <span>Model</span>
+            <span id="chiefModelSelect" class="model-combo model-combo--settings" data-value="">
+            <button data-track="chief.model" type="button" class="model-combo-trigger" aria-label="Chief model"
+                    aria-haspopup="listbox" aria-expanded="false" aria-controls="chiefModelMenu">Default</button>
+            <span id="chiefModelMenu" class="model-combo-menu" role="listbox"
+                  aria-label="Chief model" hidden>
+              <button data-track="chief.model-option" type="button" role="option" data-value="" aria-selected="true">Default</button>
+            </span>
+          </span>
+          </div>
+          <label class="row">
+            <span>Worker cap</span>
+            <input id="chiefWorkerCap" type="number" class="input-native" inputmode="numeric" step="1" aria-describedby="chiefWorkerCapHelp">
+          </label>
+          <p id="chiefWorkerCapHelp" class="field-help">The only limit on how many workers the chief runs at once.</p>
+          <div class="row">
+            <span>Count only chief-dispatched sessions</span>
+            <button data-track="chief.worker-cap-scope" type="button" id="chiefWorkerCapScopeToggle" class="toggle" role="switch" aria-checked="true" aria-label="Count only chief-dispatched sessions" aria-describedby="chiefWorkerCapScopeHelp" title="Choose which sessions the worker cap counts"><span class="knob"></span><span class="toggle-label">ON</span></button>
+          </div>
+          <p id="chiefWorkerCapScopeHelp" class="field-help">On, the cap counts only the sessions the chief started, so the ones you open yourself never use up a slot. Off, it counts every live session. The chief itself never counts.</p>
+          <h3 class="opt-group-title" id="chiefAutomationsTitle">Automations</h3>
+          <p class="opt-hint">Everything the chief does on its own. Each switch saves when you tap it, and no restart is needed.</p>
+          <div class="row">
+            <span>Doorbell</span>
+            <button data-track="chief.doorbell" type="button" id="chiefDoorbellToggle" class="toggle" role="switch" aria-checked="false" aria-label="Chief doorbell" aria-describedby="chiefDoorbellHelp" title="Wake the chief when workers leave it mail"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+          </div>
+          <p id="chiefDoorbellHelp" class="field-help">Wakes the idle chief when its mailbox has worker news, by typing one fixed line into its terminal. Off, nothing is typed and the chief arms its own waiter at its next turn.</p>
+          <div class="row">
+            <span>Auto-drain queue</span>
+            <button data-track="chief.auto-drain" type="button" id="chiefAutoDrainToggle" class="toggle" role="switch" aria-checked="true" aria-label="Auto-drain queue" aria-describedby="chiefAutoDrainHelp" title="Let the chief start unattended audit fixes when a worker slot frees"><span class="knob"></span><span class="toggle-label">ON</span></button>
+          </div>
+          <p id="chiefAutoDrainHelp" class="field-help">The chief starts unattended audit fixes when a worker slot frees.</p>
+          <div class="row">
+            <span>Auto-compact</span>
+            <button data-track="chief.auto-compact" type="button" id="chiefAutoCompactToggle" class="toggle" role="switch" aria-checked="true" aria-label="Chief auto-compact" aria-describedby="chiefAutoCompactHelp" title="Let the chief compact itself when its context fills"><span class="knob"></span><span class="toggle-label">ON</span></button>
+          </div>
+          <label class="row">
+            <span>Compact at context use (%)</span>
+            <input id="chiefAutoCompactThreshold" type="number" class="input-native" inputmode="numeric" min="10" max="90" step="5" aria-describedby="chiefAutoCompactHelp">
+          </label>
+          <p id="chiefAutoCompactHelp" class="field-help">The chief compacts its own conversation when its context use reaches this share, from 10 to 90%. Off, it never compacts on its own.</p>
+          <div class="row">
+            <span>Job failures</span>
+            <button data-track="chief.job-failures" type="button" id="chiefJobFailuresToggle" class="toggle" role="switch" aria-checked="true" aria-label="Chief job failures" aria-describedby="chiefJobFailuresHelp" title="Tell the chief when a Job run fails"><span class="knob"></span><span class="toggle-label">ON</span></button>
+          </div>
+          <p id="chiefJobFailuresHelp" class="field-help">Leaves the chief a mailbox event when a Job run fails, while a chief is running. Off, a failed run only notifies you.</p>
+          <div class="row">
+            <span>Job self-heal</span>
+            <button data-track="chief.job-self-heal" type="button" id="chiefJobSelfHealToggle" class="toggle" role="switch" aria-checked="false" aria-label="Job self-heal" aria-describedby="chiefJobSelfHealHelp" title="Let the chief try to repair a failed Job on its own"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+          </div>
+          <p id="chiefJobSelfHealHelp" class="field-help">Lets the chief try to repair a Job that failed, instead of only being told. Off, a failed run is reported and nothing is repaired on its own.</p>
+          <div class="row">
+            <span>Weekly proposals</span>
+            <button data-track="chief.weekly-proposals" type="button" id="chiefWeeklyProposalsToggle" class="toggle" role="switch" aria-checked="false" aria-label="Weekly proposals" aria-describedby="chiefWeeklyProposalsHelp" title="Let the chief draft its weekly proposals"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+          </div>
+          <p id="chiefWeeklyProposalsHelp" class="field-help">Lets the chief draft its weekly proposals without being asked. Off, it proposes nothing until you ask.</p>
+        </div>
+        <div class="detail-actions">
+          <button data-track="chief.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Document reader: one configured document, rendered live. documents.js
+         fills the title and body from GET /api/documents/{id}; the body is the
+         same `.tr-md` box the Changed files Preview renders into, and
+         shared/mermaid-render.js draws its diagrams. -->
+    <dialog id="documentSheet" class="detail-dialog settings-sheet document-sheet" data-track-view="sheet.document" aria-labelledby="documentSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="document.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="documentSheetTitle" tabindex="-1" autofocus>Document</h2>
+          <button data-track="document.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="document-meta">
+          <p id="documentUpdated" class="muted small" role="status" aria-live="polite"></p>
+          <button data-track="document.copy" type="button" id="documentCopy" class="button-surface document-github document-copy" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg> Copy Markdown</button>
+          <button data-track="document.github" type="button" id="documentGithub" class="button-ghost document-github" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-globe"></use></svg> Open on GitHub</button>
+        </div>
+        <div class="settings-sheet-body document-sheet-body">
+          <div id="documentState" class="empty-state" hidden>
+            <svg class="icon empty-state-icon" aria-hidden="true" focusable="false"><use href="#i-book-open"></use></svg>
+            <p id="documentStateMessage" class="empty-state-message"></p>
+            <button type="button" id="documentRetry" class="empty-state-action" data-track="settings.document-retry" hidden>Retry</button>
+          </div>
+          <div id="documentBody" class="tr-md document-body"></div>
+        </div>
+        <div class="detail-actions">
+          <button data-track="document.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="tokensSheet" class="detail-dialog settings-sheet" data-track-view="sheet.tokens" aria-labelledby="tokensSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="tokens.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="tokensSheetTitle" tabindex="-1" autofocus>API tokens</h2>
+          <button data-track="tokens.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <p class="muted small">Tokens for running one job from a link, such as a Stream Deck button. A token can run only the job you pick, and revoking it never affects your main login.</p>
+          <ul id="tokensList" class="card-list"></ul>
+          <div id="tokensEmpty" class="empty-state" hidden>
+            <svg class="icon empty-state-icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>
+            <p class="empty-state-message">No tokens yet.</p>
+            <button data-track="tokens.empty-create" type="button" id="tokensEmptyAction" class="empty-state-action">Create a token</button>
+          </div>
+          <label class="stacked">
+            <span>Label</span>
+            <input id="tokenLabelInput" type="text" class="input-native" placeholder="Stream Deck — daily reporting">
+          </label>
+          <label class="stacked">
+            <span>Job it can run</span>
+            <select data-track="tokens.job" id="tokenJobSelect" class="select-native"></select>
+          </label>
+          <div class="row settings-actions">
+            <button data-track="tokens.create" id="tokenMintBtn" type="button" class="button-tint"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg> Create token</button>
+          </div>
+          <div id="tokenMintResult" class="stacked" hidden>
+            <span class="muted small">Copy it now — it is shown only once.</span>
+            <div class="row">
+              <input id="tokenMintValue" type="text" class="input-native" readonly>
+              <button data-track="tokens.copy" id="tokenCopyBtn" type="button" class="button-surface"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg> Copy</button>
+            </div>
+            <span id="tokenMintUrl" class="muted small"></span>
+          </div>
+          <div class="opt-group">
+            <h3 class="opt-group-title">Delegate token</h3>
+            <p class="opt-hint">For an outside agent. It can read the Board and the chief&rsquo;s plan and file issues for the chief to triage. Nothing else: no sessions, terminals or settings. Regenerating stops the old value at once.</p>
+            <p id="delegateTokenStatus" class="muted small">Off</p>
+            <div class="row settings-actions">
+              <button data-track="tokens.delegate-on" id="delegateTokenRegenBtn" type="button" class="button-tint"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-refresh-cw"></use></svg> <span id="delegateTokenRegenLabel">Turn on</span></button>
+              <button data-track="tokens.delegate-off" id="delegateTokenOffBtn" type="button" class="button-ghost" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-power"></use></svg> Turn off</button>
+            </div>
+            <div id="delegateTokenResult" class="stacked" hidden>
+              <span id="delegateTokenValueHelp" class="field-help">Copy it now — it is shown only once.</span>
+              <div class="row">
+                <input id="delegateTokenValue" type="text" class="input-native" readonly aria-label="Delegate token" aria-describedby="delegateTokenValueHelp">
+                <button data-track="tokens.delegate-copy" id="delegateTokenCopyBtn" type="button" class="button-surface"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg> Copy</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="detail-actions">
+          <button data-track="tokens.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="foldersSheet" class="detail-dialog settings-sheet" data-track-view="sheet.folders" aria-labelledby="foldersSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="folders.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="foldersSheetTitle" tabindex="-1" autofocus>Folders</h2>
+          <button data-track="folders.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <label class="stacked">
+            <span>Projects folder</span>
+            <input id="projectsDir" type="text" class="input-native" aria-describedby="projectsDirHelp">
+          </label>
+          <p id="projectsDirHelp" class="field-help">Where Code looks for projects: each folder inside it is one.</p>
+          <label class="stacked">
+            <span>Hidden projects</span>
+            <textarea id="projectsIgnore" class="input-native" aria-describedby="projectsIgnoreHelp" rows="3"
+                    placeholder="archive&#10;*-old&#10;scratch"></textarea>
+          </label>
+          <p id="projectsIgnoreHelp" class="field-help">Folders Code leaves out, one per line. A * matches anything, so *-old hides every name ending in -old.</p>
+          <label class="stacked">
+            <span>Apps folder</span>
+            <input id="appsScanRoot" type="text" class="input-native" aria-describedby="appsScanRootHelp">
+          </label>
+          <p id="appsScanRootHelp" class="field-help">Where the Apps tab's Scan for new apps looks for apps to add.</p>
+          <label class="stacked">
+            <span>Team OS folder</span>
+            <input id="teamOsDir" type="text" class="input-native" aria-describedby="teamOsDirHelp">
+          </label>
+          <p id="teamOsDirHelp" class="field-help">Your team-os checkout, which the Team OS tab reads (skills live under <code>.claude/skills</code>).</p>
+          <label class="stacked">
+            <span>fleet-config-lite folder</span>
+            <input id="fleetConfigDir" type="text" class="input-native" aria-describedby="fleetConfigDirHelp">
+          </label>
+          <p id="fleetConfigDirHelp" class="field-help">Your fleet-config-lite copy. The Board, session state and the fleet chief read from it.</p>
+          <div class="stacked">
+            <span id="outboxRootsLabel">Chat file folders</span>
+            <ul id="outboxRootsList" class="card-list outbox-roots" aria-labelledby="outboxRootsLabel"></ul>
+          </div>
+          <div class="row outbox-root-add">
+            <input id="outboxRootInput" type="text" class="input-native" placeholder="C:\Drop or %USERPROFILE%\Drop" aria-label="Add a chat file folder" aria-describedby="outboxRootsHelp" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <button data-track="folders.outbox-add" id="outboxRootAdd" type="button" class="button-tint">Add</button>
+          </div>
+          <p id="outboxRootsHelp" class="field-help">The session's own folder is always allowed. These are extra folders an agent may send files from.</p>
+        </div>
+        <div class="detail-actions">
+          <button data-track="folders.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="passkeysSheet" class="detail-dialog settings-sheet" data-track-view="sheet.passkeys" aria-labelledby="passkeysSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="passkeys.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="passkeysSheetTitle" tabindex="-1" autofocus>Passkeys</h2>
+          <button data-track="passkeys.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <div class="webauthn-section">
+            <p id="webauthnStatus" class="muted small">Checking…</p>
+            <ul id="webauthnDevices" class="webauthn-devices"></ul>
+            <button data-track="passkeys.enroll" id="enrollDeviceBtn" type="button" class="button-tint" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-smartphone"></use></svg> Enroll this device</button>
+            <p class="muted small">
+              Open the enrollment window from the tray menu
+              (<strong><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg> Enroll device</strong>) on the PC, then tap the button above.
+            </p>
+          </div>
+          <p id="statusReadout" class="muted small settings-section"></p>
+        </div>
+        <div class="detail-actions">
+          <button data-track="passkeys.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="terminalSheet" class="detail-dialog settings-sheet" data-track-view="sheet.terminal" aria-labelledby="terminalSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="terminal.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="terminalSheetTitle" tabindex="-1" autofocus>Terminal</h2>
+          <button data-track="terminal.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <label class="stacked">
+            <span>Terminal history (lines)</span>
+            <input id="terminalHistoryLines" type="number" class="input-native" aria-describedby="terminalHistoryLinesHelp" step="100" inputmode="numeric">
+          </label>
+          <p id="terminalHistoryLinesHelp" class="field-help">How much a full-screen agent such as Copilot keeps to redraw when you reconnect.</p>
+          <label class="stacked">
+            <span>Large file limit (MB)</span>
+            <input id="largeUploadMaxMb" type="number" class="input-native" aria-describedby="largeUploadMaxMbHelp" step="1" inputmode="numeric">
+          </label>
+          <p id="largeUploadMaxMbHelp" class="field-help">The biggest file Attach large file takes. It is stored on this PC for the agent to use by path, never read into its context.</p>
+        </div>
+        <div class="detail-actions">
+          <button data-track="terminal.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
+        </div>
+      </div>
+    </dialog>

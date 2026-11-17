@@ -1,8 +1,10 @@
 """Tailscale CLI discovery and tailnet-hostname resolution for the tray.
 
-These are pure functions with no ``TrayApp`` state — callers pass a
-debug-breadcrumb callback rather than this module owning a log path itself,
-so it stays decoupled from ``tray.py``'s own ``PROJECT_ROOT``-derived paths.
+Split off ``app/tray/tray.py`` (a single-file god-module flagged by
+``/codebase-audit``). These are pure functions with no ``TrayApp`` state —
+callers pass a debug-breadcrumb callback rather than this module owning a
+log path itself, so it stays decoupled from ``tray.py``'s own
+``PROJECT_ROOT``-derived paths.
 """
 
 from __future__ import annotations
@@ -68,7 +70,7 @@ def _run(binary: str, args: list) -> subprocess.CompletedProcess:
 def resolve_hostname(debug: Callable[[str], None] = _NO_DEBUG) -> Optional[str]:
     """Return this machine's tailnet address, or None if unavailable.
 
-    Prefers the full DNS name (e.g. ``tower.tailnet.ts.net``) — the form
+    Prefers the full DNS name (e.g. ``<host>.ts.net``) — the form
     both the copied URL and the WebAuthn relying-party ID want — and falls
     back to the raw ``100.x`` IP. Every failure path is reported through
     ``debug`` (the tray wires this to its ``webapp/tailscale_debug.log``

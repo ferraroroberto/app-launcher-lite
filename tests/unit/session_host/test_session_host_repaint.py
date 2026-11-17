@@ -3,10 +3,10 @@
 Two halves of the fix live in ``app/webapp/session_host/server.py``:
 
 - the WS handler **skips the raw scrollback-ring replay** for a
-  full-screen differential-TUI agent — replaying its
+  full-screen differential-TUI agent (Codex/ratatui) — replaying its
   stale deltas garbles a fresh xterm and re-answers the agent's startup
   terminal queries as input (the ``[?1;2c`` DA leak), while an inline
-  agent (e.g. SSH) still gets its snapshot;
+  agent (Claude Code) still gets its snapshot;
 - ``_force_repaint`` nudges the TUI into a clean redraw by toggling the
   PTY width one column and back.
 """
@@ -14,6 +14,7 @@ Two halves of the fix live in ``app/webapp/session_host/server.py``:
 from __future__ import annotations
 
 import asyncio
+import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -21,7 +22,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.webapp.session_host import server
-from src.session_host import _EOF
+from src.session_host import _EOF, PTY_MIN_COLS, PtySession
 
 
 async def _async_noop(*_args, **_kwargs) -> None:
@@ -58,14 +59,39 @@ async def test_force_repaint_toggles_width_and_restores(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_force_repaint_clamps_one_column_width(monkeypatch):
+async def test_force_repaint_toggles_up_at_the_width_floor(monkeypatch):
     monkeypatch.setattr(server.asyncio, "sleep", _async_noop)
-    sess = _StubSession(rows=10, cols=1)
+    sess = _StubSession(rows=10, cols=PTY_MIN_COLS)
 
     await server._force_repaint(sess)
 
-    # cols-1 would be 0 — clamp to >=1 so the toggle never goes invalid.
-    assert sess.resizes == [(10, 1), (10, 1)]
+    # cols-1 would sit below the floor PtySession.resize clamps to (#930), so
+    # the toggle down would be swallowed as a no-op — go one column up instead.
+    assert sess.resizes == [(10, PTY_MIN_COLS + 1), (10, PTY_MIN_COLS)]
+
+
+@pytest.mark.asyncio
+async def test_force_repaint_fires_two_real_resizes_at_the_floor(monkeypatch):
+    # Against a real PtySession (floor clamp + unchanged-size guard), the
+    # nudge must still reach setwinsize twice — or it repaints nothing.
+    monkeypatch.setattr(server.asyncio, "sleep", _async_noop)
+    sess = PtySession(
+        session_id="sid-repaint",
+        project_dir=r"C:\stub",
+        name="proj",
+        flags="",
+        started_at=time.time(),
+        _loop=MagicMock(),
+        _pty=MagicMock(),
+        agent="copilot",
+        rows=30,
+        cols=PTY_MIN_COLS,
+    )
+
+    await server._force_repaint(sess)
+
+    assert sess._pty.setwinsize.call_count == 2
+    assert (sess.rows, sess.cols) == (30, PTY_MIN_COLS)
 
 
 @pytest.mark.asyncio
@@ -115,7 +141,7 @@ def _connect(monkeypatch, agent: str, vt_frame: "str | None" = None):
 
 
 def test_ws_skips_ring_replay_for_fullscreen_agent_no_vt_frame(monkeypatch):
-    """A fullscreen agent, no VT frame yet (falls back to the toggle nudge):
+    """Codex (fullscreen), no VT frame yet (falls back to the toggle nudge):
     the raw ring is NOT replayed. The only text frame is the clean-frame
     preamble (#270 tail-jump) — never the stale ring — so the DA-query leak
     can't happen (issue #128) and the reopened session lands on a clean
@@ -139,7 +165,7 @@ def test_clean_frame_preamble_is_csi_only():
 
 
 def test_ws_serves_vt_snapshot_when_available(monkeypatch):
-    """A fullscreen agent with a VT frame already painted: the snapshot is
+    """Codex (fullscreen) with a VT frame already painted: the snapshot is
     sent right after the clean-frame preamble, and — critically — the
     winsize-toggle nudge (``_force_repaint``) is never scheduled, since that
     toggle is exactly what triggers a ratatui agent's full transcript
@@ -166,7 +192,7 @@ def test_ws_serves_vt_snapshot_when_available(monkeypatch):
 
 
 def test_ws_replays_ring_for_inline_agent_after_wipe(monkeypatch):
-    """An inline agent: the scrollback snapshot is still replayed — but
+    """ssh (inline): the scrollback snapshot is still replayed — but
     prefixed with the clean-frame preamble in the SAME frame (#444). The
     phone reuses one xterm across reconnects (#28 backoff, #430 warm
     cache); without the wipe the full ring lands BELOW the stale buffer,

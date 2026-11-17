@@ -11,7 +11,7 @@ specialised to the skills in the sibling ``team-os`` repo:
     GET  /api/team-os/file?path=…              → file content (private network + passkey)
 
 Launch reuses the Coding tab's session-host / ConPTY machinery wholesale
-(:func:`src.launcher.spawn_agent_session`, agent ``copilot`` — Copilot
+(:func:`src.launching.launcher.spawn_claude_session`, agent ``copilot`` — Copilot
 reads ``.claude/skills`` and supports ``/skill`` invocation); only three
 things differ: the cwd is always ``team_os_dir`` (so the project skills
 resolve), the model comes from the tab's model combo (config-driven, from
@@ -47,8 +47,8 @@ from app.webapp.routers._helpers import (
     spawn_session_or_400,
 )
 from src import audit
-from src.launch_flags import build_copilot_flags, build_resume_flags
-from src.launcher import open_local_terminal_window, spawn_agent_session
+from src.launching.flags import build_copilot_flags, build_resume_flags
+from src.launching.launcher import open_local_terminal_window, spawn_claude_session
 from src.scanner import Skill, scan_skills, skills_dir_for
 from src.webapp_config import WebappConfig
 
@@ -220,7 +220,7 @@ async def _spawn_skill_session(
     rows = int(body.get("rows") or 40)
     cols = int(body.get("cols") or 120)
     session = await spawn_session_or_400(
-        spawn_agent_session,
+        spawn_claude_session,
         team_os_dir,
         name,
         flags,
@@ -238,7 +238,7 @@ async def _spawn_skill_session(
         sid=sid, agent="copilot", name=name, project=str(team_os_dir),
         resume=resume, skill=audit_skill, audit_mod=audit,
         mirror_fn=open_local_terminal_window,
-        event="remote_launch" if kind == "remote" else "session_start",
+        kind=kind,
         mirror=kind == "pty",
     )
 

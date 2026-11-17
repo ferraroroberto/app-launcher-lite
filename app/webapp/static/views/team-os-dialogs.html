@@ -1,0 +1,38 @@
+    <!-- Team OS content browser: one skill's files, then the document sheet
+         that opens one. team-os/team-os-content.js fills both. -->
+    <dialog id="teamOsBrowser" class="detail-dialog teamos-reader-sheet" data-track-view="sheet.team-os-browser" aria-labelledby="teamOsBrowserTitle">
+      <div class="detail-card">
+        <div class="detail-header">
+          <h2 id="teamOsBrowserTitle" class="teamos-sheet-title" tabindex="-1" autofocus>Skill</h2>
+          <button data-track="team-os-browser.close" type="button" id="teamOsBrowserClose" class="icon-button detail-close" aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <ul id="teamOsFileList" class="teamos-file-list" aria-label="Skill files"></ul>
+        <div class="detail-actions">
+          <button data-track="team-os-browser.done" type="button" id="teamOsBrowserDone" class="button-primary detail-save-btn">Done</button>
+        </div>
+      </div>
+    </dialog>
+    <dialog id="teamOsDoc" class="detail-dialog teamos-reader-sheet" data-track-view="sheet.team-os-doc" aria-labelledby="teamOsDocTitle">
+      <div class="detail-card">
+        <div class="detail-header">
+          <h2 id="teamOsDocTitle" class="teamos-sheet-title" tabindex="-1" autofocus>File</h2>
+          <button data-track="team-os-doc.close" type="button" id="teamOsDocClose" class="icon-button detail-close" aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div id="teamOsFileContent" class="teamos-file-content tr-md"></div>
+        <div id="teamOsDocLinks" hidden>
+          <div class="teamos-sheet-actions">
+            <button data-track="team-os-doc.rename" type="button" id="teamOsDocRename" class="icon-button" aria-label="Rename log" title="Rename log">
+              <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg>
+            </button>
+            <button data-track="team-os-doc.delete" type="button" id="teamOsDocDelete" class="button-tint danger">Delete log</button>
+          </div>
+        </div>
+        <div class="detail-actions">
+          <button data-track="team-os-doc.done" type="button" id="teamOsDocDone" class="button-primary detail-save-btn">Done</button>
+        </div>
+      </div>
+    </dialog>

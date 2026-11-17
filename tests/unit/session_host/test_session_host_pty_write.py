@@ -15,6 +15,7 @@ truncation or the retry-loop regression.
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from unittest.mock import MagicMock
 
@@ -33,7 +34,7 @@ def _make_session(loop) -> PtySession:
     return PtySession(
         session_id="sid-test",
         project_dir=r"C:\stub",
-        name="coding",
+        name="claude",
         flags="",
         started_at=time.time(),
         _loop=loop,
@@ -166,3 +167,106 @@ async def test_write_swallows_pty_exception_but_reports_failure():
     # Must not raise, but must report the drop.
     assert session.write("hello") is False
     assert session.write("x" * (_WRITE_CHUNK_SIZE * 2)) is False
+
+
+# --------------------------------------------------------------------------
+# Issue #721: two concurrent writers on one PTY.
+#
+# Since #611 the session-host has had two independent write paths — the
+# WebSocket pump (``app/webapp/session_host/server.py`` per-message
+# ``asyncio.to_thread(session.write, …)``) and the HTTP ``/input`` route
+# (``asyncio.to_thread(session.submit_input, …)``) — and a PC mirror plus a
+# phone attached to the same session at once is the documented, intended
+# shape. Nothing serialized them: ``_ring_lock`` guards the *output* ring and
+# the manager's lock guards the registry. So a keystroke could land between
+# two ~512 B chunks of somebody else's paste, or between a paste and its
+# submitting CR.
+# --------------------------------------------------------------------------
+
+
+def _slow_write_session(
+    loop, per_write_s: float = 0.005
+) -> tuple[PtySession, list[str]]:
+    """A session whose PTY write is slow enough that an unserialized second
+    writer is near-certain to interleave, and which records call order."""
+    session = _make_session(loop)
+    calls: list[str] = []
+    record_lock = threading.Lock()
+
+    def _record(chunk: str) -> None:
+        time.sleep(per_write_s)
+        with record_lock:
+            calls.append(chunk)
+
+    session._pty.write.side_effect = _record
+    return session, calls
+
+
+@pytest.mark.asyncio
+async def test_concurrent_writes_do_not_interleave_chunks():
+    """A single keystroke arriving mid-paste must land wholly before or
+    wholly after it — never spliced between the paste's own chunks."""
+    loop = asyncio.get_running_loop()
+    session, calls = _slow_write_session(loop)
+    paste = "A" * (_WRITE_CHUNK_SIZE * 4)  # 4 chunks, paced
+
+    paster = threading.Thread(target=session.write, args=(paste,))
+    paster.start()
+    time.sleep(0.008)  # land the keystroke while the paste is mid-flight
+    session.write("B")
+    paster.join()
+
+    joined = "".join(calls)
+    assert joined in (paste + "B", "B" + paste), (
+        "a concurrent single-char write interleaved with a chunked paste — "
+        f"got {len(calls)} chunks in an order that splices them: {joined[:40]}…"
+    )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_write_cannot_land_between_paste_and_its_cr(monkeypatch):
+    """``submit_input`` writes the text, waits for the paste to settle, then
+    writes the submitting CR as a *separate* PTY write (#166). A byte landing
+    in that gap turns the CR into a literal newline inside another user's
+    message, so the lock has to span the whole sequence, not just each
+    ``write()`` call."""
+    # The settle/ingest constants and submit_input() itself live in
+    # src/session_host_input.py (issue #798's extraction) — patch them there,
+    # since that's the module whose globals submit_input()'s code actually
+    # reads at call time; session_host.py's copies are just a re-export.
+    import src.session_host_input as sh_input
+
+    # Keep the settle wait short, and make it actually *settle*: since #763 a
+    # bulk payload that never goes quiet no longer gets a CR at the cap at all
+    # (it is handed to the deferred watcher), so this test has to drive the
+    # settled path to have a CR to assert the lock spans.
+    monkeypatch.setattr(sh_input, "_BULK_FLOOR_MS", 50)
+    monkeypatch.setattr(sh_input, "_BULK_QUIET_MS", 50)
+    monkeypatch.setattr(sh_input, "_BULK_CAP_MS", 2000)
+    monkeypatch.setattr(sh_input, "_INGEST_CAP_MS", 3000)
+
+    loop = asyncio.get_running_loop()
+    session, calls = _slow_write_session(loop, per_write_s=0.001)
+    payload = "A" * 600  # >= _BULK_SUBMIT_THRESHOLD_CHARS -> takes the settle path
+
+    submitter = threading.Thread(
+        target=session.submit_input, args=(payload, True)
+    )
+    submitter.start()
+    time.sleep(0.02)
+    # Stand in for the reader thread painting the paste back, so the CR is
+    # actually reached — without ingest evidence #760 withholds it.
+    with session._ring_lock:
+        session._output_total += len(payload)
+        session._ring += payload
+    session._last_output_at = time.time()  # the paint the quiet wait measures
+    time.sleep(0.03)  # squarely inside the settle wait
+    session.write("B")
+    submitter.join()
+
+    joined = "".join(calls)
+    assert joined == payload + "\r" + "B", (
+        "a concurrent write landed between the paste and its submitting CR "
+        f"(tail was {joined[-4:]!r}) — the lock must span text→settle→CR, "
+        "not just each write() call"
+    )

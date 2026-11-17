@@ -56,7 +56,7 @@ from src import audit
 from src import session_host as session_host_lib
 from src.session_host import PtyProcess
 
-_CHILD = Path(__file__).parent / "_pty_paint_child.py"
+_CHILD = Path(__file__).parent.parent.parent / "_pty_paint_child.py"
 
 pytestmark = [
     pytest.mark.skipif(
@@ -73,7 +73,7 @@ pytestmark = [
 ]
 
 # Five concurrent sessions — the load the issue reports ("five concurrent PTY
-# workers"), not a round number picked for symmetry.
+# workers plus chief"), not a round number picked for symmetry.
 _SESSION_COUNT = 5
 # Generous: a ConPTY spawn plus a Python interpreter start is ~0.5 s on an
 # idle box, and this must not go red merely because the machine is busy. The
@@ -145,18 +145,8 @@ async def _create_and_attach(
     }
 
 
-async def _ticker(tick_gaps: list[float], stop_ticking: asyncio.Event) -> None:
-    """Measures how badly the burst starves the shared event loop."""
-    last = time.perf_counter()
-    while not stop_ticking.is_set():
-        await asyncio.sleep(_TICK_INTERVAL_S)
-        now = time.perf_counter()
-        tick_gaps.append(now - last)
-        last = now
-
-
-def _diagnosis(results: list[dict[str, Any]], tick_gaps: list[float]) -> str:
-    """One line naming the worst loop stall and each session's spawn/paint time."""
+def _load_diagnosis(tick_gaps: list[float], results: list[dict[str, Any]]) -> str:
+    """The worst event-loop gap and each session's spawn and paint times."""
     worst_gap = max(tick_gaps) if tick_gaps else 0.0
     return (
         f"worst event-loop tick gap during the burst: {worst_gap * 1000:.0f} ms "
@@ -168,6 +158,22 @@ def _diagnosis(results: list[dict[str, Any]], tick_gaps: list[float]) -> str:
             for r in results
         )
     )
+
+
+def _assert_not_cross_wired(results: list[dict[str, Any]], diagnosis: str) -> None:
+    """A session must never receive another session's output (#537's
+    failure mode, re-reported on #610's exchange endpoint)."""
+    for row in results:
+        foreign = [
+            other["sentinel"]
+            for other in results
+            if other["index"] != row["index"] and other["sentinel"] in row["buffer"]
+        ]
+        assert not foreign, (
+            f"session #{row['index']} ({row['session_id'][:8]}) received another "
+            f"session's output {foreign} — terminals are cross-wired under a "
+            f"{_SESSION_COUNT}-session burst. {diagnosis}"
+        )
 
 
 async def test_five_concurrent_sessions_each_paint_their_own_first_frame(
@@ -202,7 +208,17 @@ async def test_five_concurrent_sessions_each_paint_their_own_first_frame(
 
     tick_gaps: list[float] = []
     stop_ticking = asyncio.Event()
-    tick_task = asyncio.create_task(_ticker(tick_gaps, stop_ticking))
+
+    async def ticker() -> None:
+        """Measures how badly the burst starves the shared event loop."""
+        last = time.perf_counter()
+        while not stop_ticking.is_set():
+            await asyncio.sleep(_TICK_INTERVAL_S)
+            now = time.perf_counter()
+            tick_gaps.append(now - last)
+            last = now
+
+    tick_task = asyncio.create_task(ticker())
     results: list[dict[str, Any]] = []
     try:
         for _ in range(400):
@@ -235,7 +251,7 @@ async def test_five_concurrent_sessions_each_paint_their_own_first_frame(
         with contextlib.suppress(asyncio.TimeoutError, TimeoutError):
             await asyncio.wait_for(serve_task, timeout=30)
 
-    diagnosis = _diagnosis(results, tick_gaps)
+    diagnosis = _load_diagnosis(tick_gaps, results)
 
     # The measurement is the point of this test, not a side effect: AC1 asks
     # for what a five-session load actually does, so the numbers go to stdout
@@ -251,16 +267,4 @@ async def test_five_concurrent_sessions_each_paint_their_own_first_frame(
         + f". {diagnosis}"
     )
 
-    # Cross-wiring: a session must never receive another session's output
-    # (#537's failure mode, re-reported on #610's exchange endpoint).
-    for row in results:
-        foreign = [
-            other["sentinel"]
-            for other in results
-            if other["index"] != row["index"] and other["sentinel"] in row["buffer"]
-        ]
-        assert not foreign, (
-            f"session #{row['index']} ({row['session_id'][:8]}) received another "
-            f"session's output {foreign} — terminals are cross-wired under a "
-            f"{_SESSION_COUNT}-session burst. {diagnosis}"
-        )
+    _assert_not_cross_wired(results, diagnosis)

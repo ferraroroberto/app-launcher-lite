@@ -1,0 +1,807 @@
+"""Fleet-chief lifecycle — the standing orchestrator behind the Board's chat mode.
+
+    POST /api/board/chief/ensure    → spawn the fleet chief if absent
+                                      (?fresh=1 kills + restarts, an explicit
+                                      operator action; ?resume=1
+                                      reattaches the most recent *substantive*
+                                      chief conversation instead of starting
+                                      fresh) — Tailscale + passkey
+    GET  /api/board/chief/settings  → chief settings block (also read by the
+                                      /chief skill over loopback)
+    PUT  /api/board/chief/settings  → persist chief settings
+    GET  /api/board/chief-journal   → the chief's journal, new entries flagged
+                                      (board token only)
+    POST /api/board/chief/journal/looked → stamp the owner's last look
+                                      (Tailscale + passkey)
+    GET  /api/board/chief-settings  → {"auto_compact_threshold": <int>}, the
+                                      chief's self-compact threshold
+                                      (read by fleet-config's chief_ops.py
+                                      self-compact); board token only
+
+Kept apart from ``app/webapp/routers/board.py``, like ``jobs.py`` and
+``sessions.py``, because the two are unrelated concerns: the Board tab's
+read-only column assembly, and this chief state machine (spawn, resume,
+label self-heal, chief-managed marking, settings). Mounted on
+``board.router`` via ``include_router`` so ``app/webapp/server.py`` still
+registers one ``board.router``.
+
+Imports flow one way: this module depends on
+:mod:`app.webapp.routers.board_spawn` (the shared spawn-then-type mechanics)
+and never on ``board.py``, which imports *this* — so there is no cycle. The
+chief-label self-heal lives here rather than in ``board.py`` even though
+``GET /api/board`` calls it: it is chief-domain logic, and the poll reaching
+into this module is one call, not a shared concern.
+
+The chief is a normal PTY session (label="chief") spawned in the fleet-config
+checkout — that cwd is what loads the fleet-only /chief skill tier and keeps
+app-launcher's own project context out of it. The server ships zero chief
+prose: the spawn types only "/chief", so the brain stays versioned in
+fleet-config. Two triggers hit the ensure endpoint: the first chat-mode message
+(lazy) and the manual Start/Restart button. No unattended schedule restarts the
+chief: it compacts and continues (hands its own handover log back to itself
+on every session start), so a forced unattended restart would discard a live
+batch's context instead of protecting it. ``fresh=1`` (a graceful
+stop-then-respawn) is an explicit operator action only, used by the manual
+Restart button.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import subprocess
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from fastapi import APIRouter, HTTPException, Request
+
+from app.webapp.routers._helpers import (
+    audit_session_start_and_maybe_mirror,
+    client_ip,
+    maybe_json,
+    safe_int,
+    spawn_launcher_session,
+)
+from app.webapp.routers.board_spawn import (
+    _agent_and_flags,
+    _await_dispatch_ready,
+    _await_pty_quiescent,
+    _read_live_sessions,
+    _resolve_repo_entry,
+    _type_into_session,
+)
+from src import audit, board
+from src.chief import identity as chief_identity
+from src.chief import journal as chief_journal
+from src.chief import pointer as chief_pointer
+from src.chief.cap_raised import publish_cap_raised
+from src.clients import session as session_client
+from src.launching.flags import build_resume_flags
+from src.launching.launcher import open_local_terminal_window, spawn_claude_session
+from src.subprocess_flags import NO_WINDOW
+from src.webapp_config import WebappConfig, update_webapp_config
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+_CHIEF_REPO = "fleet-config-lite"
+_CHIEF_LABEL = chief_identity.CHIEF_LABEL
+_CHIEF_COMMAND = chief_identity.CHIEF_COMMAND
+_CHIEF_TITLE = chief_identity.CHIEF_TITLE
+# How long a fresh respawn waits for the old chief's graceful stop before
+# escalating to kill. Module-level so tests can patch it tiny.
+CHIEF_STOP_WAIT_S = 8.0
+CHIEF_STOP_POLL_S = 0.25
+
+# Two concurrent ensures (e.g. a chat send racing a manual Restart) must not
+# double-spawn; the lock serializes the check-then-spawn window.
+_CHIEF_ENSURE_LOCK = asyncio.Lock()
+
+# The directory-name grain every "is this fleet-config?" check in this repo
+# already uses (src/board/state.py's project fallback, the state-row `project`
+# field) — cheap and consistent, no registry scan needed.
+_CHIEF_PROJECT_DIR_NAME = chief_identity.CHIEF_PROJECT_DIR_NAME
+
+_live_title_names_chief = chief_identity.live_title_names_chief
+_reconcile_chief_label = chief_identity.reconcile_chief_label
+_find_chief = chief_identity.find_chief
+
+
+async def _mark_chief_managed(
+    cfg: WebappConfig, request: Request, sid: str, repo: str, number: int
+) -> bool:
+    """Best-effort: record a launcher-dispatched worker as chief-managed
+    so `hooks/notify_on_idle.py` and
+    `hooks/block_askuserquestion_chief.py` route it like one dispatched
+    through `chief_ops.py dispatch` -- the CLI-only path that already
+    marked correctly. `start_issue`/`dispatch_goal` are the paths chief
+    actually calls (over loopback, never through the CLI wrapper), so
+    without this the marker would never be written for a real dispatch.
+
+    Gated on two signals already meaningful in this codebase rather than a
+    new protocol: the caller is loopback (the same trust `BearerTokenMiddleware`
+    already grants -- a remote Tailscale+passkey Board tap never qualifies)
+    *and* a chief PTY session is actually alive right now. Without the
+    second check, a human driving the Board locally on this same machine
+    would get their own session silently marked chief-managed too --
+    blocking their own `AskUserQuestion` and rerouting their own
+    notifications to chief. Never raises; a marking failure must never fail
+    an otherwise-successful dispatch (mirrors `chief_ops.py cmd_dispatch`'s
+    own best-effort mark).
+
+    Returns whether both signals held — a loopback caller while a chief is
+    alive — whatever became of the mark itself: the caller decides the PC
+    window from it. False when either can't be established.
+    """
+    # Imported here, not at module load, so a test's `monkeypatch.setattr
+    # (middleware.trust, "LOOPBACK_HOSTS", ...)` is actually observed -- a
+    # module-level import would bind this router's own stale copy at import
+    # time instead (same reasoning as `_helpers.should_mirror_to_pc`).
+    from src.middleware.trust import LOOPBACK_HOSTS
+
+    if not sid or client_ip(request) not in LOOPBACK_HOSTS:
+        return False
+    try:
+        live, _, host_error = await _live_sessions_with_chief_label(cfg)
+    except Exception as exc:  # noqa: BLE001 -- best-effort, never fail the dispatch
+        logger.debug("chief-managed mark: could not read live sessions: %s", exc)
+        return False
+    if host_error:
+        # Unknown, not "no chief": nothing is marked on a guess.
+        logger.debug("chief-managed mark: live sessions unknown: %s", host_error)
+        return False
+    if not _find_chief(live):
+        return False
+    try:
+        fleet_config = _resolve_repo_entry(cfg, _CHIEF_REPO)
+    except HTTPException:
+        return True
+    venv_python = Path(fleet_config.project_dir) / ".venv" / "Scripts" / "python.exe"
+    script = Path(fleet_config.project_dir) / "skills" / "_lib" / "chief_managed.py"
+    if not venv_python.exists() or not script.exists():
+        return True
+    try:
+        await asyncio.to_thread(
+            subprocess.run,
+            [str(venv_python), str(script), "mark", sid, repo, str(number)],
+            capture_output=True,
+            timeout=10,
+            creationflags=NO_WINDOW,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning(
+            "⚠️ chief-managed mark failed for session %s: %s", sid[:8], exc
+        )
+    return True
+
+
+def _reconcile_chief_labels(
+    live: List[Dict[str, Any]], state_rows: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    """Apply :func:`_reconcile_chief_label` across a live session list.
+
+    Needs both the live list and the hook state rows together (``shared_name``
+    only exists after the state-row join), so this can't live inside
+    ``board_spawn._read_live_sessions`` (``port``-only) — callers that need a
+    chief-reconciled live list fetch both and call this, or go through
+    :func:`_live_sessions_with_chief_label`.
+
+    Also persists the durable chief pointer (:func:`_note_chief_conversation`)
+    here rather than only inside :func:`_live_sessions_with_chief_label`:
+    ``GET /api/board`` calls this function directly, bypassing that wrapper,
+    so a chief typed by hand into a plain Coding-tab session (self-healed to
+    ``label="chief"`` by :func:`_reconcile_chief_label` on every poll) would
+    otherwise never get its conversation id written to
+    ``webapp/chief-pointer.json``. Both callers record it; the
+    module-level memo in :func:`_note_chief_conversation` keeps this a no-op
+    write on every poll after the first for an unchanged chief.
+    """
+    reconciled = chief_identity.reconcile_chief_labels(live, state_rows)
+    _note_chief_conversation(reconciled, state_rows)
+    return reconciled
+
+
+async def _live_sessions_with_chief_label(
+    cfg: WebappConfig,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any], Optional[str]]:
+    """Live sessions + hook state, fetched together and chief-reconciled.
+
+    Returns ``(live, state, host_error)`` so a caller that also needs
+    ``state["rows"]`` for its own purposes doesn't fetch the state file twice.
+    ``host_error`` set means ``live`` is *unknown*, not empty: a caller
+    that acts on "no chief in the list" must not act on it then.
+    """
+    (live, host_error), state = await asyncio.gather(
+        asyncio.to_thread(_read_live_sessions, cfg.session_host_port),
+        asyncio.to_thread(board.read_sessions_state, Path(cfg.sessions_state_file)),
+    )
+    reconciled = _reconcile_chief_labels(live, state["rows"])
+    return reconciled, state, host_error
+
+
+# The conversation id last persisted to the pointer sidecar. A module-level
+# memo so the steady-state 5s board poll does **zero** file IO: a write
+# fires only when the chief's conversation actually changes — about once per
+# chief lifetime. Set optimistically, before the write lands: a failed write
+# costs one missed pointer refresh, never a write attempt every 5 seconds.
+_last_noted_chief_conversation = ""
+
+
+def _note_chief_conversation(
+    live: List[Dict[str, Any]], state_rows: Dict[str, Any]
+) -> None:
+    """Persist which conversation the live chief is, when that changes.
+
+    This is the write half of the durable pointer (:mod:`src.chief.pointer`).
+    It hangs off the *identification* path rather than ``ensure_chief``,
+    because the two shapes the pointer exists for are precisely the ones
+    ``ensure`` never sees: a chief the launcher never spawned (recognised only
+    by :func:`_reconcile_chief_label`'s self-heal) and a chief whose row is
+    about to age past ``board.STATE_STALE_AFTER``. Recording the id while the
+    PTY is alive is what makes both resumable once it isn't.
+
+    Two properties keep this off ``GET /api/board``'s 5s poll budget: the
+    module-level memo above (an unchanged chief does no IO at all) and
+    ``create_task`` (the one write per transition runs in a worker thread,
+    never on the response path — the same fire-and-forget shape the mirror
+    window spawn uses in ``routers/_helpers.py``).
+
+    Silent no-op when there's no live chief, when the claim walk can't resolve
+    its conversation, or when that row carries no transcript path — a pointer
+    without a transcript can't be substance-checked or resumed, so it is worth
+    less than no pointer at all.
+    """
+    global _last_noted_chief_conversation
+    chief = _find_chief(live)
+    if not chief:
+        return
+    conversation = str(
+        board.state_sid_for_session(
+            live, state_rows, str(chief.get("session_id") or "")
+        )
+        or ""
+    )
+    if not conversation or conversation == _last_noted_chief_conversation:
+        return
+    row = state_rows.get(conversation)
+    transcript = row.get("transcript_path") if isinstance(row, dict) else None
+    if not transcript:
+        return
+    _last_noted_chief_conversation = conversation
+    asyncio.create_task(
+        asyncio.to_thread(
+            chief_pointer.write_chief_pointer, conversation, transcript, "live"
+        )
+    )
+
+
+def _fresh_fleet_config_stamp(row: Any, now: datetime) -> Optional[datetime]:
+    """This ``sessions-state.json`` row's ``updated_at``, if it is a
+    live-enough fleet-config row — else ``None``.
+
+    Qualifying means: in the fleet-config checkout (``project``, falling back
+    to ``Path(cwd).name`` — the same fallback ``src.board.sessions._external_card``
+    already applies) and stamped within ``board.STATE_STALE_AFTER``. The 24h
+    window is applied **per row** rather than trusting the file-level
+    ``stale`` flag some *other* row could keep looking fresh: a chief
+    conversation that's individually gone cold must not be resumed just
+    because a different session kept the file's newest timestamp recent.
+
+    Returns the parsed stamp rather than a bool because every caller that
+    cares whether a row qualifies also ranks it by that same stamp.
+    """
+    if not isinstance(row, dict):
+        return None
+    cwd = row.get("cwd")
+    project = str(row.get("project") or Path(str(cwd or "")).name)
+    if project != _CHIEF_PROJECT_DIR_NAME:
+        return None
+    stamp = board.parse_iso(row.get("updated_at"))
+    if stamp is None or now - stamp > board.STATE_STALE_AFTER:
+        return None
+    return stamp
+
+
+def _find_resumable_chief_session_id(
+    state_rows: Dict[str, Any],
+    *,
+    now: Optional[datetime] = None,
+    preferred_sid: str = "",
+) -> str:
+    """The chief conversation worth reattaching, or ``""``.
+
+    Returns the dict key — Claude's own session UUID, exactly what
+    ``claude --resume <id>`` needs. Returns ``""`` (never raises) when
+    nothing qualifies — same degradation contract every other
+    ``src.board.state`` reader already follows; the caller treats that as "fall
+    back to a fresh spawn", not an error.
+
+    **Newest is not the same as right.** Ranking candidates on
+    ``updated_at`` alone inverts after any event that kills the chief's
+    PTY: the real conversation's row freezes at the moment of death, while
+    the blank chief spawned seconds later by the fallback path — renamed
+    ``"chief"`` by ``ensure_chief`` itself, so indistinguishable by name —
+    keeps writing rows and always wins the recency race. Resume would then
+    reattach a conversation whose entire content is ``/chief`` and the
+    handover file, and if the live blank chief is stopped first on every
+    later restart too, no amount of pressing Resume can get back to a
+    long-running real conversation buried under a short-lived blank one.
+
+    So substance decides, not just recency. Candidates are ranked in tiers,
+    newest-first within each:
+
+    1. ``preferred_sid`` — the conversation of the live chief this resume is
+       about to stop, when it has substance. Honors a context-preserving
+       restart *and* covers a chief the launcher never spawned (its row is
+       named after the project, never ``"chief"``, so the name scan below
+       cannot see it at all).
+    2. Rows named ``"chief"`` (case-insensitive, mirroring ``_CHIEF_TITLE``)
+       with a **confirmed** typed human prompt.
+    3. The same rows with *unknown* substance — an unreadable transcript, or
+       one too big for the tail window to answer over. Unknown is not a
+       negative (:func:`board.has_typed_user_prompt`); it just ranks below a
+       confirmed one, so a long autonomous chief is still resumable when
+       nothing better exists.
+
+    A row whose transcript is *confirmed* to hold no typed prompt is never
+    resumed at any tier — reattaching it is worth strictly less than the
+    fresh spawn the caller falls back to, which at least re-runs ``/chief``.
+
+    **The durable pointer.** Tiers 2 and 3 above can only ever see what
+    ``sessions-state.json`` still holds, and two perfectly resumable chiefs are
+    invisible to it: one the launcher never spawned (its row is named after the
+    project, so the name scan skips it) once its PTY is gone, and any chief
+    dead longer than the hook writer's 24h prune (no row left at all). So the
+    remembered conversation (:mod:`src.chief.pointer`, written by
+    :func:`_note_chief_conversation` while the chief was alive) joins the scan
+    as one more candidate — exempt from the name check and the row-freshness
+    gate, since bypassing exactly those two is its purpose, but subject to
+    every other rule. It is deliberately **not** a tier of its own: above the
+    scan it would override a better live answer, and below it an older
+    launcher-spawned row would outrank the newer conversation the pointer
+    names. Ranked by its row's ``updated_at`` when that row still exists
+    (a live conversation's true recency) and by the pointer's own ``seen_at``
+    when it doesn't.
+    """
+    now = now or board.utc_now()
+    if preferred_sid and _preferred_is_resumable(state_rows.get(preferred_sid), now):
+        logger.info(
+            "↩️ chief resume: reattaching the stopped PTY's own conversation %s",
+            str(preferred_sid)[:8],
+        )
+        return str(preferred_sid)
+
+    tiers = _ResumeTiers()
+    for sid, row in state_rows.items():
+        stamp = _fresh_fleet_config_stamp(row, now)
+        if stamp is None:
+            continue
+        if str(row.get("name") or "").strip().lower() != _CHIEF_TITLE:
+            continue
+        tiers.consider(str(sid), stamp, row.get("transcript_path"), "state row")
+
+    pointer = _pointer_candidate(state_rows, now)
+    if pointer is not None:
+        tiers.consider(*pointer, "pointer")
+
+    chosen = tiers.confirmed[1] or tiers.unknown[1]
+    logger.info(
+        "↩️ chief resume: %s",
+        f"resuming {chosen[:8]} ({'confirmed' if tiers.confirmed[1] else 'unknown'} substance)"
+        if chosen
+        else "nothing resumable — falling back to a fresh spawn",
+    )
+    return chosen
+
+
+def _preferred_is_resumable(row: Any, now: datetime) -> bool:
+    """Whether the stopped live chief's own row is fresh and not confirmed
+    bootstrap-only."""
+    return _fresh_fleet_config_stamp(row, now) is not None and (
+        board.has_typed_user_prompt(row.get("transcript_path")) is not False
+    )
+
+
+class _ResumeTiers:
+    """The newest resume candidate in each substance tier, as ``(stamp, sid)``."""
+
+    def __init__(self) -> None:
+        self.confirmed: Tuple[Optional[datetime], str] = (None, "")
+        self.unknown: Tuple[Optional[datetime], str] = (None, "")
+
+    def consider(self, sid: str, stamp: datetime, transcript: Any, origin: str) -> None:
+        """Rank one candidate into its substance tier, newest-first. The one
+        place the "confirmed bootstrap-only is never resumable" rule lives, so
+        a state row and the pointer can't drift apart on it."""
+        typed = board.has_typed_user_prompt(transcript)
+        if typed is False:
+            # Breadcrumb: this is the conversation the old
+            # recency-only lookup would have handed back.
+            logger.info(
+                "↩️ chief resume: skipping %s (%s) — bootstrap-only conversation",
+                sid[:8], origin,
+            )
+            return
+        tier = self.confirmed if typed else self.unknown
+        if tier[0] is None or stamp > tier[0]:
+            if typed:
+                self.confirmed = (stamp, sid)
+            else:
+                self.unknown = (stamp, sid)
+
+
+def _pointer_candidate(state_rows: Dict[str, Any], now: datetime) -> Optional[Tuple[str, datetime, Any]]:
+    """``(sid, stamp, transcript)`` of the remembered chief conversation:
+    ranked by its row's ``updated_at`` while the row exists, else by the
+    pointer's own ``seen_at``; ``None`` with no pointer or no stamp."""
+    pointer = chief_pointer.read_chief_pointer(now=now)
+    if not pointer:
+        return None
+    pointer_sid = str(pointer.get("session_id") or "")
+    pointer_row = state_rows.get(pointer_sid)
+    pointer_row = pointer_row if isinstance(pointer_row, dict) else {}
+    pointer_stamp = board.parse_iso(
+        pointer_row.get("updated_at")
+    ) or board.parse_iso(pointer.get("seen_at"))
+    if pointer_stamp is None:
+        return None
+    return pointer_sid, pointer_stamp, pointer.get("transcript_path")
+
+
+def _refresh_chief_pointer_after_resume(
+    state_rows: Dict[str, Any], resumed_sid: str
+) -> None:
+    """Re-stamp the pointer at the conversation a Resume just reattached.
+
+    Blocking IO — callers wrap in ``asyncio.to_thread``; this only ever runs on
+    the explicit ensure path, never on the board poll.
+
+    The identification writer would eventually record the same id off the next
+    poll, but only once a hook has fired and only while a row still exists.
+    Doing it here means the 7-day expiry clock restarts the moment Roberto
+    presses Resume — which matters most for exactly the conversation that had
+    no row left to find (the transcript path then comes from the pointer that
+    named it in the first place). Also primes the memo, so the poll that
+    follows doesn't write the same id a second time.
+    """
+    global _last_noted_chief_conversation
+    row = state_rows.get(resumed_sid)
+    transcript = row.get("transcript_path") if isinstance(row, dict) else None
+    if not transcript:
+        pointer = chief_pointer.read_chief_pointer()
+        if str(pointer.get("session_id") or "") == resumed_sid:
+            transcript = pointer.get("transcript_path")
+    if not transcript:
+        return
+    chief_pointer.write_chief_pointer(resumed_sid, transcript, "ensure-resume")
+    _last_noted_chief_conversation = resumed_sid
+
+
+def _chief_settings_payload(cfg: WebappConfig) -> Dict[str, Any]:
+    return {
+        "model": cfg.chief_model,
+        "worker_cap": cfg.chief_worker_cap,
+        "worker_cap_scope": cfg.chief_worker_cap_scope,
+        "auto_drain": cfg.chief_auto_drain,
+        "chief_job_self_heal": cfg.chief_job_self_heal,
+        "chief_weekly_proposals": cfg.chief_weekly_proposals,
+    }
+
+
+@router.get("/api/board/chief-journal")
+async def get_chief_journal(request: Request) -> Dict[str, Any]:
+    """The chief's journal for the Board's "Since you last looked" card.
+
+    Read-only, polled beside ``/api/board``: ``state`` is ``ok`` (with
+    ``entries`` newest first, each flagged ``new``, plus ``new_count`` and
+    ``last_look``), ``empty`` or ``unreadable``. The file sits beside the
+    plan file; the writer is fleet-config's ``chief_ops.py``.
+    """
+    cfg: WebappConfig = request.app.state.webapp_config
+    return await asyncio.to_thread(
+        chief_journal.read_journal,
+        chief_journal.journal_path(Path(cfg.chief_plan_file)), cfg.gitlab_group,
+    )
+
+
+@router.post("/api/board/chief/journal/looked")
+async def post_chief_journal_looked(request: Request) -> Dict[str, Any]:
+    """Stamp "Roberto looked just now": the Board sent the chief a message or
+    submitted the answer sheet (Tailscale + passkey, as every
+    ``/api/board/chief/`` route). Entries after the stamp read as new.
+    """
+    try:
+        at = await asyncio.to_thread(chief_journal.record_look)
+    except OSError as exc:
+        logger.warning("⚠️ chief journal look not written: %s", exc)
+        raise HTTPException(status_code=500, detail="last look not written")
+    return {"last_look": at}
+
+
+@router.get("/api/board/chief-settings")
+async def get_chief_auto_compact(request: Request) -> Dict[str, Any]:
+    """The chief's auto-compact threshold, the contract
+    fleet-config's ``chief_ops.py self-compact`` reads: percent of
+    context use, 0 = off, the default when nothing is stored. Set through
+    Settings (POST /api/config); the app never compacts anything itself.
+    Same bearer token as /api/board — a number, no session or terminal."""
+    cfg: WebappConfig = request.app.state.webapp_config
+    return {"auto_compact_threshold": cfg.chief_auto_compact_threshold}
+
+
+@router.get("/api/board/chief/settings")
+async def get_chief_settings(request: Request) -> Dict[str, Any]:
+    """The chief settings block. Also the /chief skill's rails source: the
+    worker cap is read from here over loopback, so it stays phone-tunable
+    without a fleet-config commit."""
+    cfg: WebappConfig = request.app.state.webapp_config
+    return {"settings": _chief_settings_payload(cfg)}
+
+
+@router.put("/api/board/chief/settings")
+async def put_chief_settings(request: Request) -> Dict[str, Any]:
+    """Persist chief settings."""
+    body = await maybe_json(request)
+    patch: Dict[str, Any] = {}
+    if "model" in body:
+        model = str(body.get("model") or "").strip()
+        cfg_now: WebappConfig = request.app.state.webapp_config
+        # The chief runs on Copilot: its model is "" (Copilot picks) or one of
+        # the per-install copilot_models; anything else would only fail at launch.
+        if model not in ("", "default", *cfg_now.copilot_models):
+            raise HTTPException(
+                status_code=400,
+                detail=f"model must be one of copilot_models; got {model!r}",
+            )
+        patch["chief_model"] = model
+    if "worker_cap" in body:
+        try:
+            patch["chief_worker_cap"] = int(body.get("worker_cap"))
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400, detail="worker_cap must be an integer"
+            )
+    if "worker_cap_scope" in body:
+        patch["chief_worker_cap_scope"] = str(
+            body.get("worker_cap_scope") or ""
+        ).strip().lower()
+    if not patch:
+        raise HTTPException(status_code=400, detail="no chief settings in body")
+    try:
+        new_cfg = await asyncio.to_thread(update_webapp_config, **patch)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    old_cfg: WebappConfig = request.app.state.webapp_config
+    request.app.state.webapp_config = new_cfg
+    # Freed lane slots wake the chief through its mailbox; the writer logs and
+    # swallows its own failure, so the save below never depends on it.
+    await asyncio.to_thread(publish_cap_raised, old_cfg, new_cfg)
+    return {"settings": _chief_settings_payload(new_cfg)}
+
+
+async def _stop_chief_for_respawn(port: int, sid: str) -> None:
+    """Gracefully quit the old chief, escalating to kill after the bounded
+    wait — a fresh respawn must never end up with two chiefs."""
+    try:
+        await asyncio.to_thread(session_client.stop, port, sid, "quit")
+    except session_client.SessionHostError as exc:
+        logger.debug(f"chief respawn: quit failed ({exc}); will kill")
+    deadline = time.monotonic() + CHIEF_STOP_WAIT_S
+    while time.monotonic() < deadline:
+        try:
+            info = await asyncio.to_thread(session_client.get_session, port, sid)
+        except session_client.SessionHostError:
+            return  # gone — the host dropped it
+        if not info.get("alive"):
+            return
+        await asyncio.sleep(CHIEF_STOP_POLL_S)
+    try:
+        await asyncio.to_thread(session_client.stop, port, sid, "kill")
+    except session_client.SessionHostError:
+        pass
+
+
+@router.post("/api/board/chief/ensure")
+async def ensure_chief(request: Request) -> Dict[str, Any]:
+    """Spawn the fleet chief if none is alive (Tailscale + passkey).
+
+    Body/query: ``fresh`` truthy → kill the current chief first and respawn
+    — the manual Restart button's mode (the query form keeps a
+    bodyless ``curl -X POST`` usable for a manual operator restart). ``resume``
+    truthy → reattach the chief conversation worth continuing instead of
+    starting fresh: looks up the newest *substantive* same-day chief
+    conversation in ``sessions-state.json`` for the fleet-config checkout —
+    preferring the one the just-stopped PTY was attached to, and never a
+    conversation confirmed to hold nothing but its own ``/chief`` bootstrap
+    (:func:`_find_resumable_chief_session_id`) — and — if found — spawns with
+    ``label="chief"`` declared at spawn time and a direct
+    ``claude --resume <id>`` (never the bare interactive picker), skipping the
+    ``/chief`` type-in entirely since a resumed conversation is already past
+    that point. ``resume`` alone never touches a live chief: it is
+    kept exactly as with no flags, and the lookup runs only when there is
+    none. Stopping one takes an explicit restart intent — ``fresh`` (the
+    Restart button) or ``restart`` (the Resume buttons, which pair it with
+    ``resume``) — so a stale page can't do it: an older Board page
+    sends ``resume`` alone from every chat send and answer sheet, and a
+    phone never reloads it. A chief stopped for a ``resume`` + restart
+    request is resumed right back into itself — a context-preserving
+    restart, not a coincidence of the shared stop-first ordering with
+    ``fresh`` — *unless* that conversation is
+    a bootstrap-only one, in which case the substantive conversation it
+    displaced wins instead (that is exactly the case where resuming
+    "itself" is what loses the real chief). The lookup also consults the
+    durable pointer, so a chief the launcher never spawned, or one
+    dead past the 24h row-prune, is still reachable. No resumable id (state
+    pruned past the 24h window, no prior chief, or nothing but bootstrap-only
+    conversations) degrades to the fresh-spawn-
+    and-``/chief`` path, never a hard failure — the response's ``resumed`` /
+    ``resume_fallback_reason`` fields tell the caller which happened.
+    ``if_absent``, which older pages still send, is the default behaviour and
+    is ignored.
+    ``rows``/``cols`` size the PTY like every other launch. Returns
+    ``{"session_id", "spawned", "resumed", "resume_fallback_reason"}`` —
+    ``spawned`` False when an alive chief was found and kept (whenever
+    neither ``fresh`` nor ``restart`` was requested).
+    """
+    cfg: WebappConfig = request.app.state.webapp_config
+    body = await maybe_json(request)
+    fresh = _truthy_flag(body, request, "fresh")
+    resume = _truthy_flag(body, request, "resume")
+    restart = _truthy_flag(body, request, "restart")
+    rows = safe_int(body, "rows", 40)
+    cols = safe_int(body, "cols", 120)
+
+    async with _CHIEF_ENSURE_LOCK:
+        live, state, host_error = await _live_sessions_with_chief_label(cfg)
+        _refuse_unreadable_host(host_error)
+        chief = _find_chief(live)
+        preferred_sid = ""
+        if chief:
+            sid = str(chief.get("session_id") or "")
+            if not fresh and not restart:
+                logger.info(
+                    "ℹ️ chief ensure: kept live chief %s (resume=%s)",
+                    sid[:8], resume,
+                )
+                return {"session_id": sid, "spawned": False}
+            # Resolve the conversation behind the PTY *before* stopping it —
+            # the live list is the only place that join can be made, and a
+            # chief the launcher never spawned is invisible to the name-based
+            # scan.
+            preferred_sid = str(
+                board.state_sid_for_session(live, state["rows"], sid) or ""
+            )
+            await _stop_chief_for_respawn(cfg.session_host_port, sid)
+
+        resumed_session_id = await _resume_target(state["rows"], preferred_sid) if resume else ""
+        session, sid = await _spawn_chief(
+            cfg, request, body, state["rows"], resumed_session_id, rows=rows, cols=cols,
+        )
+        # The branch ensure took, paired with the "kept" line above:
+        # a chief that disappears and comes back is diagnosable from here.
+        logger.info(
+            "ℹ️ chief ensure: %s chief %s (replaced_live=%s, fresh=%s, resume=%s, restart=%s)",
+            "resumed" if resumed_session_id else "fresh-spawned", sid[:8],
+            bool(chief), fresh, resume, restart,
+        )
+        return {
+            "session_id": sid,
+            "spawned": True,
+            "session": session,
+            "resumed": bool(resumed_session_id),
+            "resume_fallback_reason": (
+                "no resumable chief conversation found in the last 24h"
+                if resume and not resumed_session_id
+                else ""
+            ),
+        }
+
+
+async def _resume_target(state_rows: Dict[str, Any], preferred_sid: str) -> str:
+    """The chief conversation a resume reattaches, ``""`` for none, read off the loop."""
+    return await asyncio.to_thread(
+        _find_resumable_chief_session_id, state_rows, preferred_sid=preferred_sid,
+    )
+
+
+def _refuse_unreadable_host(host_error: Any) -> None:
+    """503 when the session list could not be read.
+
+    An unreadable list is not "no chief": spawning on it could double-spawn a
+    chief that is alive behind a host that timed out once, or stop-and-respawn
+    one it never saw.
+    """
+    if not host_error:
+        return
+    logger.warning(
+        "⚠️ chief ensure refused: session-host list unreadable: %s", host_error
+    )
+    raise HTTPException(
+        status_code=503,
+        detail="The session host is unreachable, so the chief was not started",
+    )
+
+
+def _truthy_flag(body: Dict[str, Any], request: Request, name: str) -> bool:
+    """A body field, else the same-named query parameter, read as a boolean."""
+    raw = body.get(name, request.query_params.get(name))
+    return str(raw).strip().lower() in ("1", "true", "yes")
+
+
+async def _spawn_chief(
+    cfg: WebappConfig, request: Request, body: Dict[str, Any], state_rows: Dict[str, Any],
+    resumed_session_id: str, *, rows: int, cols: int,
+) -> Tuple[Dict[str, Any], str]:
+    """Spawn the chief, resumed into ``resumed_session_id`` or fresh with
+    ``/chief`` typed in, name it and audit the start; ``(session, sid)``."""
+    entry = _resolve_repo_entry(cfg, _CHIEF_REPO)
+    if resumed_session_id:
+        agent = "copilot"
+        flags = build_resume_flags(
+            cfg, agent, model_override=cfg.chief_model,
+            session_id=resumed_session_id,
+        )
+    else:
+        agent, flags = _agent_and_flags(cfg, cfg.chief_model)
+    session, sid = await spawn_launcher_session(
+        spawn_claude_session, cfg,
+        project_dir=Path(entry.project_dir), name=_CHIEF_LABEL,
+        flags=flags, agent=agent, rows=rows, cols=cols,
+        label=_CHIEF_LABEL,
+    )
+    if resumed_session_id:
+        await asyncio.to_thread(
+            _refresh_chief_pointer_after_resume,
+            state_rows, resumed_session_id,
+        )
+    # Order matters: rename FIRST, then /chief. The rename
+    # also forwards the agent-native /rename into the PTY, so it must
+    # land after boot but before the skill invocation — typed the other
+    # way round it interleaves with /chief's processing and the agent
+    # rejects it ("Args from unknown skill: rename"). The ready-wait
+    # here plus _type_into_session's own settle give the rename a clear
+    # beat before /chief goes in. Best-effort — a rename failure never
+    # fails the spawn. A resumed conversation skips /chief below —
+    # it's already past that point — but still gets the same rename so
+    # its title reads "chief" immediately rather than waiting on the
+    # self-heal signals in _reconcile_chief_label.
+    try:
+        await _await_dispatch_ready(cfg.session_host_port, sid)
+    except HTTPException:
+        try:
+            await asyncio.to_thread(
+                session_client.stop, cfg.session_host_port, sid, "kill"
+            )
+        except session_client.SessionHostError:
+            pass
+        raise
+    # First paint is not "input live" — wait for boot output to go
+    # quiet before typing the rename, or its CR gets swallowed and the
+    # text merges with the /chief paste (see _await_pty_quiescent). The
+    # later _type_into_session call for the /chief command itself also
+    # runs this wait, but by then boot has already settled here.
+    await _await_pty_quiescent(cfg.session_host_port, sid)
+    try:
+        await asyncio.to_thread(
+            session_client.rename,
+            cfg.session_host_port, sid, _CHIEF_TITLE,
+        )
+    except session_client.SessionHostError as exc:
+        logger.warning(
+            "⚠️ chief ensure could not name session %s: %s",
+            sid[:8], exc,
+        )
+    if not resumed_session_id:
+        await _type_into_session(cfg.session_host_port, sid, _CHIEF_COMMAND)
+
+    await audit_session_start_and_maybe_mirror(
+        cfg, request, body,
+        sid=sid, agent=agent, name=_CHIEF_LABEL,
+        project=entry.project_dir,
+        skill=None if resumed_session_id else _CHIEF_COMMAND,
+        resume=bool(resumed_session_id),
+        audit_mod=audit, mirror_fn=open_local_terminal_window,
+    )
+    return session, sid

@@ -38,13 +38,15 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from src import runtime_files
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TRAY_BAT_PATH = PROJECT_ROOT / "tray.bat"
 
 STARTUP_BAT_NAME = "AppLauncherLite.bat"
 
 # Env override for the resolved Startup directory. Set ONLY by the e2e
-# pre-ship gate's autoboot (tests/e2e/conftest.py) so the disposable webapp's
+# pre-ship gate's autoboot (tests/e2e/fixtures/autoboot.py) so the disposable webapp's
 # `/api/settings/boot-autostart` route — which calls `is_enabled()` /
 # `enable()` / `disable()` with no explicit `startup_dir` — reads and writes a
 # temp directory instead of the real per-user Startup folder. Without this,
@@ -54,7 +56,7 @@ STARTUP_BAT_NAME = "AppLauncherLite.bat"
 # SESSION_HOST_PORT_ENV / WEBAPP_CONFIG_PATH_ENV isolation pattern in
 # src/webapp_config.py. Not a user-facing knob; intentionally undocumented in
 # the config sample. Only consulted when a caller doesn't already pass an
-# explicit `startup_dir` — unit tests in tests/unit/platform/test_boot_autostart.py always
+# explicit `startup_dir` — unit tests in tests/unit/launching/test_boot_autostart.py always
 # do, so they're unaffected.
 STARTUP_DIR_ENV = "LAUNCHER_STARTUP_DIR"
 
@@ -87,8 +89,8 @@ def _wrapper_bat_content(tray_bat: Path) -> str:
     ``tray.bat`` is idempotent (no-op if a tray is already running), so a
     Startup-folder run racing an already-running tray (e.g. a prior manual
     launch) is safe. The breadcrumb + redirected ``tray.bat`` output + logged
-    exit code exist because a login-time failure was otherwise silent. The precondition check mirrors the one hard-fail in
-    ``tray.bat`` (missing repo-local ``scripts\\tray_lifecycle.ps1`` → ``exit /b 1``) so
+    exit code exist because a login-time failure was otherwise silent. The precondition check mirrors the one hard-fail in ``tray.bat``
+    (missing repo-local ``scripts\\tray_lifecycle.ps1`` → ``exit /b 1``) so
     that broken-checkout gap is named in the log rather than showing up as a
     bare non-zero exit code.
     """
@@ -119,18 +121,18 @@ def enable(*, tray_bat: Path = TRAY_BAT_PATH, startup_dir: Optional[Path] = None
     Verifies the write actually landed (read-back must match the intended
     content) and raises ``OSError`` otherwise, so a partial/failed write
     surfaces to the caller (the ``/api/settings/boot-autostart`` route turns
-    it into a 400) instead of silently reporting success — a silent no-op is the
-    failure mode this guards against.
+    it into a 400) instead of silently reporting success — the failure mode
+    to avoid is a silent no-op.
     """
     target_dir = startup_dir if startup_dir is not None else _startup_dir()
-    target_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: the Windows Startup folder is fixed by the OS shell and sits outside the repo
+    runtime_files.make_dirs(target_dir)
     path = target_dir / STARTUP_BAT_NAME
     # Binary I/O so the CRLF line endings land verbatim: text-mode write would
     # translate each "\n" to os.linesep, turning our "\r\n" into "\r\r\n" on
     # disk, and text-mode read-back would then differ from what we wrote,
     # making the verification below spuriously fail.
     data = _wrapper_bat_content(tray_bat).encode("utf-8")
-    path.write_bytes(data)  # runtime-write-exempt: the Windows Startup folder is fixed by the OS shell and sits outside the repo
+    runtime_files.save_bytes(path, data)
     try:
         written = path.read_bytes()
     except OSError as exc:

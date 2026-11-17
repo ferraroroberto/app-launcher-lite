@@ -7,6 +7,10 @@ matched and the friendly "Skipped" toast fell through to a generic
 "Run failed". Hermetic: route-mock the run endpoint's 429 body so the exact
 shape the server produces (jobs.py:538-546) exercises the real jsonApi/toast
 code path, and pin the non-cooldown failure path stays unchanged.
+
+Since #1438 there is no per-row Run button: the run is fired from the row's
+kebab menu (``[data-item=job-run-item]``), which calls the same ``runJobNow`` as the job
+sheet's ``#jobSheetRun``. The server-side shapes pinned here are unchanged.
 """
 
 from __future__ import annotations
@@ -16,6 +20,8 @@ import re
 
 import pytest
 from playwright.sync_api import Page, expect
+
+from tests.e2e.fixtures.ui import open_row_menu
 
 pytestmark = pytest.mark.smoke
 
@@ -48,55 +54,41 @@ def _wire_jobs_list(page: Page) -> None:
     )
 
 
-def scenario_cooldown_429_shows_skipped_toast(authed_page: Page, base_url: str) -> None:
+def test_cooldown_429_shows_skipped_and_any_other_failure_says_run_failed(
+    authed_page: Page, base_url: str
+) -> None:
+    """Both run replies on one page (#1215): the first run answers the
+    cooldown 429, the second a plain 500."""
     _wire_jobs_list(authed_page)
     # FastAPI double-wraps our raise HTTPException(detail={...}) — this is
     # the exact body shape the server produces (jobs.py:538-546).
-    cooldown_body = {
-        "detail": {
-            "detail": "cooldown",
-            "retry_after_seconds": 42,
-            "cooldown_seconds": 60,
-        }
-    }
-    authed_page.route(
-        re.compile(r".*/api/jobs/demo/run$"),
-        lambda route: route.fulfill(
-            status=429, content_type="application/json",
-            body=_json.dumps(cooldown_body),
-        ),
-    )
+    replies = [
+        (429, {"detail": {"detail": "cooldown", "retry_after_seconds": 42,
+                          "cooldown_seconds": 60}}),
+        (500, {"detail": "boom"}),
+    ]
+
+    def _run(route) -> None:
+        status, body = replies.pop(0)
+        route.fulfill(status=status, content_type="application/json",
+                      body=_json.dumps(body))
+
+    authed_page.route(re.compile(r".*/api/jobs/demo/run$"), _run)
 
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     authed_page.wait_for_selector("#sessionsList", state="attached", timeout=5_000)
     authed_page.locator("#tabJobs").click()
 
-    row = authed_page.locator("#jobsList li.app-item[data-id='demo']")
+    row = authed_page.locator("#jobsList li.job-row[data-id='demo']")
     expect(row).to_be_visible()
-    row.locator("[data-role='run-btn']").click()
+    toast = authed_page.locator(".toast")
+    row.locator("button.job-menu-anchor").click()
+    open_row_menu(authed_page).locator("[data-item=job-run-item]").click()
+    expect(toast).to_contain_text("cooled down")
+    expect(toast).not_to_contain_text("Run failed")
 
-    expect(authed_page.locator(".toast")).to_contain_text("cooled down")
-    expect(authed_page.locator(".toast")).not_to_contain_text("Run failed")
-
-
-def scenario_non_cooldown_failure_still_shows_run_failed(
-    authed_page: Page, base_url: str
-) -> None:
-    _wire_jobs_list(authed_page)
-    authed_page.route(
-        re.compile(r".*/api/jobs/demo/run$"),
-        lambda route: route.fulfill(
-            status=500, content_type="application/json",
-            body=_json.dumps({"detail": "boom"}),
-        ),
-    )
-
-    authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.wait_for_selector("#sessionsList", state="attached", timeout=5_000)
-    authed_page.locator("#tabJobs").click()
-
-    row = authed_page.locator("#jobsList li.app-item[data-id='demo']")
-    expect(row).to_be_visible()
-    row.locator("[data-role='run-btn']").click()
-
-    expect(authed_page.locator(".toast")).to_contain_text("Run failed")
+    # -- was test_non_cooldown_failure_still_shows_run_failed --
+    row.locator("button.job-menu-anchor").click()
+    open_row_menu(authed_page).locator("[data-item=job-run-item]").click()
+    expect(toast).to_contain_text("Run failed")
+    assert replies == []

@@ -1,11 +1,11 @@
 """Provision a Tailscale HTTPS certificate for this machine.
 
-The app's only HTTPS provisioner (no self-signed-CA
-generator): browsers trust https://<machine>.tail*.ts.net:<port> without any
+The app's only HTTPS provisioner (there is no self-signed-CA
+generator): browsers trust https://<machine>.tail*.ts.net:8465 without any
 manual certificate installation on any device — ``tailscale cert`` issues a
 real Let's Encrypt leaf for the tailnet MagicDNS name, so there is no CA
 install, no mobileconfig detour, no Certificate Trust toggle.
-Fleet standard: project-scaffolding's Tailscale-cert convention.
+Fleet standard: the shared Tailscale-cert provisioning convention.
 
 Prerequisites:
   1. Enable HTTPS in the Tailscale admin console:
@@ -18,7 +18,7 @@ Usage:
     & .venv/Scripts/python.exe scripts/gen_tailscale_cert.py <host>.ts.net
 
     # Check and auto-renew if expiring within 30 days (called on startup by
-    # webapp.bat and the webapp manager the tray and run_named_tunnel.py share):
+    # webapp.bat, the tray's webapp manager, and run_named_tunnel.py):
     & .venv/Scripts/python.exe scripts/gen_tailscale_cert.py --check
 """
 from __future__ import annotations
@@ -29,13 +29,27 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
+
+# Two print() calls below carry an em-dash, and this script is run with
+# capture_output=True by app/webapp/manager.py::check_tailscale_cert (and so
+# by every uvicorn spawn site that calls it). A captured stdout on Windows
+# defaults to cp1252, which cannot encode it: without this the renewal check
+# raises UnicodeEncodeError and the caller logs "tailscale cert check failed
+# (ignored)" — blaming the check rather than an encoding bug, while the cert
+# silently does not get renewed. Same guard as gen_token.py
+# / session_retention.py (global CLAUDE.md, "Windows Python: UTF-8
+# stdout under capture").
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.app_config import resolve_webapp_port  # noqa: E402
 from src.subprocess_flags import NO_WINDOW  # noqa: E402
-from src.tls.certs import tailscale_hostname_from_cert  # noqa: E402
 
 CERT_DIR = PROJECT_ROOT / "webapp" / "certificates"
 RENEW_WITHIN_DAYS = 30
@@ -63,6 +77,33 @@ def _tailscale_hostname() -> str:
     if not name:
         raise SystemExit("Could not detect Tailscale hostname from 'tailscale status'.")
     return name
+
+
+def _tailscale_hostname_from_cert(cert_path: Path) -> Optional[str]:
+    """Return the .ts.net DNS SAN from the cert, or None if not a Tailscale cert.
+
+    Keyed on the ISSUER (Let's Encrypt), not the SAN alone: a legacy
+    self-signed leaf (the retired gen_ssl_cert.py) also carried the ts.net
+    hostname in its SAN, and a SAN-only test would make --check silently
+    replace an expiring self-signed cert with a ts.net-only LE cert.
+    """
+    try:
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+        issuer_orgs = [
+            attr.value
+            for attr in cert.issuer.get_attributes_for_oid(NameOID.ORGANIZATION_NAME)
+        ]
+        if not any("let's encrypt" in str(org).lower() for org in issuer_orgs):
+            return None  # self-signed / local-CA cert; not ours to renew
+        san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+        for name in san.value.get_values_for_type(x509.DNSName):
+            if ".ts.net" in name:
+                return name
+    except Exception:
+        pass
+    return None
 
 
 def _expiring_within(cert_path: Path, days: int) -> bool:
@@ -120,7 +161,7 @@ def _check_and_renew() -> None:
     if not cert_path.exists():
         return
 
-    hostname = tailscale_hostname_from_cert(cert_path)
+    hostname = _tailscale_hostname_from_cert(cert_path)
     if hostname is None:
         return  # self-signed cert; leave it alone
 
@@ -134,7 +175,7 @@ def _check_and_renew() -> None:
     try:
         _provision(hostname)
         print("[OK] Tailscale cert renewed.")
-    except SystemExit as exc:
+    except SystemExit as exc:  # includes the timeout paths: startup proceeds on the existing cert
         print(f"[WARN] Cert renewal failed: {exc}")
 
 
@@ -153,11 +194,10 @@ def main() -> None:
     _provision(hostname)
     print()
     print("Restart the webapp (tray.bat --restart or webapp.bat), then open:")
-    port = resolve_webapp_port()
-    print(f"  https://{hostname}:{port}")
+    print(f"  https://{hostname}:8465")
     print()
     print("Note: the cert is issued only for the Tailscale hostname, so")
-    print(f"https://127.0.0.1:{port} and LAN-IP URLs will show a hostname-mismatch")
+    print("https://127.0.0.1:8465 and LAN-IP URLs will show a hostname-mismatch")
     print("warning. The PC mirror windows connect over loopback — see the")
     print("README HTTPS section before switching an instance that uses them.")
 

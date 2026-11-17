@@ -21,7 +21,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src.agents import SESSION_HOST_AGENTS, quit_command_for
 from src.session_host import (
+    _STOP_KEY_SETTLE_SECONDS,
     STOP_INTERRUPT,
     STOP_KILL,
     STOP_QUIT,
@@ -29,12 +31,17 @@ from src.session_host import (
 )
 
 
+def _writes(session: PtySession) -> list:
+    """The payloads handed to the PTY, in order, one entry per write."""
+    return [c.args[0] for c in session._pty.write.call_args_list]
+
+
 def _make_session(loop, agent: str = "copilot") -> PtySession:
     pty = MagicMock(name="PtyProcess")
     return PtySession(
         session_id="sid-test",
         project_dir=r"C:\stub",
-        name="coding",
+        name="claude",
         flags="",
         started_at=time.time(),
         _loop=loop,
@@ -45,34 +52,28 @@ def _make_session(loop, agent: str = "copilot") -> PtySession:
 
 @pytest.mark.asyncio
 async def test_stop_quit_types_esc_then_quit_and_exits_cleanly():
-    """STOP_QUIT clears the prompt with ESC, types the agent's quit command, and
+    """STOP_QUIT clears the prompt with ESC, types the agent's /exit, and
     when the agent exits within the grace window it must NOT force-kill."""
     loop = asyncio.get_running_loop()
     session = _make_session(loop)
     session._pty.isalive.return_value = False  # exits immediately on /exit
 
-    session.stop(mode=STOP_QUIT)
+    session.stop(mode=STOP_QUIT, key_settle_seconds=0)
 
-    calls = [c.args for c in session._pty.write.call_args_list]
-    assert ("\x1b",) in calls
-    assert ("/exit\r",) in calls
+    assert _writes(session) == ["\x1b", "/exit", "\r"]
     session._pty.terminate.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_stop_quit_uses_per_agent_command():
-    """STOP_QUIT types the agent's *own* quit command — SSH's bare exit,
-    not Copilot's /exit."""
+    """STOP_QUIT types the agent's *own* quit command — Copilot's /exit."""
     loop = asyncio.get_running_loop()
-    session = _make_session(loop, agent="ssh")
+    session = _make_session(loop, agent="copilot")
     session._pty.isalive.return_value = False
 
-    session.stop(mode=STOP_QUIT)
+    session.stop(mode=STOP_QUIT, key_settle_seconds=0)
 
-    calls = [c.args for c in session._pty.write.call_args_list]
-    assert ("\x1b",) in calls
-    assert ("exit\r",) in calls
-    assert ("/exit\r",) not in calls
+    assert _writes(session) == ["\x1b", "/exit", "\r"]
     session._pty.terminate.assert_not_called()
 
 
@@ -85,13 +86,105 @@ async def test_stop_quit_force_terminates_when_agent_does_not_exit():
     session = _make_session(loop)
     session._pty.isalive.return_value = True  # never exits on its own
 
-    session.stop(mode=STOP_QUIT, grace_seconds=0.2)
+    session.stop(mode=STOP_QUIT, grace_seconds=0.2, key_settle_seconds=0)
 
     # Quit was still attempted first…
-    calls = [c.args for c in session._pty.write.call_args_list]
-    assert ("/exit\r",) in calls
+    assert _writes(session) == ["\x1b", "/exit", "\r"]
     # …then the fallback force-kill fired.
     session._pty.terminate.assert_called_once_with(force=True)
+
+
+@pytest.mark.asyncio
+async def test_stop_quit_types_three_separate_keystrokes():
+    """#1016 — ESC, the command and the submitting CR are three writes.
+
+    This is the shape the pre-fix code got wrong, and the assertion that
+    fails against it: it sent ``"\\x1b"`` then ``"/quit\\r"``, bursting the
+    slash onto the ESC (Pi/Antigravity/Copilot read ``ESC /`` as one
+    meta-key and dropped the slash) and the CR onto the command (Codex left
+    ``/quit`` in an open popup and never exited). Runs at the real default
+    settle so the shipped constant is what gets exercised.
+    """
+    loop = asyncio.get_running_loop()
+    session = _make_session(loop)
+    session._pty.isalive.return_value = False
+
+    session.stop(mode=STOP_QUIT)
+
+    assert _writes(session) == ["\x1b", "/exit", "\r"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("agent", sorted(SESSION_HOST_AGENTS))
+async def test_stop_quit_never_bursts_keystrokes_together(agent):
+    """#1016 — no single write may carry two of the three keystrokes.
+
+    Covers every agent the session-host accepts, so a harness added later
+    inherits the guard instead of quietly re-acquiring the bug. The bytes
+    themselves are unchanged from pre-fix: same command, same order, only
+    delivered as separate keystrokes.
+    """
+    loop = asyncio.get_running_loop()
+    session = _make_session(loop, agent=agent)
+    session._pty.isalive.return_value = False
+    command = quit_command_for(agent)
+
+    session.stop(mode=STOP_QUIT, key_settle_seconds=0)
+
+    writes = _writes(session)
+    assert writes == ["\x1b", command, "\r"]
+    # Restated as the two races, so a future rewrite that still passes the
+    # equality above for the wrong reason can't reintroduce either one.
+    assert not any("\x1b" in w and command in w for w in writes)
+    assert not any(command in w and "\r" in w for w in writes)
+
+
+@pytest.mark.asyncio
+async def test_stop_quit_beats_between_keystrokes():
+    """#1016 — the keystrokes are actually spaced, not merely split.
+
+    Splitting the writes is not enough on its own: the ESC→slash race was
+    reproduced with two back-to-back writes, and only a real pause fixed
+    it. Lower bound only, so a loaded box can't make this flaky.
+
+    Timed per gap with ``perf_counter`` — see the assertion comment (#1087).
+    """
+    loop = asyncio.get_running_loop()
+    session = _make_session(loop)
+    session._pty.isalive.return_value = False
+
+    # Stamp each keystroke as it reaches the PTY, so the two *gaps* are
+    # measured directly rather than inferred from a single total.
+    stamps: list[float] = []
+    session._pty.write.side_effect = lambda _payload: stamps.append(
+        time.perf_counter()
+    )
+
+    settle = 0.05
+    session.stop(mode=STOP_QUIT, key_settle_seconds=settle)
+
+    assert len(stamps) == 3  # ESC, the command, the CR
+    gaps = [later - earlier for earlier, later in zip(stamps, stamps[1:])]
+
+    # ``perf_counter``, not ``monotonic``: on Windows CPython <= 3.12
+    # time.monotonic() is GetTickCount64, granular to ~15.6 ms, so it
+    # reports two real 50 ms beats as 93-94 ms. That clock — not an early
+    # sleep — is what failed the old ``elapsed >= 0.1`` on every CI run
+    # (#1087): the runner is on 3.12 and this box on 3.14, which switched
+    # monotonic to QueryPerformanceCounter. perf_counter is QPC on both.
+    #
+    # The floor is per gap and deliberately under the nominal settle: the
+    # property pinned is "two real pauses, not two back-to-back writes",
+    # so it only has to separate a slept beat (>= 50 ms) from a missing
+    # one (microseconds). One beat, or neither, still fails it widely.
+    # The slack is for scheduler jitter — do not buy margin instead by
+    # raising ``settle``, which would only make the test slower.
+    assert min(gaps) >= 0.8 * settle, (
+        f"keystroke gaps {gaps} — both beats must be real pauses"
+    )
+    # Measured floor: Pi ate the slash at 25 ms and kept it at 50 ms, so the
+    # shipped default must not be trimmed below the threshold it clears.
+    assert _STOP_KEY_SETTLE_SECONDS >= 0.05
 
 
 @pytest.mark.asyncio

@@ -1,86 +1,83 @@
 /* ---------- Team OS tab ---------- */
-/* The model combo + Detached/Resume controls live in the Skills card's
-   summary (no separate options card); the recap tile is the
-   only .card--row left on the tab. */
-/* Single-row (non-collapsible) cards inherit the disclosure closed-box:
-   zero vertical padding, a 52px .card-head (vendored card.css) owns the
-   height, so they sit pixel-identical beside collapsed disclosure cards. */
-.card--row { padding: 0 14px; }
-.card--row .card-head { min-height: 52px; }
-/* Right-aligned toggle group: keeps a summary row's switches packed together
-   as a single flex child so the row stays title-left / toggles-right. Without
-   this the Coding row's three children space-between and Detached floats in the
-   center. Shared by the Coding + Team OS option rows. */
-.coding-toggles,
-.teamos-toggles { display: flex; gap: 6px; }
-.teamos-launch { font-size: var(--icon-title); }
-
-/* Weekly-recap tile: title + a staleness badge on the left, the
-   🚀 review launch on the right. The badge is a coloured dot + label whose
-   colour tracks how stale the recap ledger is — green/accent fresh, amber
-   (--attention) past 7 days, red (--danger) past 14, muted when never run. Mirrors
-   the .health-dot colour vocabulary used elsewhere. */
-.teamos-recap-main { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
-.teamos-recap-badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: var(--font-caption); color: var(--muted); white-space: nowrap;
-}
-.teamos-recap-badge::before {
-  content: ''; width: 8px; height: 8px; border-radius: 50%;
-  background: var(--muted); flex: 0 0 auto;
-}
-.teamos-recap-badge.fresh { color: var(--muted); }
-.teamos-recap-badge.fresh::before { background: var(--accent); }
-.teamos-recap-badge.due { color: var(--attention); }
-.teamos-recap-badge.due::before { background: var(--attention); }
-.teamos-recap-badge.overdue { color: var(--danger); }
-.teamos-recap-badge.overdue::before { background: var(--danger); }
-.teamos-recap-badge.never::before { background: var(--muted); }
-/* The recap card isn't an .app-item, so it doesn't inherit the tab's
-   .app-item .row-actions .icon-btn treatment — restate it here so the 🚀
-   matches the skill-tile launch buttons instead of rendering as a default
-   (white) UA button. */
-.teamos-recap-card .icon-btn {
-  background: transparent;
-  border: 0;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: var(--icon-title);
-  min-width: 52px;
-  min-height: 30px;
-  display: flex;
+/* This fork's stand-in for the full app's lifeos.css: the Team OS tab is
+   the Life tab's shape (skill rows, the weekly-recap glance row, the
+   read-only content browser), so its rules are lifeos.css's, renamed and cut
+   to what Team OS draws. */
+/* The weekly-recap glance row: the action-row with the notebook
+   avatar, glyph in the accent like the job avatars, and its ▶ verb. */
+.teamos-recap-avatar .avatar-glyph { color: var(--accent); }
+/* A skill row's avatar: its name's first letter, in the accent like the
+   recap's and the job rows'. */
+.teamos-avatar .avatar-glyph { color: var(--accent); }
+.teamos-monogram {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-size: var(--font-body);
+  font-weight: 600;
+  line-height: 1;
 }
-.teamos-recap-card .icon-btn:active {
-  background: var(--card-2);
-  color: var(--fg);
+/* A letter is text, so it needs AA against the avatar's grey; the accent
+   itself only reaches 4.2:1 (light) and 3.8:1 (dark) there, `accent-text`
+   clears it in both themes. */
+.teamos-avatar .teamos-monogram { color: var(--accent-text); }
+.teamos-toolbar .launch-toolbar-slot { flex: 1; min-width: 0; }
+
+/* ---------- Team OS sheets ---------- */
+/* Browse's two sheets are the vendored modal. The title is one line, the
+   full name in its title. A block, not the header h2's flex row:
+   text-overflow does not apply to a flex container's text. */
+.detail-header .teamos-sheet-title {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-
-/* Read-only content browser: a full-screen file list; tapping a file
-   opens it in a full-screen layer that overlays the list (the ✕ in the
-   bar closes it back to the list). Inside the reused .terminal-overlay. */
-/* The Team OS browser reuses .terminal-overlay for its full-screen shell,
-   but it is a READING surface, not a terminal screen — it follows the app
-   theme instead of the invariant --term-bg (which would otherwise stick dark in light
-   theme). */
-#teamOsBrowser.terminal-overlay { background: var(--bg); }
-
-.teamos-browser-body {
-  position: relative;
+/* The document sheet's verbs are buttons by the action-to-variant table:
+   Delete a danger tint, Rename a pencil. */
+.teamos-sheet-actions { display: flex; flex-direction: row; align-items: center; gap: 8px; margin-top: 12px; }
+.teamos-sheet-actions .button-tint { flex: 1; width: auto; }
+/* Browse's sheets are tall reading surfaces: the vendored modal at full
+   height, the card exactly that tall so the text scrolls inside it and the
+   Done footer stays at its foot. */
+.teamos-reader-sheet {
+  width: min(560px, calc(100vw - 24px));
+  height: 92vh;
+  height: 92dvh;
+}
+.teamos-reader-sheet .detail-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+}
+.teamos-reader-sheet .detail-header,
+.teamos-reader-sheet .detail-actions,
+#teamOsDocLinks { flex: none; }
+.teamos-file-content {
   flex: 1;
   min-height: 0;
-}
-.teamos-file-list {
-  list-style: none;
-  margin: 0;
-  padding: 8px;
-  height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Browse's file list. */
+.teamos-file-list {
+  flex: 1;
+  min-height: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 .teamos-file-cat {
   font-size: var(--font-caption);
+  font-weight: 700;
   color: var(--muted);
   margin: 10px 4px 4px;
 }
@@ -90,4 +87,50 @@
   gap: 6px;
   margin: 4px 0;
 }
+.teamos-file-row[hidden] { display: none; }
+/* A file inside a folded sub-folder sits inset under its folder row. */
+.teamos-file-nested { margin-inline-start: 14px; }
+/* A file row and a sub-folder row share one card; the folder's chevron at
+   the end turns as it opens. Both meet the 44px touch floor. */
+.teamos-file-btn,
+.teamos-folder-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: var(--font-label);
+  min-height: var(--row-sm);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.teamos-folder-btn { color: var(--muted); }
+.teamos-folder-label { min-width: 0; overflow-wrap: anywhere; }
+.teamos-folder-chevron {
+  display: inline-flex;
+  flex: none;
+  transition: transform 0.15s;
+}
+.teamos-folder-chevron .icon { width: var(--icon-inline); height: var(--icon-inline); }
+.teamos-folder-btn[aria-expanded="true"] .teamos-folder-chevron { transform: rotate(90deg); }
 
+/* The Jobs sort-and-filter sheet (lifeos.css carries it in the full app):
+   the tabs fill the row's value side, and the footer is Clear beside Done
+   (design.md "Long lists") — the one place this app's stacked
+   detail-actions runs as a row. Clear takes the primary's 48px height and
+   type so the pair reads as one footer. */
+.jobs-sort-sheet .segmented { flex: 1; }
+.jobs-sort-sheet .detail-actions { flex-direction: row; }
+.jobs-sort-sheet .detail-actions .button-primary { flex: 1; }
+.jobs-sort-sheet .detail-actions .button-ghost {
+  min-height: 48px;
+  padding-inline: 16px;
+  font-size: var(--font-body);
+}

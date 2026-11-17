@@ -42,10 +42,10 @@ class _FakeCompleted:
 
 
 def _make_remote_session(manager: SessionManager, tmp_path, monkeypatch):
-    from src import session_host
+    from src.session_hosting import remote
 
     monkeypatch.setattr(
-        session_host.subprocess, "run", lambda *a, **k: _FakeCompleted()
+        remote.subprocess, "run", lambda *a, **k: _FakeCompleted()
     )
     return manager.create_remote(str(tmp_path), "proj", "", "copilot")
 
@@ -103,6 +103,20 @@ def test_manual_title_defaults_empty_in_to_api():
     mgr = SessionManager()
     session = _make_pty_session(mgr)
     assert session.to_api()["manual_title"] == ""
+
+
+def test_manual_title_survives_the_first_prompt_capture():
+    """#1579: a dispatched lane is renamed before its launch command is
+    captured as the first-prompt title (#266); the rename must still stand."""
+    mgr = SessionManager()
+    session = _make_pty_session(mgr)
+    mgr.rename(session.session_id, "repo#7 Some issue")
+
+    session._finalize_prompt_title_with("Issue 7 from repo brief")
+
+    api = session.to_api()
+    assert api["manual_title"] == "repo#7 Some issue"
+    assert api["prompt_title"] == "Issue 7 from repo brief"
 
 
 # --- rename never touches the live PTY (issue #555) ---------------------------

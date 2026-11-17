@@ -12,11 +12,11 @@ holds the **Apps tab** rows — bat-based launchers:
       ]
     }
 
-``coding`` rows are **not** persisted here — they are computed live
-on every request by :func:`live_coding_entries`, which scans the
+``claude-code`` rows are **not** persisted here — they are computed live
+on every request by :func:`live_claude_code_entries`, which scans the
 configured ``projects_dir`` for project directories. Each carries a
-``project_dir`` (the folder the agent is cwd'd into); the Apps-tab
-kinds each carry a ``bat_path``. Stale ``coding`` rows left in an
+``project_dir`` (the folder ``claude`` is cwd'd into); the Apps-tab
+kinds each carry a ``bat_path``. Stale ``claude-code`` rows left in an
 older ``apps.json`` are ignored by the API.
 """
 
@@ -32,15 +32,18 @@ from typing import Dict, List, Optional
 from . import runtime_files
 from ._json_io import atomic_write_json
 from .scanner import (
-    KIND_CODING,
+    KIND_CLAUDE_CODE,
+    KIND_MINI,
     KIND_STREAMLIT,
     VALID_KINDS,
     app_id_from_path,
+    github_repo_url,
     pretty_folder_name,
     repo_issues_url,
-    repo_web_url,
     scan_app_bats,
+    scan_mini_bats,
     scan_project_dirs,
+    slugify,
     tunnel_url_for,
 )
 
@@ -48,6 +51,20 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_REGISTRY_PATH = PROJECT_ROOT / "config" / "apps.json"
+
+
+class RegistryReadError(Exception):
+    """Raised by ``load_registry(strict=True)`` when ``config/apps.json``
+    exists but could not be read or parsed.
+
+    A missing file legitimately means "empty registry" (first run, nothing
+    scanned in yet) for every caller — that case never raises this, even in
+    strict mode. This is only for the narrower "the file is there but a read
+    or parse failed" case, which non-strict callers still fold into an empty
+    ``Registry`` (unchanged, so the Apps-tab scan/save flow keeps its existing
+    tolerance) but which a strict caller needs to distinguish from a
+    legitimately empty/unconfigured registry.
+    """
 
 
 @dataclass
@@ -58,15 +75,11 @@ class AppEntry:
     bat_path: Optional[str] = None
     project_dir: Optional[str] = None
     repo_url: Optional[str] = None
-    # Precomputed issues-page URL for coding rows (Phase 5): the server owns
-    # the host check (GitHub `/issues` vs GitLab `/-/issues`), the client
-    # uses it verbatim. Never persisted — coding rows are computed live.
-    repo_issues_url: Optional[str] = None
     added_at: str = ""
-    # Registered Trays panel — whether the tray boots
-    # this ``kind == "tray"`` row automatically. Meaningless on every other
-    # kind; always serialized (like ``added_at``) rather than conditionally,
-    # since it's a plain bool with a real default, not an optional field.
+    # Whether the tray boots this ``tray`` or ``mini`` row automatically.
+    # Meaningless on every other kind; always serialized (like ``added_at``)
+    # rather than conditionally, since it's a plain bool with a real default,
+    # not an optional field.
     autostart: bool = False
 
     def to_dict(self) -> Dict:
@@ -83,8 +96,7 @@ class AppEntry:
             payload["project_dir"] = self.project_dir
         if self.repo_url is not None:
             payload["repo_url"] = self.repo_url
-        if self.repo_issues_url is not None:
-            payload["repo_issues_url"] = self.repo_issues_url
+            payload["issues_url"] = repo_issues_url(self.repo_url)
         return payload
 
 
@@ -100,7 +112,18 @@ class Registry:
         }
 
 
-def load_registry(path: Optional[Path] = None) -> Registry:
+def load_registry(path: Optional[Path] = None, *, strict: bool = False) -> Registry:
+    """Load the registry from ``path`` (default ``config/apps.json``).
+
+    ``strict=True`` raises :class:`RegistryReadError` when the file exists but
+    fails to read/parse, instead of silently folding that failure into an
+    empty registry. Default (``strict=False``, every existing caller) keeps
+    the original behavior — a missing file, or a read/parse failure, both
+    just return an empty ``Registry``. Only ``app.tray.registered_trays``'s
+    boot-time autostart walk needs to tell "genuinely nothing configured"
+    apart from "couldn't read the file this time"; the Apps-tab
+    scan/save flow and the CLI's ``scan`` command are unaffected.
+    """
     target = Path(path) if path is not None else DEFAULT_REGISTRY_PATH
     if not target.exists():
         return Registry(scan_root="")
@@ -108,6 +131,8 @@ def load_registry(path: Optional[Path] = None) -> Registry:
     try:
         raw = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
+        if strict:
+            raise RegistryReadError(f"could not read {target}: {exc}") from exc
         logger.warning(f"⚠️  Could not read {target} ({exc}); starting fresh")
         return Registry(scan_root="")
 
@@ -150,8 +175,7 @@ def decorate_for_api(entry: AppEntry) -> Dict:
     For ``tunnel`` rows, attaches the current public URL read from
     ``<bat.parent>/webapp/last_tunnel_url.txt``. Returns the API shape:
 
-        {id, name, kind, bat_path?, project_dir?, repo_url?,
-         repo_issues_url?, added_at, tunnel_url?}
+        {id, name, kind, bat_path?, project_dir?, repo_url?, added_at, tunnel_url?}
     """
     payload = entry.to_dict()
     if entry.kind == "tunnel" and entry.bat_path:
@@ -159,49 +183,62 @@ def decorate_for_api(entry: AppEntry) -> Dict:
     return payload
 
 
-# ------------------------------------------------------ coding (live)
+# ------------------------------------------------------ claude-code (live)
 
 
-def live_coding_entries(
+def live_claude_code_entries(
     projects_dir: Path, ignore: Optional[List[str]] = None
 ) -> List[AppEntry]:
-    """Build ``coding`` rows live from the directories under ``projects_dir``.
+    """Build ``claude-code`` rows live from the directories under ``projects_dir``.
 
     No persistence and no scan step — every direct child directory of
     ``projects_dir`` that survives the ignore list (see
     :func:`src.scanner.scan_project_dirs`) becomes a launchable row.
     """
-    entries: List[AppEntry] = []
-    for project in scan_project_dirs(projects_dir, ignore):
-        web_url = repo_web_url(project.project_dir)
-        entries.append(
-            AppEntry(
-                id=project.id,
-                name=project.name,
-                kind=KIND_CODING,
-                project_dir=str(project.project_dir),
-                repo_url=web_url,
-                repo_issues_url=repo_issues_url(web_url),
-            )
+    return [
+        AppEntry(
+            id=project.id,
+            name=project.name,
+            kind=KIND_CLAUDE_CODE,
+            project_dir=str(project.project_dir),
+            repo_url=github_repo_url(project.project_dir),
         )
-    return entries
+        for project in scan_project_dirs(projects_dir, ignore)
+    ]
 
 
 # ----------------------------------------------------------- scan + diff
 
 
-def discover_new(*, scan_root: Path, existing: Registry) -> List[AppEntry]:
-    """Scan ``scan_root`` for app bats not already in ``existing``.
+def _same_folder(a: Path, b: Path) -> bool:
+    try:
+        return a.resolve() == b.resolve()
+    except OSError:
+        return False
+
+
+def discover_new(
+    *,
+    scan_root: Path,
+    existing: Registry,
+    mini_root: Optional[Path] = None,
+) -> List[AppEntry]:
+    """Scan ``scan_root`` for app bats (and ``mini_root`` for mini apps) not
+    already in ``existing``.
 
     Each returned entry has ``added_at`` empty — the caller is expected
-    to stamp it when persisting. ``coding`` rows are never returned
-    here; they come from :func:`live_coding_entries` instead.
+    to stamp it when persisting. ``claude-code`` rows are never returned
+    here; they come from :func:`live_claude_code_entries` instead. A bat in
+    ``mini_root`` is a ``mini`` row even when ``scan_root`` also covers that
+    folder, so one file never lists twice. New rows start with autostart off.
     """
     have_paths: set[str] = {a.bat_path for a in existing.apps if a.bat_path}
 
     new: List[AppEntry] = []
     for bat, kind in scan_app_bats(scan_root):
         if str(bat) in have_paths:
+            continue
+        if mini_root is not None and _same_folder(bat.parent, mini_root):
             continue
         new.append(
             AppEntry(
@@ -211,6 +248,23 @@ def discover_new(*, scan_root: Path, existing: Registry) -> List[AppEntry]:
                 bat_path=str(bat),
             )
         )
+
+    if mini_root is not None:
+        taken_ids = {a.id for a in existing.apps} | {a.id for a in new}
+        for bat in scan_mini_bats(mini_root):
+            if str(bat) in have_paths:
+                continue
+            mini_id = f"{KIND_MINI}-{slugify(bat.stem)}"
+            if mini_id in taken_ids:
+                continue
+            new.append(
+                AppEntry(
+                    id=mini_id,
+                    name=pretty_folder_name(Path(bat.stem)),
+                    kind=KIND_MINI,
+                    bat_path=str(bat),
+                )
+            )
 
     return new
 
@@ -257,9 +311,9 @@ def rename_by_id(reg: Registry, app_id: str, new_name: str) -> Optional[AppEntry
 def set_autostart_by_id(
     reg: Registry, app_id: str, autostart: bool
 ) -> Optional[AppEntry]:
-    """Flip the Registered Trays autostart flag for ``app_id``. Meaningless
-    on a non-``tray`` entry, but not rejected — the API layer scopes which
-    rows offer the toggle."""
+    """Flip the autostart flag for ``app_id``. Meaningless on an entry that is
+    neither a ``tray`` nor a ``mini`` one, but not rejected — the API layer
+    scopes which rows offer the toggle."""
     for entry in reg.apps:
         if entry.id == app_id:
             entry.autostart = autostart

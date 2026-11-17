@@ -1,12 +1,25 @@
-"""Registered Trays sequential autostart boot sequence.
+"""Registered Trays and Mini apps sequential autostart boot sequence.
 
-These are pure functions with no ``TrayApp`` state — ``port_listening`` is
-also reused by ``tray.py`` for its own session-host adoption check, since
-it's a general-purpose loopback-port probe.
+Split off ``app/tray/tray.py`` (a single-file god-module flagged by
+``/codebase-audit``). These are pure functions with no ``TrayApp`` state —
+``port_listening`` is also reused by ``tray.py`` for its own session-host
+adoption check, since it's a general-purpose loopback-port probe.
+
+Diagnosability: ``launch_all()`` runs at real boot time under
+``pythonw.exe`` (no console), spawned by ``tray_lifecycle.ps1``'s
+``Start-Process`` — which never redirects stdout/stderr anywhere. So the
+``logger.info``/``logger.warning`` calls below are silently discarded in
+production; a sister tray failing to launch, or taking an unusually long
+time to become reachable, left no trace. Mirrors the breadcrumb log
+``src/boot_autostart.py`` already writes for app-launcher's own Startup
+wrapper: every attempt appends a timestamped line to a
+gitignored ``webapp/registered_trays.log``, so a login-time failure is
+diagnosable from that log alone instead of requiring a live re-run.
 """
 
 from __future__ import annotations
 
+import datetime
 import logging
 import socket
 import subprocess
@@ -15,17 +28,56 @@ import tomllib
 from pathlib import Path
 from typing import Optional
 
-from src.registry import load_registry
-from src.scanner import KIND_TRAY
+from src import runtime_files
+from src.launching.bat_running import find_running_target
+from src.registry import RegistryReadError, load_registry
+from src.scanner import KIND_MINI, KIND_TRAY
 from src.subprocess_flags import NO_WINDOW
 
 logger = logging.getLogger(__name__)
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 _TRAY_READY_TIMEOUT_S = 30.0
 _TRAY_READY_POLL_S = 0.5
 # Fallback wait when a tray's repo has no readable .fleet.toml port — still
 # gives it a head start before the next tray launches, without a real signal.
 _TRAY_FALLBACK_DELAY_S = 5.0
+
+# A genuine config/apps.json read failure (as opposed to "no
+# autostart trays configured") is retried a small, bounded number of times —
+# the suspected trigger is a transient early-boot I/O hiccup (this repo lives
+# on a second drive that may still be settling right at login on a full
+# restart), likely to clear within a second or two. Kept small on purpose:
+# this runs synchronously in TrayApp._start()'s thread on every boot and must
+# not meaningfully delay the webapp becoming usable.
+_REGISTRY_LOAD_ATTEMPTS = 3
+_REGISTRY_LOAD_RETRY_DELAY_S = 1.0
+
+
+def _log_path() -> Path:
+    """The gitignored boot breadcrumb log this repo writes at each autostart.
+
+    Reads ``PROJECT_ROOT`` off the module (not a bound default argument) so
+    tests can redirect it via ``monkeypatch.setattr(rt_mod, "PROJECT_ROOT", ...)``.
+    """
+    return PROJECT_ROOT / "webapp" / "registered_trays.log"
+
+
+def _log_breadcrumb(msg: str) -> None:
+    """Best-effort append of a timestamped line to the breadcrumb log.
+
+    Never raises — a log-write failure must not take down the boot
+    sequence it exists to make diagnosable.
+    """
+    try:
+        path = _log_path()
+        runtime_files.make_dirs(path.parent)
+        stamp = datetime.datetime.now().isoformat(timespec="seconds")
+        with runtime_files.open_for_write(path, "a", encoding="utf-8") as fh:
+            fh.write(f"[{stamp}] {msg}\n")
+    except OSError:
+        pass
 
 
 def port_listening(port: int) -> bool:
@@ -122,34 +174,98 @@ def launch_all() -> None:
     is logged and does NOT abort the rest of the sequence — this
     function itself must never raise into its caller (``TrayApp._start``).
     """
-    try:
-        registry = load_registry()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(f"⚠️  Registered Trays: could not load registry: {exc}")
+    registry = None
+    last_exc: Optional[Exception] = None
+    for attempt in range(1, _REGISTRY_LOAD_ATTEMPTS + 1):
+        try:
+            registry = load_registry(strict=True)
+            break
+        except RegistryReadError as exc:
+            last_exc = exc
+            logger.warning(
+                f"⚠️  Registered Trays: registry read failed "
+                f"(attempt {attempt}/{_REGISTRY_LOAD_ATTEMPTS}): {exc}"
+            )
+            _log_breadcrumb(
+                f"registry read failed (attempt {attempt}/{_REGISTRY_LOAD_ATTEMPTS}): {exc}"
+            )
+            if attempt < _REGISTRY_LOAD_ATTEMPTS:
+                time.sleep(_REGISTRY_LOAD_RETRY_DELAY_S)
+        except Exception as exc:  # noqa: BLE001 — unexpected, not retried
+            logger.warning(f"⚠️  Registered Trays: could not load registry: {exc}")
+            _log_breadcrumb(f"could not load registry: {exc}")
+            return
+    if registry is None:
+        logger.warning(
+            f"⚠️  Registered Trays: registry unreadable after "
+            f"{_REGISTRY_LOAD_ATTEMPTS} attempts — giving up: {last_exc}"
+        )
+        _log_breadcrumb(
+            f"registry unreadable after {_REGISTRY_LOAD_ATTEMPTS} attempts "
+            f"— giving up: {last_exc}"
+        )
         return
-    trays = [a for a in registry.apps if a.kind == KIND_TRAY and a.autostart]
+    trays = [
+        a for a in registry.apps if a.kind in (KIND_TRAY, KIND_MINI) and a.autostart
+    ]
     if not trays:
         return
     logger.info(f"🧭 Registered Trays: launching {len(trays)} autostart entr{'y' if len(trays) == 1 else 'ies'}")
+    _log_breadcrumb(f"launching {len(trays)} autostart entr{'y' if len(trays) == 1 else 'ies'}")
     for entry in trays:
         if not entry.bat_path:
             logger.warning(f"⚠️  Registered Trays: {entry.name} has no bat_path — skipped")
+            _log_breadcrumb(f"{entry.name}: no bat_path — skipped")
             continue
         bat_path = Path(entry.bat_path)
         if not bat_path.is_file():
             logger.warning(f"⚠️  Registered Trays: {entry.name} bat not found at {bat_path} — skipped")
+            _log_breadcrumb(f"{entry.name}: bat not found at {bat_path} — skipped")
+            continue
+        mini = entry.kind == KIND_MINI
+        if mini and _already_running(entry.name, bat_path):
             continue
         try:
             logger.info(f"🚀 Registered Trays: launching {entry.name}")
+            _log_breadcrumb(f"{entry.name}: launching {bat_path}")
             _spawn_tray_bat_detached(bat_path)
+            if mini:
+                # A mini app declares no port, so there is nothing to wait on.
+                continue
             ready = _wait_for_tray_ready(bat_path.parent)
             if ready:
                 logger.info(f"✅ Registered Trays: {entry.name} ready")
+                _log_breadcrumb(f"{entry.name}: ready")
             else:
                 logger.warning(
                     f"⚠️  Registered Trays: {entry.name} readiness unconfirmed "
                     "(timed out or no .fleet.toml port) — continuing"
                 )
+                _log_breadcrumb(
+                    f"{entry.name}: readiness unconfirmed (timed out or no "
+                    ".fleet.toml port) — continuing"
+                )
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"⚠️  Registered Trays: {entry.name} failed to launch: {exc}")
+            _log_breadcrumb(f"{entry.name}: failed to launch: {exc}")
             continue
+
+
+def _already_running(name: str, bat_path: Path) -> bool:
+    """True when a mini app's target is up already, or cannot be ruled out.
+
+    An unreadable process table skips the launch: a missed autostart is one
+    tap on the row, a duplicate is a second copy of something that may hold a
+    port, a lock or a tray icon.
+    """
+    try:
+        pid = find_running_target(bat_path)
+    except RuntimeError as exc:
+        logger.warning(f"⚠️  Registered Trays: {name} not started, could not check it is not running: {exc}")
+        _log_breadcrumb(f"{name}: not started, could not check it is not running: {exc}")
+        return True
+    if pid is None:
+        return False
+    logger.info(f"ℹ️  Registered Trays: {name} already running (pid {pid}) — skipped")
+    _log_breadcrumb(f"{name}: already running (pid {pid}) — skipped")
+    return True

@@ -1,7 +1,9 @@
 """``POST /api/jobs/{job_id}/hook`` — webhook trigger.
 
-Mounted into the parent ``jobs.router`` via ``include_router`` so
-``app/webapp/server.py`` registers a single ``jobs.router``.
+Split off ``app/webapp/routers/jobs.py`` (a single-file god-router
+candidate flagged by ``/codebase-audit``). Mounted into the parent
+``jobs.router`` via ``include_router`` so ``app/webapp/server.py``
+keeps registering a single ``jobs.router`` unchanged.
 """
 
 from __future__ import annotations
@@ -33,7 +35,7 @@ async def run_job_webhook(job_id: str, request: Request) -> Response:
     """Fire a job from an external service.
 
     Authenticated by the job's own ``webhook.provider`` signature — never
-    the bearer token (see ``app.webapp.middleware._is_webhook_hook_path``),
+    the bearer token (see ``src.middleware.is_webhook_hook_path``),
     so this URL is safe to hand to a third party in plaintext. Anything
     that fails signature/shape verification writes **no run record** — only
     a verified fire ever touches disk.

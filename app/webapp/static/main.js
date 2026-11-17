@@ -1,4 +1,4 @@
-/* Entry point: wires every module together, runs refetchAll(), drives polls.
+/* Entry point: wires every module together, runs boot(), drives polls.
  *
  * Modules export named functions; this file is the only place that
  * sequences them. Each wireX() attaches DOM listeners exactly once;
@@ -6,45 +6,43 @@
  */
 
 import { els, state, BOARD_POLL_MS, GIT_STATUS_POLL_MS, JOBS_POLL_MS, LISTENERS_POLL_MS, RUNNING_APPS_POLL_MS, SESSIONS_POLL_MS, SYSTEM_LOAD_POLL_MS, TUNNEL_POLL_MS, WEBAUTHN_POLL_MS } from './state.js';
-import { apiFailToast, consumeUrlParam, jsonApi, setSignInHandler, toast, writeToken } from './api.js';
+import { AuthRequiredError, apiFailToast, consumeUrlParam, jsonApi, setSignInHandler, toast, writeToken } from './api.js';
 import { wireTabs } from './tabs.js';
 import { wireUsageLog } from './usage.js';
-import { fetchConfig, patchConfig, wireCopilotOptions } from './copilot-options.js';
-import { fetchSessions, wireSessions } from './sessions.js';
-import { fetchAgents, fetchApps, fetchRunningApps, refreshGitStatus, wireApps } from './apps.js';
-import { fetchListeners } from './listeners.js';
-import { fetchJobs, renderJobs, wireJobs } from './jobs.js';
-import { fetchSkills, wireTeamOs } from './team-os.js';
-import { fetchBoard, openBoardCard, wireBoard } from './board.js';
-import { wireScreenView } from './screen-view.js';
-import { fetchSystemLoad, wireSystemLoad } from './system-load.js';
-import { wireTokens } from './tokens.js';
-import { openTerminal, wireTerminal } from './terminal.js';
-import { fetchWebauthnStatus, writeTerminalToken } from './webauthn.js';
-import { icon } from './_vendored/icons/icons.js';
-import { setSwitch } from './_vendored/switch/switch.js';
+import { initBuildWatch } from './_vendored/build-watch/build-watch.js';
 import { bindTextSize } from './_vendored/text-size/text-size.js';
 import { buildReadoutText } from './_vendored/page-foot/page-foot.js';
-import { initBuildWatch } from './_vendored/build-watch/build-watch.js';
+import { fetchConfig, wireClaudeOptions } from './settings/claude-options.js';
+import { fetchSessions, wireSessions } from './sessions.js';
+import { fetchSystemLoad, wireSystemLoad } from './system-load.js';
+import { fetchAgents, fetchApps, fetchRunningApps, wireApps } from './apps.js';
+import { refreshGitStatus } from './apps/apps-coding.js';
+import { fetchListeners } from './apps/apps-listeners.js';
+import { fetchJobs, wireJobs } from './jobs.js';
+import { fetchSkills, wireTeamOs } from './team-os.js';
+import { fetchBoard, openBoardCard, renderBoard, wireBoard } from './board.js';
+import { wireHtmlViewer, wireImageLightbox } from './lightbox.js';
+import { openScreenWindow, wireScreenView } from './screen/screen-view.js';
+import { wireTokens } from './settings/tokens.js';
+import { wireDocuments } from './settings/documents.js';
+import { wireSettingsSheets } from './settings/settings-sheets.js';
+import { wireLidKeepAwake } from './settings/lid-keep-awake.js';
+import { openTerminal, wireTerminal } from './terminal.js';
+import { wireChatPane } from './chat/session-transcript.js';
+import { wireQuoteCopy } from './quote-copy.js';
+import { wireChanges } from './changes/changes-overlay.js';
+import { wireLinks } from './links/links-sheet.js';
+import { markMirrorWindowEarly } from './terminal/terminal-mirror.js';
+import { fetchWebauthnStatus, wireWebauthn, writeTerminalToken } from './webauthn.js';
+import { renderSettingsHead } from './home-head.js';
+import { isWideLayout } from './layout.js';
+import { icon } from './_vendored/icons/icons.js';
 
 // --------------------------------------------------------- settings panel
-// One edit-mode state, two switches: the Settings-head toggle and the
-// Registered-jobs summary toggle (the Jobs tab is where editing actually
-// happens, so it carries its own friendly entry point).
-function syncEditModeButtons() {
-  setSwitch(els.editMode, state.editMode);
-  if (els.jobsEditBtn) setSwitch(els.jobsEditBtn, state.editMode);
-}
-
-function toggleEditMode() {
-  state.editMode = !state.editMode;
-  syncEditModeButtons();
-  localStorage.setItem('launcher.editMode', state.editMode ? '1' : '0');
-  // Re-render apps lists to show/hide rename + remove buttons.
-  fetchApps().catch(function () {});
-  // Same toggle drives the Jobs tab's ➕ Add + per-row edit/remove.
-  renderJobs();
-}
+// No Edit mode: Add, Edit and Remove are always one tap away, so there is
+// no edit-mode switch or persisted key. A device that still holds the
+// stale key drops it here, once per boot.
+try { localStorage.removeItem('launcher.editMode'); } catch (_) { /* storage blocked */ }
 
 // Boot-autostart is its own dedicated endpoint, not a
 // patchConfig() field — enabling/disabling it writes/removes a Startup-folder
@@ -70,36 +68,12 @@ async function toggleBootAutostart() {
 }
 
 function wireSettings() {
-  syncEditModeButtons();
-  els.editMode.addEventListener('click', toggleEditMode);
-  if (els.jobsEditBtn) els.jobsEditBtn.addEventListener('click', toggleEditMode);
   if (els.bootAutostartToggle) {
     els.bootAutostartToggle.addEventListener('click', toggleBootAutostart);
   }
-  els.saveSettings.addEventListener('click', async function () {
-    const ignore = els.projectsIgnore.value
-      .split('\n')
-      .map(function (s) { return s.trim(); })
-      .filter(Boolean);
-    const patch = {
-      projects_dir: els.projectsDir.value.trim(),
-      projects_ignore: ignore,
-      apps_scan_root: els.appsScanRoot.value.trim(),
-      team_os_dir: els.teamOsDir.value.trim(),
-    };
-    // Board GitLab source (Phase 5) — patch only when the fields exist, so
-    // a markup regression can never silently wipe a stored value with ''.
-    if (els.gitlabGroup) patch.gitlab_group = els.gitlabGroup.value.trim();
-    if (els.gitlabHost) patch.gitlab_host = els.gitlabHost.value.trim();
-    if (els.terminalHistoryLines && els.terminalHistoryLines.value !== '') {
-      const lines = parseInt(els.terminalHistoryLines.value, 10);
-      if (Number.isFinite(lines)) patch.terminal_history_lines = lines;
-    }
-    await patchConfig(patch);
-    await fetchApps();
-    await fetchSkills();
-    toast('Settings saved.', 'good');
-  });
+  wireLidKeepAwake(function () { return fetchConfig(); });
+  // Every other Settings field saves as it changes: settings-sheets.js.
+  wireSettingsSheets();
 }
 
 // --------------------------------------------------------- theme toggle
@@ -110,45 +84,37 @@ function wireTheme() {
   // CSS keyed on the attribute, so there is nothing to re-render here —
   // the terminal screen follows the app theme via
   // terminal.js's own data-theme observer, which restyles any open
-  // terminal. The button lives in the home-head card's toggle slot
-  // — no <summary> around it any more, so no stopPropagation needed.
-  els.themeToggle.addEventListener('click', function () {
-    const dark = document.documentElement.dataset.theme !== 'dark';
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-    localStorage.setItem('app-launcher.theme', dark ? 'dark' : 'light');
+  // terminal. Every page header carries one (the home-head toggle
+  // slot); they all flip the same attribute.
+  document.querySelectorAll('.theme-toggle-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const dark = document.documentElement.dataset.theme !== 'dark';
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      localStorage.setItem('app-launcher.theme', dark ? 'dark' : 'light');
+    });
   });
 }
 
 // --------------------------------------------------------- status readout
-// Appends a sprite-icon span + a trailing text node — data (tunnel_url,
+// Renders a sprite-icon span + a trailing text node — data (tunnel_url,
 // etc.) always rides a text node, never innerHTML, even though it's
 // locally-sourced.
-function appendStatusChunk(parts, iconName, text) {
-  if (parts.length) parts.push(document.createTextNode(' \u00b7 '));
-  if (iconName) {
-    const ic = document.createElement('span');
-    ic.className = 'inline-icon';
-    ic.innerHTML = icon(iconName);
-    parts.push(ic);
-  }
-  parts.push(document.createTextNode((iconName ? ' ' : '') + text));
-}
-
 async function fetchStatus() {
   try {
     const body = await jsonApi('/api/status');
     state.status = body;
-    // The TLS badge + tunnel URL used to render here too — dropped
-    // (Settings tab cleanup): needless exposure of the tunnel hostname in
-    // the UI, and not information the user needs day to day. The
-    // reachability warning stays; it's actionable (fix by switching to
-    // the Tailscale/VPN URL), not just informational.
-    const parts = [];
-    if (body.terminal && body.terminal.reachable === false) {
-      appendStatusChunk(parts, 'triangle-alert', 'terminal needs the private (Tailscale/VPN) URL');
-    }
+    // No TLS badge or tunnel URL render here: exposing the tunnel hostname
+    // in the UI is needless, and not information the user needs day to
+    // day. The reachability warning stays; it's actionable (fix by
+    // switching to the Tailscale URL), not just informational.
     els.statusReadout.innerHTML = '';
-    parts.forEach(function (p) { els.statusReadout.appendChild(p); });
+    if (body.terminal && body.terminal.reachable === false) {
+      const ic = document.createElement('span');
+      ic.className = 'inline-icon';
+      ic.innerHTML = icon('triangle-alert');
+      els.statusReadout.appendChild(ic);
+      els.statusReadout.appendChild(document.createTextNode(' terminal needs the Tailscale URL'));
+    }
   } catch (_) {
     els.statusReadout.textContent = '';
   }
@@ -159,23 +125,137 @@ async function fetchVersion() {
   // Visible proof of which build the PWA is running. Catches stale-cache
   // confusion before it costs a debugging session. Uses jsonApi so the
   // bearer token is attached — /api/version is auth-gated like the rest.
-  try {
-    const body = await jsonApi('/api/version');
-    els.buildReadout.textContent = buildReadoutText(body.git_sha || 'unknown', body.built_at || '');
-  } catch (_) {
-    els.buildReadout.textContent = '';
+  // A transient failure is retried on boot's backoff: one dropped
+  // request used to leave the readout blank until a reload. No toast — it is
+  // a readout; after the last attempt it stays blank.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const body = await jsonApi('/api/version');
+      const sha = body.git_sha || 'unknown';
+      els.buildReadout.textContent = buildReadoutText(sha, body.built_at || '');
+      // The Settings header carries the sha too, without the time.
+      state.buildSha = sha;
+      renderSettingsHead();
+      return;
+    } catch (exc) {
+      els.buildReadout.textContent = '';
+      if (exc instanceof AuthRequiredError || attempt >= BOOT_RETRY_MS.length) return;
+      console.warn('boot: /api/version failed, retrying', exc);
+      await new Promise(function (resolve) {
+        setTimeout(resolve, BOOT_RETRY_MS[attempt]);
+      });
+    }
   }
 }
 
 // --------------------------------------------------------- boot
-// One-time setup (URL params, pollers) is split from the refetch work: the
-// sign-in handler re-runs the refetch after a mid-session 401, and must not
-// stack a second set of pollers or lose the already-consumed ?terminal= param.
-let deepLinkSid = null;
-let deepLinkHandled = false;
-let pollersStarted = false;
+// A transient /api/config failure (a dropped connection on the phone, or a
+// loopback socket error on a loaded box) used to end boot() for good:
+// no session list, and none of the polls armed at the end of boot(), so the
+// app stayed empty until a manual reload. Non-auth failures are
+// retried on this backoff before the toast. A 401 is not retried: it has
+// already raised the sign-in sheet, whose success handler calls boot() again.
+// fetchVersion() above retries on the same backoff.
+const BOOT_RETRY_MS = [500, 1000, 2000, 4000];
 
-function parseUrlParams() {
+async function fetchConfigForBoot() {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await fetchConfig();
+      return true;
+    } catch (exc) {
+      if (exc instanceof AuthRequiredError) return false;
+      if (attempt >= BOOT_RETRY_MS.length) {
+        apiFailToast('Boot failed', exc);
+        return false;
+      }
+      console.warn('boot: /api/config failed, retrying', exc);
+      await new Promise(function (resolve) {
+        setTimeout(resolve, BOOT_RETRY_MS[attempt]);
+      });
+    }
+  }
+}
+
+// The Screen view's pop-out window opens on ?screen=1. Read once, at
+// the first boot: a login in between re-runs boot() after the param is gone.
+let screenWindow = null;
+
+async function boot() {
+  if (screenWindow === null) screenWindow = consumeUrlParam('screen') !== null;
+  const { mirrorSid, sharedSessionSid } = consumeSessionParams();
+
+  if (!(await fetchConfigForBoot())) return;
+  // Each remaining boot fetch fills one panel — none is load-bearing for
+  // the rest of the app, so a single failure must not abort boot() and take
+  // the deep-link branch below down with it: the PC mirror window's title
+  // marker + terminal connect depend on reaching it.
+  const safe = function (fn) { return fn().catch(function (exc) {
+    console.warn('boot: non-critical fetch failed', exc);
+  }); };
+
+  // The pop-out is the viewer alone: it needs the passkey gate's state
+  // (reachability + whether a passkey is set up) and nothing else, so none of
+  // the panel fetches or polls below start in it.
+  if (screenWindow) {
+    await Promise.all([safe(fetchStatus), safe(fetchWebauthnStatus)]);
+    openScreenWindow();
+    return;
+  }
+
+  // A PC mirror (?terminal=) or human-shared link (?session=) drops straight
+  // into the same session; only the former set state.isMirrorWindow above.
+  // ?board=<sid> lands a Slack ping on that session's Board
+  // card, drawer open — mutually exclusive with the session links by
+  // construction (each link carries one param).
+  const deepLinkSid = mirrorSid || sharedSessionSid;
+  const boardSid = deepLinkSid ? null : consumeUrlParam('board');
+
+  // Every panel fetch starts at once: awaited one by one they cost
+  // the phone ~13 serial round trips over the tunnel before the git flags
+  // (last in line) painted. Only real reads are chained. The session and
+  // project lists render agent icons from state.agents, and fetchAgents
+  // re-renders neither, so both wait for it.
+  const lists = safe(fetchAgents).then(function () {
+    return Promise.all([safe(fetchApps), safe(fetchSessions)]);
+  }).then(function () {
+    // A Board opened before the project list landed drew its issue actions
+    // without it (they key on the registered projects). git-status used to
+    // redraw it by coming last in the serial chain; now nothing else would.
+    if (state.tab === 'board') renderBoard();
+  });
+  // The Team OS skills fill their tab's list and header count.
+  const skills = safe(fetchSkills);
+  // The terminal deep link reads both: reachability and the passkey gate.
+  const status = safe(fetchStatus);
+  const webauthn = safe(fetchWebauthnStatus);
+  // Git flags fill without a tap: one fetch at boot, then the slow
+  // poll below keeps them current while a git-reading tab is visible.
+  const git = safe(function () { return refreshGitStatus({ quiet: true }); });
+  const listeners = safe(fetchListeners);
+  const running = safe(fetchRunningApps);
+  const load = safe(fetchSystemLoad);
+  const others = [safe(fetchVersion)];
+  // The Board card link fetches the Board itself, so it needs none of these.
+  if (boardSid) openBoardCard(boardSid).catch(function () {});
+
+  armPolls({ lists, listeners, running, webauthn, load, git });
+
+  if (deepLinkSid) {
+    await Promise.all([lists, status, webauthn]);
+    const found = state.sessions.find(function (s) {
+      return s.session_id === deepLinkSid;
+    });
+    openTerminal(found || { session_id: deepLinkSid, name: deepLinkSid });
+  }
+  // safe() never rejects, so neither does this: boot() resolves once every
+  // boot fetch has settled.
+  await Promise.all([lists, skills, status, webauthn, git, listeners, running, load].concat(others));
+}
+
+// Cache the URL's tokens and read its session links: ?terminal=<sid> (the
+// launcher-spawned PC mirror) and ?session=<sid> (a shared link).
+function consumeSessionParams() {
   const fromUrl = consumeUrlParam('token');
   if (fromUrl) writeToken(fromUrl);
   // A launcher-spawned PC mirror window on the ts.net URL carries a
@@ -183,135 +263,111 @@ function parseUrlParams() {
   // ceremony-minted one. TTL mirrors the server's 12 h _TERMINAL_TOKEN_TTL.
   const ttFromUrl = consumeUrlParam('tt');
   if (ttFromUrl) writeTerminalToken(ttFromUrl, 12 * 3600);
-  deepLinkSid = consumeUrlParam('terminal');
-  // Only the launcher-spawned PC mirror window opens via the ?terminal=<sid>
-  // deep-link; a human's own browser never does. Recording it here (before
-  // the param is stripped from the URL) is what lets terminal.js tell a real
-  // mirror apart from a desktop browser that merely connects over loopback.
-  state.isMirrorWindow = !!deepLinkSid;
+  const mirrorSid = consumeUrlParam('terminal');
+  const sharedSessionSid = consumeUrlParam('session');
+  // Only the launcher-spawned PC mirror window uses ?terminal=<sid>.
+  // Human-copyable links use ?session=<sid>, so opening one on a phone does
+  // not claim mirror ownership or surrender the phone's PTY-size authority.
+  // Recording only the former here is what lets terminal.js tell a real
+  // mirror apart from an ordinary browser.
+  state.isMirrorWindow = !!mirrorSid;
+  // Mark the window closable before the first network call: a mirror whose
+  // /api/config 401s returns from boot() and never reaches announceMirrorWindow
+  // ?session= links stay unmarked.
+  if (mirrorSid) markMirrorWindowEarly(mirrorSid);
+  return { mirrorSid, sharedSessionSid };
 }
 
-function startPollers(load) {
-  if (pollersStarted) return;
-  pollersStarted = true;
-  setInterval(function () {
-    fetchApps().catch(function () {});
-  }, TUNNEL_POLL_MS);
-  setInterval(function () {
-    // Pause the session poll while the terminal is open — it would
-    // re-render the list under the overlay for no reason.
-    if (!state.terminal) fetchSessions().catch(function () {});
-  }, SESSIONS_POLL_MS);
-  setInterval(function () {
-    fetchListeners().catch(function () {});
-  }, LISTENERS_POLL_MS);
-  setInterval(function () {
-    // fetchRunningApps() self-gates: it no-ops unless the Apps tab is up.
-    fetchRunningApps().catch(function () {});
-  }, RUNNING_APPS_POLL_MS);
-  setInterval(function () {
-    // fetchJobs() self-gates: only polls while the Jobs tab is visible.
-    fetchJobs({ poll: true }).catch(function () {});
-  }, JOBS_POLL_MS);
-  setInterval(function () {
-    // fetchBoard() self-gates: only polls while the Board tab is visible.
-    fetchBoard().catch(function () {});
-  }, BOARD_POLL_MS);
-  setInterval(function () {
-    fetchWebauthnStatus().catch(function () {});
-  }, WEBAUTHN_POLL_MS);
-  load.then(function () {
+// Each poll arms once its own first fetch has settled, so it never
+// overlaps it, and never waits on a slower, unrelated one: a git scan
+// still running must not hold back the Jobs poll.
+function armPolls(first) {
+  const noop = function () {};
+  first.lists.then(function () {
     setInterval(function () {
-      // The header shows it on the Coding tab; fetchSystemLoad() skips a hidden page.
-      fetchSystemLoad().catch(function () {});
+      fetchApps().catch(noop);
+    }, TUNNEL_POLL_MS);
+    setInterval(function () {
+      // Pause the session poll while the session overlay is open (either
+      // mode) — it would re-render the list under the overlay for no
+      // reason. The open terminal keeps its own title poll (terminal.js).
+      // Not on the wide layout: the view docks beside the list
+      // so the list is on screen and must keep updating — a session
+      // that ends there would otherwise keep its card until a reload.
+      if (!state.sessionView || isWideLayout()) fetchSessions().catch(noop);
+    }, SESSIONS_POLL_MS);
+  });
+  first.listeners.then(function () {
+    setInterval(function () {
+      fetchListeners().catch(noop);
+    }, LISTENERS_POLL_MS);
+  });
+  first.running.then(function () {
+    setInterval(function () {
+      // fetchRunningApps() self-gates: it no-ops unless the Apps tab is up.
+      fetchRunningApps().catch(noop);
+    }, RUNNING_APPS_POLL_MS);
+  });
+  first.webauthn.then(function () {
+    setInterval(function () {
+      fetchWebauthnStatus().catch(noop);
+    }, WEBAUTHN_POLL_MS);
+  });
+  first.load.then(function () {
+    setInterval(function () {
+      // Every tab's header shows it; fetchSystemLoad() skips a hidden page.
+      fetchSystemLoad().catch(noop);
     }, SYSTEM_LOAD_POLL_MS);
   });
+  first.git.then(function () {
+    setInterval(function () {
+      // Always-on git flags: refresh only while the tab that shows
+      // them (Code; the Board's Backlog doesn't draw them) is visible and
+      // the page is foreground — a backgrounded PWA must not keep spawning
+      // git subprocesses.
+      if (document.hidden) return;
+      if (state.tab !== 'claude') return;
+      refreshGitStatus({ quiet: true }).catch(noop);
+    }, GIT_STATUS_POLL_MS);
+  });
+  // No boot fetch of their own: both self-gate to their tab.
   setInterval(function () {
-    // Always-on git flags: refresh only while a tab that shows them
-    // is visible (Coding tiles / Board backlog) and the page is foreground —
-    // a backgrounded PWA must not keep spawning git subprocesses.
-    if (document.hidden) return;
-    if (state.tab !== 'coding' && state.tab !== 'board') return;
-    refreshGitStatus({ quiet: true }).catch(function () {});
-  }, GIT_STATUS_POLL_MS);
-  // "New version available · Reload" when a deploy lands under an open page;
-  // /api/version is auth-gated, so it reads through the bearer-token jsonApi.
-  initBuildWatch({ fetchJson: jsonApi });
-}
-
-async function refetchAll() {
-  try {
-    await fetchConfig();
-  } catch (exc) {
-    apiFailToast('Boot failed', exc);
-    return;
-  }
-  // Each remaining boot fetch fills one panel — none is load-bearing for
-  // the rest of the app, so a single failure must not abort refetchAll() and take
-  // the deep-link branch below down with it: the PC mirror window's title
-  // marker + terminal connect depend on reaching it.
-  const safe = function (fn) { return fn().catch(function (exc) {
-    console.warn('boot: non-critical fetch failed', exc);
-  }); };
-  // The header's CPU reading fills alongside the rest of boot.
-  const load = safe(fetchSystemLoad);
-  // openTerminal() reads exactly these four: the agent registry and session
-  // list (fullscreen handling), the status (reachability gate) and the
-  // passkey state (token gate). The deep link opens once they have settled,
-  // not behind the panel fetches below, which each take seconds under load.
-  await safe(fetchAgents);
-  await safe(fetchSessions);
-  await safe(fetchStatus);
-  await safe(fetchWebauthnStatus);
-
-  // PC mirror window opened with ?terminal=<sid> — drop straight in.
-  if (!deepLinkHandled && deepLinkSid) {
-    deepLinkHandled = true;
-    const found = state.sessions.find(function (s) {
-      return s.session_id === deepLinkSid;
-    });
-    openTerminal(found || { session_id: deepLinkSid, name: deepLinkSid });
-  }
-
-  await safe(fetchApps);
-  await safe(fetchSkills);
-  await safe(fetchListeners);
-  await safe(fetchRunningApps);
-  await safe(fetchVersion);
-  // Git flags fill without a tap: one fetch at boot, then the slow
-  // poll below keeps them current while a git-reading tab is visible.
-  await safe(function () { return refreshGitStatus({ quiet: true }); });
-
-  if (!deepLinkHandled) {
-    deepLinkHandled = true;
-    // ?board=<sid>: a Slack ping lands on that session's
-    // Board card, drawer open. Mutually exclusive with ?terminal= by
-    // construction (each link carries one param).
-    const boardSid = consumeUrlParam('board');
-    if (boardSid) openBoardCard(boardSid).catch(function () {});
-  }
-  startPollers(load);
+    fetchJobs().catch(noop);
+  }, JOBS_POLL_MS);
+  setInterval(function () {
+    fetchBoard().catch(noop);
+  }, BOARD_POLL_MS);
 }
 
 // --------------------------------------------------------- wire + go
-setSignInHandler(refetchAll);
+setSignInHandler(boot);
 wireUsageLog();
 wireTabs();
-wireCopilotOptions();
+wireClaudeOptions();
 wireSessions();
+wireSystemLoad();
 wireApps();
 wireJobs();
 wireTeamOs();
 wireBoard();
-wireTerminal();
+wireImageLightbox();
+wireHtmlViewer();
 wireScreenView();
-wireSystemLoad();
+wireTerminal();
+wireChatPane();
+wireQuoteCopy();
+wireChanges();
+wireLinks();
+wireWebauthn();
 wireSettings();
 wireTokens();
+wireDocuments();
 wireTheme();
-// Text size: the pre-paint script in index.html stamped html[data-textsize];
-// this paints the stored step on the Settings control and persists clicks.
-bindTextSize(document.getElementById('textSizeControl'), 'app-launcher');
+// Settings → Text size: same localStorage prefix as the theme,
+// which the pre-paint boot script reads.
+if (document.getElementById('textSizeControl')) {
+  bindTextSize(document.getElementById('textSizeControl'), 'app-launcher');
+}
 
-parseUrlParams();
-refetchAll();
+initBuildWatch();
+boot();

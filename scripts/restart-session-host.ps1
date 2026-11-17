@@ -7,10 +7,11 @@
 # documented way to do that: an explicit, operator-initiated action, never
 # a side effect of a normal ship.
 #
-# THIS KILLS EVERY LIVE CODING-TAB SESSION ON THIS MACHINE. There is
-# no drain, no idle check -- every PTY dies immediately. Only run this at a
-# clean boundary (no live sessions mid-work), never unattended, never as
-# part of building or testing a session-host change itself.
+# THIS KILLS EVERY LIVE CODING-TAB / CHIEF SESSION ON THIS MACHINE. There is
+# no drain, no idle check -- every PTY dies immediately, including any
+# standing fleet chief. Only run this at a clean boundary (no live sessions
+# mid-work), never unattended, never as part of building or testing a
+# session-host change itself.
 #
 # Usage:
 #   C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/restart-session-host.ps1 -Confirm
@@ -22,13 +23,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$trayPs = Join-Path $PSScriptRoot "tray_lifecycle.ps1"
+$trayPs = Join-Path $env:USERPROFILE ".claude\tray\tray_lifecycle.ps1"
 $trayBat = Join-Path $repoRoot "tray.bat"
 $psExe = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
 if (-not $Confirm) {
-    Write-Host "This restarts the app-launcher session-host (default :8466)." -ForegroundColor Yellow
-    Write-Host "It KILLS EVERY LIVE PTY SESSION ON THIS MACHINE." -ForegroundColor Red
+    Write-Host "This restarts the app-launcher session-host (:8466)." -ForegroundColor Yellow
+    Write-Host "It KILLS EVERY LIVE PTY SESSION ON THIS MACHINE, including any standing chief." -ForegroundColor Red
     Write-Host "There is no drain and no idle check. Only proceed at a clean boundary." -ForegroundColor Red
     Write-Host ""
     Write-Host "Re-run with -Confirm to proceed:" -ForegroundColor Yellow
@@ -37,7 +38,7 @@ if (-not $Confirm) {
 }
 
 if (-not (Test-Path $trayPs)) {
-    Write-Host "Missing tray helper: $trayPs" -ForegroundColor Red
+    Write-Host "Missing shared tray helper: $trayPs" -ForegroundColor Red
     exit 1
 }
 if (-not (Test-Path $trayBat)) {
@@ -45,32 +46,9 @@ if (-not (Test-Path $trayBat)) {
     exit 1
 }
 
-# The session-host port is the webapp_config.json `session_host_port` knob (the
-# tray, the CLI and every router read it); 8466 only when that read fails.
-$sessionHostPort = 8466
-$venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
-Push-Location $repoRoot
-try {
-    $configured = & $venvPython -c "from src.webapp_config import load_webapp_config; print(load_webapp_config().session_host_port)"
-    if ($LASTEXITCODE -eq 0 -and "$configured" -match '^\d+$') {
-        $sessionHostPort = [int]$configured
-    } else {
-        Write-Host "Could not read session_host_port from the config -- assuming :8466." -ForegroundColor Yellow
-    }
-    # The webapp port is config.json `webapp.port`; the resolver itself falls
-    # back to 8465 when the key is missing.
-    $webappPort = & $venvPython -m scripts.webapp_port
-    if ($LASTEXITCODE -ne 0 -or "$webappPort" -notmatch '^\d+$') {
-        Write-Host "Could not read webapp.port from config.json -- assuming :8465." -ForegroundColor Yellow
-        $webappPort = 8465
-    }
-} finally {
-    Pop-Location
-}
-
-Write-Host "Reclaiming :$sessionHostPort (this kills every live PTY now)..." -ForegroundColor Cyan
+Write-Host "Reclaiming :8466 (this kills every live PTY now)..." -ForegroundColor Cyan
 & $psExe -NoProfile -NonInteractive -File $trayPs reclaim `
-    -VenvDir (Join-Path $repoRoot ".venv") -Ports $sessionHostPort
+    -VenvDir (Join-Path $repoRoot ".venv") -Ports 8466
 if ($LASTEXITCODE -ne 0) {
     Write-Host "tray_lifecycle.ps1 reclaim exited $LASTEXITCODE -- session-host may still be running." -ForegroundColor Red
     exit $LASTEXITCODE
@@ -79,26 +57,60 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Restarting the tray (also spawns a fresh session-host since none is left to adopt)..." -ForegroundColor Cyan
 & $trayBat --restart
 
-# Bounded poll of the same /api/version freshness check, so this
+# Bounded poll of the same /api/version freshness check the webapp already makes, so this
 # script proves the restart actually worked instead of trusting silence.
+#
+# Gate on `freshness`, NOT raw stale. docs/restart-and-
+# liveness.md is explicit that `stale` is true after any merge anywhere in
+# the repo, so a correct restart used to print a false "STILL STALE"
+# failure here. `freshness` carries the stale_relevant scoping (was a
+# declared session-host path actually touched) -- the only thing this
+# script can claim to have fixed -- as one declared state.
+#
+# `unknown` and `stale-unknown` (a SHA or the scoped diff could not be
+# resolved) are their own states and are NOT treated as success.
+function Format-Tri($value) {
+    if ($value -eq $true) { return "true" }
+    if ($value -eq $false) { return "false" }
+    return "unknown"
+}
+
 $deadline = (Get-Date).AddSeconds(30)
-$reported = $false
+$confirmed = $false
+$lastSeen = ""
 while ((Get-Date) -lt $deadline) {
     try {
-        $body = Invoke-RestMethod -Uri "https://127.0.0.1:$webappPort/api/version" -SkipCertificateCheck -TimeoutSec 3
+        $body = Invoke-RestMethod -Uri "https://127.0.0.1:8465/api/version" -SkipCertificateCheck -TimeoutSec 3
         $host_ = $body.session_host
         if ($host_.reachable -eq $true) {
-            $staleText = if ($host_.stale -eq $false) { "fresh" } elseif ($host_.stale -eq $true) { "STILL STALE" } else { "unknown" }
-            Write-Host "session-host: git_sha=$($host_.git_sha) started_at=$($host_.started_at) ($staleText)" -ForegroundColor Green
-            $reported = $true
-            break
+            $lastSeen = ("git_sha=$($host_.git_sha) started_at=$($host_.started_at) " +
+                         "stale=$(Format-Tri $host_.stale) " +
+                         "stale_relevant=$(Format-Tri $host_.stale_relevant) " +
+                         "freshness=$($host_.freshness)")
+            if ($host_.freshness -eq "fresh" -or $host_.freshness -eq "stale-irrelevant") {
+                Write-Host "session-host: $lastSeen (live)" -ForegroundColor Green
+                $confirmed = $true
+                break
+            }
+            # stale-relevant -> the fresh host still loads code older than a
+            #          declared session-host path change; keep polling, it may
+            #          still be coming up.
+            # unknown / stale-unknown -> freshness could not be resolved at
+            #          all; also not a pass.
         }
     } catch {
         # webapp or session-host not up yet -- keep polling until the deadline.
     }
     Start-Sleep -Seconds 1
 }
-if (-not $reported) {
-    Write-Host "Could not confirm the session-host is back up within 30s -- check it by hand." -ForegroundColor Red
+if (-not $confirmed) {
+    if ($lastSeen) {
+        Write-Host "session-host: $lastSeen" -ForegroundColor Yellow
+        Write-Host ("Restart NOT confirmed within 30s: freshness never reached fresh or stale-irrelevant. " +
+                    "The session-host is reachable but is not provably running the merged " +
+                    "session-host code -- check it by hand.") -ForegroundColor Red
+    } else {
+        Write-Host "Could not reach the session-host within 30s -- check it by hand." -ForegroundColor Red
+    }
     exit 1
 }

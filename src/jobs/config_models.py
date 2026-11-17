@@ -20,6 +20,12 @@ from pathlib import Path
 from re import compile as _re_compile
 from typing import Any, Dict, List, Optional, Union
 
+from src.jobs.config_rules import (
+    validate_principal_shape,
+    validate_rerun_safe,
+    validate_rerun_safe_shape,
+)
+from src.jobs.outcome import DECLARABLE_OUTCOMES
 from src.jobs.webhook import WebhookConfig, webhook_from_dict
 from src.scanner import slugify
 
@@ -67,6 +73,16 @@ MAX_WATCHDOG_SECONDS = 7 * 86_400
 # one file with the group as a JSON key, not a dir name).
 MAX_MUTEX_GROUP_LEN = 32
 _MUTEX_GROUP_RE = _re_compile(r"^[a-z][a-z0-9_-]{0,31}$")
+
+# Job id shape — lowercase alnum segments joined by single hyphens, exactly
+# what make_job_id()/slugify() produce. Nothing downstream validated
+# a caller-supplied id: it became a raw path join for the job's run
+# directory (src/jobs/history.py's ``runs_dir``, which prune_runs'
+# ``shutil.rmtree`` can walk outside ``webapp/jobs/`` given a `../` id) and
+# unchecked text in the ``\AppLauncher\<id>`` Task Scheduler name + its
+# ``/TR`` string.
+MAX_JOB_ID_LEN = 64
+_JOB_ID_RE = _re_compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 # ---------------------------------------------------------------- Schedule
@@ -382,12 +398,22 @@ class Job:
     # so a fat-fingered tap or stray Stream Deck press can't execute a
     # destructive job by accident.
     confirm: bool = False
+    # Owner-set: this job may be re-run unattended by the fleet chief's
+    # self-heal after a fix lands. Default False is the safe state; a job
+    # that needs a confirm tap or cannot be run manually can never be
+    # True (see :func:`validate_rerun_safe_shape`). Agents only read it.
+    rerun_safe: bool = False
     # When True, a failed run pushes a Telegram alert via the vendored
     # notifier (``src.notify``), independent of the global Pushover
     # ``notify_on_failure`` switch in webapp_config.json. Opt-in per job
     # (default off) so the shared Telegram chat isn't spammed by every
     # job's failures.
     alert_on_failure: bool = False
+    # What this job's *own* non-zero exit codes mean, e.g. ``{3: "deferred"}``:
+    # read at render time by ``src.jobs.outcome.run_outcome``, so a
+    # declared code re-labels a ``failed`` run on the card, in the stats and in
+    # the alert path, while ``status`` on disk and chaining stay unchanged.
+    exit_outcomes: Dict[int, str] = field(default_factory=dict)
     # When True, the job's scheduled Task Scheduler entry runs under
     # ``python.exe`` (a real console window in the logged-on session)
     # instead of the silent ``pythonw.exe``, and the executor tees the
@@ -402,6 +428,23 @@ class Job:
     # rights to do its work (e.g. restarting an app whose manifest requires
     # elevation). See ``src.jobs.schtasks.sync_schtasks``.
     elevated: bool = False
+    # When True, this job's Task Scheduler entry is expected to carry an
+    # **S4U** principal ("run whether the user is logged on or not") instead
+    # of the ``InteractiveToken`` principal ``schtasks /Create`` defaults to,
+    # so it still fires while the machine sits logged out.
+    #
+    # Like ``elevated`` this makes the entry *externally managed*: registering
+    # an S4U principal needs elevation, which this webapp process never has
+    # (proven non-elevated — every route to an S4U principal returns
+    # ``Access is denied``, including the create-then-``Set-ScheduledTask``
+    # patch that works for *Settings*). See
+    # ``src.jobs.schtasks.registration_script`` for the command that registers
+    # it and ``sync_schtasks`` for the hands-off rule.
+    #
+    # Mutually exclusive with ``visible``: an S4U task runs in session 0 with
+    # no desktop, so a console window has nowhere to appear. Choosing one is
+    # the deliberate trade the job owner makes.
+    session_less: bool = False
     # When non-None, ``schedule`` is the placeholder ``Schedule(type="none")``
     # and ``paused_schedule`` carries the *real* shape so resume can
     # restore it untouched. See pause_job/resume_job.
@@ -440,10 +483,6 @@ class Job:
     # watchdog, "off" and "use the default" are opposite instructions.
     max_runtime_seconds: Optional[int] = None
     no_output_seconds: Optional[int] = None
-    # When the live schedule last took effect (added, edited, resumed). The
-    # missed-fire check never replays the current schedule before it, because
-    # earlier days ran under a different (or no) schedule.
-    schedule_changed_at: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -470,16 +509,23 @@ class Job:
             payload["on_failure"] = list(self.on_failure)
         if self.confirm:
             payload["confirm"] = True
+        if self.rerun_safe:
+            payload["rerun_safe"] = True
         if self.alert_on_failure:
             payload["alert_on_failure"] = True
+        if self.exit_outcomes:
+            payload["exit_outcomes"] = {
+                str(code): outcome
+                for code, outcome in sorted(self.exit_outcomes.items())
+            }
         if self.visible:
             payload["visible"] = True
         if self.elevated:
             payload["elevated"] = True
+        if self.session_less:
+            payload["session_less"] = True
         if self.paused_schedule is not None:
             payload["paused_schedule"] = self.paused_schedule.to_dict()
-        if self.schedule_changed_at:
-            payload["schedule_changed_at"] = self.schedule_changed_at
         # kind / kind_config: omit when unset so legacy rows (and every
         # explicit-.py/.bat row saved before this feature shipped) stay
         # byte-for-byte after a load → save round-trip.
@@ -510,7 +556,7 @@ class Job:
         Explicit ``self.kind`` wins; otherwise inferred from
         ``script_path``'s suffix. See :func:`src.jobs_kinds.resolve_kind`
         for the exact fallback rule — imported locally to avoid a
-        ``jobs_config`` ↔ ``jobs_kinds`` import cycle (every kind module
+        ``src.jobs.config`` ↔ ``src.jobs_kinds`` import cycle (every kind module
         imports :class:`Job` from here).
         """
         from src.jobs_kinds import resolve_kind  # local import avoids a cycle
@@ -635,6 +681,39 @@ def _validate_mutex_group(raw: Any) -> Optional[str]:
     return stripped
 
 
+def exit_outcomes_from_dict(raw: Any) -> Dict[int, str]:
+    """Parse + validate a job's ``exit_outcomes`` declaration.
+
+    Missing / ``None`` → ``{}``. A JSON object mapping an exit code (a JSON
+    key, so a decimal string; an int is accepted too) to one of
+    :data:`src.jobs.outcome.DECLARABLE_OUTCOMES`. Exit 0 cannot be declared,
+    because it already means success.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"exit_outcomes must be an object, got {type(raw).__name__}"
+        )
+    out: Dict[int, str] = {}
+    for key, outcome in raw.items():
+        try:
+            code = int(str(key).strip())
+        except ValueError:
+            raise ValueError(
+                f"exit_outcomes: key {key!r} is not an integer exit code"
+            ) from None
+        if code == 0:
+            raise ValueError("exit_outcomes: exit 0 always means success")
+        if outcome not in DECLARABLE_OUTCOMES:
+            raise ValueError(
+                f"exit_outcomes: {outcome!r} for exit {code} must be one of "
+                f"{sorted(DECLARABLE_OUTCOMES)}"
+            )
+        out[code] = outcome
+    return out
+
+
 def env_from_dict(raw: Any) -> Dict[str, str]:
     """Parse + validate a job's ``env`` overlay.
 
@@ -740,6 +819,15 @@ def job_from_dict(raw: Dict[str, Any]) -> Job:
     script_path = str(raw.get("script_path") or "").strip()
     kind_config = kind_config_from_dict(raw.get("kind_config"))
     validate_kind_shape(kind, script_path, kind_config)
+    validate_principal_shape(
+        bool(raw.get("visible", False)), bool(raw.get("session_less", False))
+    )
+    rerun_safe = validate_rerun_safe(raw.get("rerun_safe"))
+    validate_rerun_safe_shape(
+        rerun_safe,
+        bool(raw.get("confirm", False)),
+        bool(raw.get("elevated", False)),
+    )
     job = Job(
         id=str(raw.get("id") or "").strip(),
         name=str(raw.get("name") or "").strip(),
@@ -753,9 +841,12 @@ def job_from_dict(raw: Dict[str, Any]) -> Job:
         on_success=_validate_chain_list("on_success", raw.get("on_success")),
         on_failure=_validate_chain_list("on_failure", raw.get("on_failure")),
         confirm=bool(raw.get("confirm", False)),
+        rerun_safe=rerun_safe,
         alert_on_failure=bool(raw.get("alert_on_failure", False)),
+        exit_outcomes=exit_outcomes_from_dict(raw.get("exit_outcomes")),
         visible=bool(raw.get("visible", False)),
         elevated=bool(raw.get("elevated", False)),
+        session_less=bool(raw.get("session_less", False)),
         paused_schedule=(
             schedule_from_dict(raw["paused_schedule"])
             if raw.get("paused_schedule") is not None
@@ -767,22 +858,22 @@ def job_from_dict(raw: Dict[str, Any]) -> Job:
         env=env_from_dict(raw.get("env")),
         max_runtime_seconds=_validate_max_runtime(raw.get("max_runtime_seconds")),
         no_output_seconds=_validate_no_output(raw.get("no_output_seconds")),
-        schedule_changed_at=str(raw.get("schedule_changed_at") or ""),
     )
     if not job.id:
         raise ValueError("job id is required")
+    if not _JOB_ID_RE.match(job.id) or len(job.id) > MAX_JOB_ID_LEN:
+        raise ValueError(
+            f"job id {job.id!r} must be lowercase alnum segments joined by "
+            f"single hyphens (the make_job_id()/slugify() shape), up to "
+            f"{MAX_JOB_ID_LEN} chars"
+        )
     if not job.name:
         raise ValueError("job name is required")
     return job
 
 
 def make_job_id(name: str, existing_ids: Optional[List[str]] = None) -> str:
-    """Slugify ``name`` into a job id, suffixing to avoid collisions.
-
-    The suffix is ``-dup<N>``, never ``-<digits>``: that shape is the Task
-    Scheduler slot suffix of a ``daily_times`` job (``src.jobs.schtasks``), so
-    a ``-<digits>`` id could collide with a sibling job's slot task.
-    """
+    """Slugify ``name`` into a job id, suffixing to avoid collisions."""
     base = slugify(name) or "job"
     if not existing_ids:
         return base
@@ -790,9 +881,9 @@ def make_job_id(name: str, existing_ids: Optional[List[str]] = None) -> str:
     if base not in have:
         return base
     n = 2
-    while f"{base}-dup{n}" in have:
+    while f"{base}-{n}" in have:
         n += 1
-    return f"{base}-dup{n}"
+    return f"{base}-{n}"
 
 
 # ----------------------------------------------------------- JobsConfig

@@ -1,0 +1,31 @@
+    <!-- The chief's answer sheet (#1295): one block per question waiting on
+         Roberto, built by board-answers.js when it opens; full-screen on
+         the phone, the centred modal on desktop. Done is its one primary
+         action. -->
+    <dialog id="chiefAnswersDialog" class="detail-dialog chief-answers-dialog" data-track-view="sheet.chief-answers" aria-labelledby="chiefAnswersTitle">
+      <div class="detail-card">
+        <div class="detail-header">
+          <h2 id="chiefAnswersTitle"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-messages-square"></use></svg> <span id="chiefAnswersTitleText">Answer the chief</span></h2>
+          <button data-track="chief-answers.close" type="button" id="chiefAnswersClose" class="icon-button detail-close" aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <p id="chiefAnswersDefaults" class="muted small chief-answers-defaults" hidden>Recommended answers are picked for you. Done sends every answer at once; tap an option to change it.</p>
+        <div id="chiefAnswersList" class="chief-answers-list"></div>
+        <!-- Every item's paperclip (answer-files.js) is cloned from this, so its
+             tracking id is a constant in markup, never set by a script. -->
+        <template id="boardAnswerAttachTemplate">
+          <button type="button" class="icon-button tr-ask-attach" data-track="board.answer-attach"></button>
+        </template>
+        <!-- Anything else is the shared composer (composer.js) as a field:
+             dictation and image paste as in Chat, Done its one send. -->
+        <div class="chief-answers-also">
+          <span>Anything else</span>
+          <div id="chiefAnswersAlso"></div>
+        </div>
+        <div class="detail-actions">
+          <p id="chiefAnswersNote" class="muted small chief-answers-note" role="status" hidden></p>
+          <button data-track="chief-answers.done" type="button" id="chiefAnswersDone" class="button-primary detail-save-btn">Done</button>
+        </div>
+      </div>
+    </dialog>

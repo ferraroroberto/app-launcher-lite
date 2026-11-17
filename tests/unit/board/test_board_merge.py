@@ -1,4 +1,4 @@
-"""Board tab — state-file reads and the live-session/state-row merge (issue #300 / #164)."""
+"""Board backend: merge_sessions joins live sessions to state rows, and attach_* helpers."""
 
 from __future__ import annotations
 
@@ -7,80 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from src import board
-from tests.unit.board._board_helpers import (
-    NOW,
-    _iso,
-    _live,
-    _state_row,
-    _transcript_file,
-)
-
-# ------------------------------------------------------ read_sessions_state
-
-
-def test_state_missing_file_unavailable(tmp_path: Path):
-    result = board.read_sessions_state(tmp_path / "nope.json", now=NOW)
-    assert result == {"available": False, "stale": False, "updated_at": None, "rows": {}}
-
-
-def test_state_corrupt_file_unavailable(tmp_path: Path):
-    target = tmp_path / "sessions-state.json"
-    target.write_text("{not json", encoding="utf-8")
-    assert board.read_sessions_state(target, now=NOW)["available"] is False
-
-
-def test_state_fresh_rows(tmp_path: Path):
-    target = tmp_path / "sessions-state.json"
-    target.write_text(json.dumps({
-        "sid-1": {"project": "photo-ocr", "status": "needs-you",
-                  "cwd": "E:/automation/photo-ocr",
-                  "updated_at": _iso(NOW - timedelta(minutes=12))},
-    }), encoding="utf-8")
-    result = board.read_sessions_state(target, now=NOW)
-    assert result["available"] is True
-    assert result["stale"] is False
-    assert set(result["rows"]) == {"sid-1"}
-
-
-def test_state_stale_when_newest_row_old(tmp_path: Path):
-    target = tmp_path / "sessions-state.json"
-    target.write_text(json.dumps({
-        "sid-1": {"status": "working", "cwd": "x",
-                  "updated_at": _iso(NOW - timedelta(hours=30))},
-    }), encoding="utf-8")
-    assert board.read_sessions_state(target, now=NOW)["stale"] is True
-
-
-# ------------------------------------------------------ read_active_issues
-
-
-def test_active_issues_missing_or_corrupt_file_unavailable(tmp_path: Path):
-    target = tmp_path / "active-issues.json"
-    assert board.read_active_issues(target, now=NOW) == {
-        "available": False, "updated_at": None, "rows": {},
-    }
-    target.write_text("{not json", encoding="utf-8")
-    assert board.read_active_issues(target, now=NOW)["available"] is False
-
-
-def test_active_issues_keeps_fresh_and_expires_orphans(tmp_path: Path):
-    target = tmp_path / "active-issues.json"
-    target.write_text(json.dumps({
-        "APP-LAUNCHER#528": {
-            "repo": "app-launcher", "number": 528,
-            "branch": "feat/528-active", "started_at": _iso(NOW - timedelta(hours=2)),
-        },
-        "photo-ocr#73": {
-            "repo": "photo-ocr", "number": 73,
-            "branch": "fix/73-old", "started_at": _iso(NOW - timedelta(hours=25)),
-        },
-        "broken#1": {"repo": "broken", "number": 1, "started_at": "garbage"},
-    }), encoding="utf-8")
-
-    result = board.read_active_issues(target, now=NOW)
-    assert result["available"] is True
-    assert result["updated_at"] == _iso(NOW - timedelta(hours=2))
-    assert set(result["rows"]) == {"app-launcher#528"}
+from tests.unit.board._support import NOW, _iso, _live, _state_row, _transcript_file
 
 
 def test_merge_joins_by_normalized_cwd():
@@ -99,17 +26,17 @@ def test_merge_joins_by_normalized_cwd():
 
 def test_merge_carries_label_from_live_session():
     """The role tag (#245) rides the live session into the board card so the
-    frontend can single out a purpose-built session; absent → empty string."""
+    frontend can single out e.g. the fleet chief; absent → empty string."""
     cards = board.merge_sessions(
         [
-            _live("aaa", "E:\\automation\\fleet-config", 30, label="special"),
+            _live("aaa", "E:\\automation\\fleet-config", 30, label="chief"),
             _live("bbb", "E:\\automation\\photo-ocr", 20),
         ],
         {},
         now=NOW,
     )
     by_id = {c["session_id"]: c for c in cards}
-    assert by_id["aaa"]["label"] == "special"
+    assert by_id["aaa"]["label"] == "chief"
     assert by_id["bbb"]["label"] == ""
 
 
@@ -177,23 +104,22 @@ def test_merge_three_sessions_one_dir_never_cross_wires_transcripts():
         assert by_id[sid]["status"] == "unknown"
 
 
-def test_merge_other_agent_does_not_claim_agentless_row():
-    """#455: agent-less rows default to the launcher's agent. A session
-    running a different agent in the same cwd must stay truthful/unknown
-    instead of borrowing that row's needs-you state."""
-    other = _live(
-        "ssh-live", "E:/automation/app-launcher", 5, agent="ssh"
+def test_merge_non_claude_does_not_claim_legacy_claude_row():
+    """#455: legacy rows are Claude rows. A Codex session in the same cwd
+    must stay truthful/unknown instead of borrowing Claude's needs-you state."""
+    codex = _live(
+        "codex-live", "E:/automation/app-launcher", 5, agent="codex"
     )
     cards = board.merge_sessions(
-        [other],
-        {"copilot-transcript": _state_row(
+        [codex],
+        {"claude-transcript": _state_row(
             "E:/automation/app-launcher", status="needs-you", updated_min_ago=240
         )},
         now=NOW,
     )
     assert len(cards) == 1
-    assert cards[0]["session_id"] == "ssh-live"
-    assert cards[0]["agent"] == "ssh"
+    assert cards[0]["session_id"] == "codex-live"
+    assert cards[0]["agent"] == "codex"
     assert cards[0]["status"] == "unknown"
     assert cards[0]["state_sid"] is None
 
@@ -205,12 +131,12 @@ def test_merge_exact_launcher_id_beats_same_cwd_recency():
     state_rows = {
         "right": _state_row(
             "E:/automation/app-launcher", status="needs-you",
-            updated_min_ago=20, agent="copilot",
+            updated_min_ago=20, agent="claude",
             launcher_session_id="launcher-aaa",
         ),
         "newer-other": _state_row(
             "E:/automation/app-launcher", status="working",
-            updated_min_ago=1, agent="copilot",
+            updated_min_ago=1, agent="claude",
             launcher_session_id="launcher-bbb",
         ),
     }
@@ -229,12 +155,12 @@ def test_merge_duplicate_exact_launcher_ids_take_newest_row():
     state_rows = {
         "older": _state_row(
             "E:/automation/app-launcher", status="working",
-            updated_min_ago=20, agent="copilot",
+            updated_min_ago=20, agent="claude",
             launcher_session_id="launcher-aaa",
         ),
         "newer": _state_row(
             "E:/automation/app-launcher", status="needs-you",
-            updated_min_ago=1, agent="copilot",
+            updated_min_ago=1, agent="claude",
             launcher_session_id="launcher-aaa",
         ),
     }
@@ -388,9 +314,9 @@ def test_attach_shared_names_no_match_returns_none():
 
 
 def test_attach_shared_names_does_not_cross_agent_boundary():
-    live = [_live("ssh-live", "E:/automation/app-launcher", 10, agent="ssh")]
-    state_rows = {"copilot-row": _state_row(
-        "E:/automation/app-launcher", name="Copilot title",
+    live = [_live("codex-live", "E:/automation/app-launcher", 10, agent="codex")]
+    state_rows = {"claude-row": _state_row(
+        "E:/automation/app-launcher", name="Claude title",
     )}
     joined = board.attach_shared_names(live, state_rows)
     assert joined[0]["shared_name"] is None
@@ -402,6 +328,65 @@ def test_attach_shared_names_does_not_mutate_input():
     state_rows = {"t": _state_row("E:/automation/photo-ocr", name="X")}
     board.attach_shared_names(live, state_rows)
     assert "shared_name" not in live[0]
+
+
+# --------------------------------------------------- attach_last_turn (#1647)
+
+
+def test_attach_last_turn_ignores_a_recent_pty_repaint(tmp_path: Path):
+    """The shared-repaint bug: every channel session's PTY repainted a minute
+    ago (Claude Code's footer refresh), but the last real turn was hours old.
+    ``last_turn_at`` is the turn; ``last_output_at`` rides along untouched."""
+    turn = NOW - timedelta(hours=4)
+    row = _state_row("E:/x/y")
+    row["transcript_path"] = _transcript_file(tmp_path, turn)
+    repainted = (NOW - timedelta(minutes=1)).timestamp()
+    live = [_live("aaa", "E:/x/y", 300, last_output_at=repainted)]
+    joined = board.attach_last_turn(live, {"t": row})
+    assert joined[0]["last_turn_at"] == turn.timestamp()
+    assert joined[0]["last_output_at"] == repainted
+
+
+def test_attach_last_turn_is_per_session(tmp_path: Path):
+    """One used session and one idle one read their own turns, not a shared time."""
+    used = _state_row("E:/x/used", transcript_path=_transcript_file(tmp_path, NOW - timedelta(minutes=2)))
+    idle_dir = tmp_path / "idle"
+    idle_dir.mkdir()
+    idle = _state_row("E:/x/idle", transcript_path=_transcript_file(idle_dir, NOW - timedelta(hours=5)))
+    live = [_live("u", "E:/x/used", 60), _live("i", "E:/x/idle", 30)]
+    by_id = {s["session_id"]: s for s in board.attach_last_turn(live, {"u": used, "i": idle})}
+    assert by_id["u"]["last_turn_at"] == (NOW - timedelta(minutes=2)).timestamp()
+    assert by_id["i"]["last_turn_at"] == (NOW - timedelta(hours=5)).timestamp()
+
+
+def test_attach_last_turn_unreadable_transcript_is_unknown(tmp_path: Path):
+    """No row, no path, a missing file and a file with no conversation line
+    are all ``None``: unknown, never a stand-in time."""
+    no_path = _state_row("E:/x/nopath")
+    gone = _state_row("E:/x/gone", transcript_path=str(tmp_path / "missing.jsonl"))
+    metadata_dir = tmp_path / "meta"
+    metadata_dir.mkdir()
+    metadata_only = _state_row(
+        "E:/x/meta",
+        transcript_path=_transcript_file(
+            metadata_dir, NOW, content=json.dumps({"type": "system", "timestamp": _iso(NOW)}) + "\n"
+        ),
+    )
+    live = [
+        _live("nr", "E:/x/norow", 40, last_output_at=NOW.timestamp()),
+        _live("np", "E:/x/nopath", 30, last_output_at=NOW.timestamp()),
+        _live("gn", "E:/x/gone", 20, last_output_at=NOW.timestamp()),
+        _live("mo", "E:/x/meta", 10, last_output_at=NOW.timestamp()),
+    ]
+    rows = {"np": no_path, "gn": gone, "mo": metadata_only}
+    for sess in board.attach_last_turn(live, rows):
+        assert sess["last_turn_at"] is None, sess["session_id"]
+
+
+def test_attach_last_turn_does_not_mutate_input():
+    live = [_live("aaa", "E:/x/y", 30)]
+    board.attach_last_turn(live, {})
+    assert "last_turn_at" not in live[0]
 
 
 def test_attach_shared_names_agrees_with_merge_sessions():
@@ -524,17 +509,20 @@ def test_merge_reaped_launcher_session_with_no_transcript_also_suppressed():
     assert cards == []
 
 
-def test_merge_reaped_other_agent_launcher_session_suppressed(tmp_path: Path):
-    """#613's literal reported ghost, reproduced with a non-default agent:
+def test_merge_reaped_codex_launcher_session_suppressed(tmp_path: Path):
+    """#613's literal reported ghost, reproduced: ``agent=codex``,
     ``status=needs-you``, ~14.3 min old -- the exact shape from the issue.
     The reaped-session check is agent-agnostic (keyed only on
-    ``launcher_session_id``, never on ``agent``) -- so this ghost is
-    suppressed exactly like the default-agent case above, regardless of how
-    fresh its transcript looks."""
+    ``launcher_session_id``, never on ``agent``), and a Codex row spawned via
+    the launcher's own session-host does carry ``launcher_session_id``
+    (fleet-config#349's ``session_state_codex.py`` inherits
+    ``APP_LAUNCHER_SESSION_ID`` from the same PTY env Claude rows use) -- so
+    this ghost is suppressed exactly like the Claude case above, regardless
+    of how fresh its transcript looks."""
     row = _state_row(
         "E:/automation/app-launcher", status="needs-you", updated_min_ago=14,
         transcript_path=_transcript_file(tmp_path, NOW - timedelta(minutes=1)),
-        launcher_session_id="dead-ssh-pty-id", agent="ssh",
+        launcher_session_id="dead-codex-pty-id", agent="codex",
     )
     cards = board.merge_sessions([], {"t": row}, now=NOW)
     assert cards == []
@@ -545,7 +533,7 @@ def test_external_row_liveness_reaped_check_does_not_fire_when_id_is_live(tmp_pa
     reaped-session check must not fire for a row whose ``launcher_session_id``
     genuinely IS in the live set -- it falls through to the transcript-claim
     check and then the ordinary freshness fallback, exactly as before #613."""
-    from src.board_sessions import _external_row_liveness
+    from src.board.transcript import _external_row_liveness
 
     row = _state_row(
         "E:/automation/app-launcher", status="working", updated_min_ago=2,

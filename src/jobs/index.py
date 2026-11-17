@@ -16,17 +16,38 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src import runtime_files
 from src.jobs import history as jobs_history
+from src.jobs.config import exit_outcomes_for
+from src.jobs.outcome import LAUNCHER_TERMINATED_FIELDS, run_outcome
+from src.runtime_data import runtime_data_dir
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
 INDEX_FILENAME = "_index.sqlite"
 _INDEX_LOCK = threading.RLock()
 
+# Where the index file lives. It used to sit inside the run-history root it
+# mirrors (``webapp/jobs/``), which put its writes on whichever drive this repo
+# was cloned onto — a spinning HDD here. It now
+# resolves to the fleet runtime-data root instead.
+#
+# A module global rather than a call to ``runtime_data_dir()`` inside
+# :func:`index_path`, because the tests need one place to redirect: isolation
+# used to come for free from patching ``jobs_history.JOBS_RUNS_DIR``, and
+# decoupling the two would otherwise have pointed every one of those tests at
+# the real production index. ``tests/conftest.py`` patches this autouse.
+INDEX_DIR = runtime_data_dir("app-launcher-lite")
+
 
 def index_path() -> Path:
-    """Return the derived index path for the active run-history root."""
-    return jobs_history.JOBS_RUNS_DIR / INDEX_FILENAME
+    """Return the index path for the active run-history root.
+
+    The index is a *derived* mirror — deleting it is safe and the next read or
+    write rebuilds it from ``JOBS_RUNS_DIR`` — so it is free to live on a
+    different volume from the run records it indexes.
+    """
+    return INDEX_DIR / INDEX_FILENAME
 
 
 def _connect() -> sqlite3.Connection:
@@ -70,6 +91,13 @@ def _create_schema(conn: sqlite3.Connection) -> None:
             pinned INTEGER NOT NULL DEFAULT 0,
             output_size INTEGER NOT NULL DEFAULT 0,
             has_artifacts INTEGER NOT NULL DEFAULT 0,
+            -- The launcher-terminated flags (#1007). run_outcome()'s override
+            -- reads these three off the record; without them a search hit is
+            -- classified blind and a watchdog-killed run renders a different
+            -- icon in search than in the history list.
+            killed INTEGER NOT NULL DEFAULT 0,
+            watchdog INTEGER NOT NULL DEFAULT 0,
+            reaped INTEGER NOT NULL DEFAULT 0,
             UNIQUE(job_id, run_id)
         );
         CREATE INDEX runs_job_started_idx ON runs(job_id, started_at DESC);
@@ -115,8 +143,9 @@ def _sync_run_conn(
         """
         INSERT INTO runs (
             job_id, run_id, status, started_at, finished_at, duration_seconds,
-            exit_code, trigger, pinned, output_size, has_artifacts
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            exit_code, trigger, pinned, output_size, has_artifacts,
+            killed, watchdog, reaped
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(job_id, run_id) DO UPDATE SET
             status=excluded.status,
             started_at=excluded.started_at,
@@ -126,7 +155,10 @@ def _sync_run_conn(
             trigger=excluded.trigger,
             pinned=excluded.pinned,
             output_size=excluded.output_size,
-            has_artifacts=excluded.has_artifacts
+            has_artifacts=excluded.has_artifacts,
+            killed=excluded.killed,
+            watchdog=excluded.watchdog,
+            reaped=excluded.reaped
         """,
         (
             job_id,
@@ -140,6 +172,9 @@ def _sync_run_conn(
             int(bool(record.get("pinned"))),
             output_size,
             int(_artifact_present(run_dir)),
+            int(bool(record.get("killed"))),
+            int(bool(record.get("watchdog"))),
+            int(bool(record.get("reaped"))),
         ),
     )
     row = conn.execute(
@@ -247,7 +282,26 @@ def search_runs(
     since: Optional[str] = None,
     limit: int = 100,
 ) -> List[Dict[str, Any]]:
-    """FTS-search output, newest first, with optional exact filters."""
+    """FTS-search output, newest first, with optional exact filters.
+
+    Each hit carries ``outcome`` alongside ``status``, classified
+    here from the indexed ``exit_code`` rather than re-derived in the client, so
+    a search hit's icon agrees with the same run's icon in the history list. The
+    ``status`` filter argument still matches the persisted column: filtering is
+    a query against what is stored, rendering is a question about what it meant.
+    The hit's job's own ``exit_outcomes`` ride along for the same
+    reason.
+
+    That agreement needs the launcher-terminated flags too:
+    :func:`~src.jobs.outcome.run_outcome` keeps a ``failed`` verdict as
+    ``failed`` when ``killed`` / ``watchdog`` / ``reaped`` is set, instead of
+    softening it to "not confirmed". They were not in the schema, so that
+    override could never fire on a search hit and a watchdog-killed run whose
+    exit code is one of the unconfirmed codes rendered ❓ in search while the
+    history list and the stats rendered it ❌. They are selected here purely to
+    classify and are dropped from the hit afterwards, so the response shape is
+    unchanged.
+    """
     tokens = re.findall(r"[\w-]+", query, flags=re.UNICODE)
     if not tokens:
         return []
@@ -266,7 +320,9 @@ def search_runs(
     params.append(max(1, min(int(limit), 200)))
     ensure_index()
     sql = f"""
-        SELECT runs.job_id, runs.run_id, runs.status, runs.started_at,
+        SELECT runs.job_id, runs.run_id, runs.status, runs.exit_code,
+               runs.started_at,
+               runs.killed, runs.watchdog, runs.reaped,
                snippet(output_fts, 0, '', '', ' … ', 18) AS snippet
         FROM output_fts
         JOIN runs ON runs.rowid = output_fts.rowid
@@ -275,4 +331,11 @@ def search_runs(
         LIMIT ?
     """
     with _connect() as conn:
-        return [dict(row) for row in conn.execute(sql, params).fetchall()]
+        hits = [dict(row) for row in conn.execute(sql, params).fetchall()]
+    for hit in hits:
+        hit["outcome"], hit["outcome_reason"] = run_outcome(
+            hit, exit_outcomes_for(hit["job_id"])
+        )
+        for flag in LAUNCHER_TERMINATED_FIELDS:
+            hit.pop(flag, None)
+    return hits

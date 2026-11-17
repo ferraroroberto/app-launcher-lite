@@ -1,10 +1,9 @@
 """Terminal-agent registries for Coding launches and loopback PTY clients.
 
-The Coding tab launches an interactive terminal agent in a project
-folder, hosted by the session-host PTY/remote machinery:
-
-- ``copilot`` — GitHub Copilot CLI (GitHub's terminal-native agentic
-  coding agent; authenticates in-session via ``/login``).
+This fork launches one interactive terminal agent, GitHub Copilot CLI
+(``copilot``; it authenticates in-session via ``/login``), hosted by the
+session-host PTY/remote machinery. The :class:`Agent` fields keep the full
+app's shape so ports from upstream stay mechanical.
 
 This module is the single source of truth for the agent id → command
 mapping. ``AGENTS`` contains the coding agents exposed by the webapp;
@@ -30,11 +29,12 @@ class Agent:
     is the display name; ``command`` is the executable resolved off
     ``PATH`` when the agent is spawned; ``quit_command`` is the
     interactive command typed into the PTY for a graceful stop (each
-    program uses its own — Copilot's and SSH's are ``/exit`` and
-    ``exit`` respectively).
+    program uses its own — Claude's is ``/quit``; Copilot's and SSH's are
+    ``/exit`` and ``exit`` respectively).
 
-    ``fullscreen`` marks a full-screen *differential* TUI that repaints
-    in place rather than scrolling inline. The session-host streams these
+    ``fullscreen`` marks a full-screen *differential* TUI (Codex's
+    ratatui, and the other terminal agents) that repaints in place rather
+    than scrolling inline like Claude Code. The session-host streams these
     differently: it must **not** replay the raw scrollback ring on
     (re)connect — doing so dumps stale move-cursor/clear deltas into a
     fresh xterm and re-answers the agent's startup terminal queries (the
@@ -43,13 +43,64 @@ class Agent:
     ``resume_token`` is the agent's *native* resume invocation, spliced
     between the command and the flags for a Resume launch so
     the agent renders its own session picker over the PTY — the launcher
-    never builds a session list of its own (Copilot's is ``--resume``).
-    Empty means the agent has no resume path.
+    never builds a session list of its own. It is a flag for the
+    flag-shaped agents (Claude/Copilot ``--resume``) and a subcommand for
+    Codex (``resume``). Antigravity has no picker flag, so it maps to
+    ``--continue`` (reopen the most recent conversation — the closest
+    native behaviour). Empty means the agent has no resume path.
 
     ``native_name_flag`` is a spawn-time flag that gives a new session a
     picker-visible title. It is intentionally separate from a live rename:
     the launcher must never type into a running agent TUI. Empty means
     the agent exposes no verified non-PTY naming mechanism.
+
+    ``per_launch_model`` records whether a **per-launch** model override
+    reaches this agent's CLI. It is deliberately not "does the agent have a
+    ``--model`` flag": Pi is launched with one, but it is composed from the
+    persisted ``pi_model`` setting and no caller can vary it per launch, so
+    Pi sits with Antigravity, Copilot and Grok on the ``False`` side. ``True``
+    means a launch route may pass a ``model_override`` and the agent will
+    actually run on it; ``False`` means the launcher cannot honour a
+    per-launch model at all, and a route handed one must say so rather than
+    drop it. Adding a seventh agent sets this, and the launch
+    route's model catalog and cfg-only builder table are both checked against
+    it by ``tests/test_apps_launch_dispatch.py``.
+
+    ``console_input`` records whether a *detached* session of this agent
+    was empirically shown to take a follow-up message typed into its
+    console from outside (``AttachConsole`` + ``WriteConsoleInputW`` key
+    records — ``src/console_input.py``). Only agents the probe
+    proved get the Coding tab's **Send message** item and the
+    session-host's remote input path; ``False`` means *not probed*, never
+    *known broken* — a menu must not offer a dead end, so an unprobed
+    agent simply gets no item until it is probed.
+
+    ``type_ahead`` records whether a CR typed while the agent is mid-turn was
+    empirically shown to *queue* the composer for the agent rather than be
+    lost (Claude Code v2.1.296 paints "Press up to edit queued
+    messages" and answers the message once the turn yields). The
+    session-host's deferred submit presses Enter at once for such an agent
+    instead of waiting for the turn to go quiet. ``False`` means *not
+    probed*, and keeps the wait-for-quiet watcher.
+
+    ``composer_tracked`` records whether the agent's composer was probed for
+    the keys :mod:`src.session_host_composer` reads (typed text,
+    Backspace, Ctrl-U, Ctrl-C and Enter, idle and mid-turn, on Claude Code,
+    Codex and Pi on 2026-10-17). Only those sessions report
+    ``composer_dirty`` as ``True``/``False``; ``False`` here means *not
+    probed*, and the session reports ``None``. ``backslash_newline`` is the
+    one difference the probe found: a backslash right before Enter inserts a
+    newline (Claude Code, Pi) instead of being submitted (Codex).
+
+    ``queue_edit`` records whether a message the agent queued mid-turn was
+    shown to come back out of its queue from the keyboard. A throwaway probe
+    on Claude Code v2.1.316 (2026-11-01) found Up moves every queued message
+    back into the composer as one block, and Ctrl-U then clears it. Neither
+    key submits anything, and with nothing queued both do nothing. The
+    session-host's pending-input discard uses that sequence, and also clears
+    a payload still waiting in the composer with Ctrl-U. ``False`` means
+    *not probed*: the session lists its pending messages but cannot remove
+    them.
     """
 
     id: str
@@ -59,21 +110,30 @@ class Agent:
     fullscreen: bool = False
     resume_token: str = ""
     native_name_flag: str = ""
+    per_launch_model: bool = False
+    console_input: bool = False
+    type_ahead: bool = False
+    composer_tracked: bool = False
+    backslash_newline: bool = False
+    queue_edit: bool = False
 
 
 # id → Agent. The order here is the order the Coding tab renders the
 # per-tile launch buttons in.
 AGENTS: Dict[str, Agent] = {
+    # The one coding agent this fork launches. The other registered agents
+    # of the full app are not offered here, so every launch path that looks
+    # an id up in this dict refuses them as unknown.
     "copilot": Agent(
         id="copilot", label="GitHub Copilot CLI", command="copilot",
         quit_command="/exit", fullscreen=True, resume_token="--resume",
-        native_name_flag="--name",
+        native_name_flag="--name", console_input=True,
     ),
 }
 
 # The loopback session-host accepts the Coding-tab agents plus commands used
 # by trusted sibling services. SSH is intentionally absent from ``AGENTS``:
-# it is a service integration, not a Coding-tab launch button.
+# it is a service integration, not a sixth Coding-tab launch button.
 SESSION_HOST_AGENTS: Dict[str, Agent] = {
     **AGENTS,
     "ssh": Agent(
@@ -113,13 +173,50 @@ def resume_command_for(agent_id: str) -> str:
     """Return the agent's native resume token.
 
     Spliced between the command and the flags for a Resume launch so the
-    agent shows its own session picker (Copilot ``--resume``). Returns an
+    agent shows its own session picker (Claude/Copilot ``--resume``, Codex
+    ``resume`` subcommand) or — for Antigravity, which has no picker flag —
+    continues the most recent conversation (``--continue``). Returns an
     empty string for an unknown id or an agent with no resume path; the
     caller treats that as "not resumable" rather than raising, so a bad id
     can never break a launch.
     """
     agent = SESSION_HOST_AGENTS.get(agent_id)
     return agent.resume_token if agent else ""
+
+
+# The command-line metacharacters ``is_safe_command_text`` always excludes
+# (no caller's ``extra_chars`` adds any of these back): ``& | < > ^ % ! $ `
+# ~ * + \ '`` — everything cmd.exe or PowerShell would treat specially
+# (redirection, piping, chaining, variable expansion, escape introducers)
+# when it lands unquoted on the line ``SessionManager`` builds.
+# ``is_safe_command_text`` is the *one* allowlist predicate behind every
+# externally-influenced fragment that reaches that line — a title fed to
+# ``native_session_name_flags_for`` below, and the assembled ``flags`` string
+# validated inside ``SessionManager.create``/``create_remote``
+# (``src/session_host.py``) — so a future caller inherits the
+# invariant by construction instead of re-deriving it at its own call site.
+# Callers pass their own ``extra_chars`` because the safe punctuation differs
+# by context: a title is about to be wrapped in a literal ``"..."`` by this
+# module, so it must exclude ``"`` (a title containing one could break out of
+# that quoting); the assembled ``flags`` string already contains such
+# quoting (e.g. a quoted prompt), a literal ``=`` (config overrides like
+# ``model_reasoning_effort=high``), and ``@`` (the loopback SSH agent's
+# caller-supplied ``user@host`` target), so its allowlist includes all three
+# — none of which is a cmd.exe/PowerShell metacharacter.
+def is_safe_command_text(text: str, extra_chars: str) -> bool:
+    """True if every character of ``text`` is alnum or in ``extra_chars``.
+
+    Deliberately an allowlist, not a denylist: a fixed set of characters
+    known to be needed by legitimate flags/titles, rather than a list of
+    "bad" characters that a future shell quirk could extend around.
+    """
+    return all(char.isalnum() or char in extra_chars for char in text)
+
+
+# Title-only allowlist: excludes ``"`` (see ``is_safe_command_text`` above)
+# and ``=`` (a title has no legitimate use for it; keeping the set tight
+# costs nothing here).
+_SAFE_TITLE_CHARS = " .,:;()[]{}_-/#?"
 
 
 def native_session_name_flags_for(agent_id: str, title: str) -> str:
@@ -134,7 +231,7 @@ def native_session_name_flags_for(agent_id: str, title: str) -> str:
     clean = title.strip()[:60]
     if not agent or not agent.native_name_flag or not clean:
         return ""
-    if any(not (char.isalnum() or char in " .,:;()[]{}_-/#?") for char in clean):
+    if not is_safe_command_text(clean, _SAFE_TITLE_CHARS):
         return ""
     return f'{agent.native_name_flag} "{clean}"'
 
@@ -145,10 +242,37 @@ def is_fullscreen(agent_id: str) -> bool:
     Drives the session-host's (re)connect handling: full-screen agents
     skip the raw scrollback-ring replay and get a forced repaint instead.
     An unknown id is treated as non-fullscreen — the safe
-    inline default.
+    inline default, matching Claude Code.
     """
     agent = SESSION_HOST_AGENTS.get(agent_id)
     return bool(agent and agent.fullscreen)
+
+
+def supports_console_input(agent_id: str) -> bool:
+    """Whether a detached session of ``agent_id`` may be sent a message
+    through its console (``Agent.console_input``).
+
+    Unknown ids are ``False`` — the same *not probed* reading as an agent
+    whose flag is unset, and the guard the session-host's remote input path
+    applies before it spawns anything.
+    """
+    agent = SESSION_HOST_AGENTS.get(agent_id)
+    return bool(agent is not None and agent.console_input)
+
+
+def supports_type_ahead(agent_id: str) -> bool:
+    """Whether a CR sent to a mid-turn ``agent_id`` queues its composer
+    (``Agent.type_ahead``). Unknown ids are ``False``."""
+    agent = SESSION_HOST_AGENTS.get(agent_id)
+    return bool(agent is not None and agent.type_ahead)
+
+
+def supports_queue_edit(agent_id: str) -> bool:
+    """Whether ``agent_id``'s queued and composer-held messages can be
+    removed from the keyboard (``Agent.queue_edit``). Unknown ids are
+    ``False``."""
+    agent = SESSION_HOST_AGENTS.get(agent_id)
+    return bool(agent is not None and agent.queue_edit)
 
 
 def is_installed(agent_id: str) -> bool:
@@ -171,14 +295,16 @@ def is_installed(agent_id: str) -> bool:
 def detect_agents() -> List[Dict[str, object]]:
     """Detection snapshot for the SPA — one dict per known agent.
 
-    Each dict is ``{"id", "label", "available", "fullscreen"}``;
-    ``available`` is the live ``PATH`` check, and ``fullscreen`` lets the
-    SPA tell a differential TUI apart from an inline-scrolling agent so
+    Each dict is ``{"id", "label", "available", "fullscreen",
+    "console_input"}``; ``available`` is the live ``PATH`` check,
+    ``console_input`` is the probe-proven detached-send flag the
+    Coding tab gates its **Send message** item on, and ``fullscreen`` lets the
+    SPA tell a differential TUI (Codex/ratatui) apart from inline Claude so
     the phone terminal can pan the fixed canvas above the keyboard instead
-    of reflowing — reflowing resizes the PTY and makes a differential TUI
-    repaint on every keyboard open/close. The Coding tab
-    disables an agent's launch button (with a hover hint) when
-    ``available`` is ``False``.
+    of reflowing — reflowing resizes the PTY and makes ratatui repaint on
+    every keyboard open/close. The Coding tab disables an
+    agent's launch button (with a hover hint) when ``available`` is
+    ``False``.
     """
     return [
         {
@@ -186,6 +312,7 @@ def detect_agents() -> List[Dict[str, object]]:
             "label": agent.label,
             "available": is_installed(agent.id),
             "fullscreen": agent.fullscreen,
+            "console_input": agent.console_input,
         }
         for agent in AGENTS.values()
     ]

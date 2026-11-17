@@ -1,0 +1,51 @@
+# E2E browser suite conventions
+
+Reference for `scripts/verify-before-ship.ps1`'s browser phase, which runs only on the dev box (the GitHub workflow in [ci-github-actions.md](ci-github-actions.md) runs no browser suite). `CLAUDE.md` carries the one-line rules; the reasoning behind each lives here. Dated flake measurements live in the issue tracker and git history, not here.
+
+## Flaky legs
+
+A timeout in these is a flake, not the diff: rerun once.
+
+- **PTY-input-delivery tests** (compose/keys, paste/reconnect) intermittently time out under load. `E2E_LOG_POLL_DEADLINE_MS` tunes the poll deadline, and `pytest-timeout` (`timeout=120`, thread method) aborts a hang with a stack dump.
+- **`test_kill_from_terminal_view_stops_and_returns_to_list[webkit]`** waits for `#terminalOverlay` to hide: `stopSession()` awaits the host's full 5s-grace-then-force stop window plus two network hops. `E2E_STOP_OVERLAY_HIDE_MS` tunes the `to_be_hidden` budget.
+- **`test_reconnect_replay_does_not_duplicate_scrollback[chromium]`** is **load**-sensitive, not input-delivery: it waits for a typed marker to echo back through a real Copilot CLI composer, so it degrades with how many other live agent PTYs the box hosts. A red here means **check host load**, not the diff and not "rerun and hope". `E2E_REAL_AGENT_ECHO_MS` tunes the wait and the timeout names the real-agent cold boot. Read the traceback and check *which* wait it names before widening anything; widening helps the margin but cannot make a real agent's cold boot deterministic.
+
+## Mock non-deterministic boot fetches before `goto()`; don't widen a timeout
+
+A late boot response rebuilds the DOM out from under Playwright's click, and no timeout makes its arrival deterministic. `renderBoard()` keeps an open drawer's node (pinned by `test_board_drawer_survives_a_board_poll_mid_interaction`), and a git-status refresh does not re-render the Board at all, but other boot fetches (`/api/apps`, `/api/agents`) still rebuild cards when they land. Mock them before navigation — the pattern `test_backlog_issue_in_progress_shows_a_chip_and_blocks_both_starts` uses.
+
+## Drive a poll with the fake clock, wait on the request, never sleep on a guess
+
+The launcher's polls are plain `setTimeout`/`setInterval`: install `tests/e2e/_fake_clock.py` before `goto()`, `advance()` it, and `wait_for_interval()` first when boot arms the poll after its first fetch (a negative check against a poll that does not exist yet passes whatever the app does). To wait for a request a mocked route records, use `fixtures/waits.py::wait_until`; to prove something did *not* happen, `flush_requests` (a sentinel fetch queued behind the page's own) instead of a sleep. A sleep or jump that stands in for "the app got past the point of the wrong action" needs a mutation run: break the app and watch it go red.
+
+## Never assert on a raw `evaluate()` / `bounding_box()` read of a polled-re-render surface
+
+Mocking the boot fetches is necessary but not sufficient: `renderBoard()` rebuilds every card except an open drawer's and `fetchBoard()` re-renders every `BOARD_POLL_MS` (5s) while the Board tab is up, drawer open or not, so any board test running longer than 5s eventually reads across a rebuild. Playwright resolves a locator to a handle *then* reads from it, so a rebuild in between returns an artifact instead of raising — WebKit gives `''` from `getComputedStyle` (shorthand **and** longhand), `None` from `bounding_box()`, `0` for `scrollWidth`/`clientWidth`.
+
+Auto-retrying `expect()` assertions re-resolve and are immune: prefer `expect(...).to_have_css(...)` over a raw `getComputedStyle` read. Where a raw geometry read is unavoidable, wrap it in `tests/e2e/fixtures/waits.py::stable_read`. A script evaluated on a rebuilt node goes through `stable_eval` instead: a rebuild between resolve and run hands the script a *detached* node (all boxes 0, `closest()` finds nothing) — a wrong number or `TypeError`, not an artifact `stable_read` can skip. Measure several related boxes (a row and its kebab) in one `stable_eval` call, never one read each: a layout shift between two reads is not an artifact either.
+
+## One shared budget for opening the terminal overlay
+
+`E2E_OVERLAY_OPEN_MS`, in `tests/e2e/fixtures/waits.py`. About 19 modules open the terminal before asserting, and each had a hardcoded `timeout=10_000` — tighter than the 15s default, for the suite's slowest operation — the gate's dominant failure mode. **Any new test that opens the terminal must use this constant, never a literal**; the per-leg vars above each widen exactly one test.
+
+## Self-naming hangs
+
+The suite caps the **default Playwright action + navigation timeout** at 15s (`tests/e2e/fixtures/waits.py`, `E2E_DEFAULT_TIMEOUT_MS`-tunable) vs Playwright's 30s default, so a single auto-waiting `.click()`/`goto`/`wait_for_selector` with no explicit `timeout=` fails fast with a `TimeoutError` that *names the locator*, instead of stacking opaque 30s waits toward the 120s `pytest-timeout` black box. `expect()` assertions keep their own 5s default. A red here is still a flake on a loaded box — but a diagnosable, named one.
+
+## A `route.fetch()` handler goes through `fulfill_edited_json`
+
+A handler still mid-fetch when its test ends reads a response the context close has disposed. Playwright keeps that error and rethrows it from the *next* API call on the connection, which is the following test's fixture setup (`BrowserContext.route: Response has been disposed`), far from the handler that caused it. `tests/e2e/fixtures/routes.py::fulfill_edited_json` fetches, edits the JSON body and fulfills, and a handler that finds its context torn down stops quietly; any other error still raises. `tests/e2e/shell/test_route_teardown.py` holds a handler open across the close to pin the ordering. A page-level `unroute_all` is no substitute: `wait` blocks on handlers a test holds open on purpose, and `ignoreErrors` lets the request fall through to the context routes.
+
+## Open a tab through `open_tab`, which checks the tap reached it
+
+Under full-suite load a WebKit tap on a nav tab has come back done while no `click` reached the tab: the default tab stayed selected and the next `to_be_visible` waited out its 5s for nothing. `tests/e2e/fixtures/ui.py::open_tab` loads the app, taps the tab and reads whether a trusted `click` reached it, which `click()` has settled by the time it returns. A lost tap is sent once more and named in an `e2e input lost` warning, with the events the page did see; two lost taps fail as lost input, and a tap that reached the tab while its pane stayed hidden fails as the app's fault. `tests/e2e/board/test_board_tab_tap.py` drops taps at the window to pin all three. Widening the wait would not help: a tap that never landed never switches the tab.
+
+## Keep the harness off the loopback port pool; a drained pool names itself
+
+Every closed connection to a local server leaves an (ephemeral port, server port) pair in TIME_WAIT for about two minutes, and Windows fails a `connect()` that lands on one with `net::ERR_ADDRESS_IN_USE` instead of trying another port. A browser context opens its own connections to the app (one HTTP/2 connection plus a socket per WebSocket), so a fresh context per test spends a pair per test from a pool every other lane's gate draws on too.
+
+- **One context per distinct context arguments per projection.** `tests/e2e/fixtures/pages.py::context` replaces pytest-playwright's per-test context; `tests/e2e/_shared_context.py` keeps the contexts and resets one after each test: pages closed, routes, cookies and permissions cleared, and the app origin's storage cleared through a routed scratch page, which opens no socket to the app. The bearer token is seeded once per context as an init script, not per test.
+- **State a reset cannot undo marks the context.** An init script, the page clock, a WebSocket route, offline mode, geolocation, extra headers, an exposed function or a context listener set by a test makes that context close after the test instead of being reset, so no test inherits it and none has to declare it. A test that builds its own context with `browser.new_context` is unaffected. A reset that raises discards the context too. `shared contexts: N created for M tests` closes every run.
+- **Keep-alive is already in place.** The app speaks HTTP/2 on one connection per context, the harness's own `requests` calls share one pooled session (`loopback`), and Chromium accepts the loopback certificate at the network layer so its sockets pool.
+- **A drained pool reads as one.** A failure whose text carries `ERR_ADDRESS_IN_USE` or `connect ENOBUFS` leads with `PORT POOL EXHAUSTED`, and the run ends with a section of that name listing the tests (`tests/e2e/_port_pool.py`), so a gate reader waits out the TIME_WAIT pairs and re-runs instead of debugging a page. The gate's load-retry still treats it as load-shaped.
+- **Measure before cutting.** Sample `netstat -ano -p tcp` once a second through one full run and count each (local, remote) TIME_WAIT pair once, grouped by server port; count only the disposable app's own ports, since other apps on the box add their own. Never change the dynamic port range or `TcpTimedWaitDelay` to hide it.

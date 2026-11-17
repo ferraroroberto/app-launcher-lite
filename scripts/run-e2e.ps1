@@ -1,4 +1,4 @@
-# Run the Playwright smoke suite against a live tray on https://127.0.0.1:<config.json webapp.port>.
+# Run the Playwright smoke suite against a live tray on https://127.0.0.1:8465.
 # Tray must be started separately (tray.bat); this script does not boot it.
 #
 # Usage:
@@ -19,7 +19,20 @@ if (-not (Test-Path $python)) {
 # Explicit live-tray opt-in: this script IS the deliberate
 # dev-loop entry point for e2e-against-the-live-tray, so it sets the flag a
 # bare `pytest tests/e2e` refuses to run without.
-$env:LAUNCHER_E2E_LIVE = "1"
-
-& $python -m pytest -m smoke -v tests/e2e @args
-exit $LASTEXITCODE
+#
+# Scoped to this one run. $env: writes go to the *calling*
+# console's process environment, so leaving the flag set meant every later
+# bare `pytest tests/e2e` in that same window silently drove the live :8465
+# tray the phone is using -- precisely the accident the guard exists to
+# stop. Same set-then-finally shape as verify-before-ship.ps1 uses for
+# LAUNCHER_E2E_AUTOBOOT.
+$exitCode = 1
+try {
+    $env:LAUNCHER_E2E_LIVE = "1"
+    & $python -m pytest -m smoke -v tests/e2e @args
+    $exitCode = $LASTEXITCODE
+}
+finally {
+    Remove-Item Env:\LAUNCHER_E2E_LIVE -ErrorAction SilentlyContinue
+}
+exit $exitCode

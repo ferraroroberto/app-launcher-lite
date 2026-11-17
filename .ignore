@@ -2,17 +2,22 @@
 /app/tray/single_instance.py
 /app/tray/watchdog.py
 /app/webapp/serve.py
+/app/webapp/static/_vendored/action-row
+/app/webapp/static/_vendored/base
 /app/webapp/static/_vendored/build-watch
 /app/webapp/static/_vendored/button
 /app/webapp/static/_vendored/card
-/app/webapp/static/_vendored/color-scheme
 /app/webapp/static/_vendored/disclosure
+/app/webapp/static/_vendored/empty-state
 /app/webapp/static/_vendored/home-head
 /app/webapp/static/_vendored/icon-button
 /app/webapp/static/_vendored/icons
+/app/webapp/static/_vendored/mic-notice
 /app/webapp/static/_vendored/modal
 /app/webapp/static/_vendored/nav
 /app/webapp/static/_vendored/page-foot
+/app/webapp/static/_vendored/rec-wave
+/app/webapp/static/_vendored/row-menu
 /app/webapp/static/_vendored/segmented
 /app/webapp/static/_vendored/select-native
 /app/webapp/static/_vendored/sign-in
@@ -42,6 +47,7 @@
 /scripts/usage_track_ratchet.py
 /scripts/usage_track_scan.py
 /src/build_info.py
+/src/compression.py
 /src/login_alert.py
 /src/login_lockout.py
 /src/notify
@@ -49,5 +55,8 @@
 /src/runtime_data.py
 /src/usage_log.py
 /tests/e2e/_browser_sweep.py
+/tests/e2e/_geometry.py
+/tests/e2e/_layout_lint.py
 /tests/e2e/_shot.py
+/tests/e2e/_surface.py
 # END vendored-copies

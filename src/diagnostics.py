@@ -1,9 +1,7 @@
-"""Runtime diagnostics — listening-port introspection and process-tree kills.
+"""Runtime diagnostics — port-owner introspection.
 
-Pure data (no UI imports): ``list_app_listeners`` answers "which app servers
-are actually listening, and on what ports?" using psutil and backs the
-smart-kill endpoint; ``kill_process_tree`` and ``is_pid_alive`` are the
-process helpers the executor and reaper share.
+Pure data (no UI imports). Answers "who is actually serving on port N?"
+using psutil, for the smart-kill panel and the port-owner endpoints.
 """
 
 from __future__ import annotations
@@ -68,6 +66,29 @@ def find_pids_on_port(port: int) -> List[int]:
         logger.debug(f"find_pids_on_port denied ({exc})")
         return []
     return sorted(pids)
+
+
+def listener_pids(port: int) -> Optional[List[int]]:
+    """Every PID LISTENing on ``port``, this process included.
+
+    ``None`` means the answer could not be established (psutil missing or the
+    socket table unreadable), which is not the same as ``[]`` (nobody listens).
+    """
+    if psutil is None:
+        return None
+    try:
+        connections = psutil.net_connections(kind="inet")
+    except (psutil.AccessDenied, PermissionError, OSError) as exc:
+        logger.debug(f"listener_pids denied ({exc})")
+        return None
+    return sorted({
+        int(c.pid)
+        for c in connections
+        if c.status == psutil.CONN_LISTEN
+        and c.laddr
+        and c.laddr.port == port
+        and c.pid
+    })
 
 
 def listening_port_for_pid_tree(root_pid: int) -> Optional[int]:
@@ -141,9 +162,9 @@ _LOOPBACK_PREFIXES = ("127.", "::1")
 def list_app_listeners() -> List[PortOwner]:
     """Enumerate every LISTEN socket owned by an app-server-like process.
 
-    This walks all listeners
-    and keeps the ones whose owning process looks like a Streamlit /
-    FastAPI app, so the smart-kill panel finds apps wherever they bound.
+    Walks all listeners and keeps the ones whose owning process looks like
+    a Streamlit / FastAPI app, so the smart-kill panel finds apps wherever
+    they bound.
     """
     if psutil is None:
         return []
@@ -325,8 +346,8 @@ def is_pid_alive(
     """True when ``pid`` is a live process, guarded against Windows PID reuse.
 
     The one implementation of this check: ``src.jobs.reap`` calls it on run
-    records and ``src.app_runtime._is_alive`` on spawned-app instances
-    (one shared implementation, no per-caller copy). When
+    records and ``src.app_runtime._is_alive`` on spawned-app instances,
+    rather than each keeping its own copy. When
     ``create_time_hint`` (an epoch float captured right after the process was
     spawned) is given, a live ``pid`` whose actual ``create_time()`` drifts
     beyond ``tolerance`` seconds from the hint is treated as a *different*

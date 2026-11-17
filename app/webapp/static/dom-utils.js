@@ -1,23 +1,87 @@
 /* Small, dependency-free DOM helpers shared across modules. */
 
-// Cache-busted URL for a brand-icon SVG. The serve-time JS
-// import rewrite stamps ?v=<fleet hash> onto every module URL, so our own
-// import.meta.url already carries the hash — reuse it on the icon src so
-// an icon edit changes the cache key (iOS Safari would otherwise hold stale icons
-// past the deploy). Falls back to the bare URL when served unstamped.
-const _ASSET_V = new URL(import.meta.url).searchParams.get('v');
-export function iconUrl(name) {
-  return '/static/icons/' + name + '.svg' + (_ASSET_V ? '?v=' + _ASSET_V : '');
+// A plain element with a class and text content — the one element builder
+// this shape, was copied verbatim into board-answers.js,
+// chat-resume.js, launch-toolbar.js, system-load.js.
+export function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text != null) node.textContent = text;
+  return node;
 }
 
-// Flip an aria-checked toggle switch (button or input) and return the new
-// boolean state. Every toggle-switch site across the SPA (options cards,
-// jobs dialog, team-os, apps) reads/writes this same
-// attribute pair — call this instead of re-deriving `next` by hand.
-export function toggleAriaChecked(el) {
-  const next = el.getAttribute('aria-checked') !== 'true';
-  el.setAttribute('aria-checked', String(next));
-  return next;
+// A settings-sheet row: a label on the left, a value (optionally toned via
+// the caller setting `.lastChild.dataset.tone`) on the right. Shared by the
+// usage sheet and the CPU/system-load sheet; the value keeps one line and the
+// label wraps (board.css), so keep a value to a figure, not a sentence.
+export function sheetRow(label, value, key) {
+  const row = el('div', 'row usage-sheet-row');
+  if (key) row.dataset.row = key;
+  row.appendChild(el('span', null, label));
+  row.appendChild(el('strong', 'usage-sheet-value', value));
+  return row;
+}
+
+// Covers both positions a caller can land escaped text in: element content
+// (`&`/`<`/`>`) and an attribute value (`"`/`'`). Most callers here build a
+// text node's innerHTML, where the quote pair is a no-op — a `&quot;` renders
+// as a plain `"`. But `markdown.js`'s renderer escapes once up front
+// and then interpolates a captured link target into an `href="…"`, so an
+// unescaped quote in that value would terminate the attribute early and let
+// the rest of the token be parsed as further attributes on the same element.
+// Ampersand stays first so the entities emitted below are not re-escaped.
+export function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Brand marks. An <img src="/static/icons/NAME.svg"> would be a separate
+// document: its glyph fill cannot reach page CSS vars, so every mark would
+// need a theme-aware grey chip *behind* it to keep the baked mid-tone
+// legible on both canvases. The marks are inline <symbol>s in index.html's
+// brand sprite instead (same in-document <use> mechanism as the Lucide
+// sprite, same iOS Safari reason), so a monochrome mark simply inherits
+// currentColor and needs no chip. That also means the marks
+// share the button's own colour, disabled and :active treatment for free,
+// and the ?v= cache-busting iconUrl() existed for is moot —
+// the sprite ships in the version-stamped page itself.
+//
+// `name` is the brand id without the `b-` prefix (an agent id, or `github`
+// / `vscode`). Returns markup; brandIconEl() returns a node for the DOM-
+// building call sites.
+export function brandIcon(name, extraClass) {
+  const cls = 'agent-icon' + (extraClass ? ' ' + extraClass : '');
+  return '<svg class="' + cls + '" aria-hidden="true"><use href="#b-' + name + '"></use></svg>';
+}
+
+// `label` names the mark for assistive tech and as a hover tooltip. An SVG
+// has no `alt`, so the accessible name is `aria-label` and the tooltip is a
+// child <title> — the SVG equivalents of what the old <img> got from `alt`
+// and `title`. Omit `label` for a mark that sits inside an already-labelled
+// button (the Coding row's launch buttons), where a second name would just
+// be read twice.
+export function brandIconEl(name, extraClass, label) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  el.setAttribute('class', 'agent-icon' + (extraClass ? ' ' + extraClass : ''));
+  if (label) {
+    el.setAttribute('role', 'img');
+    el.setAttribute('aria-label', label);
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    t.textContent = label;
+    el.appendChild(t);
+  } else {
+    el.setAttribute('aria-hidden', 'true');
+  }
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  // setAttribute (not the xlink: form): every browser the PWA targets
+  // resolves the plain `href` on <use>, and the sprite is same-document.
+  use.setAttribute('href', '#b-' + name);
+  el.appendChild(use);
+  return el;
 }
 
 // Bind a document-level pointerdown listener that closes a popover on any
@@ -40,69 +104,14 @@ export function bindOutsideClickToClose(box, toggle, closer) {
   };
 }
 
-// A compact model-picker dropdown that is valid inside a <summary>.
-// A native <select> cannot live there — WebKit's HTML parser derails on it,
-// closing the enclosing <details> early and cascading into a broken tree
-// that even zeroes custom-property inheritance on ancestors (the flat 0-token
-// layout bug). So the control is built from phrasing-only content — a
-// <button class="model-combo-trigger"> plus a <span class="model-combo-menu"
-// role="listbox"> of <button role="option" data-value>. Looks like the
-// flattened board select.
-//
-// `root` is the .model-combo wrapper (its data-value holds the current
-// value). `onChange(value)` fires only on a user pick, never on programmatic
-// setValue — so a config round-trip that calls setValue can't loop. Returns
-// { setValue(v), getValue() }, or null when the markup is absent.
-export function wireModelCombo(root, onChange) {
-  if (!root) return null;
-  const trigger = root.querySelector('.model-combo-trigger');
-  const menu = root.querySelector('.model-combo-menu');
-  if (!trigger || !menu) return null;
-  let dispose = null;
-
-  function close() {
-    if (menu.hidden) return;
-    menu.hidden = true;
-    trigger.setAttribute('aria-expanded', 'false');
-    if (dispose) { dispose(); dispose = null; }
+// Bring `el` into view for an empty state's action: open every
+// disclosure it sits in (itself included), scroll it to the middle of the
+// screen, and focus it when it takes focus.
+export function revealInCard(el) {
+  if (!el) return;
+  for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) {
+    d.open = true;
   }
-  function open() {
-    if (!menu.hidden) return;
-    menu.hidden = false;
-    trigger.setAttribute('aria-expanded', 'true');
-    dispose = bindOutsideClickToClose(menu, trigger, close);
-  }
-  function apply(value, fire) {
-    const opt = menu.querySelector('[data-value="' + value + '"]');
-    if (!opt) return;
-    root.dataset.value = value;
-    trigger.textContent = opt.textContent;
-    menu.querySelectorAll('[role="option"]').forEach(function (o) {
-      o.setAttribute('aria-selected', o === opt ? 'true' : 'false');
-    });
-    if (fire && onChange) onChange(value);
-  }
-
-  // A tap anywhere in a <summary> also toggles its <details>, so every
-  // interactive handler here stops propagation (same guard the sibling
-  // Detached/Resume toggles use).
-  trigger.addEventListener('click', function (ev) {
-    ev.stopPropagation();
-    if (menu.hidden) open(); else close();
-  });
-  menu.addEventListener('click', function (ev) {
-    ev.stopPropagation();
-    const opt = ev.target.closest('[data-value]');
-    if (!opt) return;
-    apply(opt.dataset.value, true);
-    close();
-  });
-  trigger.addEventListener('keydown', function (ev) {
-    if (ev.key === 'Escape') close();
-  });
-
-  return {
-    setValue: function (v) { apply(v, false); },
-    getValue: function () { return root.dataset.value || ''; },
-  };
+  el.scrollIntoView({ block: 'center' });
+  if (typeof el.focus === 'function') el.focus({ preventScroll: true });
 }

@@ -1,241 +1,56 @@
-/* ---------- Coding tab tiles ---------- */
-/* Bare folder name on the left, one icon button per coding agent on
-   the right — sat side by side, not stacked. */
-.coding-item .app-main { justify-content: center; }
-.coding-name {
-  /* Vertical padding trimmed (was 16px) so tiles take less height and more
-     projects fit per screen. Horizontal padding is unchanged —
-     the tiles still breathe sideways. */
-  padding: 7px 18px;
-  font-size: var(--font-body);
-  font-weight: 600;
-  color: var(--fg);
-  /* One line per project — the name never wraps, it truncates.
-     The branch pill stacks UNDERNEATH rather than beside: sharing the line
-     left it ~44px on a 390px phone, i.e. "fea…", which reads as noise. A
-     project parked off its default branch is the minority case and worth
-     the extra ~13px of row height; on-default rows have no pill and stay a
-     flat single line. Both labels are spans so each gets its own ellipsis
-     box (the pill's old margin-left is zeroed in the scoped rule below). */
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 0;
-}
-.coding-name-text {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;   /* raw on-disk name — shown verbatim, cut if long */
-}
-/* ---------- Coding tab git-status flags ---------- */
-/* On-demand only: tap the header button to annotate tiles. Yellow name
-   = parked on a non-default branch; red name = uncommitted changes. */
-.sessions-header-actions {
-  position: relative;   /* anchors the off-main summary popover */
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.git-status-btn { font-size: var(--font-caption); padding: 6px 10px; }
-.git-status-btn.loading { opacity: 0.5; pointer-events: none; }
-/* Compact off-main summary popover: anchored below the
-   status button, right-aligned with the card edge. */
-.git-summary {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 30;
-  min-width: 200px;
-  max-width: min(92vw, 460px);
-  max-height: 60vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 9px 11px;
-  background: var(--card-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow);
-}
-.git-summary-row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: var(--font-caption);
-  line-height: 1.3;
-}
-.git-summary-row .git-branch-tag { margin-left: 0; font-size: var(--font-caption); }
-.git-summary-name { font-weight: 600; overflow-wrap: anywhere; }
-.git-summary-name.git-off-main { color: var(--attention); }
-.git-summary-name.git-dirty { color: var(--danger); }
-.git-summary-empty { font-size: var(--font-caption); color: var(--muted); }
-.coding-name.git-off-main { color: var(--attention); }
-.coding-name.git-dirty { color: var(--danger); }
-.git-branch-tag {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 7px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-caption);
-  font-weight: 500;
-  color: var(--attention);
-  background: rgb(from var(--attention) r g b / 0.12);
-  vertical-align: middle;
-  overflow-wrap: anywhere;
-}
-/* Inside a Coding tile the pill sits on its own line beneath the folder name,
-so it gets the tile's full text width instead of fighting the
-   name for it — a realistic `fix/28-terminal-reconnect` fits uncut at 390px.
-   It still truncates rather than wrapping when a branch name is genuinely
-   longer than the tile; the full name stays in the pill's `title` (set by
-   annotateGitStatus). Scoped to .coding-name so the off-main summary
-   popover's copy of the pill is untouched. */
-.coding-name .git-branch-tag {
-  margin-left: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  word-break: normal;
-}
-.git-legend {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-  margin: 8px 2px 0;
-}
-.git-swatch {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  margin-right: 2px;
-  vertical-align: middle;
-}
-.git-swatch.off-main { background: var(--attention); }
-.git-swatch.dirty { background: var(--danger); }
+/* ---------- Code tab ----------
+   The Usage card, the quieter Sessions list and the launch toolbar. */
 
-/* The agent icon strip (one button per registry agent + GitHub + star)
-   shares the row with the folder name — on every width now,
-   including the narrowest phone (stacking the tile into two
-   lines under 520px would double the scroll for a list of projects).
-   The buttons read as discrete controls separated by a real gap, the same
-   treatment as the Detached/Resume pair in the Projects summary
-   (.coding-toggles, also gap 6px), rather than a flush segmented rail with
-   1px dividers. Each is a full 44px (--row-sm) square of REAL geometry — an
-   adjacent cluster like this one must never fake its target with
-   .hit-target's ::before expansion, which would overlap its neighbours. */
-.row-actions.agent-actions {
+/* The header rule: each exception in its tone's text colour. */
+.head-exception[data-tone="attention"] { color: var(--attention-text); }
+.head-exception[data-tone="danger"] { color: var(--danger-text); }
+
+/* The header's CPU reading, left of the theme toggle on every tab:
+   a quiet muted number, colour only for an exception. A fixed 38px box so
+   "9%" to "100%" never moves the row; .hit-target's ::before takes it past
+   the 44px floor, and the row's 12px gap keeps it off the toggle's. */
+.home-head .cpu-reading {
+  flex: none;
+  width: 38px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--font-label);
+  font-variant-numeric: tabular-nums;
+  line-height: normal;
+  text-align: center;
+  cursor: pointer;
+}
+.home-head .cpu-reading[data-level="attention"] { color: var(--attention-text); }
+.home-head .cpu-reading[data-level="danger"] { color: var(--danger-text); }
+.cpu-sheet-body .usage-sheet-value[data-tone="attention"] { color: var(--attention-text); }
+.cpu-sheet-body .usage-sheet-value[data-tone="danger"] { color: var(--danger-text); }
+.cpu-sheet-caption {
+  margin: var(--space-md) 0 0;
+  font-size: var(--font-body-sm);
+  color: var(--muted);
+}
+
+.cpu-sheet-link { display: block; padding: var(--space-sm) 0; color: var(--accent-text); }
+
+/* The chief's row while no chief runs: the row body is not a tap target
+   (there is nothing to open), and Start / Resume sit as plain icon-button
+   verbs beside the kebab, their 44px targets touching. */
+.chief-stopped-row .chief-stopped-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--row-lg);
+  padding: 8px 4px 8px 14px;
+}
+.app-item .row-actions.session-actions:has(.chief-verb) {
   flex-direction: row;
   align-items: center;
-  gap: var(--action-cluster-gap);
-  /* Reserve the summary's chevron column so these buttons land on the same
-     centre lines as the Projects summary's controls — see the token block. */
-  padding-right: var(--action-cluster-trail);
-}
-.app-item .row-actions.agent-actions .icon-btn {
-  flex: 0 0 auto;
-  width: var(--row-sm);
-  min-width: var(--row-sm);
-  min-height: var(--row-sm);
-  padding: 5px;
-  border-radius: var(--radius-md);   /* :active reads as a rounded chip */
-}
-.app-item .row-actions.agent-actions .icon-btn + .icon-btn {
-  border-top: 0;
-}
-.agent-icon {
-  width: 24px;                    /* icons.size feature step */
-  height: 24px;
-  display: block;
-  pointer-events: none;   /* clicks land on the button, not the img */
-  /* Brand-logo SVGs ship glyph-only (no baked tile) — the chip
-     is CSS so it can be theme-aware; the internal glyph fill can't reach
-     page CSS vars (separate <img> document), so glyphs needing recolor use
-     a fixed mid-tone (#6e7781) that clears both --card-2 surfaces. */
-  background: var(--card-2);
-  border-radius: 22%;             /* matches the SVGs' original rx14/64 ratio */
-}
-.app-item .row-actions.agent-actions .icon-btn:disabled .agent-icon {
-  filter: grayscale(1);
+  gap: 0;
 }
 
-/* ---------- Coding tab favorites ---------- */
-/* Per-tile star toggle — rightmost in the agent-action strip, the vendored
-   Lucide `star` glyph. Outline + muted colour when unstarred (like the
-   other idle icons); the `.is-fav` rule below fills it gold when starred —
-   the sprite has one star symbol, not a filled/outline pair. */
-/* The star is an inline SVG while its neighbours are <img> brand logos, so
-   it needs the .agent-icon box restated to sit on the same grid (left
-   as-is it renders 20px and chip-less beside two 24px chips, which reads as
-   haphazard). Same 24px box, same chip, same border-radius; the inner
-   padding shrinks the drawn glyph to 16px so its visual weight matches the
-   brand SVGs, which carry that clearance inside their own viewBox (gitlab.svg
-   draws at 62% of its box, copilot.svg at ~72%; 16/24 sits between them). */
-.app-item .row-actions.agent-actions .icon-btn.star-btn .icon {
-  display: block;
-  box-sizing: border-box;
-  width: var(--icon-feature);
-  height: var(--icon-feature);
-  padding: 4px;
-  background: var(--card-2);
-  border-radius: 22%;
-  vertical-align: baseline;
-}
-.app-item .row-actions.agent-actions .icon-btn.star-btn.is-fav,
-.app-item .row-actions.agent-actions .icon-btn.star-btn.is-fav:active {
-  color: var(--star);
-}
-.app-item .row-actions.agent-actions .icon-btn.star-btn.is-fav .icon {
-  fill: var(--star);
-}
-/* "Favorites" header filter toggle — compact ghost button sized like the
-   git-status button; gold outline + filled star glyph when the filter is
-   active (fill rule: `.fav-filter-btn.active .icon`, near `.opt-group`). */
-.fav-filter-btn { font-size: var(--font-caption); padding: 6px 10px; }
-.fav-filter-btn.active { color: var(--star); border-color: var(--star); }
-/* Icon-only on narrow phones: the Projects summary also carries the
-   Detached/Resume toggles now — four labelled controls overflow a 390px
-   row (same compaction precedent as the Registered-jobs summary). */
-@media (max-width: 520px) {
-  .fav-filter-btn .fav-filter-label { display: none; }
-  /* ...which is also what makes the summary's three controls alignable with
-     the project rows' three buttons: icon-only, they can take the
-     rows' exact --row-sm box and 6px pitch. Above this width the filter
-     carries its label and is deliberately wider, so no alignment is claimed
-     there. The chevron column is fixed-width at every size (below) so the
-     reserve the rows leave for it is deterministic, not glyph-metric. */
-  .projects-card .coding-toggles .detached-toggle,
-  .projects-card .fav-filter-btn {
-    width: var(--row-sm);
-    min-width: var(--row-sm);
-    min-height: var(--row-sm);
-    padding: 0;
-  }
-}
-/* Fixed chevron column — the trailing reserve --action-cluster-trail assumes
-   this width. Scoped to the Projects card: it is the only summary whose
-   controls have rows beneath them to line up with. */
-.projects-card > .collapse-summary .collapse-chevron {
-  display: inline-block;
-  width: var(--collapse-chevron-w);
-  text-align: center;
-}
-/* Shown in place of the list when the filter is on but nothing is starred. */
-.coding-fav-empty {
-  list-style: none;
-  padding: 10px 4px;
-  text-align: center;
-}
-.session-agent-icon {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  background: var(--card-2);      /* theme-aware brand chip */
-}
 

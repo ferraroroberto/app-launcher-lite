@@ -1,241 +1,161 @@
-# .fleet.toml — this repo's architecture-map card.
-# Lite fork: GitHub Copilot CLI + GitLab (glab) edition of app-launcher.
-# Keep current: update in the same PR as any material change
-# (layer, port, role, one-line description, exposed services).
+# .fleet.toml — this repo's card on the fleet architecture map.
+# fleet-config's /system-map aggregates every repo's .fleet.toml. Keep current:
+# update in the same PR as any material change (layer, port, role, one-line
+# description, exposed services). Schema: fleet-config/architecture/README.md.
+# An experiment: the full app-launcher with GitHub Copilot CLI as the only
+# coding agent and GitLab (glab) as the only forge.
 layer        = "enabling"
 icon         = "🚀"
 port         = ":8465"
 display_name = "App Launcher Lite"
-description  = "Copilot + GitLab lite fork of app-launcher: the phone-first launcher hub."
-depends_on   = ["app-launcher"]
-# Root layout (scripts/structure_ratchet.py): the webapp-tray preset lists app, src,
-# tests, docs, scripts, data, brand, assets, config and webapp, so no extra root is
-# declared. Why: docs/layout.md.
+description  = "Copilot + GitLab edition of app-launcher: Coding · Apps · Jobs · Team OS · Board."
 shape        = "webapp-tray"
 extra_roots  = []
-
-# index.html:612 is a placeholder example path in the job form, not a dependency.
-[contracts]
-ignore_refs = [
-  { path = "app/webapp/static/index.html", repo = "content-management", why = "input placeholder example path, not a runtime reference" },
-  { path = "src/jobs/config.py", repo = "content-management", why = "docstring example of a jobs.json entry, not a runtime reference" },
+# Contracts with the rest of the fleet (schema: fleet-config architecture/README.md).
+interfaces = [
+  { name = "jobs", kind = "http", doc = "docs/jobs-tab.md" },
+  { name = "board", kind = "http", doc = "docs/board.md" },
+  { name = "sessions", kind = "http", doc = "docs/session-view.md" },
 ]
+owns       = ["launcher webapp", "Copilot sessions", "job scheduling", "Board"]
+not_owns   = ["agent config and skills", "app code it launches", "the forge"]
+depends_on = ["app-launcher", "fleet-config-lite"]
+
+# [upstream] -- the outside repo this one is built from and the last commit of
+# it whose work is in this tree; /upstream-sync and /downstream-sync start from
+# here. The rebuild matched app-launcher's main at this commit.
+[upstream]
+repo = "https://github.com/ferraroroberto/app-launcher"
+sha  = "c2d678b9ad1f0e7be72e5fee66012ce47c8fcce0"
+
+# ---------------------------------------------------------------------------
+# [worktree] -- gitignored paths fleet-config junctions from this primary
+# checkout into every fresh worktree it cuts (skills/_lib/worktree_claim.py's
+# `worktree_junction_targets`). `.venv` is always included; the declaration
+# below adds the HTTPS cert pair.
+#
+# Why (#1080): `git worktree add` populates tracked files only, and
+# `webapp/certificates/` is gitignored, so a side instance stood up out of a
+# worktree served a self-signed-warning page and a broken WebAuthn flow -- a
+# failure that reads like a bug in the change under test. A junction rather
+# than a copy because the certs are read-only at runtime: a regenerated cert
+# reaches every live worktree with no re-provisioning.
+#
+# A declared path that is absent in the primary is skipped rather than failing
+# setup, and `remove-worktree` strips the junction reparse-safely before any
+# delete -- never `git worktree remove` a worktree holding one, git's
+# recursive delete follows it into the primary's real target
+# (fleet-config#847).
+[worktree]
+extra_junctions = ["webapp/certificates"]
 
 [vendored]
-usage-log = { src = "app/webapp/static/_vendored/usage-log", sha = "48f9c5104fbe41b9bfd9f3bc28373efaa7b6056c", dest = "app/webapp/static/_vendored/usage-log" }
-usage_log = { src = "src/usage_log.py", sha = "78635aa74a92b9622326cb53992e0634fbaf6246", dest = "src/usage_log.py" }
-runtime_data = { src = "src/runtime_data.py", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "src/runtime_data.py" }
-usage_track_ratchet = { src = "scripts/usage_track_ratchet.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/usage_track_ratchet.py" }
-usage_track_scan = { src = "scripts/usage_track_scan.py", sha = "ea11037a42f9f99ea8e728f574c6bb89480f3aa2", dest = "scripts/usage_track_scan.py" }
-switch = { src = "app/webapp/static/_vendored/switch", sha = "8f15c49560adbc076d24a8a63dd671868ffa7a4e", dest = "app/webapp/static/_vendored/switch" }
-modal = { src = "app/webapp/static/_vendored/modal", sha = "f05859a2bada56296d7f134e471953867c253571", dest = "app/webapp/static/_vendored/modal" }
-select-native = { src = "app/webapp/static/_vendored/select-native", sha = "09fe2436b6bf3ee608d43fc8a26165e3e2400840", dest = "app/webapp/static/_vendored/select-native" }
-sign-in = { src = "app/webapp/static/_vendored/sign-in", sha = "fb7591e8a80afb39ccbff994563f9b318e969baf", dest = "app/webapp/static/_vendored/sign-in" }
-button = { src = "app/webapp/static/_vendored/button", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "app/webapp/static/_vendored/button" }
-browser_sweep = { src = "tests/e2e/_browser_sweep.py", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "tests/e2e/_browser_sweep.py" }
 color-scheme = { src = "app/webapp/static/_vendored/color-scheme", sha = "90ac7687bf9bc756d73a3b0f4e64cd692d88617e", dest = "app/webapp/static/_vendored/color-scheme" }
-nav = { src = "app/webapp/static/_vendored/nav", sha = "cb9fff9130453c781146f2cdf5083d83fb43b0df", dest = "app/webapp/static/_vendored/nav" }
-home-head = { src = "app/webapp/static/_vendored/home-head", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "app/webapp/static/_vendored/home-head" }
+icons = { src = "app/webapp/static/_vendored/icons", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/icons" }
+switch = { src = "app/webapp/static/_vendored/switch", sha = "8f15c49560adbc076d24a8a63dd671868ffa7a4e", dest = "app/webapp/static/_vendored/switch" }
+button = { src = "app/webapp/static/_vendored/button", sha = "f2464e89c902bd302291bb7af7b44c3ffa594323", dest = "app/webapp/static/_vendored/button" }
 card = { src = "app/webapp/static/_vendored/card", sha = "8f15c49560adbc076d24a8a63dd671868ffa7a4e", dest = "app/webapp/static/_vendored/card" }
 disclosure = { src = "app/webapp/static/_vendored/disclosure", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/disclosure" }
-icon-button = { src = "app/webapp/static/_vendored/icon-button", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/icon-button" }
-segmented = { src = "app/webapp/static/_vendored/segmented", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/segmented" }
+home-head = { src = "app/webapp/static/_vendored/home-head", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "app/webapp/static/_vendored/home-head" }
+nav = { src = "app/webapp/static/_vendored/nav", sha = "cb9fff9130453c781146f2cdf5083d83fb43b0df", dest = "app/webapp/static/_vendored/nav" }
+select-native = { src = "app/webapp/static/_vendored/select-native", sha = "09fe2436b6bf3ee608d43fc8a26165e3e2400840", dest = "app/webapp/static/_vendored/select-native" }
+empty-state = { src = "app/webapp/static/_vendored/empty-state", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/empty-state" }
+modal = { src = "app/webapp/static/_vendored/modal", sha = "9d0fd2777fbae78aaffa7a0e53f62a201db5af79", dest = "app/webapp/static/_vendored/modal" }
+sign-in = { src = "app/webapp/static/_vendored/sign-in", sha = "fb7591e8a80afb39ccbff994563f9b318e969baf", dest = "app/webapp/static/_vendored/sign-in" }
 text-size = { src = "app/webapp/static/_vendored/text-size", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/text-size" }
-page-foot = { src = "app/webapp/static/_vendored/page-foot", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "app/webapp/static/_vendored/page-foot" }
-notify = { src = "src/notify", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "src/notify" }
-build_info = { src = "src/build_info.py", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "src/build_info.py" }
-static_ratchet = { src = "scripts/static_ratchet.py", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "scripts/static_ratchet.py" }
+segmented = { src = "app/webapp/static/_vendored/segmented", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/segmented" }
+base = { src = "app/webapp/static/_vendored/base", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "app/webapp/static/_vendored/base" }
+action-row = { src = "app/webapp/static/_vendored/action-row", sha = "8f15c49560adbc076d24a8a63dd671868ffa7a4e", dest = "app/webapp/static/_vendored/action-row" }
+row-menu = { src = "app/webapp/static/_vendored/row-menu", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "app/webapp/static/_vendored/row-menu" }
+# Every vendored web component above is byte-identical to the scaffold and declared;
+# tests/unit/repo/test_vendored_manifest.py pins that. icons joined on 2026-10-15 (the owner's
+# decision, project-scaffolding#390): the 16 app-launcher-only glyphs were upstreamed
+# in project-scaffolding#391 and the sprite is now the scaffold's copy, byte for byte.
+# src/build_info.py is declared below: it is the scaffold's copy, and the
+# app-side extras live in src/git_utils.py.
+browser_sweep = { src = "tests/e2e/_browser_sweep.py", sha = "362f4a973746b3fbc4ebfc97c3bb0a0767fb8ada", dest = "tests/e2e/_browser_sweep.py" }
+geometry = { src = "tests/e2e/_geometry.py", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "tests/e2e/_geometry.py" }
+runtime_data = { src = "src/runtime_data.py", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "src/runtime_data.py" }
+compression = { src = "src/compression.py", sha = "d930466848d17d47261261c490c4e9c1cce9399e", dest = "src/compression.py" }
+classify_e2e = { src = "scripts/classify_e2e.py", sha = "3f15581f2188895a27f5a32083f7f7cdb7e93648", dest = "scripts/classify_e2e.py" }
+icon-button = { src = "app/webapp/static/_vendored/icon-button", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/icon-button" }
+notify = { src = "src/notify", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "src/notify" }
+usage-log = { src = "app/webapp/static/_vendored/usage-log", sha = "78635aa74a92b9622326cb53992e0634fbaf6246", dest = "app/webapp/static/_vendored/usage-log" }
+usage_log = { src = "src/usage_log.py", sha = "78635aa74a92b9622326cb53992e0634fbaf6246", dest = "src/usage_log.py" }
+surface_capture = { src = "tests/e2e/_surface.py", sha = "5c4d3a7947dae8b3b4a028bf636c0f052ea3b1f7", dest = "tests/e2e/_surface.py" }
+comment_ratchet = { src = "scripts/comment_ratchet.py", sha = "1ed07ddb5002d4513adf0ce45f1bfaf68f3acc32", dest = "scripts/comment_ratchet.py" }
+static_ratchet = { src = "scripts/static_ratchet.py", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "scripts/static_ratchet.py" }
 docs_ratchet = { src = "scripts/docs_ratchet.py", sha = "78635aa74a92b9622326cb53992e0634fbaf6246", dest = "scripts/docs_ratchet.py" }
+build_info = { src = "src/build_info.py", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "src/build_info.py" }
 structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/structure_ratchet.py" }
 structure_layout = { src = "scripts/structure_layout.py", sha = "dae6225912362ecb165cf0e02d7698fad9789bba", dest = "scripts/structure_layout.py" }
 structure_band = { src = "scripts/structure_band.py", sha = "3b708fd3c54ab7b93b08d489406c405762c83c41", dest = "scripts/structure_band.py" }
 box_lock_gate = { src = "scripts/box_lock_gate.ps1", sha = "de5b351ecbc58f0908bc1cbdcdf76fd41f36005d", dest = "scripts/box_lock_gate.ps1" }
-comment_ratchet = { src = "scripts/comment_ratchet.py", sha = "1ed07ddb5002d4513adf0ce45f1bfaf68f3acc32", dest = "scripts/comment_ratchet.py" }
-instruction_ratchet = { src = "scripts/instruction_ratchet.py", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "scripts/instruction_ratchet.py" }
+instruction_ratchet = { src = "scripts/instruction_ratchet.py", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "scripts/instruction_ratchet.py" }
 doc_refs_ratchet = { src = "scripts/doc_refs_ratchet.py", sha = "a68f6e49393f0ef0b94ab3c79f4338a50d89fa49", dest = "scripts/doc_refs_ratchet.py" }
 dead_code_ratchet = { src = "scripts/dead_code_ratchet.py", sha = "4d0b0ff30e23eb95c73c4b0b1517ec6a43d3a836", dest = "scripts/dead_code_ratchet.py" }
 conventions_ratchet = { src = "scripts/conventions_ratchet.py", sha = "cb9fff9130453c781146f2cdf5083d83fb43b0df", dest = "scripts/conventions_ratchet.py" }
 conventions_readers = { src = "scripts/conventions_readers.py", sha = "cb9fff9130453c781146f2cdf5083d83fb43b0df", dest = "scripts/conventions_readers.py" }
 conventions_state = { src = "scripts/conventions_state.py", sha = "4d0b0ff30e23eb95c73c4b0b1517ec6a43d3a836", dest = "scripts/conventions_state.py" }
-login_lockout = { src = "src/login_lockout.py", sha = "93208ab08bdc8591c678a08f55a0f46b3fc8a525", dest = "src/login_lockout.py" }
-login_alert = { src = "src/login_alert.py", sha = "fb7591e8a80afb39ccbff994563f9b318e969baf", dest = "src/login_alert.py" }
-password = { src = "src/password.py", sha = "1fab1b600964581c3df51a9f916f1fb4795ac286", dest = "src/password.py" }
 runtime_write_ratchet = { src = "scripts/runtime_write_ratchet.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/runtime_write_ratchet.py" }
+usage_track_ratchet = { src = "scripts/usage_track_ratchet.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/usage_track_ratchet.py" }
+usage_track_scan = { src = "scripts/usage_track_scan.py", sha = "ea11037a42f9f99ea8e728f574c6bb89480f3aa2", dest = "scripts/usage_track_scan.py" }
 runtime_write_resolve = { src = "scripts/runtime_write_resolve.py", sha = "5505185c5f4b10eea5ab268e7b6676c6c54340c4", dest = "scripts/runtime_write_resolve.py" }
+rec-wave = { src = "app/webapp/static/_vendored/rec-wave", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "app/webapp/static/_vendored/rec-wave" }
+mic-notice = { src = "app/webapp/static/_vendored/mic-notice", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "app/webapp/static/_vendored/mic-notice" }
+single_instance = { src = "app/tray/single_instance.py", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "app/tray/single_instance.py" }
 shot_capture = { src = "tests/e2e/_shot.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "tests/e2e/_shot.py" }
 shot_baseline = { src = "scripts/shot_baseline.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/shot_baseline.py" }
-webapp_serve = { src = "app/webapp/serve.py", sha = "6d779b94b028a898aa87200174a57c6573bdb7a5", dest = "app/webapp/serve.py" }
-instruction_frontmatter = { src = "scripts/instruction_frontmatter.py", sha = "e55de9619b9625c5499e1b9077350f9860e6037b", dest = "scripts/instruction_frontmatter.py" }
-instruction_repeats = { src = "scripts/instruction_repeats.py", sha = "e55de9619b9625c5499e1b9077350f9860e6037b", dest = "scripts/instruction_repeats.py" }
-icons = { src = "app/webapp/static/_vendored/icons", sha = "4d75f1ebfae5c9d8462c55a90edd56f8b09157d4", dest = "app/webapp/static/_vendored/icons" }
-single_instance = { src = "app/tray/single_instance.py", sha = "da2e9350daee6ab9d25d399daca21663aa509030", dest = "app/tray/single_instance.py" }
-tray_watchdog = { src = "app/tray/watchdog.py", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "app/tray/watchdog.py" }
-classify_e2e = { src = "scripts/classify_e2e.py", sha = "3f15581f2188895a27f5a32083f7f7cdb7e93648", dest = "scripts/classify_e2e.py" }
+layout_lint = { src = "tests/e2e/_layout_lint.py", sha = "2d65d6c193cbda0b1f71165c22f50dcdda944a17", dest = "tests/e2e/_layout_lint.py" }
+page-foot = { src = "app/webapp/static/_vendored/page-foot", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "app/webapp/static/_vendored/page-foot" }
+login_lockout = { src = "src/login_lockout.py", sha = "ea4e1e80f83c4f5a1a6b33e8a029e46ca63150c5", dest = "src/login_lockout.py" }
+login_alert = { src = "src/login_alert.py", sha = "fb7591e8a80afb39ccbff994563f9b318e969baf", dest = "src/login_alert.py" }
+password = { src = "src/password.py", sha = "1fab1b600964581c3df51a9f916f1fb4795ac286", dest = "src/password.py" }
+webapp_serve = { src = "app/webapp/serve.py", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "app/webapp/serve.py" }
+instruction_frontmatter = { src = "scripts/instruction_frontmatter.py", sha = "c5535ac326c398df8f44486f386ff0e0b6d4c61c", dest = "scripts/instruction_frontmatter.py" }
+instruction_repeats = { src = "scripts/instruction_repeats.py", sha = "c5535ac326c398df8f44486f386ff0e0b6d4c61c", dest = "scripts/instruction_repeats.py" }
+tray_watchdog = { src = "app/tray/watchdog.py", sha = "072d7355da45001255c3d53db00f80c3a3393900", dest = "app/tray/watchdog.py" }
 toast = { src = "app/webapp/static/_vendored/toast", sha = "e56c8330f8500b83635773033a09de6fc3cba342", dest = "app/webapp/static/_vendored/toast" }
 build-watch = { src = "app/webapp/static/_vendored/build-watch", sha = "9435d994dfc621809d9bee30240675a2423013e4", dest = "app/webapp/static/_vendored/build-watch" }
 
+# ---------------------------------------------------------------------------
+# [verify] -- the launch recipe the generated verify-app-launcher skill reads
+# (project-scaffolding docs/verify-skill.md). `boot` is the session fixture the
+# e2e suite boots a disposable webapp + session-host from; ready_path and
+# data_dir_env are the generator defaults (/healthz, APP_LAUNCHER_DATA_DIR).
+[verify]
+boot           = "tests/e2e/conftest.py::_autoboot_server"
+live_optin_env = "LAUNCHER_E2E_LIVE"
 
-# [e2e] -- diff-proportionate routing for scripts/verify-before-ship.ps1's browser
-# phase. scripts/classify_e2e.py is project-scaffolding's classifier, vendored
-# byte-for-byte; every routing decision for this repo lives here. Schema:
-# project-scaffolding docs/e2e-routing.md. Rules are tried top to bottom, first
-# match wins; a path no rule matches is "unclassified" and runs the whole suite, so
-# uncertainty escalates and never narrows. Backend src/ Python off the session-host
-# path is "none" on purpose (the non-e2e pytest suite covers it); do not route all of
-# src/ to full. tests/unit/tooling/test_classify_e2e.py pins this table.
-[e2e]
-static_pytest_target = "tests/e2e/test_smoke.py"
-static_browsers      = ["chromium"]
-full_pytest_target   = "tests/e2e"
+# ---------------------------------------------------------------------------
+# [perf.review] -- what /perf-review times (fleet-config skills/perf-review).
+# "Ready" is the Code tab's header status ("5 sessions"): it is empty until the
+# sessions answer lands, so a painted shell with no data does not count as
+# loaded. The project list is not used: it sits in a section collapsed on load.
+[perf.review]
+ready_selector = "#homeHeadStatus"
 
-# Inert static assets: the Chromium smoke is enough.
-[[e2e.rule]]
-tier       = "static"
-prefix     = "app/webapp/static/"
-extensions = ["svg", "png", "jpg", "jpeg", "gif", "ico", "webp", "avif", "woff", "woff2", "ttf", "eot", "otf", "webmanifest"]
-label      = "static-asset"
-# A vendored HTML fragment (the icons sprite) is markup the smoke suite loads; real
-# pages (index.html) and everything else under static/ are browser code.
-[[e2e.rule]]
-tier       = "static"
-prefix     = "app/webapp/static/_vendored/"
-extensions = ["html"]
-label      = "static-asset"
-[[e2e.rule]]
-tier   = "full"
-prefix = "app/webapp/static/"
-label  = "webapp-static-code"
-# The session-host package sits inside app/webapp/, so its rule comes first and the
-# diff keeps the "session-host" label.
-[[e2e.rule]]
-tier   = "full"
-prefix = "app/webapp/session_host/"
-label  = "session-host"
-[[e2e.rule]]
-tier   = "full"
-prefix = "app/webapp/"
-label  = "webapp"
-[[e2e.rule]]
-tier  = "full"
-path  = "src/session_client.py"
-label = "session-host/launcher"
-[[e2e.rule]]
-tier  = "full"
-path  = "src/launcher.py"
-label = "session-host/launcher"
-[[e2e.rule]]
-tier  = "full"
-path  = "launcher.py"
-label = "session-host/launcher"
-[[e2e.rule]]
-tier       = "full"
-prefix     = "src/session_host"
-extensions = ["py"]
-label      = "session-host/launcher"
-[[e2e.rule]]
-tier   = "full"
-prefix = "tests/e2e/"
-label  = "e2e-test"
-[[e2e.rule]]
-tier  = "full"
-path  = "tests/conftest.py"
-label = "shared-conftest"
-# The screenshot comparison is proven by a browser run, so it is a browser surface
-# despite living under scripts/. Must precede the scripts/ rule.
-[[e2e.rule]]
-tier  = "full"
-path  = "scripts/shot_baseline.py"
-label = "shot-baseline"
-[[e2e.rule]]
-tier       = "none"
-prefix     = "src/"
-extensions = ["py"]
-label      = "backend-python"
-[[e2e.rule]]
-tier       = "none"
-prefix     = "tests/"
-extensions = ["py"]
-label      = "non-e2e-test"
-[[e2e.rule]]
-tier       = "none"
-extensions = ["md"]
-label      = "docs"
-[[e2e.rule]]
-tier   = "none"
-prefix = "docs/"
-label  = "docs"
-[[e2e.rule]]
-tier   = "none"
-prefix = "scripts/"
-label  = "tooling/config"
-[[e2e.rule]]
-tier   = "none"
-prefix = "config/"
-label  = "tooling/config"
-[[e2e.rule]]
-tier   = "none"
-prefix = ".github/"
-label  = "tooling/config"
-[[e2e.rule]]
-tier       = "none"
-extensions = ["bat"]
-label      = "repo-meta"
-[[e2e.rule]]
-tier  = "none"
-path  = ".fleet.toml"
-label = "repo-meta"
-[[e2e.rule]]
-tier  = "none"
-path  = ".gitignore"
-label = "repo-meta"
-[[e2e.rule]]
-tier  = "none"
-path  = "LICENSE"
-label = "repo-meta"
-[[e2e.rule]]
-tier  = "none"
-path  = "AGENTS.md"
-label = "repo-meta"
-[[e2e.rule]]
-tier  = "none"
-path  = "CLAUDE.md"
-label = "repo-meta"
-[[e2e.rule]]
-tier  = "none"
-path  = ".static-ratchet-baseline.json"
-label = "repo-meta"
-[[e2e.rule]]
-tier  = "none"
-path  = ".docs-ratchet-baseline.json"
-label = "repo-meta"
-[[e2e.rule]]
-tier  = "none"
-path  = ".comment-ratchet-baseline.json"
-label = "repo-meta"
-[[e2e.rule]]
-tier  = "none"
-path  = ".instruction-ratchet-baseline.json"
-label = "repo-meta"
-[[e2e.rule]]
-tier  = "none"
-path  = ".doc-refs-ratchet-baseline.json"
-label = "repo-meta"
-[[e2e.rule]]
-tier  = "none"
-path  = ".dead-code-ratchet-baseline.json"
-label = "repo-meta"
-[[e2e.rule]]
-tier  = "none"
-path  = ".conventions-ratchet-baseline.json"
-label = "repo-meta"
+# ---------------------------------------------------------------------------
+# [comment_ratchet] -- the scaffold's no-history-comments ratchet (#1751,
+# project-scaffolding#411). scripts/verify-before-ship.ps1 runs
+# scripts/comment_ratchet.py, which fails when a file's count of `#NNN` issue
+# references inside comments rises above .comment-ratchet-baseline.json.
+# Procedure + limits: project-scaffolding docs/comment-ratchet.md. Vendored
+# destinations above are excluded by the script itself; tests are built in.
+[comment_ratchet]
+enabled  = true
+baseline = ".comment-ratchet-baseline.json"
+docstrings = true
+history_phrases = true
 
-# [static_ratchet] -- the scaffold's baseline-and-ratchet static analysis. The gate
-# (scripts/verify-before-ship.ps1) runs scripts/static_ratchet_gate.py, which wraps
-# scripts/static_ratchet.py: it fails on a duplicate block (jscpd via npx, Python and
-# JS), an unused import/variable (ruff F401,F841) or a likely bug / security
-# finding (curated ruff B and S rules, S113 strict) that is not in
-# .static-ratchet-baseline.json. Needs Node and ruff in the gate's venv; a detector
-# that cannot run exits 3, which fails the gate as NOT CONFIRMED. Vendored copies are
+# ---------------------------------------------------------------------------
+# [static_ratchet] -- the scaffold's baseline-and-ratchet static analysis
+# (project-scaffolding#410). scripts/verify-before-ship.ps1 runs
+# scripts/static_ratchet.py, which fails on a duplicate block (jscpd via npx,
+# Python and JS), an unused import/variable (ruff F401,F841) or a likely bug or
+# security pattern (the ruff B and S families, S113 strict) that is not in
+# .static-ratchet-baseline.json. Needs Node and ruff in the gate's venv; a
+# detector that cannot run exits 3, which fails the gate. Vendored copies are
 # duplicates by design, so they are excluded. Procedure + limits:
 # project-scaffolding docs/static-ratchet.md.
 [static_ratchet]
@@ -243,126 +163,150 @@ enabled  = true
 baseline = ".static-ratchet-baseline.json"
 exclude  = ["**/_vendored/**"]
 
-# [docs_ratchet] -- the scaffold's baseline-and-ratchet docs check. The gate runs
-# scripts/docs_ratchet.py through scripts/docs_ratchet_gate.py: README.md past its
-# size budget or baselined size, or a new history marker (issue reference, dated
-# heading, changelog heading) in README.md or docs/**/*.md that is not in
-# .docs-ratchet-baseline.json, fails. No generated or dated report folder exists
-# under docs/, so nothing is excluded. Exit 3 (a file could not be read) fails as
-# NOT CONFIRMED. Procedure + limits: project-scaffolding docs/docs-ratchet.md.
+# ---------------------------------------------------------------------------
+# [docs_ratchet] -- the scaffold's README-size and history-marker ratchet
+# (project-scaffolding#420). scripts/verify-before-ship.ps1 runs
+# scripts/docs_ratchet.py, which fails when README.md passes 40 KiB or its
+# baselined size, or when README.md / docs/**/*.md gains an issue reference, a
+# dated heading or a changelog heading beyond .docs-ratchet-baseline.json.
+# docs/ holds no generated or dated report folders, so nothing is excluded.
+# Procedure + limits: project-scaffolding docs/docs-ratchet.md.
 [docs_ratchet]
 enabled  = true
 baseline = ".docs-ratchet-baseline.json"
 
-# [structure_ratchet] -- the scaffold's baseline-and-ratchet structure check. The gate
-# runs scripts/structure_ratchet.py through scripts/structure_ratchet_gate.py: a file
-# past 1,000 lines, a Python/JS function past 100, a directory past 40 modules or a
-# src -> app import that is not in .structure-ratchet-baseline.json (or that grew past
-# its baselined size) fails, and so does a root folder outside the `shape` above. Every
-# offender is baselined at its size today; nothing is excluded to shrink the baseline
-# (vendored copies are excluded by the script itself). Exit 3 (part of the tree could
-# not be measured) fails as NOT CONFIRMED. Procedure + limits: project-scaffolding
-# docs/structure-ratchet.md.
+# ---------------------------------------------------------------------------
+# [structure_ratchet] -- the scaffold's baseline-and-ratchet layout stage.
+# scripts/verify-before-ship.ps1 runs scripts/structure_ratchet.py, which fails when
+# a new file passes 1,000 lines, a new function 100 lines or a flat directory 40
+# modules, when a baselined offender grows past its size in
+# .structure-ratchet-baseline.json, when a `src` file imports `app`, and when the
+# root folders do not match `shape` plus `extra_roots`. Existing offenders are
+# baselined at today's size, never excluded; vendored destinations are skipped by
+# the script itself. Exit 3 (git unusable, an unparseable file, an unknown shape)
+# fails the gate. Where code goes: docs/layout.md; procedure and limits:
+# project-scaffolding docs/structure-ratchet.md.
 [structure_ratchet]
 enabled  = true
 baseline = ".structure-ratchet-baseline.json"
+# The pinned third-party Mermaid build is not this repo's code to split; the
+# glob matches any pinned version of it.
+exclude  = ["app/webapp/static/vendor/mermaid-*.min.js"]
 
-# [comment_ratchet] -- the scaffold's baseline-and-ratchet check on issue references
-# (`#NNN`) inside product-code comments. The gate runs scripts/comment_ratchet.py
-# through scripts/comment_ratchet_gate.py: a file whose count of references in
-# comments rose, or a new file carrying any, fails against
-# .comment-ratchet-baseline.json. A comment states the present-tense why; the story
-# of how the code got here lives in the issue and `git log`. Product code only:
-# tests, vendored components and generated files are left out by the script itself.
-# Exit 3 (a file could not be scanned) fails as NOT CONFIRMED. Procedure + limits:
-# project-scaffolding docs/comment-ratchet.md.
-[comment_ratchet]
-enabled         = true
-baseline        = ".comment-ratchet-baseline.json"
-history_phrases = true
-docstrings      = true
-
-# [instruction_ratchet] -- the scaffold's baseline-and-ratchet check on the agent
-# instruction files (CLAUDE.md, AGENTS.md, .claude/rules/*.md, every SKILL.md and the
-# docs a skill links to). The gate runs scripts/instruction_ratchet.py through
-# scripts/instruction_ratchet_gate.py: a rule hit of the weekly prompt audit's
-# deterministic tier (R-01 to R-12, R-14 size caps, R-15 to R-17, R-30, R-34 to R-36,
-# R-45) that rose above .instruction-ratchet-baseline.json, or a file past its size
-# cap, fails. Existing hits are baselined, never excluded. Exit 3 (a file could not be
-# read or a skill description could not be parsed) fails as NOT CONFIRMED. Procedure +
-# limits: project-scaffolding docs/instruction-ratchet.md.
+# ---------------------------------------------------------------------------
+# [instruction_ratchet] -- the scaffold's baseline-and-ratchet lint of the
+# fleet's prompt-audit rules over this repo's instruction files (CLAUDE.md,
+# AGENTS.md and every SKILL.md plus the docs a skill links to).
+# scripts/verify-before-ship.ps1 runs scripts/instruction_ratchet.py, which fails
+# when a file's count of hits for a rule rises above
+# .instruction-ratchet-baseline.json or a file passes its size cap. Existing
+# hits are baselined at today's count, never excluded. Exit 3 (git unusable, a
+# file that is not UTF-8, a fence that never closes, an unreadable skill
+# description) fails the gate. Procedure and limits: project-scaffolding
+# docs/instruction-ratchet.md.
 [instruction_ratchet]
-enabled             = true
-baseline            = ".instruction-ratchet-baseline.json"
+enabled  = true
+baseline = ".instruction-ratchet-baseline.json"
 ci_expectations     = true
 agents_pointer      = true
 claude_md_max_lines = 120
 repeated_text_words = 12
 
-# [doc_refs_ratchet] -- the scaffold's baseline-and-ratchet check on references in
-# README.md, CLAUDE.md and docs/**/*.md. The gate runs scripts/doc_refs_ratchet.py
-# through scripts/doc_refs_ratchet_gate.py: a repo path, `python -m` module, relative
-# link or loopback port named in those docs that does not exist, and is not in
-# .doc-refs-ratchet-baseline.json, fails. Exit 3 (git unusable, a file that is not
-# UTF-8, or a fence that never closes) fails as NOT CONFIRMED. Procedure + limits:
-# project-scaffolding docs/doc-refs-ratchet.md.
-# allow_refs: the session-host port. The docs name it on purpose and the app's own
-# `port` above is the webapp's :8465, the only port the ratchet resolves by itself.
+# ---------------------------------------------------------------------------
+# [doc_refs_ratchet] -- the scaffold's baseline-and-ratchet check that
+# README.md, CLAUDE.md and docs/**/*.md name only repo paths, `python -m`
+# modules, relative links and loopback ports that exist.
+# scripts/verify-before-ship.ps1 runs scripts/doc_refs_ratchet.py, which fails on
+# a dangling reference that .doc-refs-ratchet-baseline.json does not record.
+# Exit 3 (git unusable, a file that is not UTF-8, a fence or comment that never
+# closes) fails the gate. allow_refs lists the other services' ports the docs
+# name on purpose. Procedure and limits: project-scaffolding
+# docs/doc-refs-ratchet.md.
 [doc_refs_ratchet]
 enabled    = true
-trees    = true
 baseline   = ".doc-refs-ratchet-baseline.json"
-allow_refs = [":8466"]
+trees      = true
+allow_refs = [
+  # Other services' loopback ports the docs name on purpose: the hub, the
+  # sibling voice-transcriber and photo-ocr apps, the session-host this repo
+  # spawns, task-os, and the Chrome DevTools port the iPhone debugging doc uses.
+  ":8000", ":8443", ":8444", ":8466", ":8448", ":9221",
+  # `:12` is the example line reference in a file chip's description, not a port.
+  ":12",
+  # Another repo's files, named as pointers (fleet-config's chief skill, life-os's
+  # Claude settings).
+  ".claude/skills/chief/SKILL.md", ".claude/settings.json",
+]
 
-# [dead_code_ratchet] -- the scaffold's baseline-and-ratchet check for a function, class
-# or method that nothing in the repo refers to. The gate runs
-# scripts/dead_code_ratchet.py through scripts/dead_code_ratchet_gate.py: a new
-# definition no tracked Python file names, beyond .dead-code-ratchet-baseline.json,
-# fails. Route handlers, `__all__`, tests, fixtures and decorated hooks are entry points
-# the script knows; vendored copies are read for references but never reported. Whole
-# tree, never diff-routed: deleting the last caller in one file strands a definition in
-# another. Exit 3 (git unusable, or a .py file that cannot be read or parsed) fails as
-# NOT CONFIRMED. Procedure + limits: project-scaffolding docs/dead-code-ratchet.md.
+# ---------------------------------------------------------------------------
+# [dead_code_ratchet] -- the scaffold's baseline-and-ratchet check that no new
+# Python function, class or method appears that nothing in the repo refers to.
+# scripts/verify-before-ship.ps1 runs scripts/dead_code_ratchet.py, which fails on
+# a definition that .dead-code-ratchet-baseline.json does not record. Exit 3
+# (git unusable, a tracked .py file that cannot be read or parsed) fails the
+# gate. Files under [vendored] are read for references, never reported.
+# entry_decorators and allow name the framework hooks this repo relies on.
+# Procedure and limits: project-scaffolding docs/dead-code-ratchet.md.
 [dead_code_ratchet]
-enabled  = true
-baseline = ".dead-code-ratchet-baseline.json"
+enabled          = true
+baseline         = ".dead-code-ratchet-baseline.json"
+entry_decorators = []
+# pytest calls `toterminal` on a report's longrepr by duck typing, never by name.
+allow            = ["tests/_credential_hygiene.py:_RedactedRepr.toterminal"]
 
-# [conventions_ratchet] -- the scaffold's baseline-and-ratchet check on fleet conventions
-# held as stdlib `ast` rules. The gate runs scripts/conventions_ratchet.py through
-# scripts/conventions_ratchet_gate.py: a file whose hit count for an enabled rule rose
-# above .conventions-ratchet-baseline.json fails. Whole tree, never diff-routed. Exit 3
-# (git unusable, or a tracked .py file that cannot be read or parsed) fails as NOT
-# CONFIRMED. Procedure + limits: project-scaffolding docs/conventions-ratchet.md.
-# Rules: no-window (a Windows-only app spawning CLIs from a console-less tray),
-# logging-not-print (src/ and app/ are library code), no-drive-path (paths come from
-# config), secret-compare (src/api_tokens.py owns the one constant-time compare) and
-# git-wrapper (src/git_run.py owns every git spawn) and password-input-vendored (the
-# one password input lives in _vendored/sign-in/) and login-lockout (the login route
-# answers 429 after repeated wrong passwords, via the vendored src/login_lockout.py).
+# ---------------------------------------------------------------------------
+# [test_weight] -- test-to-code ratchet. scripts/verify-before-ship.ps1
+# runs scripts/suite_weight_ratchet.py, which fails when the ratio of code
+# lines under tests/ to code lines under src/ + app/ rises above this ceiling.
+# Shrink-only: `python -m scripts.suite_weight_ratchet --update` lowers it after
+# a trim; `--raise-ceiling` is the one way up, and a raise says in its PR what
+# the extra test weight is for.
+# The ceiling includes the import header every feature module repeats: the same
+# tests weigh a few hundred lines more as small modules than as one giant file.
+# ---------------------------------------------------------------------------
+# [conventions_ratchet] -- the scaffold's baseline-and-ratchet stage for fleet
+# conventions held as stdlib `ast` rules (project-scaffolding#456).
+# scripts/verify-before-ship.ps1 runs scripts/conventions_ratchet.py, which fails
+# when a file's count for an enabled rule rises above
+# .conventions-ratchet-baseline.json. Enabled: no-window (the launcher spawns on
+# Windows), logging-not-print and no-drive-path (src/ and app/ are library code),
+# git-wrapper (src/git_utils.py is the one run_git), login-lockout (the /api/login
+# route enforces the vendored src/login_lockout.py; baseline zero), no-pwsh-stub (pwsh is a
+# 0-byte stub here; text files name the absolute powershell.exe; baseline zero), and
+# must_use (every outbound requests call goes through the pooled session in
+# src/clients/_loopback_http.py; sqlite3.connect through
+# src/runtime_files.py; os.replace through src/_json_io.py or src/runtime_files.py;
+# baseline zero). Skipped: secret-compare, since
+# hmac.compare_digest is called from six modules and no single helper owns it.
+# Exit 3 (git unusable, a .py file that does not parse) fails the gate. Procedure
+# and limits: project-scaffolding docs/conventions-ratchet.md.
 [conventions_ratchet]
-enabled        = true
-baseline       = ".conventions-ratchet-baseline.json"
-rules          = ["no-window", "logging-not-print", "no-drive-path", "secret-compare", "git-wrapper", "password-input-vendored", "nav-standalone-head", "login-lockout", "no-pwsh-stub", "subprocess-timeout", "state-literal", "state-set-repeat", "state-write"]
-secret_helpers = ["src/api_tokens.py"]
-git_wrappers   = ["src/git_run.py"]
+enabled      = true
+baseline     = ".conventions-ratchet-baseline.json"
+rules        = ["no-window", "logging-not-print", "no-drive-path", "git-wrapper", "password-input-vendored", "nav-standalone-head", "login-lockout", "no-pwsh-stub", "subprocess-timeout", "state-literal", "state-set-repeat", "state-write"]
+git_wrappers = ["src/git_utils.py"]
 
-# Outbound HTTP goes through the pooled session, not a bare requests call.
 [[conventions_ratchet.must_use]]
 call   = ["requests.get", "requests.post", "requests.put", "requests.patch", "requests.delete", "requests.head", "requests.request"]
-helper = ["src/_loopback_http.py"]
-why    = "CLAUDE.md: outbound-connection discipline, one pooled session (src/_loopback_http.py is this repo's pooled loopback session)"
+helper = ["src/clients/_loopback_http.py"]
+why    = "CLAUDE.md: outbound-connection discipline, one pooled session (src/clients/_loopback_http.py is this repo's pooled session)"
 paths  = ["app/", "src/"]
 
-# A raw connect skips the WAL and foreign-key pragmas; a raw replace skips the tmp-file swap.
+# Each SQLite store sets its own pragmas on the connection that
+# src/runtime_files.py opens, because that helper refuses a path under a code
+# folder. The vendored src/usage_log.py is not scanned.
 [[conventions_ratchet.must_use]]
 call   = "sqlite3.connect"
 helper = ["src/runtime_files.py"]
-why    = "src/runtime_files.py opens every SQLite file behind its code-folder guard; src/jobs/index.py sets WAL, foreign keys and timeout on the one database"
+why    = "a database opens through src/runtime_files.py, which refuses a path under a code folder"
 
+# A swap that must follow a validation step (the channel profile edit, the chief
+# mailbox) calls src/runtime_files.py replace(); a plain atomic JSON write uses
+# src/_json_io.py.
 [[conventions_ratchet.must_use]]
 call   = "os.replace"
-helper = ["src/_json_io.py"]
-why    = "src/_json_io.py is the one atomic-write helper (write-tmp + replace)"
+helper = ["src/_json_io.py", "src/runtime_files.py"]
+why    = "atomic writes go through src/_json_io.py, or src/runtime_files.py replace() when a step sits between the write and the swap"
 
 # [runtime_write_ratchet] -- scripts/runtime_write_ratchet.py fails when a tracked
 # Python file gains a write target (open for writing, Path.write_*, mkdir, a log
@@ -385,11 +329,28 @@ baseline = ".runtime-write-ratchet-baseline.json"
 enabled  = true
 baseline = ".usage-track-ratchet-baseline.json"
 rules    = ["untracked-control", "untracked-sheet", "dynamic-id", "usage-log-wired"]
+builders = [
+  "app/webapp/static/apps.js:runningVerb",
+  "app/webapp/static/board/answer-item.js:optionList",
+  "app/webapp/static/board/backlog-buckets.js:bucketGroup",
+  "app/webapp/static/board/backlog-buckets.js:foldedBucket",
+  "app/webapp/static/board/chief-plan.js:foldGroup",
+  "app/webapp/static/board/chief-plan.js:planBucketGroup",
+  "app/webapp/static/board/drawer.js:drawerAction",
+  "app/webapp/static/board/plan-prune.js:boardClearButton",
+  "app/webapp/static/board/proof-chip.js:actionButton",
+  "app/webapp/static/changes/changes-overlay.js:toolButton",
+  "app/webapp/static/chat/ask-option.js:askOption",
+]
 
+[test_weight]
+ratio_ceiling = "1.1413"
+
+# ---------------------------------------------------------------------------
 # [shot_baseline] -- the scaffold's screenshot baseline. The last stage of
-# scripts/verify-before-ship.ps1 runs scripts/shot_baseline.py, which compares the
-# PNGs tests/e2e/screens/test_screen_shots.py recaptures (the five work tabs at phone and
-# desktop width, light and dark; fictional fixture data, Chromium only) with the ones
+# scripts/verify-before-ship.ps1 runs scripts/shot_baseline.py, which compares
+# the PNGs tests/e2e/screens/test_screen_shots.py recaptures (five tabs at phone and
+# desktop, light and dark; fictional fixture data, Chromium only) with the ones
 # committed under `shots_dir`, fails on a visible change and restores the tree.
 # `capture` is the argv after the interpreter. Contract and re-baseline steps:
 # project-scaffolding docs/playwright-ui-testing.md ("Screenshot baseline").
@@ -398,29 +359,611 @@ enabled   = true
 shots_dir = "tests/e2e/shots"
 capture   = ["-m", "pytest", "tests/e2e/screens/test_screen_shots.py", "-q", "-p", "no:cacheprovider"]
 
+# ---------------------------------------------------------------------------
+# [e2e] -- diff-proportionate routing for scripts/verify-before-ship.ps1's
+# browser phase (#568, migrated to the scaffold classifier in #955).
+# scripts/classify_e2e.py is project-scaffolding's classifier copied
+# byte-verbatim (`e2e_route.py bootstrap`); every app-launcher routing decision
+# lives here. Schema: project-scaffolding docs/e2e-routing.md.
+#
+# Rules are tried top to bottom, first match wins. A path no rule matches is
+# "unclassified" and runs the whole dual-projection suite: uncertainty always
+# escalates, never narrows. Labels are echoed into E2E_REASON, and the gate's
+# session-host warning keys on the "session-host" labels below, so keep them.
+[e2e]
+static_pytest_target = "tests/e2e/shell/test_smoke.py"
+static_browsers       = ["chromium"]
+full_pytest_target    = "tests/e2e"
+# The gate's per-test START/DONE/FAILED history (gitignored): the last 20
+# browser runs, appended by scripts/verify-before-ship.ps1 into the PRIMARY
+# checkout from whichever checkout ran the gate, because a worktree's own
+# webapp/verify-progress.log is overwritten each run and dies with the worktree.
+# /e2e-audit reads it for the browser leg's time (fleet-config#1018).
+progress_log          = "webapp/verify-progress-history.log"
+# Budget for that browser leg, in seconds (#1255): the parallel plus serial
+# e2e passes of the latest quiet full-tier run in progress_log, not the whole
+# gate. 20 min against ~8.9 min measured 2026-10-03 (508 s parallel + 26 s
+# serial; gate total ~12.5 min). The budget is deliberately not ratcheted down
+# with the measurement: lowering it is the owner's call (#1376).
+# Over it, /e2e fires /e2e-audit; a narrow-routed or overlapped run is
+# `unknown`, never `within`. Same rule as test_budget: move it only with a
+# written reason.
+time_budget_s         = 1200
+# The browser suite's node budget: it equals the collected count exactly, and
+# tests/unit/repo/test_e2e_test_budget.py fails the build on either side (a
+# regrown suite, or a trim that left the number stale). Lite collects Chromium
+# only by default, so the count is the Chromium projection's. Lower it with
+# every trim; raise it only with a node-for-node reason beside it.
+test_budget = 297
+
+# --- static assets under the webapp's static dir -> Chromium smoke ----------
+[[e2e.rule]]
+tier       = "static"
+prefix     = "app/webapp/static/"
+extensions = ["svg", "png", "jpg", "jpeg", "gif", "ico", "webp", "avif", "woff", "woff2", "ttf", "eot", "otf", "webmanifest"]
+label      = "static-asset"
+# A vendored HTML *fragment* (e.g. the icons sprite) is pure markup the smoke
+# suite loads, with no behaviour of its own. Non-vendored .html (index.html)
+# is a real app page, as is a view fragment under views/, and both fall through
+# to full below.
+[[e2e.rule]]
+tier       = "static"
+prefix     = "app/webapp/static/_vendored/"
+extensions = ["html"]
+label      = "static-asset"
+
+# --- the real browser surface -> full ---------------------------------------
+# CSS routes full rather than to a curated "layout subset": styles/*.css is
+# global and WebKit is exactly where layout regressions surface, so a
+# hand-kept subset would be drift-prone and an under-testing risk.
+[[e2e.rule]]
+tier   = "full"
+prefix = "app/webapp/static/"
+label  = "webapp-static-code"
+# The session-host package sits inside app/webapp/, so its rule comes first
+# and its diff keeps the "session-host" label the gate warns on.
+[[e2e.rule]]
+tier   = "full"
+prefix = "app/webapp/session_host/"
+label  = "session-host"
+[[e2e.rule]]
+tier   = "full"
+prefix = "app/webapp/"
+label  = "webapp"
+
+# --- session-host / launcher on the e2e surface -> full ---------------------
+# The e2e suite drives a live session-host, so every module it loads is
+# browser surface: the CLAUDE.md `## session-host` import closure (#881, #923),
+# plus the launcher entry points. Kept as literal paths rather than parsed
+# from CLAUDE.md at classify time on purpose -- a parse failure would narrow
+# routing silently. tests/unit/repo/test_classify_e2e.py walks that CLAUDE.md block and
+# fails when a declared path stops routing full.
+[[e2e.rule]]
+tier = "full"
+path = "src/clients/session.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/launching/launcher.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/vt_snapshot.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/__init__.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/agents.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/app_config.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/audit.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/runtime_files.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/build_info.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/chief_session_end.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/diagnostics.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/env_path.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/git_utils.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/subprocess_flags.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "launcher.py"
+label = "session-host/launcher"
+# A prefix, not a list, so a future split of the session host
+# (e.g. src/session_host_pty.py) routes full without an edit here.
+[[e2e.rule]]
+tier       = "full"
+prefix     = "src/session_host"
+extensions = ["py"]
+label      = "session-host/launcher"
+
+# --- the CLI dispatcher and the dependency pins -> full ---------------------
+# The e2e session-host starts as `launcher.py session-host`, and the webapp's
+# jobs router imports app.cli.commands.run_job_cmd. Either import runs
+# app/cli/commands/__init__.py, which imports every command module, so a broken
+# one stops the disposable stack booting. A pin bump is installed into the venv
+# the browser run uses, so it is browser surface too. Both were "unclassified"
+# and already ran full; the rules name that.
+# Not session-host labels: the gate's session-host warning keys on those.
+[[e2e.rule]]
+tier       = "full"
+prefix     = "app/cli/"
+extensions = ["py"]
+label      = "cli-dispatcher"
+[[e2e.rule]]
+tier  = "full"
+path  = "requirements.txt"
+label = "dependencies"
+
+# --- the e2e suite itself, and the shared root conftest -> full -------------
+[[e2e.rule]]
+tier   = "full"
+prefix = "tests/e2e/"
+label  = "e2e-test"
+[[e2e.rule]]
+tier  = "full"
+path  = "tests/conftest.py"
+label = "shared-conftest"
+
+# --- no browser impact -> no browser suite ----------------------------------
+# Deliberate #568 decision, not an oversight: backend src/ code off the
+# session-host path has no browser surface of its own. The non-e2e pytest
+# suite (TestClient etc.) covers it, and that phase always runs. Do not
+# "fix" this by routing all of src/ to full.
+[[e2e.rule]]
+tier       = "none"
+prefix     = "src/"
+extensions = ["py"]
+label      = "backend-python"
+# Test support the e2e suite itself loads (#1376): a change to one reaches the
+# browser run, so it must not fall into the non-e2e-test rule below.
+[[e2e.rule]]
+tier  = "full"
+path  = "tests/_credential_hygiene.py"
+label = "e2e-test-support"
+[[e2e.rule]]
+tier  = "full"
+path  = "tests/_progress_log.py"
+label = "e2e-test-support"
+[[e2e.rule]]
+tier  = "full"
+path  = "tests/__init__.py"
+label = "e2e-test-support"
+# The routing table and its classifier decide which browser slice every diff
+# runs, so a diff to either must run the suite it reroutes. Both rules sit above
+# the `scripts/` and `repo-meta` rules, which would otherwise win first.
+[[e2e.rule]]
+tier  = "full"
+path  = ".fleet.toml"
+label = "routing-table"
+[[e2e.rule]]
+tier  = "full"
+path  = "scripts/classify_e2e.py"
+label = "routing-table"
+# Deliberately NOT here: tests/_pty_frame_text.py, _pty_paint_child.py,
+# _pty_readback_child.py and _pty_wait.py. No e2e module or conftest imports
+# them (the real-PTY coverage is tests/unit/session_host/test_session_host_pty_realpty.py, outside
+# the browser suite), and the root conftest only fingerprints their bytes, so
+# the `non-e2e-test` rule below is right and a diff to one runs no browser.
+
+[[e2e.rule]]
+tier       = "none"
+prefix     = "tests/"
+extensions = ["py"]
+label      = "non-e2e-test"
+# Node-run unit tests of the static JS modules; the browser suite never
+# executes them (a change to the JS they cover routes full on its own).
+[[e2e.rule]]
+tier       = "none"
+prefix     = "tests/js/"
+extensions = ["mjs"]
+label      = "non-e2e-test"
+# The tray process entry point: the webapp and the e2e fixture never import it
+# (only the lazy `tray` CLI command does).
+[[e2e.rule]]
+tier  = "none"
+path  = "app/tray/tray.py"
+label = "tray-process"
+[[e2e.rule]]
+tier       = "none"
+extensions = ["md"]
+label      = "docs"
+[[e2e.rule]]
+tier   = "none"
+prefix = "docs/"
+label  = "docs"
+[[e2e.rule]]
+tier   = "none"
+prefix = "scripts/"
+label  = "tooling/config"
+[[e2e.rule]]
+tier   = "none"
+prefix = "config/"
+label  = "tooling/config"
+[[e2e.rule]]
+tier   = "none"
+prefix = ".github/"
+label  = "tooling/config"
+[[e2e.rule]]
+tier  = "none"
+path  = ".comment-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".static-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".docs-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".instruction-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".doc-refs-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".dead-code-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".conventions-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".runtime-write-ratchet-baseline.json"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = ".gitignore"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = "LICENSE"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = "AGENTS.md"
+label = "repo-meta"
+[[e2e.rule]]
+tier  = "none"
+path  = "CLAUDE.md"
+label = "repo-meta"
+[[e2e.rule]]
+tier       = "none"
+extensions = ["bat"]
+label      = "repo-meta"
+
+# --- surfaces (#955, project-scaffolding#258) -------------------------------
+# A diff that would route "full" but whose every full- or static-tier path
+# sits in ONE surface below runs only that surface's pytest_targets, on both
+# projections. A surface owns a tab's own modules and its own tests, nothing
+# shared: styles/*.css, index.html, main.js/state.js/api.js/tabs.js and the other
+# shared JS, server.py, the session-host paths and both conftests stay out of
+# every surface, so a change there still runs the whole suite. So do a path in
+# two surfaces, a diff spanning two, any unclassified path, and any diff that
+# edits this file or the classifier.
+#
+# Targets are wider than the owned tests on purpose. Each tab module is
+# imported by main.js, so a broken one takes the whole SPA down: test_smoke
+# and test_primary_nav (which carries the bottom tab bar's checks since #1215)
+# catch that. test_coding_model_selector drives both tabs' model combos
+# (claude-options.js imports them), and test_overlay_phone_composer's bar legs share the
+# terminal bar's classes with the Life OS doc-browser bar and mirrors the board
+# carousel's overflow pattern.
+# tests/unit/repo/test_classify_e2e.py pins every surface with a narrowing path and a
+# shared path that must stay full, and checks that every e2e test naming a
+# surface module is in that surface's targets.
+
+# The Board tab: kanban (board.js), the dispatch bar and fleet-chief
+# lifecycle (board-dispatch.js), the chief's answer sheet (board-answers.js),
+# the drill-down drawer (board/drawer.js), the Chief's plan card
+# (board/chief-plan.js) and its Clear merged control (board/plan-prune.js),
+# and their routers. test_coding_chief drives the
+# chief from the Coding tab through board-dispatch.js; test_session_rename and
+# test_session_row_glance render board cards.
+[[e2e.surface]]
+name     = "board"
+paths    = [
+    "app/webapp/static/board.js",
+    "app/webapp/static/board/board-dispatch.js",
+    "app/webapp/static/board/board-answers.js",
+    "app/webapp/static/board/drawer.js",
+    "app/webapp/static/board/chief-plan.js",
+    "app/webapp/static/board/plan-prune.js",
+    "app/webapp/routers/board.py",
+    "app/webapp/routers/board_chief.py",
+    "app/webapp/routers/board_spawn.py",
+    "tests/e2e/board/test_board_tab.py",
+    "tests/e2e/board/test_board_nav_badge.py",
+    "tests/e2e/board/test_board_job_dismiss.py",
+]
+prefixes = ["tests/e2e/board/"]
+pytest_targets = [
+    "tests/e2e/board/test_board_tab.py",
+    "tests/e2e/board",
+    "tests/e2e/board/test_board_nav_badge.py",
+    "tests/e2e/board/test_board_job_dismiss.py",
+    "tests/e2e/shell/test_page_headers.py",
+    "tests/e2e/shell/test_header_cpu_reading.py",
+    "tests/e2e/shell/test_text_size.py",
+    "tests/e2e/shell/test_wide_layout.py",
+    "tests/e2e/code/test_wide_code_detail.py",
+    "tests/e2e/code/test_coding_chief.py",
+    "tests/e2e/session/test_session_rename.py",
+    "tests/e2e/terminal/test_overlay_phone_composer.py",
+    "tests/e2e/shell/test_primary_nav.py",
+    "tests/e2e/shell/test_smoke.py",
+    "tests/e2e/shell/test_row_name_typography.py",
+    "tests/e2e/shell/test_icon_sizes.py",
+    "tests/e2e/shell/test_vendored_empty_and_select.py",
+    "tests/e2e/shell/test_touch_targets.py",
+    "tests/e2e/session/test_session_row_glance.py",
+    "tests/e2e/code/test_code_row_status_age.py",
+    "tests/e2e/settings/test_settings_sheets.py",
+    "tests/e2e/shell/test_action_row_variants.py",
+    "tests/e2e/shell/test_async_list_states.py",
+    "tests/e2e/screens/test_screen_shots.py",
+]
+
+# [design] wide_views -- tabs whose content is two-dimensional (the Board's lanes) may
+# span the window; every other tab keeps the 772px measure. design.md Layout:
+# width follows the shape of the view (fleet-config#1113).
+[design]
+wide_views = ["board"]
+
+# [design.review] -- the rendered design review's walk (fleet-config
+# skills/_lib/design_review, docs/skills.md "Two legs, two interpreters").
+# The walk clicks the primary tabs, opens every <details> and showModal()s
+# every dialog[id] on its own; each extra step below is a click (or a short
+# `clicks` sequence) after a fresh load, never a fill or submit, and never on
+# or inside a no_go selector. A step whose target is missing on the live app
+# (an empty list) is recorded STEP_TARGET_ABSENT and leaves unrelated rules
+# alone (fleet-config#995). Anything inside the session overlay needs a
+# session the walk must never attach to on the live app: those steps are
+# `synthetic = true` and run only against the throwaway instance below.
+[design.review]
+theme_storage_key = "app-launcher.theme"
+# No tab_selector: the walk resolves it *inside* the first [role=tablist], so
+# the default [role=tab] is right and "[role=tablist] [role=tab]" matches
+# nothing (every tab click timed out on the first run with it).
+# Never clicked: every danger item (Kill, Stop, Delete, Remove), every row
+# tap (launches an agent or opens an app), anything that sends, dispatches,
+# runs, starts or resumes (a Life skill's Telegram items start or open a
+# real bot), and card taps that open a URL.
+no_go = [
+    ".row-menu-danger",
+    ".action-row-main",
+    ".session-open",
+    ".job-run-btn",
+    ".board-drawer-action",
+    ".board-stop-btn",
+    ".board-issue-btn",
+    ".board-item:not([data-session-id]) .board-card",
+    "#boardDispatchSend",
+    "#boardChiefStart",
+    "#boardChiefResume",
+    "#codingChiefStart",
+    "#codingChiefResume",
+    "#claudeResume",
+    "#lifeOsRecapLaunch",
+    "#lifeOsResume",
+    ".lifeos-channel-btn",
+]
+
+[[design.review.extra_steps]]
+tab = "claude"
+id = "settings"
+click = "#settingsOpen"
+
+[[design.review.extra_steps]]
+tab = "claude"
+id = "session-menu"
+click = "#sessionsList .session-kebab"
+
+[[design.review.extra_steps]]
+tab = "board"
+id = "drawer"
+click = ".board-item[data-session-id] .board-card"
+
+[[design.review.extra_steps]]
+tab = "lifeos"
+id = "skill-menu"
+click = ".lifeos-menu-anchor"
+
+# A skill's conversations (#1504) read its private index, so these two run on
+# the synthetic instance only; the chevron opens the conversation sheet
+# (a row's main tap stays in no_go).
+[[design.review.extra_steps]]
+tab = "lifeos"
+id = "conversations"
+clicks = [".lifeos-menu-anchor", ".lifeos-convo-btn"]
+synthetic = true
+
+[[design.review.extra_steps]]
+tab = "lifeos"
+id = "conversation-sheet"
+clicks = [".lifeos-menu-anchor", ".lifeos-convo-btn", ".lifeos-convo-chevron"]
+synthetic = true
+
+[[design.review.extra_steps]]
+tab = "jobs"
+id = "job-menu"
+click = ".job-menu-anchor"
+
+[[design.review.extra_steps]]
+tab = "jobs"
+id = "filter"
+click = "#jobsSearchInput"
+
+# `measure --e2e` runs the e2e suite with the surface() hook armed (#1698). A bare
+# run would meet the live-tray guard (it refuses while :8465 is occupied), so
+# autoboot is explicit; the suite then boots its own disposable webapp + session-host.
+[design.review.e2e]
+command = ["-m", "pytest", "tests/e2e", "--e2e-autoboot", "-q"]
+timeout_s = 1500
+
+[[design.review.extra_steps]]
+tab = "board"
+id = "session-chat"
+clicks = [".board-item[data-session-id] .board-card", ".board-open-chat"]
+synthetic = true
+
+[[design.review.extra_steps]]
+tab = "board"
+id = "session-terminal"
+clicks = [".board-item[data-session-id] .board-card", ".board-open-terminal"]
+synthetic = true
+
+[[design.review.extra_steps]]
+tab = "board"
+id = "session-overlay-menu"
+clicks = [".board-item[data-session-id] .board-card", ".board-open-terminal", "#terminalMenu"]
+synthetic = true
+
+# [[design.accepted]] -- /design-review rubric findings examined and accepted
+# for this repo (fleet-config#974; schema in fleet-config's
+# architecture/README.md). Each suppresses one rule in the managed
+# design-review issue, listed under "## Accepted" instead of "## Findings".
+# Roberto's #1238 decisions, 2026-09-25.
 [[design.accepted]]
-check  = "vendored-tokens"
-reason = "vendored components read tokens the app never defines (nav geometry, --layout-*, icon-button --hit-min) and fall back to their own defaults, which are the intended values (#47)"
+rule   = "LAYOUT-02"
+reason = "the Board's repo filter in the dispatch bar covers the long list, and Backlog starts folded on the phone"
+record = "https://github.com/ferraroroberto/app-launcher/issues/1238#issuecomment-5837905876"
 
 [[design.accepted]]
-check  = "rendered-leg"
-reason = "tests/e2e/_geometry.py is not adopted: it would grow the e2e suite and the lite fork stays small (#47)"
+rule   = "LAYOUT-05"
+reason = "the Chat turn header's copy button stops propagation, and moving it into the body would force opening a turn to copy it"
+record = "https://github.com/ferraroroberto/app-launcher/issues/1238#issuecomment-5837905876"
 
-# [[state_machines]] -- the Jobs run lifecycle, declared once. src/jobs/run_state.py owns
-# the RunState enum and the one derive function; the conventions ratchet's state rules stop
-# reporting that module and keep reporting any other module that re-derives a run's mode.
-# Why and the state table: docs/run-state.md.
-[[state_machines]]
-name   = "run-lifecycle"
-module = "src/jobs/run_state.py"
-type   = "RunState"
-derive = "derive_run_state"
+# design-lint contract findings (/design-sync, #1634) examined and accepted: neither
+# dialog is an editor modal, and the look stays as it is. The lint ignores the line
+# number after the target path when it matches an entry (fleet-config#1475), so an edit
+# to the fragment above either dialog does not break the match.
+[[design.accepted]]
+check  = "modal-footer"
+target = "app/webapp/static/views/shared-dialogs.html"
+detail = "editor-modal footer contract violated (design.md modal wants exactly one full-width solid-accent primary): app/webapp/static/views/shared-dialogs.html:15 primary not the solid-accent primary recipe"
+reason = "#confirmDialog is the Stop/Remove confirm, a destructive action: its sole action deliberately uses the danger tint, not the solid-accent primary"
+record = "https://github.com/ferraroroberto/app-launcher/issues/1634"
 
-# [[state_machines]] -- the Board drawer's last-exchange pane. board-exchange-state.js owns the
-# four display states and the one derive function; board.js reads and writes the pane only
-# through it. Why and the state table: docs/board.md.
+[[design.accepted]]
+check  = "modal-top-anchor"
+target = "app/webapp/static/views/coding-dialogs.html"
+detail = "editor-modal(s) with no max-height + internal scroll — a tall form jumps as conditional rows toggle (design.md modal: top-anchored on mobile): app/webapp/static/views/coding-dialogs.html:4"
+reason = "#screenView is the full-viewport Screen viewer (inset 0, 100dvh), not an editor modal: its one field is the hidden key-capture input, so no conditional rows can make it jump"
+record = "https://github.com/ferraroroberto/app-launcher/issues/1634"
+
+# design-lint contract finding (/design-sync, #2349) examined and accepted: the Inspiration
+# sheet is a Settings sub-sheet whose header already carries the back chevron and the
+# square x close; its three Cancel buttons belong to the inline add-source forms in the body.
+[[design.accepted]]
+check  = "modal-header"
+target = "app/webapp/static/views/inspiration-sheet.html"
+detail = "editor-modal header contract violated (design.md modal wants a heading-lg title + square x close, never a footer Cancel): app/webapp/static/views/inspiration-sheet.html:4 footer Cancel button in its place"
+reason = "the sheet's header carries the square x close; the Cancel buttons are inline add-source form controls in the body, not a footer standing in for the close"
+record = "https://github.com/ferraroroberto/app-launcher/issues/2349"
+
+# Declared state machines: the state rules never report a module listed here.
 [[state_machines]]
-name   = "board-exchange"
-module = "app/webapp/static/board-exchange-state.js"
+name   = "board-card-status"
+module = "src/board/card_status.py"
+type   = "CardStatus"
+
+[[state_machines]]
+name   = "job-run-status"
+module = "src/jobs/run_status.py"
+type   = "RunStatus"
+derive = "run_status"
+
+[[state_machines]]
+name   = "job-run-status-ui"
+module = "app/webapp/static/jobs/run-status.js"
+type   = "RunStatus"
+derive = "runStatus"
+
+[[state_machines]]
+name   = "board-attention-state"
+module = "src/board/attention_state.py"
+type   = "AttentionState"
+derive = "finished_run_state"
+
+[[state_machines]]
+name   = "board-attention-state-ui"
+module = "app/webapp/static/board/attention-state.js"
+type   = "AttentionState"
+derive = "attentionState"
+
+[[state_machines]]
+name   = "inspiration-login-state-ui"
+module = "app/webapp/static/settings/login-state.js"
+type   = "LoginState"
+derive = "loginState"
+
+[[state_machines]]
+name   = "background-task-state"
+module = "src/session_view/task_state.py"
+type   = "TaskPhase"
+derive = "next_status"
+
+[[state_machines]]
+name   = "board-exchange-state"
+module = "app/webapp/static/board/exchange-state.js"
 type   = "ExchangeState"
-derive = "deriveExchangeState"
+derive = "exchangeState"
+
+[[state_machines]]
+name   = "board-claim-state-ui"
+module = "app/webapp/static/board/claim-state.js"
+type   = "ClaimState"
+derive = "claimState"
+
+[[state_machines]]
+name   = "chief-plan-queue-status"
+module = "src/chief/queue_status.py"
+type   = "QueueStatus"
+derive = "queue_status"
+
+[[state_machines]]
+name   = "chat-pending-state-ui"
+module = "app/webapp/static/chat/pending-state.js"
+type   = "PendingState"
+derive = "pendingState"
+
+[[state_machines]]
+name   = "send-submit-state-ui"
+module = "app/webapp/static/chat/submit-state.js"
+type   = "SubmitState"
+derive = "submitState"

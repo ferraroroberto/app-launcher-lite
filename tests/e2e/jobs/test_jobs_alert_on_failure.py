@@ -1,10 +1,13 @@
-"""Per-job Telegram alert-on-failure toggle + list icon (issue #597).
+"""Per-job Telegram alert-on-failure toggle + its indicator (issue #597).
 
 Hermetic route mocks: the dialog toggle is a vendored `switch` control
 (same contract as `#jobConfirmInput`, covered generally by
 test_vendored_switch.py); these tests pin the two feature-specific
-bits — the toggle sits before "Require confirmation", and the bell
-icon in the registered-jobs list is gated on `job.alert_on_failure`.
+bits — the toggle sits before "Require confirmation", and the indicator
+is gated on `job.alert_on_failure`. #1438 moved that indicator: the bell
+that sat on the job row is now the "Alerts" line of the job sheet's detail
+block ("Telegram, on failure"), and the row's Edit lives in its kebab (there
+is no Edit mode to enter first).
 """
 
 from __future__ import annotations
@@ -14,6 +17,8 @@ import re
 
 import pytest
 from playwright.sync_api import Page, expect
+
+from tests.e2e.fixtures.ui import open_row_menu
 
 pytestmark = pytest.mark.smoke
 
@@ -53,34 +58,16 @@ def _wire_jobs_list(page: Page, jobs: list) -> None:
     )
 
 
-def scenario_toggle_precedes_confirm_toggle_in_dialog(
+def test_bell_icon_dialog_toggle_order_and_save(
     authed_page: Page, base_url: str
 ) -> None:
-    _wire_jobs_list(authed_page, [dict(_BASE_JOB)])
-
-    authed_page.goto(base_url, wait_until="domcontentloaded")
-    authed_page.locator("#tabJobs").click()
-    authed_page.locator("#jobsEditBtn").click()
-    authed_page.locator(
-        "#jobsList li[data-id='demo'] button[aria-label='Edit']"
-    ).click()
-
-    expect(authed_page.locator("#jobDialog")).to_be_visible()
-    alert_toggle = authed_page.locator("#jobAlertOnFailureInput")
-    expect(alert_toggle).to_have_attribute("role", "switch")
-    expect(alert_toggle).to_have_attribute("aria-checked", "false")
-
-    # DOM order: the alert toggle's row precedes the confirm toggle's row.
-    rows = authed_page.locator(".job-alert-row, .job-confirm-row")
-    expect(rows).to_have_count(2)
-    expect(rows.nth(0)).to_have_class(re.compile("job-alert-row"))
-    expect(rows.nth(1)).to_have_class(re.compile("job-confirm-row"))
-
-
-def scenario_saving_toggle_sends_alert_on_failure(
-    authed_page: Page, base_url: str
-) -> None:
-    _wire_jobs_list(authed_page, [dict(_BASE_JOB)])
+    """The sheet's Alerts line, the dialog toggle's placement and its Save
+    round-trip on one page load (#1215). ``demo`` has no ``alert_on_failure``
+    flag, so it is also the "off" job of the Alerts-line check (the old
+    ``quiet`` job was the same ``_BASE_JOB`` under another id); the Save — the
+    only step that writes — runs last."""
+    on_job = dict(_BASE_JOB, id="alerted", name="Alerted", alert_on_failure=True)
+    _wire_jobs_list(authed_page, [dict(_BASE_JOB), on_job])
     captured = {}
 
     def _handle_put(route):
@@ -93,33 +80,50 @@ def scenario_saving_toggle_sends_alert_on_failure(
         )
 
     authed_page.route(re.compile(r".*/api/jobs/demo$"), _handle_put)
+    authed_page.route(
+        re.compile(r".*/api/jobs/[^/]+/runs$"),
+        lambda route: route.fulfill(
+            status=200, content_type="application/json", body=_json.dumps({"runs": []})),
+    )
 
     authed_page.goto(base_url, wait_until="domcontentloaded")
     authed_page.locator("#tabJobs").click()
-    authed_page.locator("#jobsEditBtn").click()
-    authed_page.locator(
-        "#jobsList li[data-id='demo'] button[aria-label='Edit']"
-    ).click()
-    expect(authed_page.locator("#jobDialog")).to_be_visible()
 
+    # -- was test_bell_icon_shown_only_when_flag_set (the bell left the row in
+    # #1438; the fact is the job sheet's Alerts line) --
+    on_row = authed_page.locator("#jobsList li[data-id='alerted']")
+    off_row = authed_page.locator("#jobsList li[data-id='demo']")
+    expect(authed_page.locator("[data-role='alert-icon']")).to_have_count(0)
+    on_row.locator(".action-row-main").click()
+    alerts = authed_page.locator("#jobSheetBody [data-role='alerts-line']")
+    expect(alerts).to_have_count(1)
+    expect(alerts).to_contain_text("Telegram, on failure")
+    authed_page.locator("#jobSheetClose").click()
+    off_row.locator(".action-row-main").click()
+    expect(authed_page.locator("#jobSheetTitle")).to_have_text("Demo")
+    expect(authed_page.locator("#jobSheetBody [data-role='alerts-line']")).to_have_count(0)
+    authed_page.locator("#jobSheetClose").click()
+    expect(authed_page.locator("#jobSheet")).to_be_hidden()
+
+    # -- was test_toggle_precedes_confirm_toggle_in_dialog --
+    # Edit is in the row's ⋯ menu (#1130), reachable without an Edit mode (#1438).
+    off_row.locator(".action-row-kebab").click()
+    open_row_menu(authed_page).locator("[data-item=job-edit-item]").click()
+
+    expect(authed_page.locator("#jobDialog")).to_be_visible()
+    alert_toggle = authed_page.locator("#jobAlertOnFailureInput")
+    expect(alert_toggle).to_have_attribute("role", "switch")
+    expect(alert_toggle).to_have_attribute("aria-checked", "false")
+
+    # DOM order: the alert toggle's row precedes the confirm toggle's row.
+    rows = authed_page.locator(".job-alert-row, .job-confirm-row")
+    expect(rows).to_have_count(2)
+    expect(rows.nth(0)).to_have_class(re.compile("job-alert-row"))
+    expect(rows.nth(1)).to_have_class(re.compile("job-confirm-row"))
+
+    # -- was test_saving_toggle_sends_alert_on_failure (last: writes) --
     authed_page.locator("#jobAlertOnFailureInput").click()
     authed_page.locator("#jobSaveBtn").click()
 
     expect(authed_page.locator("#jobDialog")).to_be_hidden()
     assert captured["body"].get("alert_on_failure") is True
-
-
-def scenario_bell_icon_shown_only_when_flag_set(
-    authed_page: Page, base_url: str
-) -> None:
-    on_job = dict(_BASE_JOB, id="alerted", name="Alerted", alert_on_failure=True)
-    off_job = dict(_BASE_JOB, id="quiet", name="Quiet")
-    _wire_jobs_list(authed_page, [on_job, off_job])
-
-    authed_page.goto(base_url, wait_until="domcontentloaded")
-    authed_page.locator("#tabJobs").click()
-
-    on_row = authed_page.locator("#jobsList li[data-id='alerted']")
-    off_row = authed_page.locator("#jobsList li[data-id='quiet']")
-    expect(on_row.locator("[data-role='alert-icon']")).to_have_count(1)
-    expect(off_row.locator("[data-role='alert-icon']")).to_have_count(0)

@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for app-launcher.
+"""Shared pytest fixtures for app-launcher-lite.
 
 Mirrors the pattern used by sister projects (voice-transcriber / photo-ocr):
 build a fresh FastAPI ``create_app()`` against an isolated temp config dir,
@@ -17,9 +17,8 @@ import json
 import os
 import sys
 import tempfile
-import time
 from pathlib import Path
-from typing import Iterator
+from typing import Dict, Iterator
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,77 +27,147 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# The login password hash (src/password.py) is read on every login, so a run
-# must never see the live config/app_password.json: point it at a file that
-# does not exist. Assigned, not defaulted, so no outer value reaches the live
-# file; servers the suite spawns inherit it.
-os.environ["APP_PASSWORD_FILE"] = str(Path(tempfile.mkdtemp(prefix="app-launcher-lite-password-")) / "app_password.json")
+# Redirect this repo's whole fleet runtime-data directory before any `src.*`
+# module is imported, so `src.jobs.index.INDEX_DIR` — resolved at import time —
+# never points at the real store during a test run.
+#
+# The per-test `_isolated_jobs_index` fixture below is the precise isolation;
+# this is the backstop it needs. `jobs_index.ensure_index()` is dispatched via
+# `asyncio.to_thread`, and a thread can land its write *after* monkeypatch has
+# restored `INDEX_DIR`, so a purely function-scoped patch leaks the real
+# production index intermittently — observed on roughly one full run in two.
+# Setting the env var makes the module-level default itself safe, so a late
+# thread has nowhere unsafe to write. `setdefault`, so a deliberate outer
+# override still wins.
+os.environ.setdefault(
+    "APP_LAUNCHER_DATA_DIR",
+    str(Path(tempfile.gettempdir()) / "app-launcher-test-runtime-data"),
+)
+
+# Same shape, same reason, for the audit module's session files (issue #913).
+# `src.audit` resolves its directory from `__file__`, so the real-PTY tests
+# that drive a genuine ConPTY through `PtySession` — the submit probes and the
+# #64 readback — wrote their `<id>.transcript` into the checkout's own
+# `webapp/sessions`, the directory the phone reads. Small next to what the e2e
+# gate used to add there (5 files per run against a measured 228), but the
+# same defect, and it is the half a browser-suite fix can't reach: these
+# sessions live inside the pytest process, so the isolation has to be in place
+# before `src.audit` is imported. `setdefault`, so a deliberate outer override
+# still wins — and so the e2e autoboot's own per-run override still applies to
+# the processes it spawns.
+os.environ.setdefault(
+    "LAUNCHER_AUDIT_DIR",
+    str(Path(tempfile.gettempdir()) / "app-launcher-test-sessions"),
+)
+
+# The login password hash (`src/password.py`) is read on every login, so a run
+# must never see the live `config/app_password.json`: point it at a file that
+# does not exist. Assigned, not defaulted, so no outer value can reach the live
+# file; the e2e autoboot's spawned servers inherit it.
+os.environ["APP_PASSWORD_FILE"] = str(Path(tempfile.mkdtemp(prefix="app-launcher-password-")) / "app_password.json")
+
+# Credential hygiene (issue #907): every test report — browser suite included —
+# is scrubbed of credentials before any reporter writes it. Re-exported so
+# pytest registers the hook from this conftest; imported only after the
+# runtime-data redirect above, since it pulls in `src.webapp_config`.
+# Gate progress log (issues #534, #943): per-test START/DONE lines, a bounded
+# traceback excerpt under each FAILED line, and a slowest-tests summary, written
+# to LAUNCHER_VERIFY_PROGRESS_LOG when the pre-ship gate sets it. Re-exported so
+# pytest registers the hooks from this conftest; the summary is written from
+# `pytest_sessionfinish` below.
+from tests import _progress_log  # noqa: E402
+from tests._credential_hygiene import pytest_runtest_makereport  # noqa: E402,F401
+from tests._progress_log import (  # noqa: E402,F401
+    pytest_runtest_logreport,
+    pytest_runtest_logstart,
+)
+
+# --- tests/ source-mutation guard (#822) -------------------------------------
+#
+# A test that silently rewrites a tracked source file and still reports green is
+# worse than a failing test. `_pty_readback_child.py` did exactly that: a spawn
+# argument was mangled, the child truncated its own source, 3 tests quietly
+# stopped existing, and the run was green. Nothing noticed until an unrelated
+# `git diff` showed `43 ---------`.
+#
+# So: fingerprint every `.py` under tests/ at session start and re-check at
+# finish. This is a whole-directory invariant rather than a fix for that one
+# helper, because the class of bug — a test process writing to a path it
+# resolved wrongly — is not specific to it.
+_TESTS_DIR = Path(__file__).resolve().parent
+_SKIP_DIRS = {"__pycache__", ".pytest_cache", "node_modules"}
+_source_fingerprints: dict[Path, int] = {}
 
 
-@pytest.fixture(autouse=True)
-def _default_task_namespace(monkeypatch) -> None:
-    """Pin the Task Scheduler folder so a developer's own ``config.json``
-    ``task_namespace`` cannot change what the Jobs unit tests assert."""
-    from src.app_config import DEFAULT_TASK_NAMESPACE
-    from src.jobs import schtasks
-
-    monkeypatch.setattr(schtasks, "task_namespace", lambda: DEFAULT_TASK_NAMESPACE)
+def _iter_test_sources() -> Iterator[Path]:
+    for path in _TESTS_DIR.rglob("*.py"):
+        if any(part in _SKIP_DIRS for part in path.relative_to(_TESTS_DIR).parts):
+            continue
+        yield path
 
 
-# ------------------------------------------------- gate progress log (#534)
-# When the pre-ship gate (scripts/verify-before-ship.ps1) sets
-# LAUNCHER_VERIFY_PROGRESS_LOG, every test's start and finish is appended —
-# and flushed — to that file as it happens. A gate that wedges or is killed
-# by an outer timeout then leaves the ACTIVE node id (last START without a
-# DONE), per-test totals (setup+call+teardown, so fixture cost is visible),
-# and a slowest-tests summary on disk, instead of an opaque dead console.
-# Inert for normal pytest runs (env var absent → every hook no-ops).
+def _fingerprint_test_sources() -> dict[Path, int]:
+    """Map each test source to a cheap content fingerprint (CRC32 of its bytes).
 
-_PROGRESS_ENV = "LAUNCHER_VERIFY_PROGRESS_LOG"
-_progress_t0 = time.monotonic()
-_progress_node_totals: dict = {}
-_progress_durations: list = []
+    CRC32 rather than a cryptographic hash: this is corruption detection, not
+    tamper detection, and it keeps the whole sweep well under a tenth of a
+    second for ~200 files.
+    """
+    import zlib
+
+    prints: dict[Path, int] = {}
+    for path in _iter_test_sources():
+        try:
+            prints[path] = zlib.crc32(path.read_bytes())
+        except OSError:
+            continue
+    return prints
 
 
-def _progress_write(line: str) -> None:
-    path = os.environ.get(_PROGRESS_ENV, "").strip()
-    if not path:
+def pytest_sessionstart(session) -> None:
+    _source_fingerprints.update(_fingerprint_test_sources())
+
+
+def _check_test_sources_unmodified(session) -> None:
+    """Fail the run if it mutated or deleted a test source it did not create."""
+    if not _source_fingerprints:
         return
-    stamp = time.strftime("%H:%M:%S")
-    elapsed = time.monotonic() - _progress_t0
-    try:
-        with open(path, "a", encoding="utf-8") as fh:
-            fh.write(f"[{stamp} +{elapsed:7.1f}s] {line}\n")
-    except OSError:  # never let diagnostics fail the run
-        pass
-
-
-def pytest_runtest_logstart(nodeid, location) -> None:
-    _progress_write(f"START {nodeid}")
-
-
-def pytest_runtest_logreport(report: pytest.TestReport) -> None:
-    total = _progress_node_totals.get(report.nodeid, 0.0) + report.duration
-    _progress_node_totals[report.nodeid] = total
-    if report.when in ("setup", "call") and report.outcome != "passed":
-        # skipped / failed / errored — name the phase so a fixture skip is
-        # distinguishable from an assertion failure.
-        _progress_write(f"{report.outcome.upper()} ({report.when}) {report.nodeid}")
-    if report.when == "teardown":
-        _progress_node_totals.pop(report.nodeid, None)
-        _progress_durations.append((total, report.nodeid))
-        _progress_write(f"DONE  {report.nodeid} ({total:.1f}s)")
+    after = _fingerprint_test_sources()
+    changed = sorted(
+        str(p.relative_to(_TESTS_DIR))
+        for p, before in _source_fingerprints.items()
+        if after.get(p) != before
+    )
+    strays = sorted(
+        str(p.relative_to(_TESTS_DIR))
+        for p in _TESTS_DIR.rglob("*.ready")
+        if not any(part in _SKIP_DIRS for part in p.relative_to(_TESTS_DIR).parts)
+    )
+    if not changed and not strays:
+        return
+    lines = ["the tests/ tree changed while this run was in flight:"]
+    for name in changed:
+        lines.append(f"  modified/deleted: {name}")
+    for name in strays:
+        lines.append(f"  stray artifact:   {name}")
+    # Two causes produce this, and the guard cannot tell them apart: a test that
+    # wrote to a path it resolved wrongly (the #822 bug), or someone editing a
+    # test file while the suite ran. Say both rather than accuse the suite —
+    # a guard that misattributes its own trigger trains people to ignore it.
+    lines.append("")
+    lines.append("Either a test wrote to a path it resolved wrongly, or a file was")
+    lines.append("edited mid-run. If you were not editing, treat it as the former:")
+    lines.append("  git status tests/   then   git checkout -- tests/")
+    message = "\n".join(lines)
+    # Print as well as fail: a non-zero exit status alone is easy to misread as
+    # an ordinary test failure, and the actionable part is *which* file moved.
+    print(f"\n❌ {message}", file=sys.stderr)
+    session.exitstatus = 1
 
 
 def pytest_sessionfinish(session, exitstatus) -> None:
-    if not os.environ.get(_PROGRESS_ENV, "").strip():
-        return
-    _progress_write(f"pytest session finished (exit status {exitstatus})")
-    slowest = sorted(_progress_durations, key=lambda t: t[0], reverse=True)[:15]
-    if slowest:
-        _progress_write("slowest tests (setup+call+teardown):")
-        for duration, nodeid in slowest:
-            _progress_write(f"  {duration:7.1f}s  {nodeid}")
+    _check_test_sources_unmodified(session)
+    _progress_log.write_session_summary(exitstatus)
 
 
 @pytest.fixture
@@ -106,38 +175,21 @@ def project_root() -> Path:
     return PROJECT_ROOT
 
 
-@pytest.fixture
-def isolated_jobs(tmp_path, monkeypatch):
-    """Point the jobs run history, queue and registry at ``tmp_path``.
-
-    JOBS_RUNS_DIR / JOBS_QUEUE_PATH are owned by ``src.jobs.history`` /
-    ``src.jobs.queue`` (not the ``src.jobs`` facade), so they are patched there.
-    """
-    from src.jobs import config as jobs_config
-    from src.jobs import history as jobs_history
-    from src.jobs import queue as jobs_queue
-
-    monkeypatch.setattr(jobs_history, "JOBS_RUNS_DIR", tmp_path)
-    monkeypatch.setattr(jobs_queue, "JOBS_QUEUE_PATH", tmp_path / "_queue.json")
-    monkeypatch.setattr(jobs_config, "DEFAULT_JOBS_PATH", tmp_path / "jobs.json")
-    return tmp_path
-
-
 @pytest.fixture(autouse=True)
 def _no_real_mirror_window(request, monkeypatch):
     """Never spawn a real PC mirror window from a non-e2e test (issue #279).
 
-    Both launch handlers — the Apps tab (``routers/apps.py``) and the Team OS
+    The launch handlers — the Apps tab (``routers/apps.py``) and the Team OS
     tab (``routers/team_os.py``) — call ``open_local_terminal_window`` when
     ``should_mirror_to_pc`` is True, which it is under ``TestClient`` (its
     request host isn't loopback). Left real, each launch spawns an Edge
     ``--app`` window the unit test never tears down, littering the desktop with
-    ``app-launcher-mirror-*`` windows. Stub the name as imported into each
+    ``app-launcher-lite-mirror-*`` windows. Stub the name as imported into each
     router so any launch test — present or future — is leak-proof from one
     place.
 
     The ``launcher`` module's own function is intentionally left intact so
-    ``tests/unit/platform/test_launcher_mirror_hwnd.py`` can still exercise it directly with
+    ``tests/unit/launching/test_launcher_mirror_hwnd.py`` can still exercise it directly with
     the inner spawn stubbed. Skipped for the live-tray e2e (``smoke``) suite,
     which drives a separate webapp process this in-process patch can't reach.
     """
@@ -147,12 +199,210 @@ def _no_real_mirror_window(request, monkeypatch):
         "app.webapp.routers.apps",
         "app.webapp.routers.team_os",
         "app.webapp.routers.board",
+        "app.webapp.routers.board_chief",
     ):
         module = importlib.import_module(mod_name)
         if hasattr(module, "open_local_terminal_window"):
             monkeypatch.setattr(
                 module, "open_local_terminal_window", lambda *a, **k: None
             )
+
+
+@pytest.fixture(autouse=True)
+def fake_injector(monkeypatch):
+    """Never inject real mouse or keyboard input from a test (#1521).
+
+    Every Screen-control event goes out through ``desktop_input.get_injector``;
+    here it is a recorder for the whole suite, so no test can move the
+    owner's mouse or type into their desktop. A test that asserts on what
+    would have been sent asks for this fixture by name. The e2e suite's
+    disposable webapp gets the same through ``LAUNCHER_SCREEN_FAKE_INPUT=1``.
+    """
+    from src.desktop import input as desktop_input
+
+    recorder = desktop_input.RecordingInjector()
+    monkeypatch.setattr(desktop_input, "get_injector", lambda: recorder)
+    monkeypatch.setattr(desktop_input, "_injector", recorder)
+    return recorder
+
+
+@pytest.fixture(autouse=True)
+def fake_clipboard(monkeypatch):
+    """Never touch the real Windows clipboard from a test (#1719).
+
+    The Screen view's ``clipboard_set`` goes out through
+    ``desktop_clipboard.get_clipboard``; here it is a recorder for the whole
+    suite, so no test can overwrite what the owner just copied. A test that
+    asserts on what would have been copied asks for this fixture by name. The
+    e2e suite's disposable webapp gets the same through
+    ``LAUNCHER_SCREEN_FAKE_INPUT=1``.
+    """
+    from src.desktop import clipboard as desktop_clipboard
+
+    recorder = desktop_clipboard.RecordingClipboard()
+    monkeypatch.setattr(desktop_clipboard, "get_clipboard", lambda: recorder)
+    monkeypatch.setattr(desktop_clipboard, "_clipboard", recorder)
+    return recorder
+
+
+@pytest.fixture(autouse=True)
+def _isolated_spawned_apps(tmp_path, monkeypatch):
+    """Give each test its own launched-app records file and an empty tracker.
+
+    ``src.app_runtime`` re-adopts whatever the file names on first use; a
+    record left by another test (or another run) whose fake pid happens to be
+    a live process would otherwise show up as a phantom running app.
+    """
+    from src import app_runtime
+
+    monkeypatch.setattr(app_runtime, "STATE_FILE", tmp_path / "spawned-apps.json")
+    monkeypatch.setattr(app_runtime, "_instances", {})
+    monkeypatch.setattr(app_runtime, "_loaded", False)
+
+
+@pytest.fixture
+def isolated_jobs(tmp_path, monkeypatch):
+    """Run history, the run queue and ``jobs.json`` all under ``tmp_path``.
+
+    ``JOBS_RUNS_DIR`` / ``JOBS_QUEUE_PATH`` are owned by ``src.jobs.history`` /
+    ``src.jobs.queue``, so they are patched there, not on the ``src.jobs`` facade.
+    """
+    from src.jobs import config as jc
+    from src.jobs import history as jobs_history_mod
+    from src.jobs import queue as jobs_queue_mod
+
+    monkeypatch.setattr(jobs_history_mod, "JOBS_RUNS_DIR", tmp_path)
+    monkeypatch.setattr(jobs_queue_mod, "JOBS_QUEUE_PATH", tmp_path / "_queue.json")
+    monkeypatch.setattr(jc, "DEFAULT_JOBS_PATH", tmp_path / "jobs.json")
+    return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def _isolated_jobs_index(tmp_path, monkeypatch):
+    """Give each test its own Jobs index.
+
+    The index used to live inside the run-history root, so patching
+    ``jobs_history.JOBS_RUNS_DIR`` gave every test a private index for free —
+    which ~20 tests and the opt-in ``webapp_client`` fixture relied on. Since
+    project-scaffolding#243 the index no longer follows ``JOBS_RUNS_DIR``, so
+    without this they would all share one index for the whole session and see
+    each other's runs.
+
+    Staying off the *real* index is the module-level ``APP_LAUNCHER_DATA_DIR``
+    above, not this fixture — verified by disabling this fixture and confirming
+    a jobs test still writes only into the temp root.
+    """
+    from src.jobs import index as jobs_index_mod
+
+    monkeypatch.setattr(jobs_index_mod, "INDEX_DIR", tmp_path / "jobs_index")
+
+
+@pytest.fixture(autouse=True)
+def _fresh_jobs_snapshot(monkeypatch):
+    """Every test starts with an empty jobs runtime snapshot (#1324), and by
+    default every read rebuilds it, so a test that writes a run and then GETs
+    ``/api/jobs`` sees it as it did before the snapshot existed. The
+    background tick never builds under test: a build left running on one
+    test's temp dirs must not land in the next test's snapshot. The
+    snapshot's own tests (``test_jobs_snapshot.py``) put the real ages back.
+    """
+    from src.jobs import snapshot as jobs_snapshot
+
+    jobs_snapshot.reset()
+    monkeypatch.setattr(jobs_snapshot, "MAX_AGE_SECONDS", -1.0)
+    monkeypatch.setattr(jobs_snapshot, "DEMAND_WINDOW_SECONDS", -1.0)
+    yield
+    jobs_snapshot.reset()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_jobs_registry(request, tmp_path, monkeypatch):
+    """Never let a test's run-record read consult the real ``jobs.json``.
+
+    Since #1316 every ``jobs_history.read_run`` looks up the owning job's
+    ``exit_outcomes`` in the registry, so a test that only redirects
+    ``JOBS_RUNS_DIR`` would otherwise classify its runs against whatever the
+    dev box's ``config/jobs.json`` declares. Tests that write a registry of
+    their own re-patch ``DEFAULT_JOBS_PATH`` on top of this. Skipped for the
+    ``smoke`` suite, which drives a separate webapp process.
+    """
+    if request.node.get_closest_marker("smoke"):
+        return
+    from src.jobs import config as jobs_cfg_mod
+    from src.jobs import dismissed as jobs_dismissed_mod
+
+    monkeypatch.setattr(
+        jobs_cfg_mod, "DEFAULT_JOBS_PATH", tmp_path / "isolated-jobs.json"
+    )
+    # Nor the dismissed-alert marks (#1669): the Board's job cards read them.
+    monkeypatch.setattr(
+        jobs_dismissed_mod, "JOBS_DISMISSED_FILE", tmp_path / "isolated-jobs-dismissed.json"
+    )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_chief_pointer(request, tmp_path, monkeypatch):
+    """Never read or write the real chief pointer from a test (issue #675).
+
+    ``src.chief.pointer`` resolves ``webapp/chief-pointer.json`` off the repo
+    root, and the chief resume lookup consults it on every call — so without
+    this, a pointer sitting on the dev box would silently steer
+    ``_find_resumable_chief_session_id`` tests, and a test that exercised the
+    write path would clobber the real standing chief's pointer. Autouse rather
+    than opt-in for exactly that reason: the risk is to tests that never
+    mention the pointer at all. Skipped for the ``smoke`` suite, which drives a
+    separate webapp process this in-process patch can't reach.
+    """
+    if request.node.get_closest_marker("smoke"):
+        return
+    from app.webapp.routers import board_chief as chief_router
+    from src.chief import answers as chief_answers_mod
+    from src.chief import pointer as chief_pointer_mod
+    monkeypatch.setattr(
+        chief_pointer_mod, "CHIEF_POINTER_FILE", tmp_path / "chief-pointer.json"
+    )
+    # Same for the answer sheet's answered marks (#1487).
+    monkeypatch.setattr(
+        chief_answers_mod, "CHIEF_ANSWERED_FILE", tmp_path / "chief-answered.json"
+    )
+    # The journal card's last-look stamp is a file the webapp writes.
+    from src.chief import journal as chief_journal_mod
+    monkeypatch.setattr(
+        chief_journal_mod, "CHIEF_JOURNAL_LOOK_FILE", tmp_path / "chief-journal-look.json"
+    )
+    # And the Board's owner-check marks, whose cache is module memory too.
+    from src.board import owner_checks as owner_checks_mod
+    monkeypatch.setattr(
+        owner_checks_mod, "MARKS_FILE", tmp_path / "owner-check-marks.json"
+    )
+    owner_checks_mod.reset_owner_cache()
+    # The lid keep-awake switch: its saved values go to tmp, and powercfg is
+    # a plan with no lid, so no test reads or changes a real power plan.
+    import subprocess as _subprocess
+
+    from src.desktop import lid_keep_awake as lid_keep_awake_mod
+    monkeypatch.setattr(lid_keep_awake_mod, "STATE_FILE", tmp_path / "lid-keep-awake.json")
+    monkeypatch.setattr(
+        lid_keep_awake_mod, "_run_powercfg",
+        lambda args: _subprocess.CompletedProcess(args, 0, stdout="", stderr=""),
+    )
+
+    # A forge refresh starts the owner-check list; in a test it must never
+    # reach the real CLI (and GitHub). Tests that read it fake _run_cli.
+    def _no_real_cli(*_args, **_kwargs):
+        raise owner_checks_mod.OwnerCheckError("tests never run the real owner_check CLI")
+
+    monkeypatch.setattr(owner_checks_mod, "_run_cli", _no_real_cli)
+
+    # Nor may a refresh read an issue body from GitHub for an old check's Try.
+    def _no_real_body(*_args, **_kwargs):
+        raise owner_checks_mod.forge.GlabError("tests never read a real issue body")
+
+    monkeypatch.setattr(owner_checks_mod, "_fetch_body", _no_real_body)
+
+    # The write-side memo is module-level and would otherwise leak one test's
+    # chief into the next (a second test would then observe "no write").
+    monkeypatch.setattr(chief_router, "_last_noted_chief_conversation", "")
 
 
 @pytest.fixture
@@ -165,8 +415,8 @@ def sample_webapp_config() -> dict:
     )
 
 
-def _isolate_configs(tmp_path: Path, monkeypatch) -> dict:
-    """Redirect every on-disk config the app reads at startup into tmp_path."""
+def _isolate_webapp_files(tmp_path: Path, monkeypatch) -> Dict[str, Path]:
+    """Point every on-disk file the webapp reads at ``tmp_path``; the paths by role."""
     # The two on-disk configs the app reads on startup. Point both at temp
     # paths so a stray real config can never affect the test.
     tmp_apps_root = tmp_path / "scan_root"
@@ -180,16 +430,28 @@ def _isolate_configs(tmp_path: Path, monkeypatch) -> dict:
         json.dumps(
             {
                 "host": "127.0.0.1",
+                "port": 8465,
                 "projects_dir": str(tmp_projects_dir),
                 "apps_scan_root": str(tmp_apps_root),
+                "claude_model": "opus",
+                "claude_model_efforts": {},
+                "claude_verbose": True,
+                "claude_debug": False,
                 "auth_token": "",
                 "auth_password": "",
                 "session_host_port": 8466,
                 # Board tab (issue #300): point the sessions-state file at a
                 # temp path so a test can never read the real hook-written
-                # ~/.copilot/hooks/state/sessions-state.json.
+                # ~/.claude/hooks/state/sessions-state.json.
                 "sessions_state_file": str(tmp_path / "sessions-state.json"),
-                "gitlab_group": "testgroup",
+                # Same reasoning for the rate-limits cache (issue #326): never
+                # let a test touch ~/.claude/hooks/state/rate-limits.json.
+                "rate_limits_file": str(tmp_path / "rate-limits.json"),
+                # ...and for the chief's plan (#1279).
+                "chief_plan_file": str(tmp_path / "chief-plan.json"),
+                # The chief mailbox: a cap raise writes an event here, so a
+                # test must never reach ~/.claude/hooks/state/chief-inbox.
+                "chief_inbox_dir": str(tmp_path / "chief-inbox"),
             }
         ),
         encoding="utf-8",
@@ -223,31 +485,20 @@ def _isolate_configs(tmp_path: Path, monkeypatch) -> dict:
     from src import app_config as app_cfg_mod
     if hasattr(app_cfg_mod, "DEFAULT_CONFIG_PATH"):
         monkeypatch.setattr(app_cfg_mod, "DEFAULT_CONFIG_PATH", tmp_app_cfg)
+
     return {
-        "tmp_apps_root": tmp_apps_root,
-        "tmp_projects_dir": tmp_projects_dir,
-        "tmp_webapp_cfg": tmp_webapp_cfg,
-        "tmp_registry": tmp_registry,
-        "tmp_jobs_cfg": tmp_jobs_cfg,
-        "tmp_jobs_runs": tmp_jobs_runs,
+        "registry": tmp_registry,
+        "apps_scan_root": tmp_apps_root,
+        "projects_dir": tmp_projects_dir,
+        "webapp_cfg": tmp_webapp_cfg,
+        "jobs_cfg": tmp_jobs_cfg,
+        "jobs_runs": tmp_jobs_runs,
     }
 
 
-def _mock_session_client(monkeypatch) -> MagicMock:
-    """Replace every router's session-host client with one shared mock."""
-    from app.webapp.routers import board as board_router
-    from app.webapp.routers import board_spawn as board_spawn_router
-    from app.webapp.routers import misc as misc_router
-    from app.webapp.routers import sessions as sessions_router
-
-    # Mock the session-host loopback client. Every route that talks to
-    # :8466 goes through this module, so patch each router that holds a
-    # module-level `session_client` reference of its own. The launch
-    # routers (apps.py, team_os.py) no longer do since #689 moved their
-    # spawn + error-mapping head into _helpers.spawn_session_or_400 —
-    # they reach the host only through the `spawn_agent_session` the
-    # per-test fakes replace.
-    from src import session_client as real_session_client
+def _mock_session_client(monkeypatch, routers: list) -> MagicMock:
+    """One session-host client mock on every router holding its own reference."""
+    from src.clients import session as real_session_client
     session_mock = MagicMock()
     session_mock.list_sessions.return_value = []
     session_mock.stop.return_value = {"ok": True}
@@ -260,35 +511,17 @@ def _mock_session_client(monkeypatch) -> MagicMock:
     # freshness check degrades to "unreachable", never a real loopback call.
     session_mock.identity.return_value = None
     session_mock.SessionHostError = real_session_client.SessionHostError
-    monkeypatch.setattr(sessions_router, "session_client", session_mock)
-    monkeypatch.setattr(board_router, "session_client", session_mock)
-    # The Board's shared spawn-then-type mechanics hold their own
-    # module-level reference since the #691 split.
-    monkeypatch.setattr(board_spawn_router, "session_client", session_mock)
-    monkeypatch.setattr(misc_router, "session_client", session_mock)
+    for router in routers:
+        monkeypatch.setattr(router, "session_client", session_mock)
     return session_mock
 
 
-def _mock_audit(monkeypatch) -> MagicMock:
-    """Stub the audit writer in every router that imports it."""
-    from app.webapp.routers import apps as apps_router
-    from app.webapp.routers import board as board_router
-    from app.webapp.routers import desktop_screen as desktop_screen_router
-    from app.webapp.routers import sessions as sessions_router
-    from app.webapp.routers import team_os as team_os_router
-    from app.webapp.routers import webauthn as webauthn_router
-
-    # Audit log writer — stub so no files land in webapp/sessions/ during
-    # tests. The real audit module opens log files lazily. The `audit`
-    # import lives in routers/apps.py, routers/sessions.py, and
-    # routers/webauthn.py — patch all three.
+def _stub_audit(monkeypatch, routers: list) -> MagicMock:
+    """One audit mock on every router that writes audit lines, so no file
+    lands in webapp/sessions/ during tests."""
     audit_mock = MagicMock()
-    monkeypatch.setattr(apps_router, "audit", audit_mock)
-    monkeypatch.setattr(desktop_screen_router, "audit", audit_mock)
-    monkeypatch.setattr(sessions_router, "audit", audit_mock)
-    monkeypatch.setattr(webauthn_router, "audit", audit_mock)
-    monkeypatch.setattr(team_os_router, "audit", audit_mock)
-    monkeypatch.setattr(board_router, "audit", audit_mock)
+    for router in routers:
+        monkeypatch.setattr(router, "audit", audit_mock)
     return audit_mock
 
 
@@ -305,19 +538,41 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     Auth is disabled by default (``auth_token = ""``, ``auth_password = ""``).
     Auth tests opt back in by setting these on ``app.state.webapp_config``.
     """
-    cfg_paths = _isolate_configs(tmp_path, monkeypatch)
-    tmp_apps_root = cfg_paths["tmp_apps_root"]
-    tmp_projects_dir = cfg_paths["tmp_projects_dir"]
-    tmp_webapp_cfg = cfg_paths["tmp_webapp_cfg"]
-    tmp_registry = cfg_paths["tmp_registry"]
-    tmp_jobs_cfg = cfg_paths["tmp_jobs_cfg"]
-    tmp_jobs_runs = cfg_paths["tmp_jobs_runs"]
+    paths = _isolate_webapp_files(tmp_path, monkeypatch)
 
-    # Import the server after the config paths are redirected and the routers
-    # are patched, so create_app() sees only the mocks.
-    session_mock = _mock_session_client(monkeypatch)
-    audit_mock = _mock_audit(monkeypatch)
+    # Now import the server + routers. Important: import after monkeypatching
+    # the config paths, but before patching session_client / audit (which are
+    # module-level references inside each router that talks to them).
     from app.webapp import server as server_mod
+    from app.webapp.routers import apps as apps_router
+    from app.webapp.routers import board as board_router
+    from app.webapp.routers import board_chief as board_chief_router
+    from app.webapp.routers import board_spawn as board_spawn_router
+    from app.webapp.routers import misc as misc_router
+
+    # Mock the session-host loopback client. Every route that talks to
+    # :8466 goes through this module, so patch each router that holds a
+    # module-level `session_client` reference of its own. The launch
+    # routers (apps.py, life_os.py) no longer do since #689 moved their
+    # spawn + error-mapping head into _helpers.spawn_session_or_400 —
+    # they reach the host only through the `spawn_claude_session` the
+    # per-test fakes replace.
+    # The Chat question card's /answer route types into a session (#1149).
+    from app.webapp.routers import session_screen as session_screen_router
+    from app.webapp.routers import sessions as sessions_router
+    from app.webapp.routers import team_os as team_os_router
+    session_mock = _mock_session_client(monkeypatch, [
+        sessions_router, board_router, board_chief_router, board_spawn_router,
+        misc_router, session_screen_router,
+    ])
+
+    # Every router holding its own module-level `audit` reference.
+    from app.webapp.routers import desktop_screen as desktop_screen_router
+    from app.webapp.routers import webauthn as webauthn_router
+    audit_mock = _stub_audit(monkeypatch, [
+        apps_router, sessions_router, webauthn_router, team_os_router,
+        board_router, board_chief_router, desktop_screen_router,
+    ])
 
     # WebAuthnGate doesn't touch disk until configured (rp_id + origin set)
     # so default tests are safe. We still stub it for the few endpoints that
@@ -343,11 +598,47 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
         "session": session_mock,
         "audit": audit_mock,
         "webauthn": webauthn_mock,
-        "tmp_registry_path": tmp_registry,
-        "tmp_apps_scan_root": tmp_apps_root,
-        "tmp_projects_dir": tmp_projects_dir,
-        "tmp_webapp_cfg_path": tmp_webapp_cfg,
-        "tmp_jobs_path": tmp_jobs_cfg,
-        "tmp_jobs_runs_dir": tmp_jobs_runs,
+        "tmp_registry_path": paths["registry"],
+        "tmp_apps_scan_root": paths["apps_scan_root"],
+        "tmp_projects_dir": paths["projects_dir"],
+        "tmp_webapp_cfg_path": paths["webapp_cfg"],
+        "tmp_jobs_path": paths["jobs_cfg"],
+        "tmp_jobs_runs_dir": paths["jobs_runs"],
     }
     yield client, app, overrides
+
+
+def _make_team_os(root: Path) -> Path:
+    """Build a minimal team-os layout with one skill + identity."""
+    skill = root / ".claude" / "skills" / "journal-daily"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: journal-daily\ndescription: Journal from a transcript.\n---\n# journal-daily\n",
+        encoding="utf-8",
+    )
+    (skill / "description.md").write_text("Public blurb.", encoding="utf-8")
+    (skill / "memory").mkdir()
+    (skill / "memory" / "observations.md").write_text(
+        "# obs\n\nprivate note", encoding="utf-8"
+    )
+    (skill / "conversations").mkdir()
+    (skill / "conversations" / "2026-06-01-1917-trial.md").write_text(
+        "trial log", encoding="utf-8"
+    )
+    # The placeholder that keeps an empty conversations/ tracked — must stay
+    # un-deletable / un-renameable.
+    (skill / "conversations" / ".gitkeep").write_text("", encoding="utf-8")
+    identity = root / "identity"
+    identity.mkdir()
+    (identity / "who-i-am.md").write_text("# who\n\nme", encoding="utf-8")
+    return root
+
+
+@pytest.fixture
+def team_os_client(webapp_client, tmp_path):
+    """webapp_client with team_os_dir pointed at a temp team-os checkout."""
+    client, app, overrides = webapp_client
+    team_os = _make_team_os(tmp_path / "team-os")
+    app.state.webapp_config.team_os_dir = str(team_os)
+    overrides["team_os_dir"] = team_os
+    return client, app, overrides

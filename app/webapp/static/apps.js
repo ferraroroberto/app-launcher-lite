@@ -1,296 +1,130 @@
-/* Apps tab: registry list, launch, scan dialog, rename dialog,
- * running-listeners panel.
+/* Apps tab: the Running card, the registry list, launching — plus the
+ * shared orchestration both tab surfaces drive (renderApps, launchApp,
+ * fetchApps).
  *
- * All of this is on the Apps tab — except renderApps also feeds the
- * Coding tab's project list (the `coding` rows), which renders as
- * bare folder-name tiles with one launch button per coding agent.
+ * renderApps also feeds the Coding tab's project list (the `claude-code`
+ * rows); those tiles and their git-status annotation live in apps-coding.js, the rename/scan dialogs in
+ * apps-dialogs.js, and the Other ports sheet in apps-listeners.js — all
+ * split out, following the shape jobs.js and board.js already
+ * set.
  */
 
 import { els, state } from './state.js';
-import { apiFailToast, escapeHtml, jsonApi, toast, logPollFailure } from './api.js';
-import { bindOutsideClickToClose, iconUrl } from './dom-utils.js';
-import { renderBoard } from './board.js';
+import { apiFailToast, jsonApi, toast, logPollFailure } from './api.js';
 import { renderHomeHead } from './home-head.js';
 import { fmtAgo } from './sessions.js';
-import { applyLaunchSizePayload, handleLaunchResponse } from './terminal.js';
+import { applyLaunchSizePayload } from './shared/launch-size.js';
+import { handleLaunchResponse } from './terminal.js';
+import { SensitiveOutcome, runSensitiveAction } from './shared/sensitive-action.js';
+import { switchEl } from './_vendored/switch/switch.js';
+import { codingLaunch, renderCodingList, wireCoding } from './apps/apps-coding.js';
+import { openRename, wireRenameDialog, wireScanDialog } from './apps/apps-dialogs.js';
+import { ACTION_ROW_MENU, actionRow } from './action-rows.js';
+import { listFilter } from './list-filter.js';
+import { nameLabel } from './shared/format.js';
+import { revealInCard } from './dom-utils.js';
+import {
+  copyText, copyUrl, fetchListeners, renderOtherPortsRow, wireListeners,
+} from './apps/apps-listeners.js';
+import { createRowMenu } from './_vendored/row-menu/row-menu.js';
+import { avatar, chip } from './glance.js';
+import { confirmDialog } from './confirm-dialog.js';
+import { behindGate } from './apps/git-sync.js';
+import { failedFetchState, setAsyncState } from './async-state.js';
+import { WIDE_LAYOUT_QUERY, isWideLayout } from './layout.js';
 import { icon } from './_vendored/icons/icons.js';
-import { setSwitch, switchEl } from './_vendored/switch/switch.js';
-import { patchConfig } from './copilot-options.js';
+
+// The Apps and Trays rows' kebab menu, on the vendored row-menu.
+const appMenu = createRowMenu({ className: 'project-menu', placement: ACTION_ROW_MENU });
+// The Apps list's name filter, re-applied after every render.
+const appsFilter = listFilter({
+  input: els.appsFilterInput,
+  list: els.appsList,
+  empty: els.appsFilterEmpty,
+  storageKey: 'app-launcher.filter.apps',
+});
+
+// The kind avatar: one Lucide glyph per bat kind, the shared
+// avatar's alive badge on top.
+const KIND_GLYPH = { streamlit: 'gauge', webapp: 'globe', tunnel: 'cloud', tray: 'package', mini: 'package' };
+
+function kindAvatar(kind, badge) {
+  return avatar(KIND_GLYPH[kind] || 'layout-grid', badge, 'app-avatar');
+}
+
+// The kind in words, for the kebab's header line: the row itself
+// says it only through the avatar.
+const KIND_LABEL = {
+  streamlit: 'Streamlit app', webapp: 'Web app', tunnel: 'Tunnel', tray: 'Tray', mini: 'Mini app',
+};
+
+function kindLabel(kind) {
+  return KIND_LABEL[kind] || nameLabel(kind);
+}
+
+// The registry apps the Apps card lists (not coding projects, trays or mini apps).
+function launchableApps() {
+  return state.apps.filter(function (a) {
+    return a.kind !== 'claude-code' && a.kind !== 'tray' && a.kind !== 'mini';
+  });
+}
+
+// The registry ids with a launcher-spawned instance up (the running-apps
+// poll, gated to this tab like the rows it badges).
+function runningIds() {
+  return new Set(state.runningApps.map(function (r) { return r.app_id; }));
+}
 
 // ----------------------------------------------------------- apps list
 export function renderApps() {
-  const codingApps = state.apps.filter(function (a) { return a.kind === 'coding'; });
+  const codingApps = state.apps.filter(function (a) { return a.kind === 'claude-code'; });
+  renderCodingList(els.claudeList, codingApps);
+  els.claudeEmpty.hidden = codingApps.length !== 0;
+  renderBatLists();
+}
+
+// The Apps and Trays cards. Re-run when the registry lands and when the set
+// of running apps changes, so a launch gains its badge on the next poll.
+function renderBatLists() {
   const trayApps = state.apps.filter(function (a) { return a.kind === 'tray'; });
-  const otherApps = state.apps.filter(function (a) {
-    return a.kind !== 'coding' && a.kind !== 'tray';
-  });
+  const miniApps = state.apps.filter(function (a) { return a.kind === 'mini'; });
+  const otherApps = launchableApps();
+  const running = runningIds();
 
-  renderCodingList(els.codingList, codingApps);
-  renderList(els.registeredTraysList, trayApps);
-  renderList(els.appsList, otherApps);
+  renderList(els.registeredTraysList, trayApps, running);
+  renderList(els.miniAppsList, miniApps, running);
+  renderList(els.appsList, otherApps, running);
+  // One endRender for every list: they share the menu, and a call between
+  // them would close a menu open on a later one.
+  appMenu.endRender();
+  appsFilter.apply();
 
-  els.codingEmpty.hidden = codingApps.length !== 0;
-  els.registeredTraysEmpty.hidden = trayApps.length !== 0;
-  els.appsEmpty.hidden = otherApps.length !== 0;
+  // The true-empty blocks only after a good read: before one, an empty list
+  // is appsState's loading or error, not an empty registry.
+  els.registeredTraysEmpty.hidden = trayApps.length !== 0 || !appsReadAt;
+  els.appsEmpty.hidden = otherApps.length !== 0 || !appsReadAt;
+  // The empty state offers the scan itself; the row would say it twice.
+  els.appsScanRow.hidden = otherApps.length === 0;
+  const autostart = trayApps.filter(function (a) { return a.autostart; }).length;
+  els.traysSummaryMeta.hidden = trayApps.length === 0;
+  els.traysSummaryMeta.textContent = trayApps.length + ' · ' + autostart + ' autostart';
+  // The fold shows while a folder is configured, and while rows from an
+  // earlier one remain so they can still be launched and removed.
+  const miniShown = miniApps.length !== 0 || (state.miniAppsEnabled && !!appsReadAt);
+  els.miniAppsCard.hidden = !miniShown;
+  els.miniAppsEmpty.hidden = miniApps.length !== 0 || !appsReadAt;
+  const miniAutostart = miniApps.filter(function (a) { return a.autostart; }).length;
+  els.miniAppsSummaryMeta.hidden = miniApps.length === 0;
+  els.miniAppsSummaryMeta.textContent = miniApps.length + ' · ' + miniAutostart + ' autostart';
+  renderIdleLine();
+  renderHomeHead();
 }
 
-// ------------------------------------------- Coding row button visibility
-// The row strip grew to one button per registered agent plus GitHub plus the
-// star (six agents made it crowded on the phone). The user hides
-// the ones they don't use from the options card. Persisted server-side as
-// `coding_hidden_agents` — a *hidden* list, so a newly registered agent shows
-// up by default and needs no config migration.
-//
-// `github` is a pseudo-agent id: the repo-issues button is hideable the same
-// way, without inventing a second config key for one button. The id predates
-// the GitLab move — kept as-is for config compatibility (it is a persisted
-// `coding_hidden_agents` entry, renaming it would silently un-hide the button
-// on every existing install); the visible label/tooltip say "Repository
-// issues" and the glyph is this fork's only forge, GitLab.
-const REPO_BUTTON_ID = 'github';
-const REPO_BUTTON_LABEL = 'Repository issues';
-const REPO_BUTTON_ICON = 'gitlab';
-
-function hiddenButtons() {
-  const cfg = state.config || {};
-  return new Set((cfg.coding_hidden_agents || []).map(String));
-}
-
-// The list to *write*, read off the rendered switches rather than
-// `state.config`. Tapping two switches in quick succession would otherwise
-// compose the second patch from a config the first patch hasn't refreshed
-// yet — a read-modify-write race that silently resurrects the button the
-// first tap just hid (caught on the WebKit projection, where the slower
-// round-trip loses every time; Chromium only won it by luck).
-function hiddenFromSwitches() {
-  const host = els.agentVisibility;
-  if (!host) return [];
-  return Array.prototype.filter
-    .call(
-      host.querySelectorAll('[data-visibility-toggle]'),
-      function (sw) { return sw.getAttribute('aria-checked') !== 'true'; }
-    )
-    .map(function (sw) { return sw.dataset.visibilityToggle; });
-}
-
-// Writes are chained so two quick taps can't land out of order — each patch
-// sends the whole list, so a late-arriving earlier write would otherwise
-// clobber the newer one.
-let visibilityWrite = Promise.resolve();
-
-// The toggle list is *generated* from the live agent registry, never
-// hand-written per agent: adding an agent to src/agents.py puts it in this
-// list with no further code change (the whole point of the list).
-export function renderAgentVisibility() {
-  const host = els.agentVisibility;
-  if (!host) return;
-  const hidden = hiddenButtons();
-  host.innerHTML = '';
-  const rows = (state.agents || []).map(function (agent) {
-    return { id: agent.id, label: agent.label };
-  });
-  rows.push({ id: REPO_BUTTON_ID, label: REPO_BUTTON_LABEL });
-
-  rows.forEach(function (row) {
-    const wrap = document.createElement('span');
-    wrap.className = 'switch-row';
-    const name = document.createElement('span');
-    name.textContent = row.label;
-    wrap.appendChild(name);
-    const sw = switchEl(!hidden.has(row.id), {
-      label: 'Show the ' + row.label + ' button on project rows',
-      onToggle: function (next) {
-        // Optimistic flip, then persist the whole list and repaint the rows.
-        // The payload is composed from the switches (including this flip),
-        // not from state.config, and writes are serialized — see
-        // hiddenFromSwitches. patchConfig round-trips through GET
-        // /api/config, so re-rendering afterwards self-corrects a failed
-        // save.
-        setSwitch(sw, next);
-        const wanted = hiddenFromSwitches();
-        visibilityWrite = visibilityWrite.then(function () {
-          return patchConfig({ coding_hidden_agents: wanted }).then(
-            function () {
-              renderApps();
-              renderAgentVisibility();
-            }
-          );
-        });
-      },
-    });
-    sw.dataset.visibilityToggle = row.id;
-    wrap.appendChild(sw);
-    host.appendChild(wrap);
-  });
-}
-
-// ------------------------------------------------------ Coding tab tiles
-// A Coding tile shows only the bare on-disk folder name plus one icon
-// button per coding agent (the /api/agents registry drives the set).
-// An agent's button is disabled with a hover hint when its CLI isn't
-// installed. Coding rows are disk-scanned, so they carry no rename/
-// remove controls — Settings → Edit mode does not apply here.
-function renderCodingList(host, items) {
-  host.innerHTML = '';
-  // Favorites pinned to the top. `items` arrives alphabetical
-  // from the scanner, so a stable partition keeps both groups A–Z. The
-  // "Favorites" header toggle (state.codingFavFilter) narrows the list to
-  // just the starred ones.
-  const favs = items.filter(function (a) { return a.is_favorite; });
-  const rest = items.filter(function (a) { return !a.is_favorite; });
-  const ordered = state.codingFavFilter ? favs : favs.concat(rest);
-  syncFavFilterBtn();
-
-  if (state.codingFavFilter && favs.length === 0) {
-    const note = document.createElement('li');
-    note.className = 'coding-fav-empty muted small';
-    note.innerHTML = 'No favorites yet — tap a project’s ' + icon('star') + ' to star it.';
-    host.appendChild(note);
-    return;
-  }
-
-  ordered.forEach(function (a) {
-    host.appendChild(buildCodingRow(a));
-  });
-}
-
-function buildCodingRow(a) {
-  const li = document.createElement('li');
-  li.className = 'app-item coding-item';
-  li.dataset.id = a.id;
-
-  const main = document.createElement('div');
-  main.className = 'app-main';
-  const name = document.createElement('div');
-  name.className = 'coding-name';
-  // The folder name rides its own span, not a bare text node, so it can
-  // ellipsis-truncate independently of the branch pill beside it (one
-  // line per project). `title` keeps the full name reachable
-  // when it is cut, mirroring the pill's own tooltip.
-  const nameText = document.createElement('span');
-  nameText.className = 'coding-name-text';
-  nameText.textContent = a.name;   // raw folder name, exactly as on disk
-  nameText.title = a.name;
-  name.appendChild(nameText);
-  annotateGitStatus(name, a.id);
-  main.appendChild(name);
-  li.appendChild(main);
-
-  const actions = document.createElement('div');
-  actions.className = 'row-actions agent-actions';
-
-  // Buttons the user hid in the options card. Re-derived on
-  // every render (like syncFavFilterBtn) so the ~4 s poll can't resurrect
-  // a hidden button.
-  const hidden = hiddenButtons();
-
-  // Order is Repository · Star · agents. The agent launch is the
-  // row's primary action, so it sits rightmost — the far side of the strip
-  // is the easiest thumb reach on a phone, and it cannot go any further
-  // right than this: the strip already ends at the list's content edge.
-  if (!hidden.has(REPO_BUTTON_ID)) actions.appendChild(buildRepoButton(a));
-  actions.appendChild(buildStarButton(a));
-
-  // Agent launch buttons last — see the ordering note above.
-  state.agents.forEach(function (agent) {
-    if (hidden.has(agent.id)) return;
-    actions.appendChild(buildAgentButton(a, agent));
-  });
-
-  li.appendChild(actions);
-  return li;
-}
-
-// Repo icon — opens the repo's issues page in a new browser tab. The
-// URL is precomputed server-side (a.repo_issues_url — GitHub `/issues`
-// vs GitLab `/-/issues`, registry.py owns the host check) and used
-// verbatim here. Spawns no process and creates no session. Disabled
-// with a hover hint when the project has no parseable git remote.
-// Hideable under the same pseudo-id as the agents.
-function buildRepoButton(a) {
-  const repoBtn = document.createElement('button');
-  repoBtn.dataset.track = 'apps-open-repo';
-  repoBtn.type = 'button';
-  repoBtn.className = 'icon-btn agent-btn';
-  const repoIcon = document.createElement('img');
-  repoIcon.className = 'agent-icon';
-  repoIcon.src = iconUrl(REPO_BUTTON_ICON);
-  repoIcon.alt = 'GitLab';
-  repoBtn.appendChild(repoIcon);
-  if (a.repo_issues_url) {
-    repoBtn.title = REPO_BUTTON_LABEL;
-    repoBtn.setAttribute('aria-label', REPO_BUTTON_LABEL);
-    repoBtn.addEventListener('click', function () {
-      window.open(a.repo_issues_url, '_blank', 'noopener,noreferrer');
-    });
-  } else {
-    repoBtn.disabled = true;
-    repoBtn.title = 'No git remote';
-    repoBtn.setAttribute('aria-label', 'No git remote');
-  }
-  return repoBtn;
-}
-
-// Favorite star — a toggle, kept between the repo link and the agent
-// launch so the two "opens something" buttons don't sit side by side.
-// Filled when starred, outline otherwise (see .star-btn.is-fav).
-function buildStarButton(a) {
-  const starBtn = document.createElement('button');
-  starBtn.dataset.track = 'apps-favorite';
-  starBtn.type = 'button';
-  starBtn.className = 'icon-btn agent-btn star-btn' + (a.is_favorite ? ' is-fav' : '');
-  starBtn.innerHTML = icon('star');
-  starBtn.title = a.is_favorite ? 'Unstar (remove from favorites)' : 'Star (add to favorites)';
-  starBtn.setAttribute('aria-label', starBtn.title);
-  starBtn.setAttribute('aria-pressed', a.is_favorite ? 'true' : 'false');
-  starBtn.addEventListener('click', function () { toggleFavorite(a); });
-  return starBtn;
-}
-
-function buildAgentButton(a, agent) {
-  const btn = document.createElement('button');
-  btn.dataset.track = 'apps-launch-agent';
-  btn.type = 'button';
-  btn.className = 'icon-btn agent-btn';
-  btn.dataset.agent = agent.id;
-  const agentIcon = document.createElement('img');
-  agentIcon.className = 'agent-icon';
-  agentIcon.src = iconUrl(agent.id);
-  agentIcon.alt = agent.label;
-  btn.appendChild(agentIcon);
-  if (agent.available) {
-    btn.title = 'Launch ' + agent.label;
-    btn.setAttribute('aria-label', 'Launch ' + agent.label);
-    btn.addEventListener('click', function () { launchApp(a, agent.id); });
-  } else {
-    btn.disabled = true;
-    btn.title = agent.label + ' is not installed';
-    btn.setAttribute('aria-label', agent.label + ' is not installed');
-  }
-  return btn;
-}
-
-// Star / unstar a coding project. Persists server-side, then
-// re-fetches /api/apps so the star and the favorites-first ordering update
-// from the authoritative payload (no optimistic local mutation to drift).
-async function toggleFavorite(a) {
-  try {
-    await jsonApi('/api/coding/favorites', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: a.id, favorite: !a.is_favorite }),
-    });
-    await fetchApps();
-  } catch (exc) {
-    apiFailToast('Could not update favorite', exc);
-  }
-}
-
-// Flip a Registered Trays entry's autostart flag via
+// Flip a tray's or mini app's autostart flag via
 // the same PATCH /api/apps/{id} the rename dialog uses. Re-fetches
 // /api/apps on success so the switch reflects the authoritative persisted
 // state, not an optimistic local flip.
-async function toggleTrayAutostart(a, next) {
+async function toggleAutostart(a, next) {
   try {
     await jsonApi('/api/apps/' + encodeURIComponent(a.id), {
       method: 'PATCH',
@@ -303,304 +137,191 @@ async function toggleTrayAutostart(a, next) {
   }
 }
 
-// Keep the "Favorites" header toggle's pressed state + glyph in sync with
-// state.codingFavFilter. Called on every coding re-render so the 4 s apps
-// poll can't leave the button out of step with the list it's filtering.
-function syncFavFilterBtn() {
-  const btn = els.favFilterBtn;
-  if (!btn) return;
-  const on = state.codingFavFilter;
-  btn.classList.toggle('active', on);
-  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-  // Label in its own span so narrow phones can drop it to icon-only (
-  // the Projects summary also carries the Detached/Resume toggles).
-  btn.innerHTML = icon('star') + '<span class="fav-filter-label"> Favorites</span>';
+// A registered app's alive badge: red for a tunnel whose probe says
+// down (it should be up), green while it is up or a launch from here is
+// running, none otherwise.
+function appBadge(a, running) {
+  if (a.kind === 'tunnel' && a.health === 'down') return 'down';
+  if (running.has(a.id) || (a.kind === 'tunnel' && a.health === 'up')) return 'alive';
+  return '';
 }
 
-// Colour a Coding tile's folder name from the cached git-status map:
-// red when the working tree is dirty (needs cleaning),
-// yellow when parked on a non-default branch (not a fresh start). Red
-// wins the colour when both apply, but the branch tag still shows so the
-// "why" behind a yellow stays visible. No-op only until the boot fetch
-// lands — state.gitStatus fills automatically now, no tap needed.
-function annotateGitStatus(nameEl, id) {
-  const gs = state.gitStatus && state.gitStatus[id];
-  if (!gs || !gs.is_git) return;
-  const offMain = !!gs.branch && !gs.on_default_branch;
-  if (gs.dirty) nameEl.classList.add('git-dirty');
-  else if (offMain) nameEl.classList.add('git-off-main');
-  if (offMain) {
-    const tag = document.createElement('span');
-    tag.className = 'git-branch-tag';
-    tag.textContent = gs.branch;
-    tag.title = 'on ' + gs.branch +
-      (gs.default_branch ? ' (default: ' + gs.default_branch + ')' : '');
-    nameEl.appendChild(tag);
-  }
+// A tray or mini row's context line: "running" while a launch from here is
+// up, and "starts at log on" when its autostart switch is on. Ones the
+// tray process starts at log on are not in the running list, so a row not
+// seen running says nothing about it rather than "not running".
+function autostartMeta(a) {
+  return a.autostart ? 'starts at log on' : '';
 }
 
-// Always-on git-status refresh (deliberately not
-// on-demand). Runs git per project on the server, fanned out
-// across threads; caches the result in state and re-renders every surface
-// that reads it (Coding tiles + legend, home-head aggregate, Board
-// backlog). Called at boot and on the GIT_STATUS_POLL_MS interval in
-// main.js (quiet — poll failures log, never toast), and by the header
-// status button below (loud).
-export async function refreshGitStatus(options) {
-  const quiet = !!(options && options.quiet);
-  try {
-    const body = await jsonApi('/api/coding/git-status');
-    const map = {};
-    (body.projects || []).forEach(function (p) { map[p.id] = p; });
-    state.gitStatus = map;
-    if (els.gitStatusLegend) els.gitStatusLegend.hidden = false;
-    renderApps();
-    renderHomeHead();
-    // The Board backlog reads the same cache; repaint it if
-    // it's the visible tab — its own 5 s poll does no git work. Self-gate on
-    // an open drawer (pattern: fetchBoard() at board.js:598) so this refresh
-    // can't tear down a drawer's DOM out from under an in-progress
-    // interaction.
-    if (state.tab === 'board' && !state.boardExpanded) renderBoard();
-  } catch (exc) {
-    if (!quiet) throw exc;
-    logPollFailure('git status refresh failed', exc);
-  }
-}
-
-// The header ⎇ status button: re-fetch fresh data, then open the off-main
-// drill-down popover. The data is usually already warm from the
-// poll — the re-fetch just guarantees the popover never shows stale state.
-export async function fetchGitStatus() {
-  const btn = els.gitStatusBtn;
-  if (btn) { btn.disabled = true; btn.classList.add('loading'); }
-  try {
-    await refreshGitStatus();
-    openGitSummary();
-  } catch (exc) {
-    apiFailToast('Git status check failed', exc);
-  } finally {
-    if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
-  }
-}
-
-// Compact "what am I working on" popover. Reads the same
-// cached git-status the tiles use and lists one line per project parked
-// off its default branch, colour-matched to the list (red = dirty,
-// yellow = off-main). Anchored below the status button; closes on a
-// second tap or any tap outside, mirroring the terminal keys popover.
-let _disposeGitSummaryOutsideClick = null;
-
-function closeGitSummary() {
-  if (els.gitStatusSummary) els.gitStatusSummary.hidden = true;
-  if (_disposeGitSummaryOutsideClick) {
-    _disposeGitSummaryOutsideClick();
-    _disposeGitSummaryOutsideClick = null;
-  }
-}
-
-function buildGitSummary() {
-  const box = els.gitStatusSummary;
-  if (!box) return;
-  box.innerHTML = '';
-  // Off-default-branch coding projects, in the list's own order.
-  const offMain = state.apps.filter(function (a) {
-    if (a.kind !== 'coding') return false;
-    const gs = state.gitStatus && state.gitStatus[a.id];
-    return gs && gs.is_git && gs.branch && !gs.on_default_branch;
-  });
-  if (!offMain.length) {
-    const note = document.createElement('div');
-    note.className = 'git-summary-empty';
-    note.innerHTML = 'All projects on their default branch ' + icon('circle-check');
-    box.appendChild(note);
-    return;
-  }
-  offMain.forEach(function (a) {
-    const gs = state.gitStatus[a.id];
-    const row = document.createElement('div');
-    row.className = 'git-summary-row';
-    row.setAttribute('role', 'listitem');
-    const name = document.createElement('span');
-    // Same precedence as annotateGitStatus: red wins when also dirty.
-    name.className = 'git-summary-name ' + (gs.dirty ? 'git-dirty' : 'git-off-main');
-    name.textContent = a.name;
-    const tag = document.createElement('span');
-    tag.className = 'git-branch-tag';
-    tag.textContent = gs.branch;
-    row.appendChild(name);
-    row.appendChild(tag);
-    box.appendChild(row);
-  });
-}
-
-function openGitSummary() {
-  const box = els.gitStatusSummary;
-  if (!box) return;
-  buildGitSummary();
-  box.hidden = false;
-  if (!_disposeGitSummaryOutsideClick) {
-    _disposeGitSummaryOutsideClick = bindOutsideClickToClose(
-      box, els.gitStatusBtn, closeGitSummary
-    );
-  }
-}
-
-function renderList(host, items) {
+// Apps and Trays rows on the vendored action-row. Tapping the row
+// launches the bat hidden, with no console window (🚫👁): the
+// phone-first case, the PC unattended. Launch visible (watch a
+// Streamlit boot, read a traceback) and every other action ride the kebab,
+// whose header line names the kind; the bat path is its Copy path item
+// An app row leads with its kind avatar and is one line: the
+// avatar already says the kind. A tunnel keeps "Tunnel" as its
+// context line, since it is not the app's own web row, plus a danger "down"
+// chip when it is down (Up is normal, so it gets none). A tray row keeps
+// its autostart switch as the row's one leading toggle — it is state read
+// at a glance, unlabelled because the panel is called Trays; screen readers
+// still get "Autostart <name> at boot".
+function renderList(host, items, running) {
   host.innerHTML = '';
   items.forEach(function (a) {
-    host.appendChild(buildAppRow(a));
+    // Trays and mini apps lead with their autostart switch, not a kind avatar.
+    const tray = a.kind === 'tray' || a.kind === 'mini';
+    const tunnel = a.kind === 'tunnel';
+    const down = tunnel && a.health === 'down';
+    const path = a.bat_path || a.project_dir || '';
+    const row = actionRow({
+      id: a.id,
+      className: 'app-row',
+      title: a.name,
+      meta: tray ? autostartMeta(a) : (tunnel ? kindLabel(a.kind) : ''),
+      tail: tray && running.has(a.id) ? 'running' : '',
+      chips: down ? [chip('down', 'danger', 'app-down-chip')] : [],
+      avatar: tray ? null : kindAvatar(a.kind, appBadge(a, running)),
+      label: 'Launch ' + a.name + ' hidden, with no window',
+      onMain: function () { launchApp(a, undefined, true); },
+      trailing: a.refreshable ? refreshVerb(a) : null,
+      kebabClass: 'app-menu-anchor',
+      kebabLabel: a.name + ' actions',
+    });
+    if (tray) {
+      row.li.insertBefore(switchEl(!!a.autostart, {
+        label: 'Autostart ' + a.name + ' at boot',
+        onToggle: function (next, btn) {
+          btn.disabled = true;
+          toggleAutostart(a, next).finally(function () {
+            btn.disabled = false;
+          });
+        },
+      }), row.main);
+    }
+    appMenu.attach(a.id, row.kebab, [
+      {
+        // The same bat in a console window you can watch (⚡); the
+        // row tap is the hidden launch.
+        dataset: { item: 'app-visible-btn' }, glyph: 'eye',
+        label: 'Launch visible', ariaLabel: 'Launch ' + a.name + ' in a visible window',
+        onTap: function () { launchApp(a, undefined, false); },
+      },
+      {
+        // A tunnel's URL is tapped, never read: a cloudflared URL with a
+        // `?token=…` on it wrapped to three lines on the phone.
+        dataset: { item: 'app-tunnel-link' }, glyph: 'link',
+        label: 'Open link',
+        ariaLabel: a.tunnel_url ? 'Open ' + a.name + ' tunnel' : a.name + ' tunnel not running',
+        hidden: !tunnel,
+        disabled: !a.tunnel_url,
+        hint: 'Tunnel not running',
+        onTap: function () { window.open(a.tunnel_url, '_blank', 'noopener'); },
+      },
+      {
+        dataset: { item: 'app-copy-url-btn' }, glyph: 'copy',
+        label: 'Copy URL', ariaLabel: 'Copy ' + a.name + ' tunnel URL',
+        hidden: !tunnel,
+        disabled: !a.tunnel_url,
+        hint: 'Tunnel not running',
+        onTap: function () { copyUrl(a.tunnel_url); },
+      },
+      {
+        // Always offered: there is no Edit mode
+        // anywhere.
+        dataset: { item: 'app-rename-btn' }, glyph: 'pencil',
+        label: 'Rename', ariaLabel: 'Rename ' + a.name,
+        onTap: function () { openRename(a); },
+      },
+      {
+        dataset: { item: 'app-copy-path-btn' }, glyph: 'clipboard',
+        label: 'Copy path', ariaLabel: 'Copy the path of ' + a.name,
+        hidden: !path,
+        onTap: function () { copyText(path, 'Path'); },
+      },
+      {
+        dataset: { item: 'app-remove-btn' }, glyph: 'trash-2', danger: true,
+        label: 'Remove', ariaLabel: 'Remove ' + a.name,
+        onTap: function () { removeApp(a); },
+      },
+    ], { header: kindLabel(a.kind) });
+    host.appendChild(row.li);
   });
 }
 
-function buildAppRow(a) {
-  const li = document.createElement('li');
-  li.className = 'app-item';
-  li.dataset.id = a.id;
-
-  const main = document.createElement('div');
-  main.className = 'app-main';
-
-  const launch = document.createElement('button');
-  launch.dataset.track = 'apps-launch';
-  launch.type = 'button';
-  launch.className = 'launch-btn';
-
-  const top = document.createElement('div');
-  const dot = document.createElement('span');
-  dot.className = 'health-dot';
-  // Health is only known for tunnel apps (probed server-side).
-  if (a.health === 'up') dot.classList.add('up');
-  else if (a.health === 'down') dot.classList.add('down');
-  top.appendChild(dot);
-
-  const pill = document.createElement('span');
-  pill.className = 'kind-pill';
-  pill.textContent = a.kind;
-  top.appendChild(pill);
-
-  const name = document.createElement('span');
-  name.textContent = a.name;
-  top.appendChild(name);
-  launch.appendChild(top);
-
-  const meta = document.createElement('span');
-  meta.className = 'meta';
-  meta.textContent = a.bat_path || a.project_dir || '';
-  // Tray rows show the path inline with the autostart toggle below
-  // instead — .launch-btn is a <button>, so the toggle can't nest
-  // inside it, and the path moves out to sit alongside it.
-  if (a.kind !== 'tray') launch.appendChild(meta);
-
-  launch.addEventListener('click', function () { launchApp(a); });
-  main.appendChild(launch);
-
-  if (a.kind === 'tunnel') main.appendChild(buildTunnelRow(a));
-  if (a.kind === 'tray') main.appendChild(buildTrayAutostartRow(a, meta));
-
-  li.appendChild(main);
-
-  // Rename + remove are gated behind Settings → Edit mode, so the
-  // lists stay icon-free in normal use (no per-row icon inflation).
-  // Only the Apps tab's bat-based rows reach renderList — Coding-tab
-  // rows render via renderCodingList instead.
-  if (state.editMode) li.appendChild(buildEditActions(a));
-
-  return li;
+// The row's one trailing verb: Refresh. Separate from the row tap (launch),
+// so a restart is never a mistaken launch.
+function refreshVerb(a) {
+  const btn = document.createElement('button');
+  btn.dataset.track = 'apps.refresh';
+  btn.dataset.item = 'app-refresh-btn';
+  btn.type = 'button';
+  btn.className = 'icon-button action-row-verb app-refresh-btn';
+  btn.innerHTML = icon('refresh-cw');
+  btn.title = 'Refresh ' + a.name;
+  btn.setAttribute('aria-label', 'Refresh ' + a.name + ': stop it and start it again hidden');
+  btn.addEventListener('click', function () { refreshApp(a); });
+  return btn;
 }
 
-function buildTunnelRow(a) {
-  const tr = document.createElement('div');
-  tr.className = 'tunnel-row';
-  if (a.tunnel_url) {
-    const link = document.createElement('a');
-    link.href = a.tunnel_url;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.innerHTML = icon('satellite-dish') + ' ' + escapeHtml(a.tunnel_url);
-    tr.appendChild(link);
-  } else {
-    const span = document.createElement('span');
-    span.innerHTML = icon('satellite-dish') + ' Tunnel not running';
-    tr.appendChild(span);
-  }
-  return tr;
-}
+// A tray restarts through its own tray.bat, which waits for the new build, so
+// it gets longer than the stop-and-spawn of a bat app before "not confirmed".
+const REFRESH_TIMEOUT_MS = 40000;
+const REFRESH_TRAY_TIMEOUT_MS = 130000;
 
-// Autostart switch — persists
-// via the same PATCH /api/apps/{id} the rename dialog uses, just with
-// `autostart` instead of `name`. The switch is a sibling of the launch
-// button, so its compact 44px target remains independent of launching.
-// Shares a row with the path text (moved out of .launch-btn above) —
-// the panel title already says "autostart", so no per-row label.
-function buildTrayAutostartRow(a, meta) {
-  const row = document.createElement('div');
-  row.className = 'tray-autostart-row';
-  row.appendChild(meta);
-  const toggleBtn = switchEl(!!a.autostart, {
-    label: 'Autostart ' + a.name + ' at boot',
-    onToggle: function (next, btn) {
-      btn.disabled = true;
-      toggleTrayAutostart(a, next).finally(function () {
-        btn.disabled = false;
-      });
+async function refreshApp(a) {
+  const verdict = await runSensitiveAction({
+    key: 'app-refresh:' + a.id,
+    pending: 'Refreshing ' + a.name + '…',
+    icon: 'refresh-cw',
+    timeoutMs: a.kind === 'tray' ? REFRESH_TRAY_TIMEOUT_MS : REFRESH_TIMEOUT_MS,
+    run: function () {
+      return jsonApi('/api/apps/' + encodeURIComponent(a.id) + '/refresh', { method: 'POST' });
     },
+    done: function () { return 'Refreshed ' + a.name; },
+    failPrefix: 'Refresh failed',
+    unconfirmed: 'Refresh of ' + a.name + ' not confirmed — check Running before trying again.',
   });
-  row.appendChild(toggleBtn);
-  return row;
+  // Success or not, the Running panel may have changed: stops landed before a failure.
+  if (verdict.outcome !== SensitiveOutcome.DROPPED) fetchRunningApps().catch(function () {});
 }
 
-function buildEditActions(a) {
-  const actions = document.createElement('div');
-  actions.className = 'row-actions';
-
-  const renameBtn = document.createElement('button');
-  renameBtn.dataset.track = 'apps-rename';
-  renameBtn.type = 'button';
-  renameBtn.className = 'icon-btn';
-  renameBtn.innerHTML = icon('pencil');
-  renameBtn.title = 'Rename';
-  renameBtn.setAttribute('aria-label', 'Rename');
-  renameBtn.addEventListener('click', function () { openRename(a); });
-  actions.appendChild(renameBtn);
-
-  const removeBtn = document.createElement('button');
-  removeBtn.dataset.track = 'apps-remove';
-  removeBtn.type = 'button';
-  removeBtn.className = 'icon-btn danger';
-  removeBtn.innerHTML = icon('trash-2');
-  removeBtn.title = 'Remove';
-  removeBtn.setAttribute('aria-label', 'Remove');
-  removeBtn.addEventListener('click', function () { removeApp(a); });
-  actions.appendChild(removeBtn);
-
-  return actions;
-}
-
-// Coding-tab launch mode is the ☁️ Detached toggle in the options
-// card: checked → 'remote' (detached console window, listed + killable
-// here but no phone terminal); unchecked → full-control PTY streamed to
-// the phone. The ↺ Resume toggle reopens the agent's own
+// Coding-tab launch mode is the Detached switch in the Projects card's
+// launch toolbar (launch-toolbar.js): on → 'remote' (detached
+// console window, listed + killable here but no phone terminal); off →
+// full-control PTY streamed to the phone. The Resume switch
+// reopens the agent's own
 // session picker; it is orthogonal to Detached — Detached +
 // Resume opens the picker in the detached console, Resume alone streams it
-// to the phone over a PTY. `agentId` (copilot) is set by the Coding
-// tile's per-agent button; undefined for Apps-tab bat launches.
-async function launchApp(a, agentId) {
-  const resume = !!(a.kind === 'coding' && els.codingResume &&
-    els.codingResume.getAttribute('aria-checked') === 'true');
+// to the phone over a PTY. `agentId` (copilot) is set by the Coding tile's
+// launch button; undefined for Apps-tab bat launches.
+//
+// `stealth` is the Apps/Trays 🚫👁 button: the bat runs with
+// no console window on screen. Bat kinds only — a coding session has no
+// console window of its own to hide.
+export async function launchApp(a, agentId, stealth) {
+  const coding = a.kind === 'claude-code' && codingLaunch;
+  const resume = !!(coding && codingLaunch.isResume());
   // Detached → 'remote', independent of Resume. The two combine: a
   // Detached+Resume launch renders the agent's picker in the console.
-  const mode = (a.kind === 'coding' && els.codingDetached &&
-    els.codingDetached.getAttribute('aria-checked') === 'true') ? 'remote' : null;
+  const mode = (coding && codingLaunch.isDetached()) ? 'remote' : null;
+  // A repo behind its remote is pulled first (or, when it cannot be, launched
+  // only on an explicit "Launch anyway"); the server refuses it otherwise.
+  const gate = a.kind === 'claude-code' ? await behindGate(a) : {};
+  if (!gate) return;
   try {
     const opts = { method: 'POST' };
-    const payload = {};
+    const payload = Object.assign({}, gate);
     if (mode) payload.mode = mode;
     if (resume) payload.resume = true;
-    if (a.kind === 'coding') payload.agent = agentId || 'copilot';
+    if (a.kind === 'claude-code') {
+      // Copilot takes no per-launch model; its model is set in Settings.
+      payload.agent = agentId || 'copilot';
+    }
+    else if (stealth) payload.stealth = true;
     // Streamed (pty) coding launches need a starting PTY size. Detached
     // (remote) launches have no PTY, so skip it.
-    if (a.kind === 'coding' && !mode) {
+    if (a.kind === 'claude-code' && !mode) {
       // A desktop browser gets a dedicated PC Edge --app window, not an
       // in-page terminal; a phone carries its real terminal
       // size so the PTY's first frame is the right width for a ratatui
@@ -611,30 +332,33 @@ async function launchApp(a, agentId) {
       opts.headers = { 'Content-Type': 'application/json' };
       opts.body = JSON.stringify(payload);
     }
-    const body = await jsonApi(
-      '/api/apps/' + encodeURIComponent(a.id) + '/launch', opts
-    );
-    // Tag the toast with the agent's label for any non-default agent;
-    // resolved against the registry so a new agent needs no change here.
-    let agentTag = '';
-    if (a.kind === 'coding' && body.agent && body.agent !== 'copilot') {
-      const known = state.agents.find(function (ag) { return ag.id === body.agent; });
-      agentTag = ' (' + (known ? known.label : body.agent) + ')';
-    }
-    toast(
-      (resume ? 'Resumed ' : 'Launched ') + a.name + agentTag +
-        (mode === 'remote' ? ' (detached)' : ''),
-      'good',
-      { icon: resume ? 'rotate-ccw' : 'rocket' }
-    );
-    if (a.kind === 'coding' && body.session) {
+    const verdict = await runSensitiveAction({
+      key: 'app-launch:' + a.id,
+      pending: (resume ? 'Resuming ' : 'Launching ') + a.name + '…',
+      icon: resume ? 'rotate-ccw' : (stealth ? 'eye-off' : 'rocket'),
+      run: function () {
+        return jsonApi('/api/apps/' + encodeURIComponent(a.id) + '/launch', opts);
+      },
+      done: function (reply) {
+        // A stealth launch leaves nothing on screen to confirm it worked, so
+        // the toast is the only feedback — say the mode out loud.
+        return (resume ? 'Resumed ' : 'Launched ') + a.name +
+          (mode === 'remote' ? ' (detached)' : '') +
+          (stealth ? ' (stealth)' : '');
+      },
+      failPrefix: 'Launch failed',
+      unconfirmed: 'Launch of ' + a.name + ' not confirmed — check the session list before trying again.',
+    });
+    if (verdict.outcome !== SensitiveOutcome.DONE) return;
+    const body = verdict.result;
+    if (a.kind === 'claude-code' && body.session) {
       // Full-control sessions drop straight into the terminal; detached
       // ones only appear in the running-sessions list. A desktop browser
       // gets its terminal in a dedicated PC Edge window instead of in-page,
       // so it stays on the launcher SPA.
       handleLaunchResponse(body.session);
-    } else if (a.kind !== 'coding') {
-      // Non-coding: a bat was spawned and is now tracked. Port
+    } else if (a.kind !== 'claude-code') {
+      // Non-claude-code: a bat was spawned and is now tracked. Port
       // discovery is racy (Streamlit takes 1-3 s to bind) so poll the
       // running-apps list a few times after the launch.
       fetchRunningApps().catch(function () {});
@@ -651,7 +375,12 @@ async function launchApp(a, agentId) {
 }
 
 async function removeApp(a) {
-  if (!confirm('Remove ' + a.name + ' from the registry?')) return;
+  const ok = await confirmDialog({
+    title: 'Remove ' + a.name + '?',
+    message: 'It leaves the registry. Its files stay where they are.',
+    action: 'Remove',
+  });
+  if (!ok) return;
   try {
     await jsonApi('/api/apps/' + encodeURIComponent(a.id), { method: 'DELETE' });
     toast('Removed ' + a.name, 'good');
@@ -661,9 +390,33 @@ async function removeApp(a) {
   }
 }
 
+// When the registry last read well: a failure before it is the
+// Apps card's error with Retry, one after it a stale line over the last list.
+let appsReadAt = 0;
+
+function retryApps() {
+  fetchApps().catch(function () {});
+}
+
 export async function fetchApps() {
-  const body = await jsonApi('/api/apps');
+  if (!appsReadAt) {
+    setAsyncState(els.appsState, 'loading', { message: 'Reading apps…' });
+    setAsyncState(els.traysState, 'loading', { message: 'Reading trays…' });
+  }
+  let body;
+  try {
+    body = await jsonApi('/api/apps');
+  } catch (exc) {
+    // The Trays card reads the same registry, so it fails with it.
+    failedFetchState(els.appsState, !!appsReadAt, appsReadAt, 'the apps', retryApps);
+    failedFetchState(els.traysState, !!appsReadAt, appsReadAt, 'the trays', retryApps);
+    throw exc;
+  }
+  appsReadAt = Date.now();
+  setAsyncState(els.appsState, 'ready');
+  setAsyncState(els.traysState, 'ready');
   state.apps = body.apps || [];
+  state.miniAppsEnabled = !!body.mini_apps_enabled;
   renderApps();
 }
 
@@ -676,104 +429,139 @@ export async function fetchAgents() {
     if (Array.isArray(body.agents) && body.agents.length) {
       state.agents = body.agents;
     }
+    // Rides on the same payload — the VS Code button isn't an agent,
+    // but it's detected the same way. Guarded on the type so an older server
+    // that omits the field leaves the conservative fallback in place rather
+    // than coercing `undefined` to a hard `false`.
+    if (typeof body.vscode_available === 'boolean') {
+      state.vscodeAvailable = body.vscode_available;
+    }
   } catch (exc) {
     logPollFailure('agents fetch failed', exc);
   }
-  // The visibility list is keyed off the registry, so it renders once the
-  // agents are known (boot order: fetchConfig → fetchAgents). Rendering from
-  // the conservative fallback on a failed fetch is fine — same ids, same
-  // labels.
-  renderAgentVisibility();
 }
 
-// -------------------------------------------------- running apps panel
-// Apps spawned from the launcher (bats). Mirrors the Coding tab's
-// Running sessions panel: list, tap-to-open over the remote host, per-app stop.
+// -------------------------------------------------- the Running card
+// Apps spawned from the launcher (bats), as action-rows: tapping the
+// row opens the app over Tailscale; Copy URL and the destructive Stop (last,
+// confirmed) are in its ⋮ menu rather than a visible button. A
+// row leads with its kind avatar wearing the alive badge, its context line
+// is "up 2h · :8501", and the pid is the menu's header line.
+const runningMenu = createRowMenu({ className: 'project-menu', placement: ACTION_ROW_MENU });
+// The running app ids the Apps list was last badged from: it re-renders
+// only when that set changes, not on every poll.
+let badgedRunning = '';
+// When the running list last read well: its empty state and the
+// footnote wait for one, and a failure before it is the error with Retry.
+let runningReadAt = 0;
+
+// The wide layout's line in place of the empty-state block: CSS
+// shows it only at that query, and only while nothing runs.
+function renderIdleLine() {
+  if (!els.appsIdleLine) return;
+  const n = launchableApps().length;
+  els.appsIdleLine.hidden = !runningReadAt || state.runningApps.length !== 0;
+  els.appsIdleLine.textContent = 'Nothing running · ' + n + (n === 1 ? ' app' : ' apps') + ' to start';
+}
+
+// A running row's common actions as visible buttons: CSS shows them
+// at the wide layout only, where hiding them behind the kebab is a phone
+// compromise; the kebab keeps them for the phone. Open is the row tap, so it
+// has no button: with the kebab that is three controls beside the row's main
+// button, the most the design review allows a row. Both are the vendored plain verb (icon-button action-row-verb, no fill
+// or border at rest); Stop takes the quiet danger hover.
+function runningVerb(className, glyph, label, onTap, disabled, hint, opts) {
+  const btn = document.createElement('button');
+  btn.dataset.track = opts.track;
+  btn.type = 'button';
+  btn.className = className;
+  btn.innerHTML = icon(glyph);
+  btn.title = disabled ? hint : label;
+  btn.setAttribute('aria-label', label);
+  btn.disabled = !!disabled;
+  btn.addEventListener('click', onTap);
+  return btn;
+}
+
+function runningActions(r, noUrl) {
+  const box = document.createElement('span');
+  box.className = 'running-app-actions icon-button-group';
+  box.append(
+    runningVerb('icon-button action-row-verb running-app-copy-inline', 'copy', 'Copy ' + r.name + ' URL',
+      function () { copyUrl(r.url); }, !r.url, noUrl, { track: 'apps.running-copy' }),
+    runningVerb('icon-button action-row-verb danger running-app-stop-inline',
+      'square', 'Stop ' + r.name,
+      function () { stopAppInstance(r); }, false, '', { track: 'apps.running-stop' }),
+  );
+  return box;
+}
+
 export function renderRunningApps() {
   const host = els.runningAppsList;
   host.innerHTML = '';
-  els.runningAppsEmpty.hidden = state.runningApps.length !== 0;
-  renderHomeHead();
+  const none = state.runningApps.length === 0;
+  els.runningAppsEmpty.hidden = !none || !runningReadAt;
+  // The note is on from first paint and leaves only once a read finds rows:
+  // it is the one line the empty answer adds under the block that stood in
+  // for it, so the card keeps its height when the answer lands.
+  els.runningAppsNote.hidden = !!runningReadAt && !none;
+  renderIdleLine();
+  renderOtherPortsRow();
+  const ids = Array.from(runningIds()).sort().join('\n');
+  if (ids !== badgedRunning) {
+    badgedRunning = ids;
+    renderBatLists();
+  } else {
+    renderHomeHead();
+  }
 
   state.runningApps.forEach(function (r) {
-    const li = document.createElement('li');
-    li.className = 'app-item session-item';
-    li.dataset.pid = r.pid;
-
-    const main = document.createElement('div');
-    main.className = 'app-main';
-
-    // Inert info block — the row itself isn't tappable; actions are
-    // the two buttons. Reuses .launch-btn styling minus the click.
-    const info = document.createElement('div');
-    info.className = 'launch-btn session-open inert';
-
-    const head = document.createElement('div');
-    head.className = 'session-head';
-    const dot = document.createElement('span');
-    dot.className = 'health-dot ' + ((r.alive && r.port) ? 'up' : 'down');
-    head.appendChild(dot);
-    const pill = document.createElement('span');
-    pill.className = 'kind-pill';
-    pill.textContent = r.kind;
-    head.appendChild(pill);
-    const name = document.createElement('span');
-    name.className = 'name';
-    name.textContent = r.name;
-    head.appendChild(name);
-    info.appendChild(head);
-
-    const meta = document.createElement('span');
-    meta.className = 'meta';
     const ago = fmtAgo(r.started_at);
-    const parts = [];
-    if (ago) parts.push('up ' + ago);
-    parts.push(r.port ? ':' + r.port : 'binding…');
-    parts.push('pid ' + r.pid);
-    meta.textContent = parts.join(' · ');
-    info.appendChild(meta);
-    main.appendChild(info);
-    li.appendChild(main);
-
-    const actions = document.createElement('div');
-    actions.className = 'row-actions session-actions';
-
-    const openBtn = document.createElement('button');
-    openBtn.dataset.track = 'apps-running-open';
-    openBtn.type = 'button';
-    openBtn.className = 'icon-btn action-open';
-    openBtn.innerHTML = icon('globe');
-    openBtn.setAttribute('aria-label', 'Open app');
-    if (r.url) {
-      openBtn.title = 'Open ' + r.url;
-      openBtn.addEventListener('click', function () {
-        window.open(r.url, '_blank', 'noopener,noreferrer');
-      });
-    } else {
-      openBtn.disabled = true;
-      openBtn.title = r.port
-        ? 'Set tailnet_host in config/config.json to enable Open'
-        : 'Waiting for the app to bind a port…';
-    }
-    actions.appendChild(openBtn);
-
-    const stopBtn = document.createElement('button');
-    stopBtn.dataset.track = 'apps-running-stop';
-    stopBtn.type = 'button';
-    stopBtn.className = 'icon-btn action-stop-close';
-    stopBtn.innerHTML = icon('square');
-    stopBtn.title = 'Stop ' + r.name;
-    stopBtn.setAttribute('aria-label', 'Stop app');
-    stopBtn.addEventListener('click', function () { stopAppInstance(r); });
-    actions.appendChild(stopBtn);
-
-    li.appendChild(actions);
-    host.appendChild(li);
+    const noUrl = r.port
+      ? 'Set tailnet_host in config/config.json to enable Open'
+      : 'Waiting for the app to bind a port…';
+    const row = actionRow({
+      className: 'running-app',
+      title: r.name,
+      meta: r.port ? ':' + r.port : 'binding…',
+      tail: ago ? 'up ' + ago : '',
+      avatar: kindAvatar(r.kind, 'alive'),
+      label: r.url ? 'Open ' + r.url : 'Open ' + r.name,
+      disabled: !r.url,
+      hint: noUrl,
+      onMain: function () { window.open(r.url, '_blank', 'noopener,noreferrer'); },
+      trailing: runningActions(r, noUrl),
+      kebabClass: 'running-app-menu-anchor',
+      kebabLabel: r.name + ' actions',
+    });
+    row.li.dataset.pid = r.pid;
+    row.main.classList.add('action-open');
+    runningMenu.attach(r.app_id + ':' + r.pid, row.kebab, [
+      {
+        dataset: { item: 'running-app-copy-btn' }, glyph: 'copy',
+        label: 'Copy URL', ariaLabel: 'Copy ' + r.name + ' URL',
+        disabled: !r.url,
+        hint: noUrl,
+        onTap: function () { copyUrl(r.url); },
+      },
+      {
+        dataset: { item: 'action-stop-close' }, glyph: 'square', danger: true,
+        label: 'Stop', ariaLabel: 'Stop ' + r.name,
+        onTap: function () { stopAppInstance(r); },
+      },
+    ], { header: 'pid ' + r.pid });
+    host.appendChild(row.li);
   });
+  runningMenu.endRender();
 }
 
 async function stopAppInstance(r) {
-  if (!confirm('Stop ' + r.name + ' (pid ' + r.pid + ')?')) return;
+  const ok = await confirmDialog({
+    title: 'Stop ' + r.name + '?',
+    message: 'This ends pid ' + r.pid + ' and everything it started.',
+    action: 'Stop',
+  });
+  if (!ok) return;
   try {
     await jsonApi(
       '/api/apps/' + encodeURIComponent(r.app_id) +
@@ -791,166 +579,81 @@ async function stopAppInstance(r) {
   }
 }
 
+function retryRunning() {
+  fetchRunningApps().catch(function () {});
+}
+
 export async function fetchRunningApps() {
   // Apps-tab-only poll: pause while another tab is showing so the
   // background interval doesn't hit the API for an invisible panel.
   if (state.tab !== 'apps') return;
+  if (!runningReadAt) {
+    setAsyncState(els.runningAppsState, 'loading', { message: 'Reading running apps…', reserveAction: true });
+  }
   try {
     const body = await jsonApi('/api/apps/running');
     state.runningApps = body.running || [];
-    renderRunningApps();
   } catch (exc) {
-    // Best-effort poll — don't spam toasts.
+    // Best-effort poll — don't spam toasts; the card says it instead.
     logPollFailure('running apps fetch failed', exc);
-  }
-}
-
-// ----------------------------------------------------------- rename dialog
-let renameTargetId = null;
-
-function openRename(a) {
-  renameTargetId = a.id;
-  els.renameInput.value = a.name;
-  if (els.renameDialog.showModal) els.renameDialog.showModal();
-}
-
-function wireRenameDialog() {
-  els.renameCancel.addEventListener('click', function () {
-    if (els.renameDialog.close) els.renameDialog.close();
-  });
-  els.renameForm.addEventListener('submit', async function (ev) {
-    ev.preventDefault();
-    const name = els.renameInput.value.trim();
-    if (!name || !renameTargetId) return;
-    try {
-      await jsonApi('/api/apps/' + encodeURIComponent(renameTargetId), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      });
-      if (els.renameDialog.close) els.renameDialog.close();
-      await fetchApps();
-    } catch (exc) {
-      apiFailToast('Rename failed', exc);
-    }
-  });
-}
-
-// ----------------------------------------------------------- scan dialog
-async function runScan() {
-  try {
-    const body = await jsonApi('/api/apps/scan', { method: 'POST' });
-    state.pendingScan = body.new || [];
-    renderScanResults();
-    if (els.scanDialog.showModal) els.scanDialog.showModal();
-    else els.scanDialog.hidden = false;
-  } catch (exc) {
-    apiFailToast('Scan failed', exc);
-  }
-}
-
-function renderScanResults() {
-  els.scanResults.innerHTML = '';
-  if (!state.pendingScan.length) {
-    const p = document.createElement('p');
-    p.className = 'muted small';
-    p.textContent = 'No new entries.';
-    els.scanResults.appendChild(p);
+    failedFetchState(els.runningAppsState, !!runningReadAt, runningReadAt,
+      'the running apps', retryRunning);
     return;
   }
-  const byKind = {};
-  state.pendingScan.forEach(function (c) {
-    (byKind[c.kind] = byKind[c.kind] || []).push(c);
-  });
-  Object.keys(byKind).sort().forEach(function (kind) {
-    const section = document.createElement('div');
-    section.className = 'scan-section';
-    const h = document.createElement('h3');
-    h.textContent = kind;
-    section.appendChild(h);
-    byKind[kind].forEach(function (c) {
-      const row = document.createElement('div');
-      row.className = 'scan-row';
-      const body = document.createElement('div');
-      const name = document.createElement('div');
-      name.textContent = c.name;
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      meta.textContent = c.bat_path || c.project_dir || '';
-      body.appendChild(name);
-      body.appendChild(meta);
-      row.appendChild(body);
-      const toggleBtn = switchEl(true, {
-        label: 'Include ' + c.name,
-        onToggle: function (next, btn) { setSwitch(btn, next); },
-      });
-      toggleBtn.dataset.value = c.id;
-      row.appendChild(toggleBtn);
-      section.appendChild(row);
-    });
-    els.scanResults.appendChild(section);
-  });
+  runningReadAt = Date.now();
+  setAsyncState(els.runningAppsState, 'ready');
+  renderRunningApps();
 }
 
-function wireScanDialog() {
-  els.rescanBtn.addEventListener('click', runScan);
-  els.scanCancel.addEventListener('click', function () {
-    if (els.scanDialog.close) els.scanDialog.close();
-  });
-  els.scanSave.addEventListener('click', async function () {
-    const checked = Array.from(
-      els.scanResults.querySelectorAll('.scan-row .toggle[aria-checked="true"]')
-    );
-    const ids = checked.map(function (btn) { return btn.dataset.value; });
-    if (!ids.length) {
-      toast('Nothing selected.', 'error');
-      return;
+// The wide layout: two columns right of the rail. The left is the
+// page itself (header, Apps, Trays); the "what is up now" column moves after
+// Trays, so the keyboard reaches the list before the pane, and CSS docks it
+// on the right. Other ports' list moves out of its sheet into the inline
+// card there, so the rows and their confirmed stop are the same code. Below
+// the query everything goes back where the phone has it.
+function wireWideApps() {
+  const col = els.appsNowCol;
+  const pane = col && col.parentNode;
+  const listCard = pane && pane.querySelector('.apps-list-card');
+  const body = els.listenersBody;
+  if (!col || !listCard || !body || !els.otherPortsCardBody) return;
+  const sheetHome = body.parentNode;
+  const sheetNext = body.nextSibling;
+  function place() {
+    if (isWideLayout()) {
+      if (els.otherPortsSheet.open) els.otherPortsSheet.close();
+      pane.appendChild(col);
+      els.otherPortsCardBody.appendChild(body);
+    } else {
+      pane.insertBefore(col, listCard);
+      sheetHome.insertBefore(body, sheetNext);
     }
-    try {
-      const body = await jsonApi('/api/apps/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-      });
-      toast('Added ' + (body.added || []).length + ' entry(ies).', 'good');
-      if (els.scanDialog.close) els.scanDialog.close();
-      await fetchApps();
-    } catch (exc) {
-      apiFailToast('Save failed', exc);
-    }
-  });
+  }
+  place();
+  try {
+    window.matchMedia(WIDE_LAYOUT_QUERY).addEventListener('change', place);
+  } catch (_) { /* no matchMedia: the phone placement stands */ }
 }
 
 export function wireApps() {
-  if (els.gitStatusBtn) {
-    els.gitStatusBtn.addEventListener('click', function () {
-      // Toggle: a second tap closes the summary; otherwise re-fetch fresh
-      // git status and open it (fetchGitStatus opens on success).
-      if (els.gitStatusSummary && !els.gitStatusSummary.hidden) {
-        closeGitSummary();
-        return;
-      }
-      fetchGitStatus().catch(function () {});
-    });
-  }
-  if (els.favFilterBtn) {
-    els.favFilterBtn.addEventListener('click', function (ev) {
-      // The toggle lives inside the Projects <summary>; stopPropagation keeps
-      // the tap from also collapsing the panel (same trick the Settings edit
-      // toggle and the sessions header actions use).
-      ev.stopPropagation();
-      state.codingFavFilter = !state.codingFavFilter;
-      localStorage.setItem(
-        'launcher.codingFavFilter', state.codingFavFilter ? '1' : '0'
-      );
-      renderApps();
-    });
-  }
-  // Refresh the running-apps panel the moment the Apps tab is opened —
-  // the background poll pauses while the tab is hidden.
+  // Refresh the running-apps panel and the port probe the moment the Apps
+  // tab is opened — both polls pause while the tab is hidden.
   els.tabApps.addEventListener('click', function () {
     fetchRunningApps().catch(function () {});
+    fetchListeners().catch(function () {});
   });
+  wireWideApps();
+  // Nothing running: an app starts from the Apps list below.
+  const runningEmptyAction = document.getElementById('runningAppsEmptyAction');
+  if (runningEmptyAction) {
+    runningEmptyAction.addEventListener('click', function () {
+      revealInCard(document.querySelector('details.apps-list-card'));
+    });
+  }
+  // Nothing running points at Other ports, the row right under the empty
+  // state, which is where a restart's orphans show.
+  wireListeners();
+  wireCoding();
   wireRenameDialog();
   wireScanDialog();
 }

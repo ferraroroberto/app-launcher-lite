@@ -1,12 +1,147 @@
 /* ---------- Board tab ---------- */
-/* Launch-model dropdown for the Coding + Team OS card summaries. A
+/* The lane toolbar: the Board's first row under the page header —
+   the project filter, full width, and ↻ beside it, above the lanes they act
+   on. 8px apart: two 44px targets, no overlap. */
+.board-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 var(--gap);
+  --icon-btn-box: var(--hit-min);
+}
+.board-toolbar .board-repo-combo { flex: 1; min-width: 0; }
+/* Project filter: a type-to-filter combobox, the vendored filter field
+   (.action-row-filter: 44px, control-border on card) with the chevron kept as
+   the cue that it opens a list. The live filter over the board's lanes; the
+   empty field (placeholder "All projects", the default) shows everything. */
+.board-repo-combo {
+  position: relative;
+  margin: 0;
+  padding-right: 34px;
+}
+.board-repo-combo::after {
+  content: '';
+  width: var(--icon-inline);
+  height: var(--icon-inline);
+  background: currentColor;
+  -webkit-mask: var(--chevron-down-mask) center / contain no-repeat;
+  mask: var(--chevron-down-mask) center / contain no-repeat;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+.board-repo-combo .icon { flex: none; }
+/* 44px tall over the field's 1px borders, so the typing target meets the floor. */
+.board-repo-combo .board-repo-input { height: var(--hit-min); margin: -1px 0; text-overflow: ellipsis; }
+.board-repo-input::placeholder { color: var(--ink); opacity: 1; }
+/* The ✕ is a 44px target inside a 44px field: the negative margin lets it
+   cover the border's 1px so the field keeps its height. */
+.board-repo-clear { margin: -1px 0; }
+.board-repo-clear[hidden] { display: none; }
+.board-repo-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+}
+.board-repo-list li {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-body-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.board-repo-list li[data-repo]:hover,
+.board-repo-list li[aria-selected="true"] { background: var(--card); color: var(--accent); }
+/* The keyboard's row reads apart from the committed pick. */
+.board-repo-list li[data-active="true"] { background: var(--accent-soft); color: var(--accent-text); }
+.board-repo-list li.board-repo-empty { color: var(--muted); cursor: default; }
+
+/* One attention banner above the lanes, only while a source is down
+   or stale: the status text on its own 16% tint, behind one glyph. */
+.board-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 var(--gap);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: rgb(from var(--attention) r g b / 0.16);
+  color: var(--attention-text);
+  font-size: var(--font-body-sm);
+}
+.board-status[hidden] { display: none; }
+.board-status .icon {
+  flex: none;
+  width: var(--icon-inline);
+  height: var(--icon-inline);
+  margin-top: 2px;
+}
+
+/* The Backlog lane's toolbar: "Start with" and the model combo the
+   rows' Start and YOLO launch with. */
+.board-lane-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px var(--board-card-inset, 14px) 8px;
+}
+.board-lane-toolbar-label {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--font-body-sm);
+}
+.board-lane-toolbar .model-combo { flex: 1; min-width: 0; }
+.board-lane-toolbar .model-combo-trigger { width: 100%; min-width: 0; }
+/* The Backlog's footer: "GitLab · updated N min ago". */
+.board-lane-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px var(--board-card-inset, 14px) 4px;
+  border-top: 1px solid var(--line-muted);
+  color: var(--muted);
+  font-size: var(--font-body-sm);
+}
+.board-lane-foot[hidden] { display: none; }
+.board-lane-foot .icon { flex: none; width: var(--icon-inline); height: var(--icon-inline); }
+
+/* A folded lane's exception: "1 failing", "1 question for you", in
+   its tone, in place of the count. Open, the lane shows its rows and count. */
+.board-lane-exception {
+  display: none;
+  font-size: var(--font-body-sm);
+  font-weight: 400;
+}
+.board-lane-exception[data-tone="attention"] { color: var(--attention-text); }
+.board-lane-exception[data-tone="danger"] { color: var(--danger-text); }
+details:not([open]) > .collapse-summary .board-lane-exception:not([hidden]) { display: inline; }
+details:not([open]) > .collapse-summary:has(.board-lane-exception:not([hidden])) .board-count { display: none; }
+
+/* Launch-model dropdown for the Board's Start-with picker. A
    native <select> cannot live inside a <summary> — WebKit's HTML parser
    derails on it (closes the <details> early, cascading into a broken tree
    that even zeroes custom-property inheritance on ancestors). So this is
    built from phrasing-only content — a <button> trigger + a
    <span role="listbox"> of <button role="option"> — which is valid in a
-   summary, styled to the shared flat control recipe (36px control height,
-   12px radius, --card-2 fill, ▾ affordance). */
+   summary, styled as the fleet's inline control (36px control height, 12px
+   radius, --card-2 fill, chevron-down affordance). */
 .model-combo { position: relative; display: inline-flex; }
 .model-combo-trigger {
   height: var(--control-h);
@@ -14,7 +149,7 @@
   padding: 0 24px 0 10px;
   background: var(--card-2);
   color: var(--fg);
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius-md);
   font-size: var(--font-caption);
   cursor: pointer;
@@ -24,17 +159,22 @@
 }
 .model-combo-trigger:active { background: var(--card); }
 .model-combo::after {
-  content: '▾';
+  content: '';
+  width: var(--icon-inline);
+  height: var(--icon-inline);
+  background: currentColor;
+  -webkit-mask: var(--chevron-down-mask) center / contain no-repeat;
+  mask: var(--chevron-down-mask) center / contain no-repeat;
   position: absolute;
-  right: 9px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--muted);
-  font-size: var(--font-caption);
   pointer-events: none;
 }
-/* Opens downward from the summary; cards don't clip overflow, so a high
-   z-index keeps it above the collapsed card body below it. */
+/* Closed menus live beside their triggers. The controller portals an open
+   menu to the document viewport (except inside a native dialog's top layer),
+   so scrollable toolbars and card overflow cannot clip it. */
 .model-combo-menu {
   position: absolute;
   top: calc(100% + 4px);
@@ -46,11 +186,19 @@
   background: var(--card-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: var(--shadow);
 }
+.model-combo-menu--portal {
+  position: fixed;
+  right: auto;
+  z-index: 380;
+  width: max-content;
+}
 .model-combo-menu[hidden] { display: none; }
-.model-combo-menu button {
+.model-combo-menu button:not(.toggle) {
   padding: 8px 14px;
   text-align: left;
   background: none;
@@ -60,236 +208,316 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.model-combo-menu button:hover,
+.model-combo-menu button:not(.toggle):hover,
+.model-combo-menu button:not(.toggle):focus-visible,
 .model-combo-menu button[aria-selected="true"] {
   background: var(--card);
   color: var(--accent);
 }
-/* Column switcher strip: four count buttons + the glab refresh. Doubles as
-   the column header on the phone, where the carousel shows one column. */
-.board-strip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 10px;
-}
-/* Not migrated to the button tiers: the column-switcher
-   strip is a segmented control (has an .active state). */
-.board-strip-btn {
-  flex: 1;
-  min-width: 0;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+.model-combo-trigger:disabled {
+  background: var(--card-2);
   color: var(--muted);
-  padding: 8px 2px;
-  font-size: var(--font-caption);
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  cursor: not-allowed;
+  opacity: 0.72;
 }
-.board-strip-btn.active { background: var(--card-2); color: var(--fg); }
+.model-combo-menu button:not(.toggle):disabled {
+  background: var(--card-2);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* Column count in each section's summary (was the phone strip's
+   pill before the strip retired). Its own text colour, not --muted: that
+   reads 4.08:1 on the dark --card-2 pill. */
 .board-count {
   display: inline-block;
   min-width: 18px;
   padding: 1px 5px;
   border-radius: var(--radius-pill);
   background: var(--card-2);
+  color: var(--fg);
   font-size: var(--font-caption);
+  text-align: center;
 }
 /* "Your turn" holding work is the one number that matters. State signal,
    not decoration — the warn color marks pending human action. */
-.board-strip-btn.attention .board-count { background: var(--attention); color: var(--attention-fg); }
-/* Without this the button has no icon-button box at all (only flex: 0 0 auto — a bare
-   default browser button). Same 36px --control-h square recipe as
-   .model-combo-trigger, so every icon-sized button in the Board tab
-   shares one footprint. */
-.board-refresh {
-  flex: 0 0 auto;
-  height: var(--control-h);
-  min-height: var(--control-h);
-  width: var(--control-h);
-  min-width: var(--control-h);
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-label);
-  background: var(--card-2);
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-.board-refresh:active { background: var(--card); }
-.board-status { color: var(--muted); font-size: var(--font-caption); margin: 0 0 8px; }
+.board-col.attention .board-count { background: var(--attention); color: var(--attention-fg); }
 
-/* Phone-first carousel: one column per viewport, swipe between them.
-   scroll-snap gives the swipe for free — no gesture JS. */
-.board-columns {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.board-columns::-webkit-scrollbar { display: none; }
-.board-col {
-  flex: 0 0 100%;
-  min-width: 0;
-  scroll-snap-align: start;
-}
-/* The strip is the column header on the carousel; the per-column title
-   only earns space in the desktop grid below. */
-.board-col-title { display: none; }
-
-.board-list { list-style: none; margin: 0; padding: 0; }
-/* Column, not the shared .app-item row: the drawer and the issue-action
-   buttons must land BELOW the card, never split it horizontally
-   (seen on a phone). */
-.board-item {
-  margin: 0;
-  flex-direction: column;
-  align-items: stretch;
-}
-/* Flat separator row (the backlog's look extended
-   to Bot's/Yours/Done): no per-card box; the status accents below keep
-   signalling on the row's left edge. */
-.board-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 3px;
-  width: 100%;
-  min-height: var(--row-lg);
-  text-align: left;
-  background: none;
-  border: none;
-  padding: 12px 14px;
-  color: var(--fg);
-  cursor: pointer;
-}
-.board-card:disabled { cursor: default; opacity: 0.75; }
-.board-card-top {
-  font-size: var(--font-caption);
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.board-agent-icon { width: 16px; height: 16px; }
-.board-card-title {
-  font-size: var(--font-label);
-  line-height: 1.3;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-/* Status accents on the card's left edge — state colors signal state. */
-.board-item.is-awaiting-input .board-card { border-left: 3px solid var(--attention); }
-.board-item.is-working .board-card { border-left: 3px solid var(--accent); }
-.board-item.is-idle .board-card { opacity: 0.7; }
-.board-empty { margin: 4px 0 12px; }
-
-/* Backlog issue tiles: a flat separator row — no card
-   background/border/radius, just a bottom-border divider between rows
-   (issue-tracker-list style) — with repo/# and the title on their own lines
-   and the ▶/⚡ actions vertically centered against the full row height.
-   .app-item is already a row flexbox by default; .board-item overrides that
-   to a column for the stacked layout the other card kinds use, so this
-   pairs both classes to opt back into a row. The flat
-   look IS the .app-item base (this pattern is app-wide), so
-   no box-resetting overrides are needed — only the row direction and
-   the flat button geometry remain. The truncating spans still need
-   `min-width: 0` on the flex item along the row axis (.board-card-text),
-   not just its ancestors — a flex item's default min-width is `auto`
-   (content-based), which silently defeats overflow/ellipsis by letting
-   the item grow to fit its content instead of shrinking to the row's
-   available space (the textbook "ellipsis inside flex doesn't truncate"
-   bug, not a mobile-Safari quirk). */
-.board-item.board-item-issue {
-  flex-direction: row;
-  align-items: center;
-  gap: 4px;
-}
-/* Active workflow marker: keep the flat issue-row geometry while the
-   canonical accent tint distinguishes in-flight work in both themes. Git
-   dirty/off-main colours remain on the meta text independently. */
-.board-item.board-item-issue.is-in-progress {
-  background: var(--accent-soft);
-}
-.board-card-flat {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-  width: auto;
-  padding: 10px 4px;
-}
-.board-card-text {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  flex: 1;
-  min-width: 0;
-  gap: 2px;
-}
-.board-card-title-compact {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: var(--font-label);
-  font-weight: 600;
-  line-height: 1.3;
-}
-.board-card-meta-inline {
-  color: var(--muted);
-  font-size: var(--font-caption);
+/* The sheets' label/value rows (sheetRow): the value is a figure and keeps
+   its one line, so a long label (a process group's name) takes the rest of
+   the row and wraps instead of squeezing the figure a letter per line. */
+.usage-sheet-body .row > span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.usage-sheet-body .usage-sheet-value {
+  flex: none;
   font-weight: 400;
-  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
-  text-overflow: ellipsis;
 }
-.board-issue-actions.board-issue-actions-compact {
-  flex: 0 0 auto;
+
+/* Columns are section cards: on the phone they stack like every
+   other tab's cards; the desktop block below lays them side by side. */
+.board-col { min-width: 0; }
+
+/* The chief's plan sits under Bot's turn: the two share one
+   wrapper, a grid cell on the desktop and plain stacked cards on the phone.
+   Its rows are the shared action-row: questions open the answer
+   sheet, lanes and queue rows only report, each with its status chip; an
+   unknown status keeps the neutral chip. */
+.board-col-stack { min-width: 0; }
+.board-plan-line { margin: 0 0 6px; }
+.board-plan-heading {
+  margin: 12px 0 2px;
+  font-size: var(--font-body);
+  font-weight: 600;
+  color: var(--muted);
+}
+/* A lane, queue or parked row: two lines on the default action-row,
+   the title over `repo#N, Model`, the status chip pushed to the right end of
+   line 2 so the title keeps the whole first line, and (on a row that opens its
+   issue) a chevron as the one trailing item. The model word is quiet text
+   inside the meta line. */
+.board-plan-model { white-space: nowrap; }
+.board-plan-row .action-row-meta .chip { margin-left: auto; }
+.board-plan-section-note { margin: 0 0 4px; }
+/* A fold: its heading is the <details> summary, with the
+   section's own chevron instead of the browser marker. It takes the size,
+   weight and colour of `.board-plan-heading`, so every Board section heading
+   (the Backlog buckets, the plan card, Your turn's groups) reads the same. */
+.board-plan-fold-summary {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 4px 0 0;
+  min-height: var(--row-sm);
+  margin: 0;
+  cursor: pointer;
+  list-style: none;
 }
-.board-issue-btn.icon-only {
-  /* Real 44px geometry: the ▶/⚡ pair is an adjacent cluster,
-     so the rectangles are grown for real, not via overlapping insets. */
-  min-width: 44px;
-  padding: 8px 10px;
-  font-size: var(--font-label);
-  text-align: center;
+.board-plan-fold-summary::-webkit-details-marker { display: none; }
+.board-plan-fold-chevron {
+  margin-left: auto;
+  display: inline-flex;
+  width: var(--row-sm);
+  justify-content: center;
+  transition: transform 0.15s;
 }
-.board-issue-btn:disabled {
-  background: var(--card-off);
+.board-plan-fold-chevron .icon { width: var(--icon-inline); height: var(--icon-inline); }
+.board-plan-fold[open] > .board-plan-fold-summary .board-plan-fold-chevron { transform: rotate(90deg); }
+/* What waits on you: plain one-line rows under
+   an attention heading, no bar or stripe; a chevron says a row opens the
+   answer sheet. "N more" unfolds the rest in place. */
+.board-plan-group-waiting .board-plan-heading { color: var(--attention-text); }
+.board-plan-chevron,
+.lifeos-convo-chevron {
+  width: var(--row-sm);
+  height: var(--row-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--muted);
-  border-color: var(--line);
-  cursor: default;
+  cursor: pointer;
+}
+.board-plan-chevron .icon,
+.lifeos-convo-chevron .icon { width: var(--icon-inline); height: var(--icon-inline); }
+.board-plan-answer,
+.board-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-block: 0;
 }
 
-/* Backlog repo-state annotation: the meta line inherits the
-   Coding tab's git colour vocabulary — red = dirty tree, yellow = parked
-   off the default branch (red wins when both; same precedence as
-   annotateGitStatus). Fed from the shared state.gitStatus cache — the
-   board's own 5 s poll does no git work. */
-.board-card-meta-inline.git-dirty { color: var(--danger); }
-.board-card-meta-inline.git-off-main { color: var(--attention); }
+/* Owner checks, under Your turn's sessions: one group per kind on the plan
+   card's headings, a row's tap unfolding its detail (why, what to try, the
+   links as reference pills in 44px targets, Answer). */
+.board-owner:empty { display: none; }
+/* Headings, the freshness line, the detail and the group's button take the
+   rows' inset, as the Done lane's day headers do, so they line up with the
+   row text on the phone and on the inset-less desktop grid alike. */
+.board-owner-group > .board-plan-heading,
+.board-owner-state,
+.board-owner-detail { padding-inline: var(--board-card-inset, 14px); }
+/* A fold's answer button (plan questions, an owner-check group) takes the rows' inset. */
+.board-plan-fold > .board-plan-answer {
+  width: calc(100% - 2 * var(--board-card-inset, 14px));
+  margin-inline: var(--board-card-inset, 14px);
+}
+/* The detail sits inside the shared action-row's 4px side padding; it takes
+   that back so its inset equals the group button's. */
+.board-owner-detail {
+  flex: 0 0 calc(100% + 8px);
+  margin-inline: -4px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-bottom: 12px;
+}
+.board-owner-line,
+.owner-answer-line { margin: 0; overflow-wrap: anywhere; }
+.board-owner-line { font-size: var(--font-body-sm); }
+.owner-answer-error { color: var(--danger-text); overflow-wrap: anywhere; }
+.board-owner-try-none { color: var(--muted); }
+.board-owner-try-list { margin: 0; padding-inline-start: 1.3em; }
+.board-owner-try-list li + li { margin-top: 2px; }
+.board-owner-links { display: flex; flex-wrap: wrap; column-gap: 4px; }
+.board-owner-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--row-sm);
+  text-decoration: none;
+}
+.board-owner-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--space-sm);
+  border: 1px solid var(--accent-border-soft);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.board-owner-pill .icon { width: var(--icon-inline); height: var(--icon-inline); }
+.board-owner-row.is-answered .action-row-title { color: var(--muted); }
+.board-owner-answer { padding-block: 0; }
+
+/* The chief's answer sheet: the modal shell, full-screen on the
+   phone. Each question borrows the transcript AskUserQuestion card's parts
+   (.tr-ask-*), so options, marks and the Other field look as they do in
+   Chat — but as a flat list row on the modal's top hairline (design.md
+   list-row), never a card nested in the modal's card. */
+.chief-answers-list { display: flex; flex-direction: column; }
+.chief-answers-list .tr-ask.chief-answer {
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+.chief-answer-head { flex-wrap: wrap; }
+.chief-answer-num {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--muted);
+}
+.chief-answer-ref {
+  font-size: var(--font-body-sm);
+  color: var(--accent-text);
+  overflow-wrap: anywhere;
+}
+span.chief-answer-ref { color: var(--muted); }
+.chief-answers-also {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.chief-answers-also[hidden] { display: none; }
+.chief-answers-also > span { font-weight: 600; }
+/* The composer mount sits on the sheet's own surface, as the Board drawer's
+   does: no docked bar padding, hairline or card fill. */
+.chief-answers-also .compose-bar {
+  padding: 0;
+  border-top: 0;
+  background: transparent;
+}
+.chief-answers-note { margin: 0; text-align: center; }
+.chief-answers-defaults { margin: 0 0 4px; }
+@media (max-width: 520px) {
+  .chief-answers-dialog {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+  }
+  .chief-answers-dialog .detail-card {
+    min-height: 100%;
+    border-radius: 0;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 18px);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  }
+}
+
+.board-list { list-style: none; margin: 0; padding: 0; }
+/* Every Board row is the shared action-row; .board-item stays
+   the hook the poll and the tests use. A session row wraps, so its drawer
+   lands below the row at full width, never beside it.
+   Titles are one line with an ellipsis on every width (not a two-line clamp), the full text in the title attribute;
+   the repo reference is part of the meta text that ellipsizes. */
+.board-list .action-row.board-item {
+  margin: 0;
+  flex-wrap: wrap;
+}
+.board-list .action-row.board-item > .board-drawer { flex: 0 0 100%; }
+/* A Backlog card's date. With a claim chip the meta is one line whose
+   text ellipsizes; the date is its own item beside the chip so it is never the
+   part that gets cut (LAYOUT-09) while a long repo name still ellipsizes. */
+.board-card-stamp { flex: none; white-space: nowrap; }
+/* A Backlog row's bucket chip (`blocked by ...`, `after ...`) is the one chip
+   that gives way: its shrink weight dwarfs the meta text's, so it takes the
+   shortfall first and ends in its own ellipsis, and the repo and number stay
+   whole. At its minimum width the text then ellipsizes as before, never the
+   date. */
+.board-item-issue .board-bucket-chip {
+  display: block;
+  flex: 0 1000 auto;
+  min-width: 6ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.board-agent-icon { width: 16px; height: 16px; }
+.board-empty { margin: 0; }
+
+/* The Done lane's day headers ("Today", "Yesterday", "Tue 27 Oct") and its
+   "Show earlier" control; the rows under a header are the lane's ordinary ones. */
+.board-day-head {
+  margin: 12px 0 4px;
+  padding: 0 var(--board-card-inset, 14px);
+  color: var(--muted);
+  font-size: var(--font-body-sm);
+  font-weight: 600;
+}
+.board-day-head[hidden] { display: none; }
+.board-day-none { margin: 0; padding: 4px var(--board-card-inset, 14px); }
+.board-done-more { margin-top: 12px; }
+.board-done-more[hidden] { display: none; }
+
+/* A Done row's trailing actions (PR, Proof): each chip is the look, the
+   button around it the 44px tap target (the same box as the row's other
+   trailing controls). */
+.board-done-actions {
+  display: flex;
+  align-items: center;
+}
+.board-done-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--row-sm);
+  min-height: var(--row-sm);
+  padding: 0 4px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.board-done-action:disabled { opacity: 0.6; cursor: progress; }
+
+/* A meta column (a check, a harness, an API token) is that first span, so
+   the detail line under its title would inherit the label's 600; it stays
+   muted at 400. Muted on the sheet's card measures 5.25:1 light and 4.64:1
+   dark (COLOR-02; pinned by test_settings_sheets.py). */
+.detail-card .row > span:first-child .muted { font-weight: 400; }
 
 /* Drill-down drawer: last exchange + reply, inline under the card. */
 .board-drawer {
@@ -307,7 +535,7 @@
   gap: 6px;
   max-height: 40vh;
   overflow-y: auto;
-  font-size: var(--font-caption);
+  font-size: var(--font-body-sm);
 }
 .board-exchange[data-state="loading"],
 .board-exchange[data-state="empty"],
@@ -316,88 +544,108 @@
   min-height: 44px;
   justify-content: center;
 }
+/* The user's side of a drawer exchange. fg, not muted: on the dark theme's
+   card-2 the muted text measured 4.08:1 (COLOR-02), and design.md puts text
+   on a tinted fill in fg. The left rule still marks it as the user's. */
 .board-exchange-user {
-  color: var(--muted);
-  font-size: var(--font-caption);
-  white-space: pre-wrap;
+  color: var(--fg);
+  font-size: var(--font-body-sm);
   border-left: 2px solid var(--muted);
   padding-left: 8px;
 }
-.board-exchange-assistant { white-space: pre-wrap; }
-/* Drawer action layout: the reply box
-   takes a full line of its own, and the buttons form one right-aligned
-   row beneath it — canonical 44px footprints, leftover space on the left
-   is fine. flex-wrap keeps the row inside its own column at narrow
-   desktop grid widths too. */
+/* The drawer's mount of the shared composer (mockup screen 8): the
+   bar sits inside the drawer's own surface, so it drops the docked bar's
+   padding, hairline and card fill. */
+.board-drawer-composer .compose-bar {
+  padding: 0;
+  border-top: 0;
+  background: transparent;
+}
+/* Drawer actions: Chat, the one tint primary,
+   then Terminal on the secondary surface, each a glyph beside its label at
+   the 44px floor, then the kebab holding Rename and Stop. The drawer's own
+   width decides the layout, never squeezing a button under the floor
+: one row while the two labelled buttons keep their words beside
+   the kebab; in a narrow desktop column Chat and the kebab share the first
+   row and Terminal spans the second; in the narrowest, one column.
+   minmax(0, 1fr) keeps the buttons inside the drawer. The kebab's
+   menu drops below the row. */
+.board-drawer { container-type: inline-size; }
 .board-drawer-actions {
-  display: flex;
-  flex-wrap: wrap;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--row-sm);
   gap: 8px;
+}
+@container (max-width: 279.98px) {
+  .board-drawer-actions {
+    grid-template-columns: minmax(0, 1fr) var(--row-sm);
+    grid-template-areas: "chat menu" "terminal terminal";
+  }
+  .board-drawer-actions > .board-open-chat { grid-area: chat; }
+  .board-drawer-actions > .board-open-terminal { grid-area: terminal; }
+  .board-drawer-actions > .board-drawer-kebab { grid-area: menu; }
+}
+@container (max-width: 103.98px) {
+  .board-drawer-actions {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "chat" "terminal" "menu";
+  }
+}
+.board-drawer-action {
+  display: flex;
   align-items: center;
-  justify-content: flex-end;
-}
-.board-reply-input {
-  flex: 1 1 100%;
+  justify-content: center;
+  gap: 6px;
   min-width: 0;
-  resize: vertical;
-  background: var(--card-off);
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: 8px 10px;
-  font-size: var(--font-label);
-  font-family: inherit;
-}
-/* One-tap issue start — a compact row under the card button. */
-.board-issue-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  padding: 0 10px 10px;
-}
-/* Every board action button gets the dark theme explicitly — without this
-   they render as the UA's native white buttons (seen on a phone). */
-.board-refresh,
-.board-issue-btn,
-.board-reply-send,
-.board-open-terminal,
-.board-rename-btn,
-.board-stop-btn {
+  min-height: var(--row-sm);
+  padding: 0 10px;
   background: var(--card-2);
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  padding: 8px 14px;
-  font-size: var(--font-caption);
+  font-size: var(--font-body-sm);
+  font-weight: 600;
   cursor: pointer;
 }
-.board-reply-send { font-size: var(--font-body); }
-.board-issue-btn:active,
-.board-reply-send:active,
-.board-open-terminal:active,
-.board-rename-btn:active { background: var(--card); }
-/* Drawer action row at the 44px floor — these sit in an
-   adjacent cluster, so they get real height, not hit-target insets. The
-   icon-only Rename/Stop also need real width around their lone glyph. */
-.board-reply-send,
-.board-open-terminal,
-.board-rename-btn,
-.board-stop-btn {
-  min-height: var(--row-sm);
+.board-drawer-action:active { background: var(--card); }
+.board-drawer-action.is-primary {
+  background: var(--accent-soft);
+  border-color: var(--accent-border-soft);
+  color: var(--accent-text);
 }
-.board-reply-send,
-.board-rename-btn,
-.board-stop-btn { min-width: 44px; }
-/* Stop: same unified stop path as the Coding tab's row ✕
- — muted glyph at rest, danger-red on press. */
-.board-stop-btn { color: var(--muted); }
-.board-stop-btn:active {
-  background: rgb(from var(--danger) r g b / 0.2);
-  color: var(--danger);
-  border-color: var(--danger);
+.board-drawer-action.is-primary:active { filter: brightness(0.9); }
+.board-drawer-action .icon { flex: none; }
+.board-drawer-action-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-drawer-kebab { --icon-btn-box: var(--row-sm); justify-self: end; }
+/* An action the session can't take (Terminal for a detached session, Chat
+   with no transcript reader): design.md button-disabled — flat muted text on
+   the subtle surface, never opacity. aria-disabled, not :disabled, so the
+   tap still toasts the reason. */
+.board-drawer-action[aria-disabled="true"],
+.board-drawer-action[aria-disabled="true"]:active {
+  background: var(--input-bg);
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: default;
+  filter: none;
 }
 
-/* Desktop / wide: all four columns side by side; titles come back.
+/* The GitLab refresh in flight (COLOR-02): the ↻ spins at full
+   strength instead of a disabled "…" (1.55:1 on dark). Still, under reduced
+   motion. */
+.board-refresh[aria-busy="true"] .icon { animation: board-refresh-spin 0.9s linear infinite; }
+@keyframes board-refresh-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .board-refresh[aria-busy="true"] .icon { animation: none; }
+}
+
+/* Desktop / wide: all five column sections side by side.
    Board (only) also breaks out of the phone-first `.app` 720px cap —
    full-bleed to the viewport, since `.app`'s horizontal centering makes
    the standard breakout offsets cancel out exactly. Every
@@ -412,31 +660,90 @@
     margin-right: -50vw;
     padding: 0 24px;
     box-sizing: border-box;
+    /* The lane grid's gap, named once: the project filter below is sized to
+       one lane from it, so the two cannot drift apart. */
+    --board-col-gap: 20px;
   }
+  /* `start`, not the grid's default stretch: a folded section keeps its
+     52px summary height instead of growing an empty card to the row. */
+  /* One column per lane that holds rows (board.js sizeLaneGrid sets
+     --board-lanes on the pane); an empty lane spans the grid as a
+     strip, and `dense` keeps the lanes with rows side by side above the
+     strips, each set in lane order. */
   .board-columns {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--board-lanes, 5), minmax(0, 1fr));
+    grid-auto-flow: row dense;
+    align-items: start;
+    gap: var(--board-col-gap);
+  }
+  .board-columns > .board-col.is-empty { grid-column: 1 / -1; }
+  /* The strip: title and count, then the empty sentence and its one
+     action inline, on one line; the sentence ellipsizes first. */
+  .board-columns > .board-col.is-empty[open] {
+    display: flex;
+    align-items: center;
+  }
+  /* One line, so no divider under the summary; the chevron keeps a gap
+     from the count. */
+  .board-columns > .board-col.is-empty[open] > .collapse-summary {
+    flex: none;
+    column-gap: 12px;
+    border-bottom: 0;
+  }
+  .board-columns > .board-col.is-empty[open] > .collapse-body {
+    flex: 1;
+    min-width: 0;
+    padding: 0 14px 0 0;
+  }
+  /* Done's "Show earlier" sits inline after the sentence, in the same line. */
+  .board-columns > .board-col.is-empty > .collapse-body { display: flex; align-items: center; gap: 12px; }
+  .board-columns > .board-col.is-empty .board-empty { flex: 1; min-width: 0; }
+  .board-columns > .board-col.is-empty .board-done-more { flex: none; width: auto; margin: 0; }
+  .board-columns > .board-col.is-empty .board-lane-toolbar,
+  .board-columns > .board-col.is-empty .board-lane-foot,
+  .board-columns > .board-col.is-empty .empty-state-icon { display: none; }
+  .board-columns > .board-col.is-empty .empty-state {
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 0;
+    min-height: 0;
+  }
+  .board-columns > .board-col.is-empty .empty-state-message {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .board-columns > .board-col.is-empty .empty-state-action { flex: none; margin: 0; }
+  .board-col { margin: 0; }
+  .board-col-stack {
+    display: flex;
+    flex-direction: column;
     gap: 20px;
-    overflow-x: visible;
-    scroll-snap-type: none;
   }
-  .board-col-title {
-    display: block;
-    margin: 0 0 8px;
-    font-size: var(--font-caption);
-    font-weight: 600;
-    text-transform: none;
-    color: var(--muted);
+  .board-chief-plan { margin: 0; }
+  /* A fifth of the pane is narrow: the body's 14px sides on top of each
+     row's own inset left the drawer's actions too little room for one row.
+     The rows carry an inset already, so the grid's bodies drop the sides. */
+  .board-col > .collapse-body { padding: 4px 0 8px; }
+  /* The body's sides are gone here, so the button takes the rows' inset
+     itself (sized to the lane minus both insets). */
+  .board-col .board-done-more {
+    width: calc(100% - 2 * var(--board-card-inset, 14px));
+    margin-inline: var(--board-card-inset, 14px);
   }
-  .board-col-count { font-weight: 400; }
-  /* The phone tab-switcher strip duplicates the grid's own aligned
-     .board-col-title headers, with no shared width/gap math between the two
-     rows. Hide just the switcher buttons — .board-strip also hosts the glab
-     refresh button, which still needs a home on desktop. */
-  .board-strip-btn { display: none; }
-  .board-strip { justify-content: flex-end; }
+  /* A full-bleed pane makes a full-width filter absurdly long: it is exactly
+     one lane wide (the toolbar and the grid share the pane's content box and
+     --board-lanes), so its edges line up with the first column's, ↻ beside
+     it. */
+  .board-toolbar .board-repo-combo {
+    flex: 0 0 calc((100% - (var(--board-lanes, 5) - 1) * var(--board-col-gap)) / var(--board-lanes, 5));
+  }
 }
-.teamos-file-btn {
+.lifeos-file-btn {
   flex: 1;
   display: block;
   text-align: left;
@@ -446,134 +753,31 @@
   border-radius: var(--radius-md);
   padding: 10px 12px;
   font-size: var(--font-label);
-  min-height: 40px;
+  min-height: var(--row-sm);   /* the 44px touch floor */
   cursor: pointer;
 }
-.teamos-file-btn.active {
-  border-color: var(--accent);
-  background: rgb(from var(--accent) r g b / 0.18);
-}
-.teamos-file-content {
-  position: absolute;
-  inset: 0;
-  background: var(--bg);
+/* The document sheet's text, scrolling inside the reader sheet. */
+.lifeos-file-content {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 12px 16px 32px;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
-.teamos-file-content h1,
-.teamos-file-content h2,
-.teamos-file-content h3,
-.teamos-file-content h4 { line-height: 1.3; }
-.teamos-file-content p { line-height: 1.5; }
-.teamos-file-content a { color: var(--accent); }
-.teamos-file-content code {
+.lifeos-file-content h1,
+.lifeos-file-content h2,
+.lifeos-file-content h3,
+.lifeos-file-content h4 { line-height: 1.3; }
+.lifeos-file-content p { line-height: 1.5; }
+.lifeos-file-content a { color: var(--accent); }
+.lifeos-file-content code {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 1px 5px;
   font-size: var(--font-caption);
 }
-.teamos-file-content pre.md-code {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  overflow-x: auto;
-}
-.teamos-file-content pre.md-code code {
-  background: none;
-  border: none;
-  padding: 0;
-}
+/* A fence here is the same `.md-block` frame as in Chat; the document
+   viewer keeps its scroll route, where Chat wraps. */
+.lifeos-file-content pre.md-code { overflow-x: auto; }
 
-/* The Screen view: the PC's desktop,
-   full screen. A bar on the card surface (title, the display picker when
-   there is more than one, the x) over a stage the frame fills, letterboxed
-   on the canvas. The page is zoom-locked, so pinch and pan are the view's
-   own (screen-view.js): the stage takes every touch, and the frame moves by
-   transform alone. */
-.screen-view {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  max-width: none;
-  height: 100vh;
-  height: 100dvh;
-  max-height: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: var(--bg);
-  color: var(--fg);
-}
-.screen-view[open] { display: flex; flex-direction: column; }
-.screen-view::backdrop { background: var(--bg); }
-.screen-view-bar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--gap);
-  min-height: var(--row-md);
-  padding: env(safe-area-inset-top, 0px) 14px 0;
-  background: var(--card);
-  border-bottom: 1px solid var(--line);
-}
-.screen-view-title {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: var(--font-heading-lg);
-}
-.screen-view-title .icon { width: var(--icon-title); height: var(--icon-title); color: var(--muted); }
-.screen-picker { flex: 1 1 auto; min-width: 0; margin: 0; }
-.screen-picker[hidden] { display: none; }
-.screen-view-bar .icon-button { margin-left: auto; }
-.screen-stage {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-.screen-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  transform-origin: 0 0;
-  pointer-events: none;
-}
-.screen-image[hidden] { display: none; }
-/* The state block floats centred over the stage as a card, so it reads over
-   the last frame as well as over an empty canvas. */
-.screen-state {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  width: min(320px, calc(100% - 2 * var(--gap)));
-  padding: 16px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  text-align: center;
-}
-.screen-state[hidden] { display: none; }
-.screen-state-message { margin: 0; }
-.screen-state[data-state="stale"] {
-  top: var(--gap);
-  transform: translateX(-50%);
-  padding: 8px 14px;
-  color: var(--muted);
-}

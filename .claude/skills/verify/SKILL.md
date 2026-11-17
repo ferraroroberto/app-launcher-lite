@@ -13,7 +13,7 @@ up `app.webapp.server:app` + a disposable session-host, so this is real
 rendering of the actual changed JS/CSS, not a DOM-assertion-only test run.
 
 1. Find (or write) the e2e test closest to the surface you touched — e.g.
-   `tests/e2e/test_board_tab.py` for anything under the Board tab.
+   `tests/e2e/board/test_board_tab.py` for anything under the Board tab.
 2. Temporarily add `authed_page.screenshot(path="scratch_verify_X.png")`
    calls at the points you want to see (before/after an action, each theme).
 3. Run just that test:

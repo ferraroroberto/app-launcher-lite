@@ -1,30 +1,29 @@
-"""One browser context per distinct context arguments per projection, reset between scenarios.
+"""One browser context per distinct context arguments per projection, reset between tests.
 
-A fresh context per scenario starts with no sockets and an empty HTTP cache, so
-every scenario pays its own connections to the app, and every one it closes
-parks a loopback port in TIME_WAIT (see ``_port_pool``). Here a context outlives
-the scenario that asked for it: each scenario gets a new page in it, and the
-reset below puts back what a context keeps between pages.
+A fresh context per test starts with no sockets and an empty HTTP cache, so every
+test pays its own connections to the app, and every one it closes parks a
+loopback port in TIME_WAIT (see ``_port_pool``). Here a context outlives the test
+that asked for it: each test gets a new page in it, and the reset below puts back
+what a context keeps between pages.
 
-The reset covers the context state the suite relies on: the pages, the
+The reset covers every piece of context state the suite relies on: the pages, the
 context's routes, cookies and permission grants, and the app origin's local and
 session storage and service-worker registrations. State the reset cannot undo
 (init scripts, the page clock, WebSocket routes, offline mode, geolocation, extra
-headers, exposed functions, context listeners) is *tainted*: a scenario that
-touches it on a shared context has that context closed afterwards instead of
-reset, so a later scenario never inherits it and none has to declare that it did.
+headers, exposed functions, context listeners) is *tainted*: a test that touches
+it on a shared context has that context closed afterwards instead of reset, so a
+later test never inherits it and no test has to declare that it did.
 
 A reset that raises discards the context too, so a damaged one never reaches the
-next scenario.
+next test.
 """
 
 from __future__ import annotations
 
-import contextlib
 import functools
 import json
 import logging
-from typing import Any, Iterator, Optional
+from typing import Any, Optional
 
 from playwright.sync_api import Browser, BrowserContext, Route
 
@@ -50,10 +49,9 @@ _CLOCK_TAINTS = (
     "install", "set_fixed_time", "set_system_time", "pause_at", "fast_forward", "run_for", "resume",
 )
 
-#: The report property a test carries for the run summary: how a scenario's
-#: context was obtained (``created`` / ``reused``), then what became of it
-#: (``kept`` / ``tainted`` / ``reset-failed``). Reports cross xdist workers; a
-#: module counter would not.
+#: The report property a test carries for the run summary: how its context was
+#: obtained (``created`` / ``reused``), then what became of it (``kept`` /
+#: ``tainted`` / ``reset-failed``). Reports cross xdist workers; a module counter would not.
 PROPERTY = "shared_context"
 
 _TAINTED: list[str] = []
@@ -72,7 +70,7 @@ def _taint_on_call(cls: type, name: str) -> None:
 
 
 def install_taint_guard() -> None:
-    """Make each call that sets state the reset cannot undo mark the running scenario's context."""
+    """Make each call that sets state the reset cannot undo mark the running test's context."""
     for cls, names in ((BrowserContext, _CONTEXT_TAINTS), (_Clock, _CLOCK_TAINTS)):
         for name in names:
             if not getattr(getattr(cls, name), "__tainting__", False):
@@ -114,7 +112,6 @@ class SharedContexts:
     def __init__(self, browser: Browser) -> None:
         self._browser = browser
         self._by_key: dict[str, BrowserContext] = {}
-        self._events: list[tuple[str, str]] = []
 
     def acquire(
         self, args: dict[str, Any], seed_script: Optional[str] = None
@@ -141,12 +138,12 @@ class SharedContexts:
         _TAINTED.clear()
 
     def release(self, context: BrowserContext, key: str, origin: str) -> str:
-        """Reset *context* for the next scenario, or drop it when it is tainted or the reset fails.
+        """Reset *context* for the next test, or drop it when it is tainted or the reset fails.
 
         Returns ``kept``, ``tainted`` or ``reset-failed``.
         """
         if _TAINTED:
-            logger.info("ℹ️ shared browser context discarded, the scenario called %s", sorted(set(_TAINTED)))
+            logger.info("ℹ️ shared browser context discarded, the test called %s", sorted(set(_TAINTED)))
             self._discard(context, key)
             return "tainted"
         try:
@@ -157,24 +154,6 @@ class SharedContexts:
             return "reset-failed"
         return "kept"
 
-    @contextlib.contextmanager
-    def lease(
-        self, args: dict[str, Any], seed_script: Optional[str], origin: str
-    ) -> Iterator[BrowserContext]:
-        """A context for one scenario: acquired, handed over clean, released (reset or discarded) on exit."""
-        context, key, created = self.acquire(args, seed_script)
-        self.begin_test()
-        try:
-            yield context
-        finally:
-            self._events.append((PROPERTY, "created" if created else "reused"))
-            self._events.append((PROPERTY, self.release(context, key, origin)))
-
-    def drain_events(self) -> list[tuple[str, str]]:
-        """The report properties for the leases since the last call, for ``user_properties``."""
-        events, self._events = self._events, []
-        return events
-
     def _discard(self, context: BrowserContext, key: str) -> None:
         self._by_key.pop(key, None)
         try:
@@ -184,7 +163,7 @@ class SharedContexts:
 
 
 def write_summary(terminalreporter: Any) -> None:
-    """One line on how many contexts the run built for how many scenarios, read off the reports."""
+    """One line on how many contexts the run built for how many tests, read off the reports."""
     counts: dict[str, int] = {}
     for reports in terminalreporter.stats.values():
         for report in reports:
@@ -193,10 +172,10 @@ def write_summary(terminalreporter: Any) -> None:
             for name, value in report.user_properties:
                 if name == PROPERTY:
                     counts[value] = counts.get(value, 0) + 1
-    scenarios = counts.get("created", 0) + counts.get("reused", 0)
-    if scenarios:
+    tests = counts.get("created", 0) + counts.get("reused", 0)
+    if tests:
         terminalreporter.write_line(
-            f"shared contexts: {counts.get('created', 0)} created for {scenarios} scenarios "
+            f"shared contexts: {counts.get('created', 0)} created for {tests} tests "
             f"({counts.get('reused', 0)} reused, {counts.get('tainted', 0)} discarded as tainted, "
             f"{counts.get('reset-failed', 0)} discarded after a failed reset)"
         )

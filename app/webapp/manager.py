@@ -1,8 +1,20 @@
-"""Webapp process manager — adopt-or-spawn for the HTTP/2 webapp.
+"""Webapp process manager — adopt-or-spawn for the webapp server.
 
-Mirrors photo-ocr's manager: status() probes /healthz + a TCP fallback,
+Mirrors photo-ocr's manager: status() probes /healthz and the TCP port,
 start() adopts an already-listening webapp or spawns one, stop() only
 terminates a process this manager owns.
+
+Health is a THREE-state fact, not a boolean. A wedged uvicorn still
+LISTENs, so "the port accepts a connection" cannot establish that the webapp
+is serving - it only rules out "nothing is there". Folding that into
+``running=True`` is what let start() adopt a wedge and report it ready, and
+made restart() refuse it with the wrong reason ("started externally"); the
+sibling ``app/tray/watchdog.py`` exists because that conflation hid the
+wedge for hours. So ``WebappStatus.health`` reports ``answering``,
+``bound_not_answering`` (honestly unknown - a connection succeeded and
+/healthz did not answer) or ``down``, ``running`` is True only for
+``answering``, and every caller branches on ``health`` explicitly rather than
+testing ``running`` for truth.
 
 Used by the tray so launching `tray.bat` brings the webapp up.
 Standalone `webapp.bat` is the "server only, no tray" alternative.
@@ -25,15 +37,20 @@ import requests
 
 from app.tray.single_instance import cross_process_lock
 from app.webapp.event_loop import LOOP_FACTORY
+from app.webapp.serve import HYPERCORN, SERVERS
 from src.app_config import DEFAULT_WEBAPP_PORT, webapp_port
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
-from src.tls.certs import CERT_CHECK_TIMEOUT_SECONDS, cert_paths
 
 logger = logging.getLogger(__name__)
 
 OWNERSHIP_NONE = "none"
 OWNERSHIP_OURS = "ours"
 OWNERSHIP_EXTERNAL = "external"
+
+# `WebappStatus.health` - what a probe could actually establish.
+HEALTH_ANSWERING = "answering"            # /healthz returned 200
+HEALTH_BOUND_NOT_ANSWERING = "bound_not_answering"  # port accepts, /healthz does not
+HEALTH_DOWN = "down"                      # nothing is listening
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -48,14 +65,17 @@ class WebappManagerConfig:
     startup_timeout_seconds: float = 15.0
     request_timeout_seconds: float = 1.0
     poll_interval_seconds: float = 0.4
-    # hypercorn serves HTTP/2 over the certificate; uvicorn is the HTTP/1.1 fallback.
-    server: str = "hypercorn"
+    # `uvicorn` is the HTTP/1.1 fallback if HTTP/2 misbehaves.
+    server: str = HYPERCORN
 
 
 @dataclass
 class WebappStatus:
+    # True only when /healthz answered. "Bound but not answering" is NOT
+    # running - read `health` for that, never `running` alone.
     running: bool
     ownership: str
+    health: str
     pid: Optional[int]
     port: int
     base_url: str
@@ -64,6 +84,13 @@ class WebappStatus:
 
 def load_config(raw: Optional[Dict[str, Any]] = None) -> WebappManagerConfig:
     raw = raw or {}
+    server = str(raw.get("server", HYPERCORN))
+    if server not in SERVERS:
+        # A typo must not quietly pick a server, nor surface later as a
+        # child that exits on its argv and "never answered /healthz".
+        raise ValueError(
+            f"❌ config.json webapp.server is {server!r}; expected one of {', '.join(SERVERS)}"
+        )
     return WebappManagerConfig(
         enabled=bool(raw.get("enabled", True)),
         host=str(raw.get("host", "0.0.0.0")),
@@ -71,8 +98,17 @@ def load_config(raw: Optional[Dict[str, Any]] = None) -> WebappManagerConfig:
         startup_timeout_seconds=float(raw.get("startup_timeout_seconds", 15.0)),
         request_timeout_seconds=float(raw.get("request_timeout_seconds", 1.0)),
         poll_interval_seconds=float(raw.get("poll_interval_seconds", 0.4)),
-        server=str(raw.get("server", "hypercorn")),
+        server=server,
     )
+
+
+def cert_paths(project_root: Optional[Path] = None) -> Optional[tuple[Path, Path]]:
+    root = project_root or PROJECT_ROOT
+    cert = root / "webapp" / "certificates" / "cert.pem"
+    key = root / "webapp" / "certificates" / "key.pem"
+    if cert.exists() and key.exists():
+        return cert, key
+    return None
 
 
 def _probe_url(scheme: str, host: str, port: int) -> str:
@@ -92,7 +128,7 @@ def check_tailscale_cert() -> None:
             [sys.executable, str(script), "--check"],
             capture_output=True,
             text=True,
-            timeout=CERT_CHECK_TIMEOUT_SECONDS,
+            timeout=90,
             cwd=str(PROJECT_ROOT),
             creationflags=NO_WINDOW,
         )
@@ -133,37 +169,87 @@ class WebappManager:
                 continue
         return False
 
+    def child_exit_code(self) -> Optional[int]:
+        """Exit code of the webapp process this manager spawned, once it has exited.
+
+        ``None`` while it runs, and when this manager spawned nothing (an
+        adopted webapp's exit is not observable from here)."""
+        return None if self._proc is None else self._proc.poll()
+
+    def child_pid(self) -> Optional[int]:
+        """Pid of the webapp process this manager spawned while it is alive.
+
+        Unlike ``status().pid`` this is set from the moment of the spawn, before
+        the port is bound, which is when a respawn guard needs it.
+        """
+        if self._proc is None or self._proc.poll() is not None:
+            return None
+        return self._proc.pid
+
     def is_port_in_use(self) -> bool:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(0.2)
             host = self.config.host if self.config.host != "0.0.0.0" else "127.0.0.1"
             return s.connect_ex((host, self.config.port)) == 0
 
+    def probe_health(self) -> str:
+        """What a probe can establish right now - never more than that.
+
+        A successful TCP connect is evidence that *something* holds the
+        port, and nothing more; only a /healthz round-trip shows the webapp
+        is serving. The middle state is reported as itself.
+        """
+        if self.is_reachable():
+            return HEALTH_ANSWERING
+        if self.is_port_in_use():
+            return HEALTH_BOUND_NOT_ANSWERING
+        return HEALTH_DOWN
+
     def status(self) -> WebappStatus:
         running_here = self._proc is not None and self._proc.poll() is None
-        reachable = self.is_reachable() or self.is_port_in_use()
+        health = self.probe_health()
 
-        if running_here and reachable:
-            return WebappStatus(
-                running=True,
-                ownership=OWNERSHIP_OURS,
-                pid=self._proc.pid,
-                port=self.config.port,
-                base_url=self.base_url,
-                detail="running (started by this process)",
-            )
-        if reachable:
+        if health == HEALTH_ANSWERING:
+            if running_here:
+                return WebappStatus(
+                    running=True,
+                    ownership=OWNERSHIP_OURS,
+                    health=health,
+                    pid=self._proc.pid,
+                    port=self.config.port,
+                    base_url=self.base_url,
+                    detail="running (started by this process)",
+                )
             return WebappStatus(
                 running=True,
                 ownership=OWNERSHIP_EXTERNAL,
+                health=health,
                 pid=None,
                 port=self.config.port,
                 base_url=self.base_url,
                 detail="running (external — adopted)",
             )
+        if health == HEALTH_BOUND_NOT_ANSWERING:
+            # Deliberately NOT running: health could not be established, and
+            # an unresolved probe is its own state, never a pass. Ownership is
+            # still known - a wedge we spawned is ours to stop and restart,
+            # one we did not is not ours to touch.
+            return WebappStatus(
+                running=False,
+                ownership=OWNERSHIP_OURS if running_here else OWNERSHIP_EXTERNAL,
+                health=health,
+                pid=self._proc.pid if running_here else None,
+                port=self.config.port,
+                base_url=self.base_url,
+                detail=(
+                    f"bound on :{self.config.port} but not answering /healthz "
+                    "— health unknown"
+                ),
+            )
         return WebappStatus(
             running=False,
             ownership=OWNERSHIP_NONE,
+            health=HEALTH_DOWN,
             pid=None,
             port=self.config.port,
             base_url=self.base_url,
@@ -179,11 +265,29 @@ class WebappManager:
         # status()-then-Popen critical section across processes so two trays
         # starting at once cannot both spawn uvicorn. The loser blocks, then
         # re-checks below and adopts the now-listening webapp. The lock is held
-        # through _wait_until_ready so a serialized caller sees a bound port.
+        # through wait_until_ready so a serialized caller sees a bound port.
         # cross_process_lock fails open (Windows mutex glitch / non-Windows), so
         # it never blocks startup. Vendored byte-identical from the scaffold.
         with cross_process_lock(rf"Global\app-launcher-lite-webapp-start-{self.config.port}"):
             current = self.status()
+            if current.health == HEALTH_BOUND_NOT_ANSWERING:
+                # Something holds the port and will not say whether it is
+                # serving. Adopting it would report a wedge as "ready";
+                # spawning over it would just fail to bind. Give it the same
+                # budget a fresh spawn gets, then say exactly what is unknown.
+                current = self._await_answer()
+            if current.health == HEALTH_BOUND_NOT_ANSWERING:
+                raise RuntimeError(
+                    f"❌ webapp on :{self.config.port} is bound but did not answer "
+                    f"/healthz within {self.config.startup_timeout_seconds}s"
+                    + (
+                        " (this process spawned it)"
+                        if current.ownership == OWNERSHIP_OURS
+                        else ""
+                    )
+                    + " — health could not be established, so it was neither "
+                    "adopted nor replaced. Restart with tray.bat --restart."
+                )
             if current.running and current.ownership == OWNERSHIP_OURS:
                 logger.info(f"ℹ️  Webapp already {current.detail}")
                 return current
@@ -214,25 +318,48 @@ class WebappManager:
                 raise RuntimeError(f"❌ failed to launch webapp: {exc}") from exc
 
             if wait:
-                self._wait_until_ready()
+                self.wait_until_ready()
             return self.status()
 
     def restart(self, wait: bool = True) -> WebappStatus:
         status = self.status()
+        # Distinct conditions get distinct messages: "someone else's healthy
+        # webapp" and "a wedge nobody here owns" are different problems with
+        # different remedies, and the old code reported both as the first.
+        if (
+            status.health == HEALTH_BOUND_NOT_ANSWERING
+            and status.ownership == OWNERSHIP_EXTERNAL
+        ):
+            raise RuntimeError(
+                f"❌ webapp on :{self.config.port} is bound but not answering /healthz, "
+                "and this process did not start it — health could not be established, "
+                "so it was not restarted. Reclaim the port with tray.bat --restart."
+            )
         if status.running and status.ownership == OWNERSHIP_EXTERNAL:
             raise RuntimeError(
                 "Webapp is running but was started externally — cannot restart from here"
             )
-        if status.running:
+        # Ownership, not `running`: a wedge we spawned is not running by the
+        # honest definition, and still has to be stopped before the respawn.
+        if status.ownership == OWNERSHIP_OURS:
             self.stop()
         return self.start(wait=wait)
 
     def stop(self) -> WebappStatus:
         status = self.status()
         if status.ownership == OWNERSHIP_EXTERNAL:
-            logger.info("✋ Leaving external webapp running (not ours)")
+            if status.health == HEALTH_BOUND_NOT_ANSWERING:
+                logger.info(
+                    f"✋ Leaving the external process on :{self.config.port} alone "
+                    "(bound, not answering — not ours to kill)"
+                )
+            else:
+                logger.info("✋ Leaving external webapp running (not ours)")
             return status
-        if not status.running or self._proc is None:
+        # `self._proc`, not `status.running`: a process we spawned that has
+        # stopped answering still has to be terminated, and that is exactly
+        # the case `running` no longer covers.
+        if self._proc is None:
             return status
 
         p = self._proc
@@ -252,9 +379,16 @@ class WebappManager:
         finally:
             self._proc = None
 
+        # Re-probe rather than assert: our process is gone, but something
+        # else may still hold the port, and "stopped" would be a claim this
+        # method never checked - the same shape of lie the tri-state fixes.
+        after = self.status()
+        if after.health != HEALTH_DOWN:
+            return after
         return WebappStatus(
             running=False,
             ownership=OWNERSHIP_NONE,
+            health=HEALTH_DOWN,
             pid=None,
             port=self.config.port,
             base_url=self.base_url,
@@ -273,10 +407,10 @@ class WebappManager:
             str(self.config.port),
             "--log-level",
             "warning",
-            "--loop",
-            LOOP_FACTORY,
             "--server",
             self.config.server,
+            "--loop",
+            LOOP_FACTORY,
         ]
         certs = cert_paths()
         if certs is not None:
@@ -291,7 +425,23 @@ class WebappManager:
             )
         return cmd
 
-    def _wait_until_ready(self) -> None:
+    def _await_answer(self) -> WebappStatus:
+        """Re-probe a bound-but-silent port for the startup budget.
+
+        A uvicorn that has bound and not yet finished booting is
+        indistinguishable from a wedged one at a single instant, so the
+        middle state gets the same grace a fresh spawn would - and is
+        reported unresolved only once that budget is spent.
+        """
+        deadline = time.time() + self.config.startup_timeout_seconds
+        while time.time() < deadline:
+            time.sleep(self.config.poll_interval_seconds)
+            status = self.status()
+            if status.health != HEALTH_BOUND_NOT_ANSWERING:
+                return status
+        return self.status()
+
+    def wait_until_ready(self) -> None:
         deadline = time.time() + self.config.startup_timeout_seconds
         while time.time() < deadline:
             if self._proc is None or self._proc.poll() is not None:

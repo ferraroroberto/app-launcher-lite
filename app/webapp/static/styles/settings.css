@@ -1,114 +1,270 @@
-/* ---------- settings ---------- */
-/* Settings is its own tab: a plain card whose head mirrors
-   the disclosure summary's box (52px, 0 14px, divider) without the
-   collapse behavior — a dedicated pane has nothing to collapse. */
-.settings-card { padding: 0; }
-.settings-head {
-  display: grid;
-  grid-template-columns: 1fr auto;
+/* ---------- Settings: inset groups ---------- */
+/* iOS-Settings-style groups under overline headers: each row is a lead
+   icon, a label, the current value in muted text and a chevron, and opens
+   a sheet. A row that holds its control inline (Text size, Start at log
+   on) drops the value and chevron. */
+.settings-overline,
+.jobs-agenda-day {
+  margin: 4px 14px 6px;
+  font-size: var(--font-caption);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.card.settings-group { padding: 0; overflow: hidden; }
+.settings-row {
+  display: flex;
   align-items: center;
-  height: 52px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--line-muted);
-}
-.settings-edit-row { min-height: 0; font-size: var(--font-caption); }
-/* API-tokens panel */
-.token-row { justify-content: space-between; }
-.token-meta { min-width: 0; flex: 1; overflow-wrap: anywhere; }
-#tokenMintValue { flex: 1; min-width: 0; font-family: ui-monospace, monospace; }
-#tokenMintUrl { overflow-wrap: anywhere; }
-.settings-switch-row { margin: 4px 0 10px; }
-.settings-card .stacked {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 10px 0;
-}
-/* The control recipe is the vendored select-native.css; a multi-line
-   textarea keeps its rows instead of the single-line control height. */
-textarea.input-native { height: auto; padding: 8px 10px; }
-/* .big-btn / .ghost-btn migrated to the vendored button-tint / button-ghost
-   tiers (project-scaffolding's button/ component) — fill,
-   border, radius, cursor and the shared :disabled recipe now come from
-   _vendored/button/button.css. What's left here is app-launcher's own
-   layout/size/weight/press-feedback, kept as-is so this migration doesn't
-   restyle any existing button. */
-.button-tint {
+  gap: 12px;
   width: 100%;
-  padding: 14px 18px;
-  font-size: var(--font-label);
+  min-height: var(--row-md);
+  padding: 4px 14px;
+  background: transparent;
+  color: var(--fg);
+  border: 0;
+  font: inherit;
+  font-size: var(--font-body);
+  text-align: left;
+}
+.settings-row + .settings-row { border-top: 1px solid var(--line-muted); }
+button.settings-row { cursor: pointer; }
+button.settings-row:active { background: var(--card-2); }
+.settings-row-icon {
+  flex: none;
+  width: var(--icon-title);
+  height: var(--icon-title);
+  color: var(--muted);
+}
+.settings-row-label {
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: 600;
-  min-height: 44px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.button-tint:active { filter: brightness(0.9); }
-.button-ghost {
-  padding: 8px 12px;
+.settings-row-value {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-body-sm);
+  color: var(--muted);
 }
-.button-ghost:active { color: var(--fg); }
-.button-ghost.accent-btn {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: var(--accent-border-soft);
-  font-weight: 600;
+.settings-row-chevron {
+  flex: none;
+  width: var(--icon-inline);
+  height: var(--icon-inline);
+  color: var(--muted);
 }
-.button-ghost.accent-btn:active { color: var(--accent); filter: brightness(0.9); }
-.row { display: flex; gap: 8px; align-items: center; }
-.muted { color: var(--muted); }
-.small { font-size: var(--font-caption); }
+/* Text size: the label beside the vendored segmented control. */
+.settings-row--inline .text-size-label { flex: none; }
+.text-size-card .segmented { flex: 1; min-width: 0; }
+/* A row's value that is an exception (settings-sheets.js setValue). */
+.settings-row-value[data-tone="attention"] { color: var(--attention-text); }
+/* The note under a group (This PC, Sessions): it wraps, unlike a one-line group footer. */
+.settings-footnote { margin: calc(-1 * var(--gap) + 6px) 14px 0; }
+/* A footnote mid-pane keeps the next group's overline off its last line. */
+.settings-footnote + .settings-overline { margin-top: 16px; }
+/* A second footnote under the same group follows the first, not the card. */
+.settings-footnote + .settings-footnote { margin-top: 6px; }
 
-.listeners {
+/* A Settings sheet: the vendored modal shell at full height, a back button
+   before the title, and the Done footer pinned to the bottom however short
+   the body. */
+.settings-sheet {
+  width: min(480px, calc(100vw - 24px));
+  height: 92vh;
+  height: 92dvh;
+}
+.settings-sheet .detail-card {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  margin: 10px 0;
+  min-height: 100%;
+  box-sizing: border-box;
 }
-/* Flat separator rows — same treatment as .app-item. */
-.listener-row {
+.settings-sheet-body { flex: 1 0 auto; }
+.settings-sheet-head { justify-content: flex-start; gap: 4px; }
+/* The ✕'s invisible 44px hit area (34px box + 5px each side) reaches 5px past
+   the header's right edge; the header owns that inset as padding and gives the
+   width back with an equal negative margin, so nothing moves. */
+.settings-sheet-head { padding-right: 5px; margin-right: -5px; }
+/* A long title at Large text on a narrow phone wraps rather than clipping
+   ("Launch defaults" at 320px). */
+.settings-sheet-head h2 {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.settings-sheet-back {
+  --icon-btn-box: 34px;
+  margin-left: -8px;
+}
+.settings-sheet-back .icon { width: var(--icon-title); height: var(--icon-title); }
+/* The agent groups bring their own padding and dividers for a card; inside
+   a sheet's padding they sit flush, and the first one under the header
+   draws no divider of its own. */
+.settings-sheet .opt-group { padding: 6px 0 14px; }
+.settings-sheet-body > .opt-group:first-child { border-top: 0; }
+/* A field's inline error, under its help line. */
+.field-error {
+  margin: -6px 0 10px;
+  font-size: var(--font-body-sm);
+  color: var(--danger-text);
+}
+.field-error[hidden] { display: none; }
+.input-native[aria-invalid="true"] { border-color: var(--danger); }
+
+/* The switch's unknown state: no position is claimed, so the knob sits
+   centred and dimmed. */
+.toggle[aria-checked="mixed"] { opacity: 0.6; }
+.toggle[aria-checked="mixed"] .knob { transform: translateX(9px); }
+
+/* ---------- Documents ---------- */
+/* A document row: the title over a muted line (repo, when it last changed).
+   The label keeps the group's one-line ellipsis; the sub line does the same. */
+.settings-row--doc { padding-top: 8px; padding-bottom: 8px; }
+.settings-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-row-sub {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-body-sm);
+  color: var(--muted);
+}
+/* The reading sheet's body: wide content (a table, a diagram) scrolls inside
+   its own box (chat.css `.md-table-wrap`, `.md-diagram`), never the sheet. */
+.document-sheet-body { min-width: 0; }
+.document-body { min-width: 0; overflow-wrap: anywhere; }
+.document-body > :first-child { margin-top: 0; }
+
+/* The reader. The header, the "Updated" line with Open on GitHub, and the Done
+   footer stay put; only the document scrolls, so the card is exactly the
+   dialog's height and the body takes what is left. */
+.detail-dialog.document-sheet {
+  width: min(900px, calc(100vw - 48px));
+  overflow: hidden;
+}
+.document-sheet .detail-card { height: 100%; min-height: 0; }
+.document-sheet .detail-header,
+.document-meta,
+.document-sheet .detail-actions { flex: none; }
+.document-sheet .document-sheet-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.document-meta {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  min-height: var(--row-md);
-  border-bottom: 1px solid var(--line);
-  padding: 6px 12px;
-  font-size: var(--font-caption);
+  gap: var(--gap);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line-muted);
 }
-.listener-row:last-child { border-bottom: none; }
-.listener-row > div { min-width: 0; }
-/* A helper service nested under its parent app's row. */
-.listener-row.child {
-  margin-left: 18px;
-  border-left: 2px solid var(--accent);
+.document-meta .muted { min-width: 0; margin: 0; }
+.document-github {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--hit-min);
+  font-size: var(--font-label);
+  font-weight: 600;
 }
-.listener-row strong { word-break: break-word; }
-.listener-row .meta { color: var(--muted); font-size: var(--font-caption); }
-/* Parent row whose dependent children are collapsed behind a tap. */
-.listener-row.expandable { cursor: pointer; }
-.listener-chevron {
-  flex-shrink: 0;
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 20px;
-  line-height: 1;
-  transition: transform 0.15s ease;
+.document-github[hidden] { display: none; }
+/* Copy sits beside Open on GitHub at the row's end, not mid-row. */
+.document-copy { margin-left: auto; }
+.document-github .icon { width: var(--icon-inline); height: var(--icon-inline); }
+/* At phone width the sheet is the whole screen: the card loses its inset and
+   its corners, and the header and footer clear the notch and the home bar. */
+@media (max-width: 520px) {
+  .detail-dialog.document-sheet {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    border-radius: 0;
+  }
+  .document-sheet .detail-card {
+    border-radius: 0;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 12px);
+    padding-left: calc(env(safe-area-inset-left, 0px) + 18px);
+    padding-right: calc(env(safe-area-inset-right, 0px) + 18px);
+  }
+  .document-sheet .detail-actions {
+    border-radius: 0;
+    margin-left: calc(-18px - env(safe-area-inset-left, 0px));
+    margin-right: calc(-18px - env(safe-area-inset-right, 0px));
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  }
 }
-.listener-row[aria-expanded="true"] .listener-chevron { transform: rotate(90deg); }
-.listener-row button {
-  flex-shrink: 0;
-  background: transparent;
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--font-caption);
-  min-height: var(--row-sm);
+/* GitHub's Markdown preview, from the app's tokens so it follows light and
+   dark: 16px / 1.5 text, 16px between blocks, h1 and h2 on a hairline, code on
+   the subtle surface and zebra tables. Scoped to the reader; the Changed files
+   Preview keeps the shared `.tr-md` look. The readable measure holds on a wide
+   sheet. */
+.document-body {
+  max-width: 780px;
+  margin-inline: auto;
+  padding: 16px 0 8px;
+  font-size: var(--font-body);
+  line-height: 1.5;
 }
-.listener-row button:active { background: rgb(from var(--danger) r g b / 0.15); }
-.launcher-note {
-  margin: 10px 2px 0;
-  font-size: var(--font-caption);
-  font-style: italic;
-  color: var(--muted);
+.document-body p,
+.document-body ul,
+.document-body ol,
+.document-body .md-block,
+.document-body .md-diagram,
+.document-body .md-quote,
+.document-body .md-table-wrap { margin: 0 0 16px; }
+.document-body :is(p, ul, ol, .md-block, .md-diagram, .md-quote, .md-table-wrap):last-child { margin-bottom: 0; }
+.document-body h1,
+.document-body h2,
+.document-body h3,
+.document-body h4,
+.document-body h5,
+.document-body h6 {
+  margin: 24px 0 16px;
+  font-weight: 600;
+  line-height: 1.25;
 }
-
+.document-body h1 { padding-bottom: 0.3em; font-size: 2em; border-bottom: 1px solid var(--line-muted); }
+.document-body h2 { padding-bottom: 0.3em; font-size: 1.5em; border-bottom: 1px solid var(--line-muted); }
+.document-body h3 { font-size: 1.25em; }
+.document-body h4 { font-size: 1em; }
+.document-body h5 { font-size: 0.875em; }
+.document-body h6 { font-size: 0.85em; color: var(--muted); }
+.document-body > :first-child { margin-top: 0; }
+.document-body ul,
+.document-body ol { padding-left: 2em; }
+.document-body li { margin: 0; padding-left: 0; }
+.document-body li + li { margin-top: 0.25em; }
+.document-body a { color: var(--accent-text); text-decoration: none; }
+.document-body a:hover { text-decoration: underline; }
+.document-body code { padding: 0.2em 0.4em; font-size: 85%; }
+.document-body .md-block { background: var(--card-2); }
+.document-body .md-block pre.md-code { padding: 16px; line-height: 1.45; }
+.document-body .md-block pre code { font-size: inherit; }
+.document-body .md-quote { padding: 0 1em; border-left: 0.25em solid var(--line); color: var(--muted); }
+.document-body .md-table { font-size: var(--font-body); line-height: 1.5; }
+.document-body .md-table th,
+.document-body .md-table td { padding: 6px 13px; }
+.document-body .md-table th { background: none; }
+.document-body .md-table tr:nth-child(2n) td { background: var(--card-2); }

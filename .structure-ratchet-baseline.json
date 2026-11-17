@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "band": {"files": 6, "functions": 13},
+  "band": {"files": 9, "functions": 38},
   "root_extras": [],
   "shape_contract": {
     "root_files": [],

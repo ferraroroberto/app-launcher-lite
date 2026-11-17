@@ -1,71 +1,203 @@
 """Live PTY sessions — list, stop, upload image, WebSocket proxy.
 
-Starlette middleware doesn't see WebSocket handshakes, so the WS proxy
-re-applies the private-network + bearer + passkey legs inline through
-``middleware.ws_terminal_gate``.
+The WS proxy re-applies auth inline via ``middleware.ws_terminal_gate``:
+Starlette middleware doesn't see WebSocket handshakes, so the Tailscale
++ bearer + passkey checks live there too (shared with
+``desktop_screen.screen_ws``, the other terminal-grade WebSocket).
 """
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
-import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile, WebSocket
+from fastapi import (
+    APIRouter,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    WebSocket,
+)
+from starlette.requests import ClientDisconnect
 from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect as ws_connect
 from websockets.exceptions import InvalidHandshake
 
-from app.webapp.middleware import LOOPBACK_HOSTS, ws_terminal_gate
+from app.webapp.hot_poll import BuildSteps, hot_poll
 from app.webapp.routers._helpers import (
+    PROJECT_ROOT,
+    attach_provider_web_urls,
     audit_off_loop,
     client_ip,
     client_ip_ws,
     maybe_json,
     mirror_url,
 )
-from src import audit, board, launcher, session_client
-from src.webapp_config import SESSION_HOST_PORT_ENV, WebappConfig
+from src import audit, board, instance_role
+from src.board import owner_checks
+from src.chief import answers as chief_answers
+from src.clients import session as session_client
+from src.launching import launcher
+from src.middleware import LOOPBACK_HOSTS, ws_terminal_gate
+from src.session_host_paths import sha_contains_commit
+from src.session_model import attach_models
+from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Whether the last sessions poll failed to place its sessions in Board
+# columns, so a persistent failure logs once per healthy→failing transition
+# instead of on every 5 s poll.
+_board_columns_failing = False
 
-@router.get("/api/coding/sessions")
-async def coding_sessions(request: Request) -> Dict[str, Any]:
+
+def _session_board_columns(
+    cfg: WebappConfig,
+    sessions: List[Dict[str, Any]],
+    state_rows: Dict[str, Dict[str, Any]],
+) -> Optional[Dict[str, Dict[str, Any]]]:
+    """Each session's Board column + status + age, or ``None`` when unknowable."""
+    global _board_columns_failing
+    active_issues_file = Path(cfg.sessions_state_file).with_name("active-issues.json")
+    try:
+        active = board.read_active_issues(active_issues_file)
+        columns = board.session_board_columns(
+            sessions, state_rows, active["rows"],
+            fleet_config_dir=Path(cfg.fleet_config_dir),
+        )
+    except Exception as exc:
+        if not _board_columns_failing:
+            logger.warning(f"⚠️ Coding sessions: Board status unavailable: {exc}")
+        _board_columns_failing = True
+        return None
+    if _board_columns_failing:
+        logger.info("ℹ️ Coding sessions: Board status available again")
+    _board_columns_failing = False
+    return columns
+
+
+def _chief_questions(cfg: WebappConfig) -> Optional[int]:
+    """The chief's unanswered questions, fleet-wide, or ``None`` when
+    the plan can't be read: unknown, never zero."""
+    try:
+        plan = chief_answers.read_plan_with_answers(
+            Path(cfg.chief_plan_file), cfg.gitlab_group
+        )
+    except Exception as exc:
+        logger.warning(f"⚠️ chief questions unavailable: {exc.__class__.__name__}")
+        return None
+    return chief_answers.unanswered_count(plan)
+
+
+def _owner_checks() -> Optional[int]:
+    """Owner checks waiting on the owner, fleet-wide, or ``None`` when no list
+    has landed or it can't be read: unknown, never zero."""
+    try:
+        return owner_checks.needs_count()
+    except Exception as exc:
+        logger.warning(f"⚠️ owner checks unavailable: {exc.__class__.__name__}")
+        return None
+
+
+@router.get("/api/claude-code/sessions")
+async def claude_sessions(request: Request) -> Dict[str, Any]:
     """List launcher-owned PTY sessions (public, token-gated).
 
-    Each session is joined with the shared cross-tab title as
-    ``shared_name``/``shared_name_source`` — the same agent-aware claim walk the Board tab's ``merge_sessions()`` uses
+    Each session is joined with the shared cross-tab title as ``shared_name``/``shared_name_source`` — the same
+    agent-aware claim walk the Board tab's ``merge_sessions()`` uses
     (``board.attach_shared_names``), so a live session resolves to the same
     state row — and therefore shows the same title — on both tabs.
+
+    Each also carries ``board_column`` (``claude_turn`` / ``your_turn``) and
+    ``board_status`` (the Board card's status, e.g. ``stalled``), so the
+    Coding tab's rows show the Board's "needs you" / "stalled" chips from
+    this poll alone. ``board_age_seconds`` is the card's
+    last-activity age, the number the Board's own row prints. All three are
+    ``None`` when the Board placement could not be worked out: unknown, never
+    "normal".
+
+    ``last_turn_at`` is the epoch second of the session's newest
+    real conversation line, read from its transcript, or ``None`` when that
+    can't be read. The Telegram sheet's "Last activity" shows it;
+    ``last_output_at`` is the PTY's last paint and stays the host's own.
+
+    ``composer_dirty`` / ``composer_dirty_since`` are the
+    session-host's own, passed through; a session-host too old to send them
+    reads as ``None`` (unknown).
+
+    ``chief_questions`` is how many of the chief's questions no
+    device has answered yet, fleet-wide, so the Board tab's badge counts them
+    from every tab; ``None`` when the plan can't be read. It is computed from
+    the same plan reader and answered marks as ``/api/board/chief-plan``.
+
+    ``owner_checks`` is how many owner checks (both kinds) still wait on the
+    owner, the cached list ``/api/board`` carries minus the items answered
+    Later or Problem, so the badge counts them from every tab; ``None`` until
+    a list has landed.
+
+    Built through :class:`app.webapp.hot_poll.HotPoll`: ``stale``
+    is ``true`` when the build ran past its deadline and this is the last
+    good list, ``age_seconds`` old.
     """
     cfg: WebappConfig = request.app.state.webapp_config
+    poll = hot_poll(request.app.state, "GET /api/claude-code/sessions")
+    return await poll.get(functools.partial(_build_sessions_payload, cfg))
+
+
+async def _build_sessions_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[str, Any]:
     try:
-        sessions = await asyncio.to_thread(
-            session_client.list_sessions, cfg.session_host_port
+        sessions = await steps.run(
+            "list_sessions", session_client.list_sessions, cfg.session_host_port
         )
     except session_client.SessionHostError as exc:
         logger.debug(f"session list failed: {exc}")
         sessions = []
     if sessions:
-        state = await asyncio.to_thread(
-            board.read_sessions_state, Path(cfg.sessions_state_file)
+        await steps.run("attach_provider_web_urls", attach_provider_web_urls, sessions)
+        state = await steps.run(
+            "read_sessions_state", board.read_sessions_state, Path(cfg.sessions_state_file)
+        )
+        columns = await steps.run(
+            "session_board_columns", _session_board_columns, cfg, sessions, state["rows"]
         )
         sessions = board.attach_shared_names(sessions, state["rows"])
-    return {"sessions": sessions}
+        sessions = await steps.run(
+            "attach_last_turn", board.attach_last_turn, sessions, state["rows"]
+        )
+        # The model's display name, for the chat header's pill: the
+        # transcript's newest answer first, then the spawn flags.
+        sessions = await steps.run(
+            "attach_transcript_model", board.attach_transcript_model, sessions, state["rows"]
+        )
+        sessions = attach_models(sessions)
+        for sess in sessions:
+            # A session-host that predates the composer fields sends none: that
+            # is unknown, never "nothing typed".
+            sess.setdefault("composer_dirty", None)
+            sess.setdefault("composer_dirty_since", None)
+            placed = (columns or {}).get(str(sess.get("session_id")))
+            sess["board_column"] = placed["column"] if placed else None
+            sess["board_status"] = placed["status"] if placed else None
+            sess["board_age_seconds"] = placed.get("age_seconds") if placed else None
+    questions = await steps.run("chief_questions", _chief_questions, cfg)
+    owner = await steps.run("owner_checks", _owner_checks)
+    return {"sessions": sessions, "chief_questions": questions, "owner_checks": owner}
 
 
-@router.post("/api/coding/sessions/{sid}/stop")
-async def stop_coding_session(sid: str, request: Request) -> Dict[str, Any]:
+@router.post("/api/claude-code/sessions/{sid}/stop")
+async def stop_claude_session(sid: str, request: Request) -> Dict[str, Any]:
     """Stop a PTY session — graceful /quit then force-fallback (public, token-gated)."""
     cfg: WebappConfig = request.app.state.webapp_config
     body = await maybe_json(request)
     mode = str(body.get("mode") or "quit")
-    # Every stop closes the window (one unified stop button), so
+    # Every stop now closes the window, so
     # always Win32-close the PC mirror window. close_mirror_window
     # first tries the HWND stashed at spawn time, then falls back to a fresh
     # title-scan of live windows so it works even after a webapp
@@ -73,8 +205,15 @@ async def stop_coding_session(sid: str, request: Request) -> Dict[str, Any]:
     # so a busted HWND can't keep the session alive. The cooperative WS
     # shutdown the session-host fires is a further fallback for when no
     # matching window is on the desktop.
+    #
+    # Runs the Win32 EnumWindows/GetWindowText/PostMessage walk off the event
+    # loop — every other blocking Win32/session-host call in this
+    # file (mirror_claude_session's own open_or_focus_mirror_window, the
+    # session_client.stop below, .submit_input, .write) already is, and per
+    # this file's own policy, stalling the loop here stalls every other live
+    # session's WebSocket pump.
     try:
-        posted = launcher.close_mirror_window(sid)
+        posted = await asyncio.to_thread(launcher.close_mirror_window, sid)
         logger.debug(
             f"close_mirror_window({sid[:8]}) returned {posted}; "
             f"forwarding stop({mode!r}) to session-host"
@@ -95,8 +234,8 @@ async def stop_coding_session(sid: str, request: Request) -> Dict[str, Any]:
     return result
 
 
-@router.post("/api/coding/sessions/{sid}/rename")
-async def rename_coding_session(sid: str, request: Request) -> Dict[str, Any]:
+@router.post("/api/claude-code/sessions/{sid}/rename")
+async def rename_claude_session(sid: str, request: Request) -> Dict[str, Any]:
     """Set or clear a manual title override for a session.
 
     Wins over every auto-derived title (``live_title``/``prompt_title``/
@@ -121,8 +260,8 @@ async def rename_coding_session(sid: str, request: Request) -> Dict[str, Any]:
     return result
 
 
-@router.post("/api/coding/sessions/{sid}/mirror")
-async def mirror_coding_session(sid: str, request: Request) -> Dict[str, Any]:
+@router.post("/api/claude-code/sessions/{sid}/mirror")
+async def mirror_claude_session(sid: str, request: Request) -> Dict[str, Any]:
     """Open (or focus) the PC mirror window for an existing session.
 
     Desktop parity with the launch flow: clicking a session row on a desktop
@@ -135,20 +274,18 @@ async def mirror_coding_session(sid: str, request: Request) -> Dict[str, Any]:
     launch path does.
 
     The phone never calls this (it streams in-page). When local-window
-    mirroring is disabled (``show_local_window`` false) the launch flow
+    mirroring is disabled (``claude_show_local_window`` false) the launch flow
     opens no window either, so this returns ``mirrored: false`` and the caller
     falls back to the in-page terminal — preserving the old behaviour for that
     config.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    if not cfg.show_local_window:
+    if not cfg.claude_show_local_window:
         return {"mirrored": False, "reason": "local window mirroring disabled"}
-    # A disposable e2e / verify-before-ship instance (identified by the
-    # session-host port override, set only by autoboot) must never spawn a real
-    # Edge window or focus the canonical instance's desktop windows — the same
-    # rule the orphan-mirror sweep follows. Report ``mirrored`` so
-    # the desktop client still skips the in-page terminal, but touch no window.
-    if os.environ.get(SESSION_HOST_PORT_ENV, "").strip():
+    # A disposable instance must never spawn an Edge window or focus the
+    # canonical instance's windows. Report ``mirrored`` so the desktop client
+    # still skips the in-page terminal, but touch no window.
+    if instance_role.is_disposable():
         return {"mirrored": True, "action": "skipped"}
     pc_url = mirror_url(request, cfg, sid)
     # Runs the win32 focus/spawn off the event loop; the spawn returns as soon
@@ -163,11 +300,11 @@ async def mirror_coding_session(sid: str, request: Request) -> Dict[str, Any]:
     return {"mirrored": True, "action": action}
 
 
-@router.post("/api/coding/sessions/{sid}/image")
+@router.post("/api/claude-code/sessions/{sid}/image")
 async def session_image(
     sid: str, request: Request, file: UploadFile = File(...)
 ) -> Dict[str, Any]:
-    """Upload an image into a session (private-network-only + passkey).
+    """Upload an image into a session (Tailscale-only + passkey).
 
     ``?inline=1`` (compose bar open) tells the session-host to skip the
     paste-into-PTY step and just return the stored path so the browser
@@ -195,35 +332,258 @@ async def session_image(
     return result
 
 
-@router.post("/api/coding/sessions/{sid}/input")
-async def session_input(sid: str, request: Request) -> Dict[str, Any]:
-    """Write composed text into a session's PTY (private-network-only + passkey).
+class _LargeUploadTooBig(Exception):
+    """Raised from the forwarding stream once a large upload passes the limit."""
 
-    The Board drawer's reply path for steering a running
+
+def _mb(n: int) -> str:
+    """"34.7 MB": one decimal, the composer's own wording (attach-batch.js)."""
+    return f"{round(n / (1024 * 1024), 1):g} MB"
+
+
+@router.post("/api/claude-code/sessions/{sid}/large-file")
+async def session_large_file(sid: str, request: Request) -> Dict[str, Any]:
+    """Stream a large file onto the machine for a session.
+    Tailscale-only + passkey, like ``/image``.
+
+    The body is the raw file (``?name=`` carries its filename) and is relayed
+    to the session-host as it arrives, so neither process holds it whole. The
+    limit is ``large_upload_max_mb``: a declared ``Content-Length`` over it is
+    refused before anything moves, and the relayed byte count is checked again
+    as it streams. The session-host returns the stored path; the composer turns
+    it into a line telling the agent to use the file by path, not to read it.
+    """
+    cfg: WebappConfig = request.app.state.webapp_config
+    limit = cfg.large_upload_max_mb * 1024 * 1024
+    too_big = f"limit {cfg.large_upload_max_mb} MB"
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise HTTPException(status_code=413, detail=f"{_mb(int(declared))}, {too_big}")
+    supported = await asyncio.to_thread(
+        session_client.supports_large_upload, cfg.session_host_port
+    )
+    if supported is None:
+        raise HTTPException(status_code=503, detail="session-host unreachable")
+    if not supported:
+        # The session-host is excluded from the webapp's restart, so it can
+        # run a build older than this route for days.
+        raise HTTPException(
+            status_code=501,
+            detail="session-host restart needed: the running build predates large-file upload",
+        )
+    received = 0
+
+    async def chunks():
+        nonlocal received
+        async for chunk in request.stream():
+            received += len(chunk)
+            if received > limit:
+                raise _LargeUploadTooBig()
+            yield chunk
+
+    name = request.query_params.get("name") or "file"
+    try:
+        result = await session_client.upload_large_file(
+            cfg.session_host_port, sid, name, chunks(), limit
+        )
+    except _LargeUploadTooBig:
+        raise HTTPException(status_code=413, detail=f"over {_mb(limit)}, {too_big}")
+    except ClientDisconnect:
+        # The phone cancelled (a tap on the busy 📎) or lost the link;
+        # the session-host has already dropped its partial file.
+        logger.info(f"ℹ️ large upload to {sid[:8]} interrupted by the client after {received} B")
+        raise HTTPException(status_code=400, detail="upload interrupted by the client")
+    except session_client.SessionHostError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+    await audit_off_loop(
+        audit.session_log,
+        sid, "large_file", path=result.get("path"), bytes=result.get("bytes"),
+        client=client_ip(request),
+    )
+    return result
+
+
+# The squash-merge that gave the session-host its detached-session input path
+# (``RemoteSession.submit_input`` behind the kind-agnostic ``/input`` route). A session-host whose loaded
+# ``git_sha`` does not contain it
+# answers a detached Send with an unhandled ``AttributeError`` — a bare 500.
+_DETACHED_INPUT_COMMIT = "1cf17209c86885ff3a488bd2501e26e8a69c4580"
+
+
+def _classify_input_500(port: int, sid: str, detail: str) -> Tuple[int, str]:
+    """Name a session-host 500 on ``/input`` when the facts allow.
+
+    The first real-device Send hit a session-host still running a build from
+    before detached input existed; the phone saw only "session-host HTTP 500".
+    That condition is established here from two facts, never from the 500
+    alone: the target is a detached (``remote``) session, and the host's
+    loaded ``git_sha`` does not contain :data:`_DETACHED_INPUT_COMMIT`. Then
+    it is a **501** saying a restart is needed. A PTY target, or a host that
+    already has the feature (the new path genuinely failed), keeps the
+    original 500 untouched. When either fact can't be established for a
+    detached target, the 500 says so — unknown, not stale.
+    """
+    try:
+        kind = session_client.get_session(port, sid).get("kind")
+    except session_client.SessionHostError as exc:
+        logger.warning(f"⚠️ input 500 on {sid[:8]}: session kind unresolved ({exc})")
+        return 500, detail
+    if kind != "remote":
+        return 500, detail
+    identity = session_client.identity(port) or {}
+    host_sha = str(identity.get("git_sha") or "")
+    contains = (
+        sha_contains_commit(PROJECT_ROOT, host_sha, _DETACHED_INPUT_COMMIT)
+        if host_sha and host_sha != "unknown" else None
+    )
+    if contains is False:
+        logger.info(
+            f"ℹ️ detached send to {sid[:8]} refused: session-host {host_sha} "
+            f"predates detached input ({_DETACHED_INPUT_COMMIT[:7]})"
+        )
+        return 501, (
+            f"session-host restart needed: the running build ({host_sha}) "
+            f"predates detached Send message"
+        )
+    if contains is None:
+        logger.warning(
+            f"⚠️ detached send to {sid[:8]} failed with 500; could not confirm "
+            f"whether session-host {host_sha or '(unreachable)'} has detached input"
+        )
+        return 500, (
+            f"{detail} (could not confirm whether the running session-host "
+            f"supports detached Send message)"
+        )
+    return 500, detail
+
+
+@router.post("/api/claude-code/sessions/{sid}/input")
+async def session_input(sid: str, request: Request, response: Response) -> Dict[str, Any]:
+    """Write composed text into a session's PTY (Tailscale-only + passkey).
+
+    The Board drawer's reply path — chief's only way to steer a running
     worker. Body: ``{"data": str, "submit": bool}``. One call to the
     session-host, which owns the whole framing + settle-then-submit
-    sequence (``PtySession.submit_input``, mirroring the
-    compose bar's ``framePaste``/``sendSubmit``/``bulkSettle``): bracketed-paste
-    framing only when the PTY's own output says bracketed-paste mode is on,
-    the submitting CR as its own separate write, and — for a bulk payload — held back until the paste's ingest visibly
-    settles instead of racing it. Writing the text and the CR back-to-back
-    with no settle logic would leave a bulk/multi-line steer unsubmitted as a
-    ``[Pasted text #N]`` chip while the API reported ``{"ok": true}``.
+    sequence (``PtySession.submit_input``, ported from the compose bar's
+    ``framePaste``/``sendSubmit``/``bulkSettle``): bracketed-paste framing
+    only when the PTY's own output says bracketed-paste mode is on, the
+    submitting CR as its own separate write, and — for a bulk payload —
+    held back until the paste's ingest visibly settles instead of racing
+    it. Writing the text and the CR back-to-back with no settle logic lets
+    a bulk/multi-line steer sit unsubmitted as a ``[Pasted text #N]`` chip
+    while the API reports ``{"ok": true}``, which is exactly the failure
+    this sequencing must prevent.
 
     ``data`` may be blank when ``submit`` is true — a bare submit against
     whatever is already sitting in the composer, with no text write. This is
-    the recovery path for a message already stranded by the exact race above:
-    previously the only way to release it was tapping the phone's own compose
-    Send by hand. Blank ``data`` with ``submit`` false is still a 400 — there
-    would be nothing to do.
+    the recovery path for a message stranded by the exact race above:
+    without it, the only way to release it is tapping the phone's own
+    compose Send by hand. Blank ``data`` with ``submit`` false is still a
+    400 — there would be nothing to do.
 
     ``{"ok": true}`` means the write (and, if requested, the submit) were
     actually accepted by a live session — the session-host reports a dead/
     exited session as a 409 instead of unconditionally claiming delivery,
-    and that propagates through the ``except`` below rather than a false 200.
+    and that propagates through the ``except`` below rather than a false
+    200.
+
+    A 200 carries the session-host's whole verdict (``delivered``/
+    ``ingested``/``submitted``/``submit_confirmed``/``reason``):
+    ``reason: "unverified"`` means no verification was performed (a short
+    payload or a bare submit), and anything other than ``"ok"`` means the
+    submit was **not** confirmed. A payload the terminal never echoed back
+    is a 502, not a 200 — ``{"ok": true}`` must never mean only "the write
+    didn't raise" when the terminal's own echo is the actual proof of
+    delivery. Callers that need certainty should treat anything other than
+    ``reason: "ok"`` as unconfirmed and check the exchange themselves.
+
+    ``reason: "deferred"`` (HTTP **202**) means the payload is in the
+    composer but the agent was still working, so the submitting CR is with
+    a bounded background watcher that will press Enter once the agent
+    settles, or at once for an agent that queues type-ahead — the message
+    is in flight, not stranded, and never fires a CR blind mid-repaint the
+    way a flat ``settle_cap`` would. The watcher's own verdict (``ok``, with
+    ``queued`` when the agent queued it / ``unverified`` / ``defer_timeout``
+    / ``defer_vanished`` / ``defer_unclear`` / ``defer_failed``) lands on
+    the session's ``last_input``, readable via the session list, so a
+    caller follows it up there rather than by holding this request open.
+
+    ``delivered`` means the input reached the *agent*, so it is never
+    ``true`` beside a requested submit that was not sent — ``deferred`` and
+    every watcher give-up (``defer_timeout`` et al.) read
+    ``delivered: false``. ``submit_state`` names the submit's fate in one
+    field: ``confirmed`` / ``unconfirmed`` (sent, nothing verified it) /
+    ``pending`` (with the watcher) / ``not_submitted`` / ``not_requested``.
+    ``ok: true`` only means a live session accepted the request. Full table:
+    ``docs/board.md``.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    body = await maybe_json(request)
+    text, submit = _input_payload(await maybe_json(request))
+    try:
+        result = await asyncio.to_thread(
+            session_client.send_input, cfg.session_host_port, sid, text, submit
+        )
+    except session_client.SessionHostError as exc:
+        raise await _input_refused(cfg, sid, exc, text, submit)
+    verdict = result if isinstance(result, dict) else {}
+    # Audit the verdict, not just the byte count: the three stalled
+    # sessions' logs recorded `bytes=6637 submit=True` for steers that were
+    # never submitted, which made the incident invisible in hindsight.
+    await audit_off_loop(
+        audit.session_log, sid, "input", bytes=len(text), submit=submit,
+        reason=verdict.get("reason"),
+        submit_confirmed=verdict.get("submit_confirmed"),
+        preview=text[:120] or None,
+    )
+    if verdict.get("reason") == session_client.INPUT_DEFERRED:
+        # Mirror the session-host's 202: accepted, submit still in
+        # flight with the watcher — not the completed delivery a 200 implies.
+        response.status_code = 202
+    return {
+        "ok": True,
+        "bytes": len(text),
+        "submit": submit,
+        **{k: v for k, v in verdict.items() if k != "ok"},
+    }
+
+
+@router.delete("/api/claude-code/sessions/{sid}/pending-input/{entry_id}")
+async def session_discard_pending_input(
+    sid: str, entry_id: str, response: Response, request: Request
+) -> Dict[str, Any]:
+    """Discard a message the agent has not taken yet (Tailscale-only + passkey).
+
+    ``entry_id`` is one of the ``pending_input`` entries the Chat view reads
+    off the transcript response. The session-host decides whether the keys
+    can go in now and presses them; nothing here touches the PTY. 200 means
+    it is gone (``ids`` names every entry that went with it: a queue comes
+    out of the agent as one block), 202 that the composer is cleared at the
+    watcher's next safe moment. Already taken is a 404 and not possible now
+    a 409, each with the session-host's own detail.
+    """
+    cfg: WebappConfig = request.app.state.webapp_config
+    try:
+        result = await asyncio.to_thread(
+            session_client.discard_pending_input, cfg.session_host_port, sid, entry_id
+        )
+    except session_client.SessionHostError as exc:
+        await audit_off_loop(
+            audit.session_log, sid, "discard_pending", entry=entry_id,
+            reason="refused", status=exc.status, detail=str(exc)[:200],
+        )
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+    body = result if isinstance(result, dict) else {}
+    await audit_off_loop(
+        audit.session_log, sid, "discard_pending", entry=entry_id,
+        reason=body.get("reason"), ids=body.get("ids"),
+    )
+    if body.get("reason") == "discarding":
+        response.status_code = 202
+    return {"ok": True, **body}
+
+
+def _input_payload(body: Dict[str, Any]) -> Tuple[str, bool]:
+    """``(text, submit)`` from an input body; blank text means a bare submit."""
     data = body.get("data")
     if not isinstance(data, str):
         raise HTTPException(status_code=400, detail="data must be a string")
@@ -231,19 +591,31 @@ async def session_input(sid: str, request: Request) -> Dict[str, Any]:
     text = data if data.strip() else ""
     if not text and not submit:
         raise HTTPException(status_code=400, detail="data must be a non-empty string")
-    try:
-        await asyncio.to_thread(
-            session_client.send_input, cfg.session_host_port, sid, text, submit
+    return text, submit
+
+
+async def _input_refused(
+    cfg: WebappConfig, sid: str, exc: session_client.SessionHostError, text: str, submit: bool,
+) -> HTTPException:
+    """Audit a refused input and return the HTTP error to raise for it."""
+    status, detail = exc.status, str(exc)
+    if exc.status == 500:
+        status, detail = await asyncio.to_thread(
+            _classify_input_500, cfg.session_host_port, sid, detail
         )
-    except session_client.SessionHostError as exc:
-        raise HTTPException(status_code=exc.status, detail=str(exc))
-    await audit_off_loop(audit.session_log, sid, "input", bytes=len(text), submit=submit)
-    return {"ok": True, "bytes": len(text), "submit": submit}
+    # Includes the 502 the host raises for a payload it wrote but never
+    # saw echoed — audited too, since a *failed* steer is the
+    # event worth finding in the log afterwards.
+    await audit_off_loop(
+        audit.session_log, sid, "input", bytes=len(text), submit=submit,
+        reason="stale_host" if status == 501 else "error", detail=detail[:200],
+    )
+    return HTTPException(status_code=status, detail=detail)
 
 
-@router.websocket("/api/coding/sessions/{sid}/ws")
+@router.websocket("/api/claude-code/sessions/{sid}/ws")
 async def proxy_session_ws(websocket: WebSocket, sid: str) -> None:
-    """Private-network-only + passkey-gated WebSocket proxy to the session-host.
+    """Tailscale-only + passkey-gated WebSocket proxy to the session-host.
 
     Browser ⇄ webapp ⇄ session-host. The webapp is the single auth
     choke point — WebSockets bypass the HTTP middleware, so the same
@@ -256,6 +628,7 @@ async def proxy_session_ws(websocket: WebSocket, sid: str) -> None:
     # code + reason and can show a clear message instead of a bare
     # "Disconnected" (closing before accept just fails the handshake).
     await websocket.accept()
+
     refusal = ws_terminal_gate(websocket, label="terminal")
     if refusal is not None:
         await websocket.close(code=refusal[0], reason=refusal[1])

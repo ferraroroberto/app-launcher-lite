@@ -1,0 +1,110 @@
+"""Regression pin for #1127 — every rendered icon sits on the icons.size steps.
+
+The vendored icon contract sizes a glyph at ``1em``, so an icon inside
+caption or label text rendered at 12.47px or 14.72px: off the design's
+16/18/20/24px steps and visibly lighter than the icons beside it. The audit
+counted 12px ×9 and 15px ×7; ``design_lint`` could not see them, because it
+reads only fixed ``px`` sizes. This walks every tab with every card open and
+measures each rendered Lucide glyph. Brand marks (``.agent-icon``) are
+excluded; they are not ``.icon`` and follow their own sizing.
+
+Since #1435 every Settings card is a modal sheet, and a closed dialog renders
+nothing, so the Settings pass also opens each sheet (and each agent's sheet)
+and measures the glyphs it shows.
+
+The CSS-only dropdown carets are pinned too: they are Lucide chevron-down now
+(a masked pseudo-element) rather than a text triangle.
+"""
+from __future__ import annotations
+
+import pytest
+from playwright.sync_api import Page
+
+from tests.e2e.fixtures.ui import (
+    close_settings_sheets,
+    open_settings_sheet,
+)
+from tests.e2e.fixtures.waits import settled
+from tests.e2e.shell.test_row_name_typography import _mock
+
+pytestmark = [pytest.mark.smoke, pytest.mark.iphone]
+
+_STEPS = (16, 18, 20, 24)
+
+_SETTINGS = ".pane:not([hidden]) .settings-open-btn"
+_SHEETS = (
+    "copilotSheet", "chiefSheet", "gitlabSheet", "tokensSheet", "foldersSheet",
+    "passkeysSheet", "terminalSheet",
+)
+
+_OFF_SCALE = """
+(steps) => {
+  const out = [];
+  document.querySelectorAll('svg.icon').forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (!r.width) return;   // not rendered (hidden tab, closed popover)
+    // A busy control's glyph is mid-spin (the Board's refresh, #1502): its
+    // rotated box is no size step.
+    if (el.closest('[aria-busy="true"]')) return;
+    const w = Math.round(r.width * 100) / 100;
+    const h = Math.round(r.height * 100) / 100;
+    if (steps.includes(w) && steps.includes(h)) return;
+    const use = el.querySelector('use');
+    const host = el.parentElement;
+    out.push(w + 'x' + h + ' ' + (use ? use.getAttribute('href') : '?') + ' in ' +
+      host.tagName.toLowerCase() + (host.id ? '#' + host.id : '') +
+      (host.className && typeof host.className === 'string'
+        ? '.' + host.className.trim().split(/\\s+/).join('.') : ''));
+  });
+  return out;
+}
+"""
+
+_CARET = """
+(sel) => {
+  const el = document.querySelector(sel);
+  if (!el) return null;
+  const cs = getComputedStyle(el, '::after');
+  return { content: cs.content, width: cs.width, mask: cs.webkitMaskImage || cs.maskImage };
+}
+"""
+
+
+def _assert_dropdown_caret_is_the_lucide_chevron(page: Page) -> None:
+    """Formerly ``test_dropdown_carets_are_the_lucide_chevron``: the Board's
+    repo dropdown caret is the masked Lucide chevron, not a text glyph."""
+    caret = page.evaluate(_CARET, ".board-repo-combo")
+    assert caret is not None, "Board repo combo not rendered"
+    assert caret["content"] in ('""', "none", "''"), (
+        f"the repo dropdown caret is a text glyph ({caret['content']}), not the icon"
+    )
+    assert "svg" in (caret["mask"] or ""), f"caret has no chevron mask: {caret}"
+    assert caret["width"] == "16px", caret
+
+
+def test_rendered_icons_sit_on_the_size_steps(authed_page: Page, base_url: str) -> None:
+    page = authed_page
+    # Edit mode renders every row action, so more icons are measured.
+    page.add_init_script("localStorage.setItem('launcher.editMode', '1')")
+    _mock(page)
+    page.set_viewport_size({"width": 430, "height": 932})
+    page.goto(f"{base_url}/", wait_until="domcontentloaded")
+
+    strays: list[str] = []
+    for tab in ("#tabClaude", "#tabApps", "#tabJobs", "#tabTeamOS", "#tabBoard", _SETTINGS):
+        page.locator(tab).click()
+        page.evaluate("document.querySelectorAll('details').forEach((d) => { d.open = true; })")
+        settled(page)
+        strays += [f"{tab}: {s}" for s in page.evaluate(_OFF_SCALE, list(_STEPS))]
+        if tab == "#tabBoard":
+            _assert_dropdown_caret_is_the_lucide_chevron(page)
+        if tab != _SETTINGS:
+            continue
+        # The sheets are closed dialogs above: open each and measure it.
+        for sheet_id in _SHEETS:
+            open_settings_sheet(page, sheet_id)
+            strays += [f"{sheet_id}: {s}" for s in page.evaluate(_OFF_SCALE, list(_STEPS))]
+            close_settings_sheets(page)
+    assert not strays, (
+        "icons rendered off the 16/18/20/24px steps (#1127):\n  " + "\n  ".join(strays)
+    )

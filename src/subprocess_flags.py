@@ -4,13 +4,13 @@ A console subprocess launched from a windowless parent (the ``pythonw`` tray,
 or any of its descendants — the webapp uvicorn process, a detached
 ``launcher.py`` run, ...) gets a **new, visible** console window from Windows
 unless the child's creation flags say otherwise. This is the one place that
-combination lives, so a call site imports it instead of re-deriving it —
-per-module constants (``_NO_WINDOW`` / ``_CREATE_NO_WINDOW`` /
-``_GIT_NO_WINDOW``) and inlined ``subprocess.CREATE_NO_WINDOW`` /
-``getattr(subprocess, "CREATE_NO_WINDOW", 0)`` would drift apart. This
-follows the fleet-wide convention in the global CLAUDE.md "Subprocess spawns must suppress the
-console window" gotcha — see ``local-llm-hub/scripts/_lib.py`` and
-``whatsapp-radar/src/subprocess_flags.py`` for the sibling implementations).
+combination lives, so a call site imports it instead of re-deriving its own
+module-level constant or inlining ``subprocess.CREATE_NO_WINDOW`` /
+``getattr(subprocess, "CREATE_NO_WINDOW", 0)`` directly — the fleet-wide
+convention in the global CLAUDE.md "Subprocess spawns must suppress the
+console window" gotcha, with sibling implementations in
+``local-llm-hub/scripts/_lib.py`` and
+``whatsapp-radar/src/subprocess_flags.py``.
 
 Safe to pass even when the parent *does* have a console, as long as the
 child's output is captured (piped/redirected) rather than read from a console

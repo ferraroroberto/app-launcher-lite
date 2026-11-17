@@ -1,7 +1,7 @@
 """Facade over the Jobs-tab backend.
 
-This module only re-exports the
-public surface of four focused modules so existing callers
+This module re-exports the public surface of the focused modules below so
+existing callers
 (``from src.jobs import X`` / ``from src import jobs as jobs_mod;
 jobs_mod.X(...)``) keep working unchanged:
 
@@ -47,12 +47,10 @@ from src.jobs.coverage import (
 from src.jobs.history import (
     JOBS_RUNS_DIR,
     MAX_RUNS_PER_JOB,
-    base_run_meta,
     is_running,
     latest_run,
     list_artifacts,
     list_runs,
-    mark_run_failed,
     new_run_dir,
     new_run_id,
     prune_runs,
@@ -63,33 +61,39 @@ from src.jobs.history import (
     write_run_json,
     write_webhook_payload,
 )
+from src.jobs.next_fire import (
+    FREQUENT_SCHEDULE_TYPES,
+    next_fire,
+    upcoming_fires,
+)
 from src.jobs.queue import (
     JOBS_QUEUE_PATH,
+    admit_and_spawn,
     dispatch_chain_run,
     drain_mutex_queue,
     enqueue_mutex,
     mutex_collision,
     peek_mutex_queue,
     pop_mutex_entry,
-    queue_run,
+    seed_run_meta,
 )
 from src.jobs.reap import reap_stranded_runs
 from src.jobs.schtasks import (
-    FREQUENT_SCHEDULE_TYPES,
+    TASK_FOLDER_PREFIX,
+    TASK_NAMESPACE,
     _run_schtasks,  # noqa: F401 -- re-exported for tests that monkeypatch it here
     delete_schtasks,
     invalidate_next_run_cache,
     list_known_tasks,
-    next_fire,
     query_next_run,
-    resolve_venv_python,
+    registered_task_principals,
+    registration_script,
     schedule_argv_parts,
-    spawn_run_job_detached,
     sync_schtasks,
     task_names_for,
     task_run_command,
-    upcoming_fires,
 )
+from src.jobs.spawn import resolve_venv_python, spawn_run_job_detached
 from src.jobs.stats import (
     consecutive_failed_runs,
     cooldown_check,
@@ -104,6 +108,8 @@ __all__ = [
     "JOBS_RUNS_DIR",
     "MAX_RUNS_PER_JOB",
     "JOBS_QUEUE_PATH",
+    "TASK_NAMESPACE",
+    "TASK_FOLDER_PREFIX",
     "FREQUENT_SCHEDULE_TYPES",
     "resolve_venv_python",
     "task_run_command",
@@ -115,14 +121,14 @@ __all__ = [
     "sync_schtasks",
     "invalidate_next_run_cache",
     "query_next_run",
+    "registered_task_principals",
+    "registration_script",
     "next_fire",
     "upcoming_fires",
     "runs_dir",
     "new_run_id",
     "new_run_dir",
     "write_run_json",
-    "base_run_meta",
-    "mark_run_failed",
     "read_run",
     "list_runs",
     "list_artifacts",
@@ -136,8 +142,9 @@ __all__ = [
     "pop_mutex_entry",
     "peek_mutex_queue",
     "mutex_collision",
+    "seed_run_meta",
+    "admit_and_spawn",
     "dispatch_chain_run",
-    "queue_run",
     "drain_mutex_queue",
     "run_stats",
     "invalidate_stats_cache",

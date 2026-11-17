@@ -1,13 +1,12 @@
 """Headless VT100 screen mirror for full-screen (ratatui) PTY sessions.
 
-A ratatui-based agent (Copilot; see :mod:`src.agents`)
+A ratatui-based agent (Codex/Antigravity/Pi/Copilot, see :mod:`src.agents`)
 re-emits its **entire transcript** on any winsize change (empirical probe:
 ~65 KB for a long conversation, on a same-shape resize toggle).
-Toggling the PTY width by one column and back
-(``_force_repaint`` in ``app/webapp/session_host/server.py``) so the agent
-repaints at the current size would serve a (re)connecting client, but that
-SIGWINCH is exactly what triggers the full re-emission, visible to every
-subscriber.
+Serving a (re)connecting client by toggling the PTY width by one column and
+back (``_force_repaint`` in ``app/webapp/session_host/server.py``) makes the
+agent repaint at the current size — but that SIGWINCH is exactly what
+triggers the full re-emission, visible to every subscriber.
 
 :class:`VtSnapshot` avoids the SIGWINCH entirely: it parses the PTY's byte
 stream through a headless ``pyte`` screen (fed from the same reader thread
@@ -35,7 +34,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Optional
+import time
+from typing import Optional
 
 import pyte
 from wcwidth import wcswidth
@@ -51,7 +51,7 @@ _BG_CODE = {name: code for code, name in pyte.graphics.BG_ANSI.items() if name !
 
 # Bounded scrollback window: enough to page back through a
 # genuine chunk of conversation without the reconnect payload ballooning
-# back toward the full-transcript re-emission this mirror exists to avoid.
+# back toward the full-transcript re-emission this snapshot exists to avoid.
 # Twice undersized in practice, each time re-measured against a real live
 # session rather than guessed: 500 was cleared by a single README dump
 # (797 lines); 2000 was cleared TWICE by one heavy Codex exchange (a user
@@ -74,40 +74,29 @@ _BG_CODE = {name: code for code, name in pyte.graphics.BG_ANSI.items() if name !
 # VtSnapshot(rows, cols) in a test).
 _HISTORY_LINES = 10_000
 
-
-# How many consecutive parse failures get logged in full before the breadcrumb
-# throttles to every Nth. A malformed sequence the agent re-emits on every
-# frame must not turn the session-host log into a flood, but the *first* few
-# must always be loud enough to diagnose from.
-_FEED_ERROR_LOG_FIRST = 3
-_FEED_ERROR_LOG_EVERY = 500
-# Characters of the offending chunk to quote in that breadcrumb.
-_FEED_ERROR_CONTEXT = 120
+# Minimum gap between "pyte parse error" warning breadcrumbs:
+# a stuck agent could otherwise emit one every chunk and flood the log.
+_FEED_ERROR_LOG_INTERVAL = 30.0
 
 
-class _MirrorScreen(pyte.HistoryScreen):
-    """A :class:`pyte.HistoryScreen` that never answers a terminal query.
+class _MutedQueryScreen(pyte.HistoryScreen):
+    """A ``pyte.HistoryScreen`` that never answers terminal queries.
 
-    :class:`VtSnapshot` is a **passive mirror with no reply channel**: it
-    parses the PTY's output stream but has no way to write back, and must
-    not try. Same principle as the session-host's OSC 10/11/12 colour-reply
-    stripping (``_strip_color_osc``) — a query answered by the
-    wrong party corrupts the stream.
-
-    Concretely this fixes a crash. pyte dispatches *any* private
-    CSI as ``handler(*params, private=True)`` (``pyte/streams.py``), but its
-    own ``Screen.report_device_status(self, mode)`` accepts no such keyword,
-    so a private DSR raises ``TypeError`` out of ``Stream.feed``. Copilot CLI
-    1.0.77 emits exactly one at startup — ``ESC[?996n``, querying the
-    terminal's light/dark colour scheme — which killed the session-host's
-    reader thread on the very first chunk and left every Coding session
-    connected, accepting input, and permanently blank. (The sibling
-    ``report_device_attributes`` already takes ``**kwargs``, which is why
-    DSR alone broke.)
+    :class:`VtSnapshot` is a passive mirror with no reply channel — the same
+    principle behind the session-host's OSC 10/11/12 colour-reply stripping
+    (``_strip_color_osc``). ``report_device_status`` is the CSI
+    analogue: pyte dispatches *any* private CSI as
+    ``csi_dispatch[char](*params, private=True)`` (``pyte/streams.py``), but
+    upstream ``Screen.report_device_status(self, mode)`` doesn't accept that
+    keyword and raises ``TypeError``. A real terminal answers a private DSR
+    (e.g. Copilot CLI 1.0.77's ``ESC[?996n`` light/dark colour-scheme query)
+    over its PTY input; this mirror has no such channel, so the only correct
+    behaviour is to no-op rather than crash or answer. Non-private DSRs
+    (``mode`` without ``private=True``) still delegate to the real
+    implementation, matching pyte's own default behaviour.
     """
 
-    def report_device_status(self, mode: int = 0, **kwargs: Any) -> None:
-        """Swallow a private DSR; defer to pyte for the standard form."""
+    def report_device_status(self, mode: int = 0, **kwargs) -> None:
         if kwargs.get("private"):
             return
         super().report_device_status(mode)
@@ -118,55 +107,36 @@ class VtSnapshot:
 
     def __init__(self, rows: int, cols: int, history: int = _HISTORY_LINES) -> None:
         self._lock = threading.Lock()
-        self._screen = _MirrorScreen(cols, rows, history=history)
+        self._screen = _MutedQueryScreen(cols, rows, history=history)
         self._stream = pyte.Stream(self._screen)
-        self._feed_errors = 0
+        self._last_feed_error_at = 0.0
 
     def feed(self, chunk: str) -> None:
-        """Parse one PTY output chunk into the mirror. Never raises.
+        """Feed one chunk of raw PTY output into the mirror.
 
-        A parse failure must degrade to "this chunk did not fully reach the
-        mirror", never propagate: :meth:`feed` is called from
-        :class:`src.session_host.PtySession`'s reader thread, whose ``try``
-        wraps only the PTY read itself — so an exception escaping here kills
-        the pump mid-loop. That thread is what fills the scrollback ring, the
-        transcript, and every subscriber queue, and it dies *before* marking
-        the session exited or pushing EOF. The session therefore still reports
-        alive and still accepts input while showing nothing at all, which is
-        precisely the silent, unrecoverable blank terminal.
-
-        Recovering is safe rather than merely tolerable: pyte reinitialises
-        its parser coroutine whenever a handler raises (``_send_to_parser``,
-        upstream pyte), so the *next* chunk parses from a clean state. Only
-        the remainder of the offending chunk is lost.
+        Any exception pyte's parser raises here is swallowed rather than
+        propagated: this runs on the PTY reader thread's hot
+        path (``session_host.py::PtySession._read_loop``), whose own
+        ``try`` covers only the ``read()`` call — an uncaught exception here
+        would kill that thread silently, leaving the session reporting
+        alive (input still worked) while scrollback, transcript, and every
+        subscriber went permanently dark. Safe to degrade-and-continue:
+        pyte reinitialises its parser coroutine whenever a handler raises
+        (upstream pyte behaviour), so the *next* chunk parses from a clean state —
+        only the chunk that triggered the error is incompletely mirrored.
         """
         with self._lock:
             try:
                 self._stream.feed(chunk)
-            except Exception as exc:  # noqa: BLE001 — any handler may raise
-                self._feed_errors += 1
-                self._log_feed_error(exc, chunk)
-
-    def _log_feed_error(self, exc: Exception, chunk: str) -> None:
-        """Leave a throttled breadcrumb for a swallowed parse failure.
-
-        Loud for the first few, then every :data:`_FEED_ERROR_LOG_EVERY`, so a
-        sequence re-emitted on every frame can't flood the log while the
-        failure still stays diagnosable from it. Caller holds ``self._lock``.
-        """
-        count = self._feed_errors
-        if count > _FEED_ERROR_LOG_FIRST and count % _FEED_ERROR_LOG_EVERY:
-            return
-        logger.warning(
-            f"⚠️ VT mirror dropped a chunk ({type(exc).__name__}: {exc}); "
-            f"parse failure #{count}, terminal output continues. "
-            f"Chunk head: {chunk[:_FEED_ERROR_CONTEXT]!r}"
-        )
-
-    @property
-    def feed_errors(self) -> int:
-        """Count of chunks the parser rejected over this session's life."""
-        return self._feed_errors
+            except Exception:
+                now = time.monotonic()
+                if now - self._last_feed_error_at >= _FEED_ERROR_LOG_INTERVAL:
+                    self._last_feed_error_at = now
+                    logger.warning(
+                        "VtSnapshot.feed: pyte parser error, chunk dropped "
+                        "from mirror (reader thread continues)",
+                        exc_info=True,
+                    )
 
     def resize(self, rows: int, cols: int) -> None:
         with self._lock:
@@ -200,7 +170,7 @@ class VtSnapshot:
             _render_row(row, cols) + "\r\n" for row in history_rows
         )
         # Force the viewport clear via real linefeeds before the frame's
-        # absolute-positioned paint (otherwise the client shows "conversation
+        # absolute-positioned paint ("conversation
         # beginning visible, a chunk in the middle missing, latest lines
         # visible"). After the history text scrolls naturally, the client's
         # viewport still holds the LAST `rows` history lines — only content

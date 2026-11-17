@@ -24,7 +24,7 @@ class ScanCommand(BaseCommand):
     def add_parser(cls, subparsers: argparse._SubParsersAction) -> None:
         p = subparsers.add_parser(
             "scan",
-            help="Scan for new app launchers and persist them",
+            help="Scan for new Claude Code projects + app launchers and persist them",
         )
         p.add_argument(
             "--dry-run",
@@ -37,7 +37,12 @@ class ScanCommand(BaseCommand):
         scan_root = Path(webapp_cfg.apps_scan_root)
         registry = load_registry()
 
-        new = discover_new(scan_root=scan_root, existing=registry)
+        mini_raw = (webapp_cfg.mini_apps_root or "").strip()
+        new = discover_new(
+            scan_root=scan_root,
+            existing=registry,
+            mini_root=Path(mini_raw) if mini_raw else None,
+        )
 
         if not new:
             logger.info("ℹ️ No new entries.")

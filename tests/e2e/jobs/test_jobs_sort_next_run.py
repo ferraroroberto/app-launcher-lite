@@ -2,8 +2,9 @@
 
 The Jobs list defaults to **Next run** order — ascending by the server-computed
 ``next_run_epoch`` — so imminent jobs float to the top and manual-only / paused
-jobs (no next fire) sink to the bottom. Each scheduled row carries a relative
-countdown chip ("in 3h"); a header toggle flips the order to A–Z.
+jobs (no next fire) sink to the bottom. Each scheduled row's meta line leads
+with a relative countdown ("Daily 12:00" with "in 3h" as its tail figure; it was a "Next in" pill
+before #1438); the sort-and-filter sheet (#1538) flips the order to A–Z.
 
 Hermetic: route-mock ``/api/jobs`` with three fixed jobs whose next-run order
 (Zeta, Alpha, Mango) deliberately differs from A–Z (Alpha, Mango, Zeta) so the
@@ -19,14 +20,8 @@ import time
 import pytest
 from playwright.sync_api import Page, expect
 
-from tests.e2e import test_smoke as smoke
-from tests.e2e._flow import FLOW_TIMEOUT_S
-from tests.e2e.jobs import test_jobs_agenda as jobs_agenda
-from tests.e2e.jobs import test_jobs_alert_on_failure as jobs_alert_on_failure
-from tests.e2e.jobs import test_jobs_cooldown_toast as jobs_cooldown_toast
-from tests.e2e.jobs import test_jobs_log_copy as jobs_log_copy
-from tests.e2e.jobs import test_jobs_run_store as jobs_run_store
-from tests.e2e.jobs import test_jobs_toast_not_clipped as jobs_toast_not_clipped
+from tests.e2e.fixtures.ui import open_row_menu
+from tests.e2e.fixtures.waits import stable_read
 
 pytestmark = pytest.mark.smoke
 
@@ -84,12 +79,13 @@ def _wire_jobs(page: Page) -> None:
 
 def _row_ids(page: Page):
     return page.eval_on_selector_all(
-        "#jobsList li.app-item[data-id]",
+        "#jobsList li.job-row[data-id]",
         "els => els.map(e => e.dataset.id)",
     )
 
 
-def scenario_jobs_default_to_next_run_order_with_countdown(
+@pytest.mark.iphone
+def test_jobs_default_to_next_run_order_with_countdown(
     authed_page: Page, base_url: str
 ) -> None:
     # Guard against a sort pref leaking from a reused context — default is 'next'.
@@ -101,7 +97,7 @@ def scenario_jobs_default_to_next_run_order_with_countdown(
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     authed_page.locator("#tabJobs").click()
     authed_page.wait_for_selector(
-        "#jobsList li.app-item[data-id]", state="attached", timeout=5_000
+        "#jobsList li.job-row[data-id]", state="attached", timeout=5_000
     )
 
     # Default order is by next fire: Zeta (+10m), Alpha (+2h), Mango (none, last).
@@ -109,92 +105,106 @@ def scenario_jobs_default_to_next_run_order_with_countdown(
         "default sort should be ascending by next_run_epoch, nulls last"
     )
 
-    # The imminent job shows a countdown chip; the manual job shows none.
-    zeta_chip = authed_page.locator(
-        "#jobsList li[data-id='zeta'] [data-role='countdown-chip']"
-    )
-    expect(zeta_chip).to_contain_text("next in")
-    assert authed_page.locator(
-        "#jobsList li[data-id='mango'] [data-role='countdown-chip']"
-    ).count() == 0, "a job with no next fire must not show a countdown chip"
+    # The imminent job's meta line leads with a countdown; the manual job's
+    # says "Manual only" and has none (the pill became the meta line, #1438).
+    zeta = authed_page.locator("#jobsList li[data-id='zeta'] [data-role='job-meta']")
+    expect(zeta.locator(".action-row-meta-text")).to_have_text("Daily")
+    expect(zeta.locator(".action-row-meta-tail")).to_have_text(["06:00", "in 10m"])
+    alpha = authed_page.locator("#jobsList li[data-id='alpha'] [data-role='job-meta']")
+    expect(alpha.locator(".action-row-meta-text")).to_have_text("Daily")
+    expect(alpha.locator(".action-row-meta-tail")).to_have_text(["12:00", "in 2h"])
+    expect(authed_page.locator(
+        "#jobsList li[data-id='mango'] [data-role='job-meta']"
+    )).to_have_text("Manual only")
 
+    # #1207, kept in spirit: a schedule-less job keeps its kebab (Run now is
+    # its first item) so the kebab column lines up with a scheduled row's; only
+    # Pause, which has nothing to pause, is left out of its menu (#1438).
+    mango = authed_page.locator("#jobsList li[data-id='mango']")
+    xs = [
+        stable_read(lambda i=i: authed_page.locator(
+            f"#jobsList li[data-id='{i}'] .action-row-kebab").bounding_box())
+        for i in ("zeta", "mango")
+    ]
+    assert all(xs), f"kebabs not laid out: {xs}"
+    assert abs(xs[0]["x"] - xs[1]["x"]) <= 1, f"kebab jumps sideways on a manual job: {xs}"
+    mango.locator(".action-row-kebab").click()
+    expect(open_row_menu(authed_page).locator("[data-item=job-run-item]")).to_be_visible()
+    expect(open_row_menu(authed_page).locator("[data-item=job-pause-item]")).to_have_count(0)
+    authed_page.keyboard.press("Escape")
 
-def scenario_sort_toggle_switches_to_alphabetical(
-    authed_page: Page, base_url: str
-) -> None:
-    authed_page.add_init_script(
-        "() => localStorage.removeItem('launcher.jobsSort')"
-    )
-    _wire_jobs(authed_page)
-
-    authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.locator("#tabJobs").click()
-    authed_page.wait_for_selector(
-        "#jobsList li.app-item[data-id]", state="attached", timeout=5_000
-    )
+    # -- was test_sort_toggle_switches_to_alphabetical (merged in #1215; last:
+    # it flips the persisted sort pref) --
     assert _row_ids(authed_page) == ["zeta", "alpha", "mango"]
 
-    # Toggle → A–Z. The button lives in the summary; the click must flip the
-    # sort without collapsing the <details>.
-    authed_page.locator("#jobsSortBtn").click()
-    assert _is_open(authed_page), "sort toggle must not collapse the jobs panel"
-    expect(authed_page.locator("#jobsList li.app-item[data-id]").first).to_have_attribute(
+    # Sort sheet (#1538): the same sort-and-filter sheet as Conversations
+    # (#1528). The sliders button in the search field names the order in force
+    # and opens the sheet; a tab applies as it is tapped, without collapsing
+    # the <details>; Clear is back to Next run; Done closes.
+    filters = authed_page.locator("#jobsFilters")
+    sheet = authed_page.locator("#jobsSortSheet")
+    expect(authed_page.locator("#jobsSortBtn")).to_have_count(0)
+    expect(filters).to_have_attribute("data-sort", "next")
+    expect(filters).to_have_attribute("aria-label", re.compile("sorted by next run"))
+    filters.click()
+    expect(sheet).to_be_visible()
+    expect(sheet.locator("h2")).to_have_text("Sort and filter")
+    tabs = sheet.locator("#jobsSortTabs .segmented-item")
+    expect(tabs).to_have_text(["Next run", "A–Z"])
+    expect(tabs.nth(0)).to_have_attribute("aria-pressed", "true")
+    tabs.nth(1).click()
+    assert _is_open(authed_page), "sorting must not collapse the jobs panel"
+    expect(tabs.nth(1)).to_have_attribute("aria-pressed", "true")
+    expect(filters).to_have_attribute("data-sort", "name")
+    expect(filters).to_have_attribute("aria-label", re.compile("sorted by A–Z"))
+    expect(authed_page.locator("#jobsList li.job-row[data-id]").first).to_have_attribute(
         "data-id", "alpha"
     )
     assert _row_ids(authed_page) == ["alpha", "mango", "zeta"], (
         "A–Z order should be name-sorted regardless of next fire"
     )
+    # Persists as it did before the sheet: the same pref key.
+    assert authed_page.evaluate("localStorage.getItem('launcher.jobsSort')") == "name"
+    sheet.locator("#jobsSortSheetDone").click()
+    expect(sheet).to_be_hidden()
+
+    # Clear → the default order again.
+    filters.click()
+    sheet.locator("#jobsSortSheetClear").click()
+    expect(filters).to_have_attribute("data-sort", "next")
+    assert _row_ids(authed_page) == ["zeta", "alpha", "mango"]
+    assert authed_page.evaluate("localStorage.getItem('launcher.jobsSort')") == "next"
+    sheet.locator("#jobsSortSheetClose").click()
+    expect(sheet).to_be_hidden()
 
 
-def scenario_external_schedule_card_only_offers_history(
+def test_external_schedule_and_manual_run_rows_say_what_they_allow(
     authed_page: Page, base_url: str
 ) -> None:
+    """An externally scheduled job and a manually started one on one list
+    (#1215): neither check reads the row order, so they share a page."""
     # Computed at call time (#646) — see _wire_jobs for why.
+    now = int(time.time())
     external = _job(
         "HWiNFO restart",
         job_id="hwinfo-restart",
-        next_epoch=int(time.time()) + 3600,
+        next_epoch=now + 3600,
         chip="every 8 h",
         sched={"type": "hourly", "every": 8},
         elevated=True,
     )
-    authed_page.route(
-        re.compile(r".*/api/jobs(\?.*)?$"),
-        lambda route: route.fulfill(
-            status=200,
-            content_type="application/json",
-            body=_json.dumps({"jobs": [external]}),
-        ),
-    )
-
-    authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.locator("#tabJobs").click()
-    row = authed_page.locator("#jobsList li[data-id='hwinfo-restart']")
-    expect(row.locator("[data-role='elevated-chip']")).to_contain_text(
-        "external schedule"
-    )
-    expect(row.locator("button[aria-label^='View run history']")).to_have_count(1)
-    expect(row.locator("[data-role='run-btn']")).to_have_count(0)
-    expect(row.locator("[data-role='pause-btn']")).to_have_count(0)
-
-
-def scenario_manual_run_state_is_distinct_from_next_scheduled_fire(
-    authed_page: Page, base_url: str
-) -> None:
-    # Computed at call time (#646) — see _wire_jobs for why.
     running = _job(
         "LI scrape",
         job_id="linkedin-scrape",
-        next_epoch=int(time.time()) + 14 * 60,
+        next_epoch=now + 14 * 60,
         chip="daily 06:15 12:00 18:00",
         sched={"type": "daily_times", "at": ["06:15", "12:00", "18:00"]},
     )
     running["running"] = True
+    running["next_run"] = "2026-07-16 06:15"
     running["last_run"] = {
         "run_id": "20260716T060156",
         "status": "running",
-        "state": "running",
-        "live": True,
         "started_at": "2026-07-16T06:01:57",
         "trigger": "manual",
         "duration_seconds": None,
@@ -204,47 +214,53 @@ def scenario_manual_run_state_is_distinct_from_next_scheduled_fire(
         lambda route: route.fulfill(
             status=200,
             content_type="application/json",
-            body=_json.dumps({"jobs": [running]}),
+            body=_json.dumps({"jobs": [external, running]}),
         ),
     )
 
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     authed_page.locator("#tabJobs").click()
+    row = authed_page.locator("#jobsList li[data-id='hwinfo-restart']")
+    # The external-schedule flag lives in the job sheet's detail block (#1130,
+    # #1438). The row no longer withholds Run / the menu outright (it has no
+    # Run button at all): the kebab is always there, but its Run now is
+    # disabled with the reason and Pause is left out, since every control an
+    # externally managed schedule cannot take is withheld.
+    row.locator(".action-row-kebab").click()
+    run_item = open_row_menu(authed_page).locator("[data-item=job-run-item]")
+    expect(run_item).to_be_disabled()
+    expect(run_item).to_have_attribute("title", re.compile("externally managed"))
+    expect(open_row_menu(authed_page).locator("[data-item=job-pause-item]")).to_have_count(0)
+    authed_page.keyboard.press("Escape")
+    row.locator(".action-row-main").click()
+    details = authed_page.locator("#jobSheetBody [data-role='job-details']")
+    expect(details.locator(".job-elevated-pill")).to_contain_text(
+        "external schedule"
+    )
+    expect(authed_page.locator("#jobSheetRun")).to_be_disabled()
+    authed_page.locator("#jobSheetClose").click()
+    expect(authed_page.locator("#jobSheet")).to_be_hidden()
+
+    # -- was test_manual_run_state_is_distinct_from_next_scheduled_fire --
     row = authed_page.locator("#jobsList li[data-id='linkedin-scrape']")
-    expect(row.locator("[data-role='meta']")).to_contain_text("running now")
-    expect(row.locator("[data-role='countdown-chip']")).to_contain_text("next in")
+    # Since #1438 the row's meta line says "running now" in place of the
+    # countdown (the avatar's alive badge says it too); the *next scheduled
+    # fire* stays a separate fact, the sheet's "Next run" row, beside the
+    # "running now" last-run sentence (#1130).
+    expect(row.locator("[data-role='job-meta'] .action-row-meta-text")).to_have_text(
+        "Daily")
+    expect(row.locator("[data-role='job-meta'] .action-row-meta-tail")).to_have_text(
+        ["06:15 12:00 18:00", "running now"])
+    expect(row.locator(".job-avatar")).to_have_attribute("data-badge", "alive")
+    row.locator(".action-row-main").click()
+    expect(authed_page.locator("#jobSheetTitle")).to_have_text("LI scrape")
+    expect(details.locator(".job-detail-row", has_text="Last run")).to_contain_text(
+        "running now")
+    expect(details.locator(".job-detail-row", has_text="Next run")).to_contain_text(
+        "06:15")
 
 
 def _is_open(page: Page) -> bool:
     return bool(
         page.locator("#paneJobs details.jobs-card").evaluate("el => el.open")
-    )
-
-
-@pytest.mark.timeout(FLOW_TIMEOUT_S)
-def test_jobs_flow(run_flow) -> None:
-    """The Jobs tab: list order and countdown, run dialog, agenda, alert-on-failure, toasts, log copy and the run store.
-
-    Each scenario below ran as its own test before; ``run_flow`` gives each a fresh
-    browser context and reports every scenario that fails, not just the first.
-    """
-    run_flow(
-        smoke.scenario_jobs_row_renders_sparkline_and_duration_chip,
-        smoke.scenario_parameterised_job_run_dialog_posts_values,
-        scenario_jobs_default_to_next_run_order_with_countdown,
-        scenario_sort_toggle_switches_to_alphabetical,
-        scenario_external_schedule_card_only_offers_history,
-        scenario_manual_run_state_is_distinct_from_next_scheduled_fire,
-        jobs_agenda.scenario_agenda_groups_by_day_in_order,
-        jobs_agenda.scenario_agenda_row_reveals_job,
-        jobs_agenda.scenario_agenda_empty_state,
-        jobs_alert_on_failure.scenario_toggle_precedes_confirm_toggle_in_dialog,
-        jobs_alert_on_failure.scenario_saving_toggle_sends_alert_on_failure,
-        jobs_alert_on_failure.scenario_bell_icon_shown_only_when_flag_set,
-        jobs_cooldown_toast.scenario_cooldown_429_shows_skipped_toast,
-        jobs_cooldown_toast.scenario_non_cooldown_failure_still_shows_run_failed,
-        jobs_log_copy.scenario_tapping_job_log_copies_to_clipboard,
-        jobs_run_store.scenario_search_jump_artifact_link_and_pin_toggle,
-        jobs_toast_not_clipped.scenario_toast_is_body_level_sibling_of_app,
-        jobs_toast_not_clipped.scenario_toast_renders_above_nav_bar,
     )
