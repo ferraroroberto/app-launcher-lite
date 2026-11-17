@@ -40,8 +40,8 @@ def _capture_run(captured: dict):
 def test_create_remote_uses_copilot_command(tmp_path, monkeypatch):
     captured: dict = {}
 
-    from src import session_host
-    monkeypatch.setattr(session_host.subprocess, "run", _capture_run(captured))
+    from src.session_hosting import remote
+    monkeypatch.setattr(remote.subprocess, "run", _capture_run(captured))
 
     mgr = SessionManager()
     session = mgr.create_remote(str(tmp_path), "proj", "", "copilot")
@@ -54,8 +54,8 @@ def test_create_remote_uses_copilot_command(tmp_path, monkeypatch):
 def test_create_remote_defaults_to_copilot(tmp_path, monkeypatch):
     captured: dict = {}
 
-    from src import session_host
-    monkeypatch.setattr(session_host.subprocess, "run", _capture_run(captured))
+    from src.session_hosting import remote
+    monkeypatch.setattr(remote.subprocess, "run", _capture_run(captured))
 
     mgr = SessionManager()
     session = mgr.create_remote(str(tmp_path), "proj", "")
@@ -70,13 +70,13 @@ def test_create_remote_orphans_console_via_start_process(tmp_path, monkeypatch):
     otherwise a ``taskkill /T`` on the tray subtree cascades into it and the
     session that was meant to outlive a restart dies."""
     captured: dict = {}
-    from src import session_host
+    from src.session_hosting import remote
 
     def boom_popen(*args, **kwargs):
         raise AssertionError("create_remote must not Popen the console directly")
 
-    monkeypatch.setattr(session_host.subprocess, "Popen", boom_popen)
-    monkeypatch.setattr(session_host.subprocess, "run", _capture_run(captured))
+    monkeypatch.setattr(remote.subprocess, "Popen", boom_popen)
+    monkeypatch.setattr(remote.subprocess, "run", _capture_run(captured))
 
     mgr = SessionManager()
     session = mgr.create_remote(str(tmp_path), "proj", "--foo")
@@ -94,9 +94,9 @@ def test_create_remote_orphans_console_via_start_process(tmp_path, monkeypatch):
 def test_create_remote_raises_when_no_pid(tmp_path, monkeypatch):
     """A spawn that prints no PID surfaces a clear error instead of a session
     tracking a bogus process."""
-    from src import session_host
+    from src.session_hosting import remote
     monkeypatch.setattr(
-        session_host.subprocess,
+        remote.subprocess,
         "run",
         lambda *a, **k: _FakeCompleted(stdout="", stderr="boom"),
     )
@@ -108,16 +108,16 @@ def test_create_remote_raises_when_no_pid(tmp_path, monkeypatch):
 
 def test_remote_stop_taskkills_by_pid(monkeypatch):
     """An explicit Stop still reaches the orphaned console by its own PID."""
-    from src import session_host
+    from src.session_hosting import remote
     calls: dict = {}
 
-    monkeypatch.setattr(session_host, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(remote, "is_pid_alive", lambda pid, hint=None: True)
 
     def fake_run(argv, **kwargs):
         calls["argv"] = argv
         return _FakeCompleted()
 
-    monkeypatch.setattr(session_host.subprocess, "run", fake_run)
+    monkeypatch.setattr(remote.subprocess, "run", fake_run)
 
     session = RemoteSession(
         session_id="sid",
@@ -208,15 +208,26 @@ def test_create_defaults_and_clamps_dimensions(tmp_path, monkeypatch):
     mgr.create(str(tmp_path), "proj", "")
     assert captured["dimensions"] == (40, 120)
 
-    # Out-of-range values clamp to the same 1..1000 bounds as resize().
+    # Out-of-range values clamp to the same bounds as resize() — which means
+    # PTY_MIN_ROWS/PTY_MIN_COLS at the bottom, not 1 (#1007). This test used
+    # to assert (1000, 1), pinning the very gap the docstring denied: the
+    # HTTP surface forwards a request's rows unfloored, so `POST /sessions`
+    # with `rows: 1` spawned a 1-row ConPTY whose first real resize fires the
+    # full-viewport repaint the floor exists to prevent (#930).
     mgr.create(str(tmp_path), "proj", "", rows=99999, cols=0)
-    assert captured["dimensions"] == (1000, 1)
+    assert captured["dimensions"] == (1000, session_host.PTY_MIN_COLS)
+
+    mgr.create(str(tmp_path), "proj", "", rows=1, cols=3)
+    assert captured["dimensions"] == (
+        session_host.PTY_MIN_ROWS,
+        session_host.PTY_MIN_COLS,
+    )
 
 
 def test_create_attaches_vt_snapshot_for_fullscreen_agent(tmp_path, monkeypatch):
-    """A fullscreen agent gets a headless VT mirror so a (re)connect can be
+    """Copilot (fullscreen) gets a headless VT mirror so a (re)connect can be
     served a current-frame snapshot instead of a resize-triggered
-    re-emission (issue #432); an inline agent (raw-ring replay) needs none."""
+    re-emission (issue #432); SSH (inline, raw-ring replay) needs none."""
     captured: dict = {}
     from src import session_host
 
@@ -226,12 +237,12 @@ def test_create_attaches_vt_snapshot_for_fullscreen_agent(tmp_path, monkeypatch)
     mgr = SessionManager()
     mgr.attach_loop(MagicMock())
 
-    fs_session = mgr.create(str(tmp_path), "proj", "", "copilot", rows=30, cols=90)
-    assert isinstance(fs_session._vt, VtSnapshot)
-    assert fs_session._vt._screen.lines == 30
-    assert fs_session._vt._screen.columns == 90
+    vt_session = mgr.create(str(tmp_path), "proj", "", "copilot", rows=30, cols=90)
+    assert isinstance(vt_session._vt, VtSnapshot)
+    assert vt_session._vt._screen.lines == 30
+    assert vt_session._vt._screen.columns == 90
 
-    inline_session = mgr.create(str(tmp_path), "peer", "user@host", "ssh")
+    inline_session = mgr.create(str(tmp_path), "proj", "", "ssh")
     assert inline_session._vt is None
 
 
@@ -357,7 +368,7 @@ def test_pty_session_to_api_carries_agent():
 
 
 def test_create_threads_label_to_api(tmp_path, monkeypatch):
-    """The role tag (#245) rides create() → to_api()
+    """The role tag (#245, e.g. the fleet chief) rides create() → to_api()
     so callers can find a purpose-built session deterministically; omitted
     stays the empty string."""
     captured: dict = {}
@@ -369,15 +380,15 @@ def test_create_threads_label_to_api(tmp_path, monkeypatch):
     mgr = SessionManager()
     mgr.attach_loop(MagicMock())
 
-    tagged = mgr.create(str(tmp_path), "special", "", "copilot", label="special")
-    assert tagged.to_api()["label"] == "special"
+    chief = mgr.create(str(tmp_path), "chief", "", "copilot", label="chief")
+    assert chief.to_api()["label"] == "chief"
 
     plain = mgr.create(str(tmp_path), "proj", "", "copilot")
     assert plain.to_api()["label"] == ""
 
 
 def test_pty_session_to_api_reports_output_chars():
-    """``output_chars`` is the "has the agent painted anything yet" signal —
+    """The board's dispatch readiness probe (#302) reads ``output_chars`` —
     0 before the agent paints anything, the scrollback ring's length after."""
     session = PtySession(
         session_id="sid-test",

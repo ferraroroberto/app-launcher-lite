@@ -1,10 +1,10 @@
 """Shared atomic-JSON-write and interprocess-lock helpers.
 
-Six call sites across ``src/`` each hand-rolled the same
-tempfile-then-``os.replace`` dance with their own suffix bikeshed. This
-module is the single place that owns it. It also owns the msvcrt-based
-file-lock-with-retry pattern that both ``src.jobs.queue`` and
-``src.jobs.history`` need for their own read-modify-write critical sections.
+The single place that owns the tempfile-then-``os.replace`` atomic-write
+dance, so a call site under ``src/`` never hand-rolls its own suffix and
+cleanup. It also owns the msvcrt-based file-lock-with-retry pattern that
+both ``src.jobs.queue`` and ``src.jobs.history`` need for their own
+read-modify-write critical sections.
 """
 
 from __future__ import annotations
@@ -25,14 +25,6 @@ except ImportError:  # pragma: no cover - non-Windows fallback
 
 logger = logging.getLogger(__name__)
 
-# How many times ``file_lock`` calls ``msvcrt.locking(LK_LOCK)`` before it
-# gives up and lets the caller write unlocked. ``LK_LOCK`` already retries
-# internally (10 attempts, 1 s apart, ~10 s) before raising ``OSError``, so
-# the true worst case is ``_LOCK_ATTEMPTS`` x ~10 s = ~30 s of blocking: long
-# enough to ride out a slow sibling process finishing its write, short enough
-# that a wedged holder never hangs the webapp's kill and queue paths for good.
-_LOCK_ATTEMPTS = 3
-
 
 def atomic_write_json(target: Path, payload: Any, *, indent: int = 2) -> None:
     """Write ``payload`` as JSON to ``target`` atomically.
@@ -41,10 +33,28 @@ def atomic_write_json(target: Path, payload: Any, *, indent: int = 2) -> None:
     it over ``target`` — the swap is all-or-nothing, so a crash mid-write or
     a concurrent reader never observes a partially-written file. Caller is
     responsible for ensuring ``target.parent`` exists.
+
+    A write that fails *after* the temp file lands — the ``os.replace`` is
+    refused, the disk fills mid-write — must not leave that ``.tmp`` behind.
+    The cleanup belongs here, where the temp-file name is known, rather than
+    in each call site re-deriving it: the ``finally`` removes the temp file
+    if it still exists, which after a successful ``os.replace`` it never
+    does (the swap consumes it).
+
+    A *serialization* failure leaks nothing either way — ``json.dumps`` runs
+    before ``write_text`` opens the file — so the leak this closes is
+    specifically the post-write one.
     """
     tmp = target.with_suffix(target.suffix + ".tmp")
-    runtime_files.save_text(tmp, json.dumps(payload, indent=indent))
-    os.replace(tmp, target)
+    try:
+        runtime_files.save_text(tmp, json.dumps(payload, indent=indent))
+        os.replace(tmp, target)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            # Best effort: a stray temp file must never mask the real error.
+            pass
 
 
 @contextmanager
@@ -59,8 +69,7 @@ def file_lock(lock_path: Path, *, label: str) -> Iterator[None]:
     file, never on the JSON document itself (which ``os.replace`` swaps out
     from under any held handle). Retries a few times before giving up and
     proceeding unlocked — logged via ``label`` — since losing serialization
-    is far better than wedging the caller's operation forever. The worst-case
-    wait is about 30 s (see ``_LOCK_ATTEMPTS``).
+    is far better than wedging the caller's operation forever.
 
     Callers resolve ``lock_path`` themselves (rather than this helper
     caching it) so tests that monkeypatch the underlying JSON path redirect
@@ -73,14 +82,14 @@ def file_lock(lock_path: Path, *, label: str) -> Iterator[None]:
     handle = runtime_files.open_for_write(lock_path, "a+b")
     locked = False
     try:
-        for attempt in range(_LOCK_ATTEMPTS):
+        for attempt in range(3):
             try:
                 handle.seek(0)
                 msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
                 locked = True
                 break
             except OSError:
-                if attempt == _LOCK_ATTEMPTS - 1:
+                if attempt == 2:
                     logger.warning(
                         "⚠️  %s lock contended — writing unlocked", label
                     )

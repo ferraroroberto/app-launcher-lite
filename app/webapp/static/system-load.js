@@ -1,20 +1,23 @@
-/* The Coding header's CPU reading (ported from app-launcher): "is the
- * work PC loaded?" at a glance, and "by what?" one tap away.
+/* The page header's CPU reading: "is the box loaded?" at a glance
+ * on every tab, and "by what?" one tap away.
  *
- * The home-head carries one .cpu-reading button left of the theme toggle. It
- * is a quiet muted number at rest; colour only rings an exception — attention
- * once CPU stays at or above 70% for ~30 s, danger at or above 90% — and a
- * reading the server could not take shows "–", never "0%". The level is the
- * server's (src/system_load.py), so the rule lives in one place.
+ * Every pane's home-head carries a .cpu-reading button left of the theme
+ * toggle. It is a quiet muted number at rest; colour only rings an
+ * exception — attention once CPU stays at or above 70% for ~30 s, danger at
+ * or above 90% — and a reading the server could not take shows "–", never
+ * "0%". The level is the server's (src/system_load.py), so the rule lives in
+ * one place.
  *
- * One small poll for the whole page: the server answers from its shared
- * sampler's cached sample, and the poll skips while the page is hidden.
- * Coming back to the foreground reads once at once. While the sampler is
- * still taking its first sample, one short retry follows.
+ * One small poll for the whole page, never one per tab: the server answers
+ * from its shared sampler's cached sample, and the poll skips while the
+ * page is hidden. Coming back to the foreground reads once at once. While
+ * the sampler is still taking its first sample, one short retry follows.
  */
 
 import { SYSTEM_LOAD_WARMING_RETRY_MS } from './state.js';
 import { jsonApi, logPollFailure } from './api.js';
+import { el, sheetRow } from './dom-utils.js';
+import { pctText } from './shared/format.js';
 
 // The last payload; null when the fetch itself failed. Before the first
 // answer it reads as the server's own "still taking the first sample".
@@ -34,10 +37,6 @@ function unknownText(r) {
   return "Couldn't reach the launcher";
 }
 
-function pctText(n) {
-  return Math.round(n) + '%';
-}
-
 function gb(bytes) {
   return (bytes / 1024 ** 3).toFixed(1).replace(/\.0$/, '');
 }
@@ -45,21 +44,6 @@ function gb(bytes) {
 function coresText(n) {
   const v = Math.round(n * 10) / 10;
   return v + (v === 1 ? ' core' : ' cores');
-}
-
-// One label/value row of the sheet; `key` is the row's data-row hook.
-function sheetRow(label, value, key) {
-  const row = document.createElement('div');
-  row.className = 'cpu-sheet-row';
-  row.dataset.row = key;
-  const name = document.createElement('span');
-  name.className = 'cpu-sheet-label';
-  name.textContent = label;
-  const val = document.createElement('span');
-  val.className = 'cpu-sheet-value';
-  val.textContent = value;
-  row.append(name, val);
-  return row;
 }
 
 function renderReadings() {
@@ -75,12 +59,6 @@ function renderReadings() {
     btn.dataset.level = level;
     btn.setAttribute('aria-label', label);
   });
-}
-
-// "python ×16 · fleet-config-wt-1440": a count only for a real group (never
-// "×1"), and the repo or worktree folder when the server resolved one.
-function groupLabel(p) {
-  return p.name + (p.count > 1 ? ' ×' + p.count : '') + (p.owner ? ' · ' + p.owner : '');
 }
 
 function renderSheet() {
@@ -104,10 +82,7 @@ function renderSheet() {
       : 'Unknown',
     'memory'
   ));
-  const caption = document.createElement('p');
-  caption.className = 'cpu-sheet-caption';
-  caption.textContent = 'Busiest processes, last few seconds';
-  body.appendChild(caption);
+  body.appendChild(el('p', 'cpu-sheet-caption', 'Busiest processes, last few seconds'));
   if (!r.top || !r.top.length) {
     body.appendChild(sheetRow('Processes', 'None busy', 'top-none'));
     return;
@@ -120,6 +95,12 @@ function renderSheet() {
   if (typeof r.other_cores === 'number' && Math.round(r.other_cores * 10) > 0) {
     body.appendChild(sheetRow('Everything else', coresText(r.other_cores), 'other'));
   }
+}
+
+// "python ×16 · fleet-config-wt-1440": a count only for a real group (never
+// "×1"), and the repo or worktree folder when the server resolved one.
+function groupLabel(p) {
+  return p.name + (p.count > 1 ? ' ×' + p.count : '') + (p.owner ? ' · ' + p.owner : '');
 }
 
 function sheet() {

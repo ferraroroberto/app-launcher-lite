@@ -10,6 +10,13 @@ Contract under test:
     background.
   * The machine-local terminal-themes.json (issue #381) still deep-merges
     over the built-in palette for the active mode.
+
+The first bullet (the tokens flip, and no #359 opt-in switch remaining) needs
+only a loaded page and runs in
+``test_terminal_module_probes.py::test_terminal_module_contracts`` since
+#1215; the legs here are the ones that need a live PTY. They share one test,
+page and PTY: the live restyle first, then a second load with the user theme
+file served, each leg a former test kept as a named helper.
 """
 
 from __future__ import annotations
@@ -20,47 +27,38 @@ import re
 import pytest
 from playwright.sync_api import Page
 
-from tests.e2e._flow import FLOW_TIMEOUT_S
-from tests.e2e.terminal import test_rotation_overlay_reset as rotation_overlay_reset
-from tests.e2e.terminal import test_terminal_bar_overflow as terminal_bar_overflow
+from tests.e2e.fixtures.waits import OVERLAY_OPEN_MS
 
-pytestmark = pytest.mark.smoke
+pytestmark = [pytest.mark.smoke, pytest.mark.iphone]
 
 
-def _term_bg(page: Page) -> str:
-    return page.evaluate(
-        "getComputedStyle(document.documentElement)"
-        ".getPropertyValue('--term-bg').trim()"
-    )
-
-
-def scenario_terminal_tokens_follow_app_theme(
-    authed_page: Page, base_url: str
-) -> None:
-    authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    authed_page.evaluate("document.documentElement.dataset.theme = 'light'")
-    assert _term_bg(authed_page) == "#ffffff"
-    authed_page.evaluate("document.documentElement.dataset.theme = 'dark'")
-    assert _term_bg(authed_page) == "#0a0a0a"
-
-
-def scenario_no_follow_switch_remains(authed_page: Page, base_url: str) -> None:
-    """The #359 opt-in switch is gone — following the theme is not a
-    setting any more."""
-    authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    assert authed_page.locator("#termFollowTheme").count() == 0
-
-
-def scenario_open_terminal_restyles_live_on_theme_flip(
-    authed_page: Page, base_url: str, launched_pty_session: str
+def _leg_open_terminal_restyles_live_on_theme_flip(
+    authed_page: Page, base_url: str, sid: str
 ) -> None:
     """Toggling theme while a terminal is open must recolor xterm live —
     no reopen. xterm mirrors options.theme.background onto its viewport
-    element, so that is the observable."""
-    sid = launched_pty_session
+    element, so that is the observable.
+
+    Also pins the JS half of the mirror-window close (issue #20): the
+    ``app-launcher-lite-mirror-<sid>`` marker trailing ``document.title``."""
     authed_page.goto(f"{base_url}/?terminal={sid}", wait_until="domcontentloaded")
-    authed_page.wait_for_selector("#terminalOverlay:not([hidden])", timeout=10_000)
-    authed_page.wait_for_selector(".xterm-viewport", timeout=10_000)
+    authed_page.wait_for_selector("#terminalOverlay:not([hidden])", timeout=OVERLAY_OPEN_MS)
+
+    # Mirror-window close marker (issue #20, #266), formerly
+    # test_edge_mirror_close.py::test_mirror_page_keeps_close_marker_in_document_title
+    # — folded in by #1215, same ?terminal= deep link on the same stub PTY.
+    # Loopback access auto-enters mirror mode: /api/status returns
+    # {reachable: true, reason: 'loopback'}, which terminal.js picks up to
+    # flip isMirror = true. The marker must remain at the tail of the title
+    # (a human name may lead, issue #266) so the launcher's substring
+    # EnumWindows scan still finds and closes the Edge --app window.
+    marker = f"app-launcher-lite-mirror-{sid}"
+    authed_page.wait_for_function(
+        f"() => document.title.endsWith({marker!r})",
+        timeout=5_000,
+    )
+
+    authed_page.wait_for_selector(".xterm-viewport", timeout=OVERLAY_OPEN_MS)
 
     authed_page.evaluate("document.documentElement.dataset.theme = 'light'")
     authed_page.wait_for_function(
@@ -76,15 +74,14 @@ def scenario_open_terminal_restyles_live_on_theme_flip(
     )
 
 
-def scenario_user_theme_file_overrides_builtins(
-    authed_page: Page, base_url: str, launched_pty_session: str
+def _leg_user_theme_file_overrides_builtins(
+    authed_page: Page, base_url: str, sid: str
 ) -> None:
     """Issue #381: /api/terminal-themes (the machine-local
     terminal-themes.json) deep-merges over the built-in palette for the
     active mode — background here — and the overlay chrome follows."""
-    sid = launched_pty_session
-
-    # Serve a user theme before the SPA boots (wireTerminal fetches once).
+    # Serve a user theme before the SPA boots (wireTerminal fetches once), so
+    # this leg reloads the page.
     authed_page.route(
         re.compile(r".*/api/terminal-themes$"),
         lambda route: route.fulfill(
@@ -96,8 +93,8 @@ def scenario_user_theme_file_overrides_builtins(
     )
 
     authed_page.goto(f"{base_url}/?terminal={sid}", wait_until="domcontentloaded")
-    authed_page.wait_for_selector("#terminalOverlay:not([hidden])", timeout=10_000)
-    authed_page.wait_for_selector(".xterm-viewport", timeout=10_000)
+    authed_page.wait_for_selector("#terminalOverlay:not([hidden])", timeout=OVERLAY_OPEN_MS)
+    authed_page.wait_for_selector(".xterm-viewport", timeout=OVERLAY_OPEN_MS)
 
     # Light theme → the user background (not the built-in white).
     authed_page.evaluate("document.documentElement.dataset.theme = 'light'")
@@ -121,19 +118,8 @@ def scenario_user_theme_file_overrides_builtins(
     )
 
 
-@pytest.mark.timeout(FLOW_TIMEOUT_S)
-def test_terminal_chrome_flow(run_flow) -> None:
-    """The terminal's chrome: theme tokens, the bar fitting the viewport, and the overlay reset on rotation.
-
-    Each scenario below ran as its own test before; ``run_flow`` gives each a fresh
-    browser context and reports every scenario that fails, not just the first.
-    """
-    run_flow(
-        scenario_terminal_tokens_follow_app_theme,
-        scenario_no_follow_switch_remains,
-        scenario_open_terminal_restyles_live_on_theme_flip,
-        scenario_user_theme_file_overrides_builtins,
-        terminal_bar_overflow.scenario_terminal_bar_buttons_stay_within_viewport,
-        terminal_bar_overflow.scenario_terminal_bar_fits_at_once_on_default_phone,
-        rotation_overlay_reset.scenario_orientationchange_releases_stale_overlay_pin,
-    )
+def test_open_terminal_restyles_live_on_theme_flip(
+    authed_page: Page, base_url: str, launched_pty_session: str
+) -> None:
+    _leg_open_terminal_restyles_live_on_theme_flip(authed_page, base_url, launched_pty_session)
+    _leg_user_theme_file_overrides_builtins(authed_page, base_url, launched_pty_session)

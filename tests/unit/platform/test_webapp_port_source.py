@@ -2,7 +2,7 @@
 
 Every reader — the tray's manager, the ``webapp`` CLI command, the mirror
 window URL, and the ``.bat`` launchers through ``scripts/webapp_port.py`` —
-resolves it through ``src.app_config``. ``webapp_config.json`` carries no port.
+resolves it through ``src.app_config``.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ import pytest
 
 from app.webapp.manager import WebappManagerConfig, load_config
 from src.app_config import DEFAULT_WEBAPP_PORT, resolve_webapp_port, webapp_port
-from src.webapp_config import WebappConfig, load_webapp_config, save_webapp_config
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -63,28 +62,6 @@ class TestManagerReadsTheSameSetting:
 
     def test_manager_default_matches(self):
         assert load_config(None).port == WebappManagerConfig().port == DEFAULT_WEBAPP_PORT
-
-
-class TestWebappConfigHoldsNoPort:
-    def test_dataclass_has_no_port_field(self):
-        assert not hasattr(WebappConfig(), "port")
-
-    def test_save_does_not_write_a_port(self, tmp_path):
-        target = save_webapp_config(WebappConfig(), tmp_path / "webapp_config.json")
-        assert "port" not in json.loads(target.read_text(encoding="utf-8"))
-
-    def test_legacy_port_key_is_ignored_on_load(self, tmp_path):
-        target = tmp_path / "webapp_config.json"
-        target.write_text(json.dumps({"port": 9999, "host": "127.0.0.1"}), encoding="utf-8")
-        cfg = load_webapp_config(target)
-        assert cfg.host == "127.0.0.1"
-        assert not hasattr(cfg, "port")
-
-    def test_sample_carries_no_port(self):
-        sample = json.loads(
-            (_REPO_ROOT / "config" / "webapp_config.sample.json").read_text(encoding="utf-8")
-        )
-        assert "port" not in sample
 
 
 class TestBatchLaunchersReadTheHelper:

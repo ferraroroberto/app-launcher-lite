@@ -1,0 +1,290 @@
+# Routing decision for verify-before-ship.ps1's e2e phase.
+#
+# Turns scripts/classify_e2e.py's E2E_* lines into what the gate runs: the
+# tier, the pytest target arguments, the browsers, and whether the run must
+# hold the machine-wide dual-projection mutex -- plus, from Get-E2EWorkerArgs
+# at the bottom, how many parallel workers it runs on, and from
+# Get-UnitWorkerArgs how many the non-browser phase runs on. Dot-sourced by
+# the gate and kept free of side effects so tests/unit/repo/test_verify_gate_route.py
+# can drive it with fake classifier output.
+#
+# Fail-safe: anything the gate can't use -- no verdict, an unknown tier, a
+# repeated E2E_* key, a static/full/surface verdict with no target -- runs the
+# whole suite on both projections. Uncertainty never narrows.
+#
+# ASCII only: Windows PowerShell 5.1 reads a BOM-less script as ANSI.
+
+function Get-E2ERoute {
+    param(
+        [AllowEmptyCollection()][AllowNull()][string[]]$ClassifierOutput,
+        [bool]$IsCI = $false
+    )
+
+    $failSafe = {
+        param($reason)
+        [pscustomobject]@{
+            Tier      = "full"
+            Targets   = @("tests/e2e")
+            Browsers  = @()
+            Reason    = $reason
+            Serialize = $true
+        }
+    }
+
+    # CI runs the clean-machine half of this gate and nothing else.
+    # The browser suite there was a second run of a gate that had already
+    # passed locally before the PR was opened -- the same script, the same
+    # tests -- and it needed three separate timeout widenings
+    # (E2E_LOG_POLL_DEADLINE_MS, E2E_STOP_OVERLAY_HIDE_MS,
+    # E2E_REAL_AGENT_ECHO_MS) purely to survive the hosted runner, which is
+    # the suite fighting the environment rather than testing the code. What
+    # only CI can do -- a fresh .venv from requirements.txt on a machine that
+    # has never seen this repo, run against committed files alone -- lives
+    # entirely in byte-compile plus the non-e2e suite, and that is what it
+    # now runs. The local gate stays the contract for the browser suite.
+    #
+    # Deliberately decided here, not in the workflow: this is a routing
+    # decision, it is the only place that already knows it is on CI, and
+    # tests/unit/repo/test_verify_gate_route.py pins it.
+    if ($IsCI) {
+        return [pscustomobject]@{
+            Tier      = "skip"
+            Targets   = @()
+            Browsers  = @()
+            Reason    = "CI runs the clean-machine half only -- browser suite is the local gate's job (#1041)"
+            Serialize = $false
+        }
+    }
+
+    $kv = @{}
+    $repeated = @()
+    foreach ($line in @($ClassifierOutput)) {
+        if ($line -match '^(E2E_[A-Z_]+)=(.*)$') {
+            if ($kv.ContainsKey($matches[1])) { $repeated += $matches[1] }
+            $kv[$matches[1]] = $matches[2]
+        }
+    }
+    if ($repeated) {
+        return & $failSafe ("classifier repeated {0} -- defaulting to full suite (fail-safe)" -f ($repeated -join ","))
+    }
+
+    $tier = [string]$kv["E2E_TIER"]
+    # A surface verdict names several targets, space-separated -- each
+    # must reach pytest as its own argument ("a.py b.py" is one missing path).
+    $targets = @(([string]$kv["E2E_PYTEST_TARGET"]) -split '\s+' | Where-Object { $_ })
+    $browsers = @(([string]$kv["E2E_BROWSERS"]) -split ',' | Where-Object { $_ })
+    $reason = [string]$kv["E2E_REASON"]
+
+    if ($tier -eq "skip") {
+        return [pscustomobject]@{
+            Tier = "skip"; Targets = @(); Browsers = @(); Reason = $reason; Serialize = $false
+        }
+    }
+    if (@("static", "full", "surface") -notcontains $tier) {
+        return & $failSafe ("classifier gave no usable verdict (tier '{0}') -- defaulting to full suite (fail-safe)" -f $tier)
+    }
+    if ($targets.Count -eq 0) {
+        return & $failSafe ("classifier gave tier '{0}' with no pytest target -- defaulting to full suite (fail-safe)" -f $tier)
+    }
+
+    # full and surface are both dual-projection runs, so both queue behind the
+    # machine-wide mutex; a Chromium-only static smoke run doesn't.
+    return [pscustomobject]@{
+        Tier      = $tier
+        Targets   = $targets
+        Browsers  = $browsers
+        Reason    = $reason
+        Serialize = ($tier -ne "static")
+    }
+}
+
+# Browser-suite parallelism. THE one setting for how
+# many pytest-xdist workers a dual-projection run (full / surface) uses:
+# $E2EDefaultWorkers, overridable per run with the E2E_WORKERS env var. 0 or 1
+# runs serially, as it did before parallelism. Parallelism changes when tests run,
+# never which: every node still runs on both projections.
+#
+# The static tier (Chromium smoke, ~15 s) stays serial -- a worker boots its
+# own webapp + session-host (~4 s each), which would cost more than it saves.
+# --dist load spreads tests one at a time. Tests marked `serial`
+# (test_terminal_reconnect.py: the real-agent replay pin and the reconnect
+# pins) are excluded from that pass and run in a second, serial pass
+# once the workers are done: measured at n=4 they failed while the other
+# workers loaded the box (a real Claude cold boot overran its 90 s budget),
+# and keeping them on one worker did not help, because the load is the other
+# workers'. A narrowed target may hold no serial test, or only serial tests;
+# the gate treats "nothing collected" (pytest exit 5) in one pass as fine as
+# long as the other ran something. All of it runs inside the gate's one
+# machine-wide dual-projection mutex, which serialises gates across
+# checkouts, not the workers within one.
+#
+# Why 3 (re-measured 2026-10-12): it was held at 2 because the live
+# webapp's /api/board slowed to ~10 s at 3 or 4 workers. That load turned out
+# to be the gate's own: every test's page boot ran `git status` across the
+# whole projects folder until tests/e2e/fixtures/launch_target.py::pin_launch_target scoped
+# the disposable webapp to the launch target. Since then the live /api/board
+# median stays 0.06 s, the same as idle, at 3 and 4 workers. Full gate:
+# 2 workers ~17 min, 3 workers ~11 min at 63% mean box CPU, 4 workers ~10 min
+# at 83%. 3 keeps headroom for whatever else the box runs.
+$E2EDefaultWorkers = 3
+
+# A worker-count override (E2E_WORKERS, UNIT_WORKERS): empty keeps the
+# default, anything but a whole number throws instead of guessing.
+function Resolve-WorkerCount {
+    param(
+        [AllowEmptyString()][AllowNull()][string]$Setting,
+        [int]$Default,
+        [string]$Name
+    )
+
+    if (-not $Setting) { return $Default }
+    $parsed = 0
+    if (-not [int]::TryParse($Setting.Trim(), [ref]$parsed) -or $parsed -lt 0) {
+        throw ("{0} must be a whole number of workers (0 or 1 = serial), got '{1}'" -f $Name, $Setting)
+    }
+    return $parsed
+}
+
+function Get-E2EWorkerArgs {
+    param(
+        [Parameter(Mandatory = $true)]$Route,
+        [AllowEmptyString()][AllowNull()][string]$Setting
+    )
+
+    $workers = Resolve-WorkerCount -Setting $Setting -Default $E2EDefaultWorkers -Name "E2E_WORKERS"
+    if (-not $Route.Serialize -or $workers -le 1) {
+        return [pscustomobject]@{ Workers = 1; Args = @(); SerialArgs = @() }
+    }
+    return [pscustomobject]@{
+        Workers    = $workers
+        Args       = @("-n", [string]$workers, "--dist", "load", "-m", "not serial")
+        SerialArgs = @("-m", "serial")
+    }
+}
+
+# The non-browser phase's xdist workers: $UnitDefaultWorkers,
+# overridable with UNIT_WORKERS (0 or 1 = serial). ~3,000 short tests, run
+# serially, took ~250 s of a gate run; on 6 workers they take ~50 s (4: ~65 s,
+# 8: ~43 s, 16: ~45 s, measured 2026-10-12). 6 keeps most of the gain and
+# leaves cores for whatever else the box is running. A test that only passes
+# serially is order-dependent; fix the test, or set UNIT_WORKERS=1 to confirm.
+$UnitDefaultWorkers = 6
+
+function Get-UnitWorkerArgs {
+    param([AllowEmptyString()][AllowNull()][string]$Setting)
+
+    $workers = Resolve-WorkerCount -Setting $Setting -Default $UnitDefaultWorkers -Name "UNIT_WORKERS"
+    if ($workers -le 1) {
+        return [pscustomobject]@{ Workers = 1; Args = @() }
+    }
+    return [pscustomobject]@{ Workers = $workers; Args = @("-n", [string]$workers) }
+}
+
+# Waits on the machine-wide e2e gate mutex. A holder that exits
+# without ReleaseMutex() makes the *next* waiter's WaitOne() throw
+# AbandonedMutexException -- but that exception means the caller now OWNS the
+# mutex, so it counts as acquired, not as an error. Reports which it was so the
+# gate can log the abandoned holder distinctly. A timeout is Acquired = $false.
+function Wait-E2EGateMutex {
+    param(
+        [Parameter(Mandatory = $true)][System.Threading.Mutex]$Mutex,
+        [Parameter(Mandatory = $true)][TimeSpan]$Timeout
+    )
+
+    try {
+        return [pscustomobject]@{ Acquired = $Mutex.WaitOne($Timeout); Abandoned = $false }
+    }
+    catch [System.Threading.AbandonedMutexException] {
+        return [pscustomobject]@{ Acquired = $true; Abandoned = $true }
+    }
+}
+
+# The durable browser-run history. verify-before-ship.ps1 overwrites
+# webapp/verify-progress.log per checkout, and most gates run in a sibling
+# worktree that is deleted when its issue ships, so the newest browser run on
+# disk was weeks old and /e2e-audit's timing read `stale`. Each browser run is
+# also appended to ONE log in the PRIMARY checkout, trimmed to the last
+# $ProgressHistoryRuns runs; .fleet.toml [e2e] progress_log declares it. The
+# run header is the line /e2e-audit splits runs on, so it must stay in step
+# with the one the gate writes.
+$ProgressHistoryRuns = 20
+$ProgressRunHeader = "verify-before-ship run started"
+
+# $History + $Run, cut into runs at the header and trimmed to the newest $Keep.
+# Text before the first header (a torn write, a BOM) belongs to no run and is
+# dropped; a missing final newline is restored so two runs never share a line.
+function Merge-ProgressHistory {
+    param(
+        [AllowEmptyString()][AllowNull()][string]$History,
+        [AllowEmptyString()][AllowNull()][string]$Run,
+        [int]$Keep = $ProgressHistoryRuns
+    )
+
+    $text = [string]$History
+    if ($text -and -not $text.EndsWith("`n")) { $text += "`n" }
+    $text += [string]$Run
+    $runs = @([regex]::Split($text, "(?m)^(?=$ProgressRunHeader )") |
+              Where-Object { $_.StartsWith($ProgressRunHeader) })
+    if ($runs.Count -eq 0) { return "" }
+    $kept = @($runs | Select-Object -Last $Keep)
+    return (($kept | ForEach-Object { if ($_.EndsWith("`n")) { $_ } else { $_ + "`n" } }) -join "")
+}
+
+# Where the history lives: the primary checkout's webapp\, found through git's
+# common dir so a worktree and the primary agree. Returns "" when git cannot
+# say, and the caller reports that rather than guessing a path.
+function Get-ProgressHistoryPath {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $commonDir = & git -C $RepoRoot rev-parse --path-format=absolute --git-common-dir 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $commonDir) { return "" }
+    return Join-Path (Split-Path -Parent ([string]$commonDir)) "webapp\verify-progress-history.log"
+}
+
+# One e2e pytest pass, retried once when every failure is a timeout or socket
+# error (tests/_load_retry.py owns that rule): when other lanes run, the box
+# stalls for 25-30 s and every worker misses its budget in the same second.
+# Only the failed node ids re-run, in one process, with $RetryArgs. A pass on
+# retry comes back as Exit 0 with the ids in Flaky; a second red, or any
+# failure that is not load-shaped, keeps its pytest exit code. The caller
+# supplies Log-Progress and Phase. pytest output goes to Out-Host so it never
+# joins the returned object.
+function Invoke-E2EPass {
+    param(
+        [Parameter(Mandatory = $true)][string]$Python,
+        [Parameter(Mandatory = $true)][string]$FailuresFile,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][object[]]$PassArgs,
+        [object[]]$RetryArgs = @()
+    )
+
+    New-Item -ItemType File -Force -Path $FailuresFile | Out-Null
+    $env:LAUNCHER_E2E_FAILURES_FILE = $FailuresFile
+    try {
+        & $Python -m pytest -p tests._load_retry @PassArgs | Out-Host
+        $passExit = $LASTEXITCODE
+        if ($passExit -ne 1) { return [pscustomobject]@{ Exit = $passExit; Flaky = @() } }
+        $planOut = @(& $Python -m tests._load_retry plan $FailuresFile)
+        $planExit = $LASTEXITCODE
+        $planOut | ForEach-Object { Write-Host "    $_" }
+        Log-Progress ("e2e {0} load-retry plan: exit {1}; {2}" -f $Label, $planExit, ($planOut -join "; "))
+        if ($planExit -ne 0) { return [pscustomobject]@{ Exit = $passExit; Flaky = @() } }
+        $retryIds = @($planOut | Where-Object { $_ -like "RETRY=*" } | ForEach-Object { $_.Substring(6) })
+        Phase "pytest e2e $Label retry: $($retryIds.Count) timed-out test(s), once, in one process..."
+        New-Item -ItemType File -Force -Path $FailuresFile | Out-Null
+        & $Python -m pytest -p tests._load_retry @retryIds @RetryArgs | Out-Host
+        $retryExit = $LASTEXITCODE
+        if ($retryExit -ne 0) {
+            Log-Progress ("e2e {0} retry: red again (pytest exit {1})" -f $Label, $retryExit)
+            return [pscustomobject]@{ Exit = $retryExit; Flaky = @() }
+        }
+        foreach ($id in $retryIds) {
+            Write-Host "[!] FLAKY (timed out, passed on retry): $id" -ForegroundColor Yellow
+            Log-Progress "FLAKY (timed out, passed on retry): $id"
+        }
+        return [pscustomobject]@{ Exit = 0; Flaky = $retryIds }
+    }
+    finally {
+        Remove-Item Env:\LAUNCHER_E2E_FAILURES_FILE -ErrorAction SilentlyContinue
+    }
+}

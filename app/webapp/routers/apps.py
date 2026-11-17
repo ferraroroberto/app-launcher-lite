@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from fastapi import APIRouter, HTTPException, Request
@@ -21,6 +22,9 @@ from app.webapp.routers._helpers import (
     audit_session_start_and_maybe_mirror,
     client_ip,
     maybe_json,
+    requested_launch_effort,
+    safe_int,
+    spawn_launcher_session,
     spawn_session_or_400,
 )
 from src import agents, app_runtime, audit
@@ -30,34 +34,67 @@ from src.diagnostics import (
     kill_process_tree,
     listening_port_for_pid_tree,
 )
-from src.launch_flags import build_copilot_flags, build_resume_flags
-from src.launcher import (
+from src.git_upstream import launch_refusal
+from src.launching import app_refresh
+from src.launching.flags import (
+    build_copilot_flags,
+    build_resume_flags,
+)
+from src.launching.launcher import (
+    TRAY_RESTART_TIMEOUT_SECONDS,
     open_local_terminal_window,
-    spawn_agent_session,
+    restart_tray_bat,
     spawn_bat,
+    spawn_claude_session,
 )
 from src.registry import (
     AppEntry,
     decorate_for_api,
     discover_new,
     get_by_id,
-    live_coding_entries,
+    live_claude_code_entries,
     load_registry,
     persist_additions,
     remove_by_id,
     rename_by_id,
     set_autostart_by_id,
 )
-from src.scanner import KIND_CODING, KIND_TRAY, KIND_TUNNEL
-from src.webapp_config import WebappConfig
+from src.scanner import KIND_CLAUDE_CODE, KIND_TRAY, KIND_TUNNEL, git_status
+from src.webapp_config import (
+    WebappConfig,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Launch-flag dispatch for the agents that take NO per-launch model: Copilot,
+# whose Coding launch carries the saved Copilot settings. Module level so the
+# coverage contract is a fact a test can check:
+# `tests/unit/launching/test_apps_launch_dispatch.py` fails when a registered
+# agent has no builder, which is otherwise a KeyError on the first launch.
+_NO_MODEL_FLAG_BUILDERS = {
+    "copilot": build_copilot_flags,
+}
 
-def _coding_entries(cfg: WebappConfig) -> List[AppEntry]:
-    """Live coding rows from the configured projects directory."""
-    return live_coding_entries(
+# The per-launch model values each agent's flag builder actually honours.
+# Which agents belong here is NOT a judgement made at this line: it
+# is `Agent.per_launch_model` in `src/agents.py`, the registry that already
+# owns every other per-agent capability, and `tests/test_apps_launch_dispatch`
+# fails when this table and that flag disagree in either direction.
+# So both keyed lookups below are direct indexing, not `.get()` - a drift is
+# caught by the test, never smuggled past the route as a skipped check.
+_LAUNCH_MODEL_CATALOG: Dict[str, Any] = {}
+
+
+def _mini_root(cfg: WebappConfig) -> Optional[Path]:
+    """The configured mini apps folder, or ``None`` when none is set."""
+    raw = (cfg.mini_apps_root or "").strip()
+    return Path(raw) if raw else None
+
+
+def _claude_code_entries(cfg: WebappConfig) -> List[AppEntry]:
+    """Live claude-code rows from the configured projects directory."""
+    return live_claude_code_entries(
         Path(cfg.projects_dir), list(cfg.projects_ignore)
     )
 
@@ -66,12 +103,12 @@ def _coding_entries(cfg: WebappConfig) -> List[AppEntry]:
 async def get_apps(request: Request) -> Dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
     registry = load_registry()
-    # coding rows are computed live from `projects_dir`; the
+    # claude-code rows are computed live from `projects_dir`; the
     # bat-based kinds come from the persisted registry. Any stale
-    # coding row left in an older apps.json is ignored.
-    bat_entries = [a for a in registry.apps if a.kind != KIND_CODING]
+    # claude-code row left in an older apps.json is ignored.
+    bat_entries = [a for a in registry.apps if a.kind != KIND_CLAUDE_CODE]
     decorated = [
-        decorate_for_api(a) for a in _coding_entries(cfg) + bat_entries
+        decorate_for_api(a) for a in _claude_code_entries(cfg) + bat_entries
     ]
     # Health for tunnel apps is probed here, server-side — the SPA
     # can't probe a sibling's /healthz from the browser (cross-origin,
@@ -89,10 +126,18 @@ async def get_apps(request: Request) -> Dict[str, Any]:
     # based kinds never carry the flag — favorites are a Coding-tab concept.
     favorites = set(cfg.coding_favorites)
     for d in decorated:
-        if d.get("kind") == KIND_CODING:
+        if d.get("kind") == KIND_CLAUDE_CODE:
             d["is_favorite"] = d.get("id") in favorites
+        else:
+            # The row's Refresh control only shows where the route would not
+            # refuse on sight: the launcher's own bat never offers it.
+            bat = d.get("bat_path")
+            d["refreshable"] = bool(bat) and not app_refresh.is_launcher_bat(Path(bat))
     return {
         "scan_root": registry.scan_root,
+        # The Mini apps fold shows while a folder is set; rows already in the
+        # registry keep it up after the folder is cleared.
+        "mini_apps_enabled": _mini_root(cfg) is not None,
         "apps": decorated,
     }
 
@@ -105,7 +150,10 @@ async def scan_apps(request: Request) -> Dict[str, Any]:
     # event loop so the /api/apps 4 s poll and any concurrent request
     # stays responsive while a scan runs.
     new = await asyncio.to_thread(
-        discover_new, scan_root=Path(cfg.apps_scan_root), existing=registry
+        discover_new,
+        scan_root=Path(cfg.apps_scan_root),
+        existing=registry,
+        mini_root=_mini_root(cfg),
     )
     return {"new": [decorate_for_api(a) for a in new]}
 
@@ -119,8 +167,13 @@ async def save_apps(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="no ids provided")
 
     registry = load_registry()
-    candidates = discover_new(
-        scan_root=Path(cfg.apps_scan_root), existing=registry
+    # Same apps_scan_root walk as scan_apps above — off the event loop for
+    # the same reason.
+    candidates = await asyncio.to_thread(
+        discover_new,
+        scan_root=Path(cfg.apps_scan_root),
+        existing=registry,
+        mini_root=_mini_root(cfg),
     )
     keep = [c for c in candidates if c.id in selected_ids]
     added = persist_additions(registry, keep, Path(cfg.apps_scan_root))
@@ -129,9 +182,9 @@ async def save_apps(request: Request) -> Dict[str, Any]:
 
 @router.patch("/api/apps/{app_id}")
 async def patch_app(app_id: str, request: Request) -> Dict[str, Any]:
-    """Rename and/or flip the Registered Trays autostart flag.
+    """Rename and/or flip the autostart flag of a tray or mini app.
 
-    Each field is independent — a Registered Trays autostart toggle posts
+    Each field is independent — an autostart toggle posts
     ``{"autostart": bool}`` alone, with no ``name`` in the body at all.
     """
     body = await maybe_json(request)
@@ -167,54 +220,94 @@ async def delete_app(app_id: str) -> Dict[str, Any]:
     return {"removed": removed.id}
 
 
-async def _launch_remote_session(
-    entry: AppEntry, cfg: WebappConfig, request: Request, flags: str, agent: str
-) -> Dict[str, Any]:
-    """Spawn a detached console agent session the session-host only tracks."""
-    session = await spawn_session_or_400(
-        spawn_agent_session,
-        Path(entry.project_dir),
-        entry.name,
-        flags,
-        cfg.session_host_port,
-        "remote",
-        agent,
-    )
-    sid = str(session.get("session_id") or "")
-    await audit_off_loop(
-        audit.audit_event,
-        "remote_launch",
-        session=sid,
-        agent=agent,
-        name=entry.name,
-        project=entry.project_dir,
-        client=client_ip(request),
-    )
-    return {
-        "launched": entry.id,
-        "name": entry.name,
-        "kind": entry.kind,
-        "agent": agent,
-        "mode": "remote",
-        "session": session,
-    }
+@router.post("/api/apps/{app_id}/launch")
+async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
+    cfg: WebappConfig = request.app.state.webapp_config
+    registry = load_registry()
+    # claude-code rows aren't persisted — resolve them against the live
+    # directory scan first; bat-based rows come from the registry.
+    entry = next(
+        (e for e in _claude_code_entries(cfg) if e.id == app_id), None
+    ) or get_by_id(registry, app_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"unknown app {app_id}")
 
-
-async def _launch_coding_entry(
-    entry: AppEntry, cfg: WebappConfig, request: Request
-) -> Dict[str, Any]:
-    """Spawn a Coding-tab row as a PTY or detached-console agent session."""
-    # coding (the Coding tab): two launch modes (chosen by the
+    # claude-code (the Coding tab): two launch modes (chosen by the
     # request body's `mode`) and one of the registered coding agents
     # (`agent`). "pty" (default) = a launcher-owned PTY session streamed
     # to and driven from the phone. "remote" = a detached console window
     # on the PC the session-host only tracks (listed + killable but not
     # streamed). `agent` must be a key in `agents.AGENTS` (see
     # `src/agents.py` for the full set).
+    if entry.kind == KIND_CLAUDE_CODE:
+        return await _launch_coding(entry, cfg, request)
+
+    # everything else: a fresh CMD window running the bat. `stealth` picks the Apps tab's 🚫👁 button
+    # instead of its ⚡ one — same bat, same process shape, no console window on screen. Absent or false keeps
+    # the visible window, so a phone still serving an older cached PWA bundle
+    # (which posts no body at all) launches exactly as it always did.
+    if not entry.bat_path:
+        raise HTTPException(
+            status_code=400, detail=f"app entry {entry.id} has no bat_path"
+        )
+    body = await maybe_json(request)
+    stealth = bool(body.get("stealth"))
+    try:
+        _spawn_and_track(entry, stealth)
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {
+        "launched": entry.id,
+        "name": entry.name,
+        "kind": entry.kind,
+        "stealth": stealth,
+    }
+
+
+def _spawn_and_track(entry: AppEntry, stealth: bool) -> None:
+    """Spawn an app's bat and record the instance, unless it is a tray."""
+    pid = spawn_bat(Path(entry.bat_path), stealth=stealth)
+    # A tray.bat hands its real long-lived process off to
+    # tray_lifecycle.ps1's `Start-Process`, then that PowerShell hop exits —
+    # so the pythonw.exe tray is never a live descendant of spawn_bat's own
+    # PID by the time anything polls for it (verified empirically: Running
+    # apps showed "binding…" forever and duplicate ghost rows on repeat
+    # taps). Tracking it here would offer a port/URL that never resolves
+    # and a Stop button that can't reach the real process either — so a
+    # tray launch isn't tracked at all; Port listeners already resolves it
+    # correctly once it's actually up.
+    # A `None` pid launched but could not be identified (spawn_bat logged it);
+    # there is no process to track.
+    if entry.kind != KIND_TRAY and pid is not None:
+        app_runtime.record_spawn(entry.id, entry.name, entry.kind, pid)
+
+
+def _behind_refusal(project_dir: Path) -> Optional[str]:
+    status = git_status(project_dir)
+    return launch_refusal(project_dir, status.default_branch) if status.is_git else None
+
+
+async def _refuse_if_behind(entry: AppEntry, body: Dict[str, Any]) -> None:
+    """409 when the repo's default branch is behind its remote.
+
+    Work started on a stale checkout surfaces only at push time, so the
+    launch waits for a pull. ``ignore_behind`` is the client's explicit
+    "Launch anyway", offered only when a pull cannot run (dirty, off the
+    default branch, diverged).
+    """
+    if body.get("ignore_behind"):
+        return
+    refusal = await asyncio.to_thread(_behind_refusal, Path(entry.project_dir))
+    if refusal:
+        raise HTTPException(status_code=409, detail=f"{entry.name}: {refusal}")
+
+
+async def _launch_coding(entry: AppEntry, cfg: WebappConfig, request: Request) -> Dict[str, Any]:
+    """Launch a Coding-tab row as a PTY session or a detached console."""
     if not entry.project_dir:
         raise HTTPException(
             status_code=400,
-            detail=f"coding entry {entry.id} has no project_dir",
+            detail=f"claude-code entry {entry.id} has no project_dir",
         )
     body = await maybe_json(request)
     mode = str(body.get("mode") or "pty").strip().lower()
@@ -225,53 +318,63 @@ async def _launch_coding_entry(
     # picker renders in the detached console window; with Detached off it
     # streams to the phone over a PTY. Resume no longer forces a PTY.
     resume = bool(body.get("resume"))
+    requested_model = str(body.get("model") or "").strip()
     # Phone's real terminal size: a pty session spawns at
     # these dimensions so a ratatui TUI's first frame isn't cut. Absent
     # (older client, or remote mode) → the legacy 40×120 default.
-    rows = int(body.get("rows") or 40)
-    cols = int(body.get("cols") or 120)
+    rows = safe_int(body, "rows", 40)
+    cols = safe_int(body, "cols", 120)
     if agent not in agents.AGENTS:
         raise HTTPException(
             status_code=400, detail=f"unknown agent: {agent}"
         )
-    # Server-side install check, as defence-in-depth behind the Coding
-    # tab's already-disabled button — a clean 400 "copilot CLI not
-    # found" beats a dead PTY. Applies to the default agent too: there
-    # is no unguarded core agent in the lite fork.
+    # Checked server-side as defence-in-depth behind the Coding tab's
+    # already-disabled button: a missing CLI is a clear 400, not a dead PTY.
     if not agents.is_installed(agent):
         raise HTTPException(
             status_code=400,
             detail=f"{agents.AGENTS[agent].label} is not installed",
         )
-    # Copilot's flags: the config-driven model / autopilot / context /
-    # effort knobs plus the allow-all toggle.
-    flag_builders = {
-        "copilot": build_copilot_flags,
-    }
-    if resume:
-        # Swap the normal flags for the agent's resume invocation; the
-        # requested `mode` decides where its picker renders — a detached
-        # console (mode="remote") or a streamed PTY.
-        flags = build_resume_flags(cfg, agent)
-    else:
-        flags = flag_builders[agent](cfg)
+    await _refuse_if_behind(entry, body)
+    model_value = _validated_launch_model(agent, requested_model)
+    effort = requested_launch_effort(body, agent, model_value)
+    flags = _coding_flags(cfg, agent, resume, model_value, effort)
 
     if mode == "remote":
-        return await _launch_remote_session(entry, cfg, request, flags, agent)
+        session = await spawn_session_or_400(
+            spawn_claude_session,
+            Path(entry.project_dir),
+            entry.name,
+            flags,
+            cfg.session_host_port,
+            "remote",
+            agent,
+        )
+        sid = str(session.get("session_id") or "")
+        await audit_off_loop(
+            audit.audit_event,
+            "remote_launch",
+            session=sid,
+            agent=agent,
+            name=entry.name,
+            project=entry.project_dir,
+            client=client_ip(request),
+        )
+        return {
+            "launched": entry.id,
+            "name": entry.name,
+            "kind": entry.kind,
+            "agent": agent,
+            "mode": "remote",
+            "session": session,
+            **({"effort": effort} if effort else {}),
+        }
 
-    session = await spawn_session_or_400(
-        spawn_agent_session,
-        Path(entry.project_dir),
-        entry.name,
-        flags,
-        cfg.session_host_port,
-        "pty",
-        agent,
-        rows,
-        cols,
-        history_lines=cfg.terminal_history_lines,
+    session, sid = await spawn_launcher_session(
+        spawn_claude_session, cfg,
+        project_dir=Path(entry.project_dir), name=entry.name,
+        flags=flags, agent=agent, rows=rows, cols=cols,
     )
-    sid = str(session.get("session_id") or "")
     await audit_session_start_and_maybe_mirror(
         cfg, request, body,
         sid=sid, agent=agent, name=entry.name, project=entry.project_dir,
@@ -284,55 +387,88 @@ async def _launch_coding_entry(
         "agent": agent,
         "mode": "pty",
         "session": session,
+        **({"effort": effort} if effort else {}),
     }
 
 
-def _launch_bat_entry(entry: AppEntry) -> Dict[str, Any]:
-    """Run an Apps-tab row's bat in a fresh visible CMD window."""
-    if not entry.bat_path:
+def _validated_launch_model(agent: str, requested_model: str) -> str:
+    """The model value of a Coding launch's ``provider:value`` pick, ``""``
+    for none; 400 when it names another agent, an agent that takes no
+    per-launch model, or a value outside the agent's catalog."""
+    if not requested_model:
+        return ""
+    provider, separator, model_value = requested_model.partition(":")
+    if not separator or provider != agent:
         raise HTTPException(
-            status_code=400, detail=f"app entry {entry.id} has no bat_path"
+            status_code=400,
+            detail=f"model {requested_model!r} does not belong to {agent}",
         )
-    try:
-        pid = spawn_bat(Path(entry.bat_path))
-    except OSError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    # A tray.bat hands its real long-lived process off to
-    # tray_lifecycle.ps1's `Start-Process`, then that PowerShell hop exits —
-    # so the pythonw.exe tray is never a live descendant of spawn_bat's own
-    # PID by the time anything polls for it (verified empirically: Running
-    # apps showed "binding…" forever and duplicate ghost rows on repeat
-    # taps). Tracking it here would offer a port/URL that never resolves
-    # and a Stop button that can't reach the real process either — so a
-    # tray launch isn't tracked at all; Port listeners already resolves it
-    # correctly once it's actually up.
-    if entry.kind != KIND_TRAY:
-        app_runtime.record_spawn(entry.id, entry.name, entry.kind, pid)
-    return {"launched": entry.id, "name": entry.name, "kind": entry.kind}
+    # The prefix match is not enough on its own, in two ways.
+    #
+    # First: four of the six agents take no per-launch model at all.
+    # Antigravity, Copilot and Grok send no `--model`, and Pi's comes
+    # from the persisted `pi_model` setting - so a request naming one
+    # fell straight through to the cfg-only builder and returned 200
+    # on a session running whatever the agent picked for itself,
+    # which a caller cannot tell apart from having got what it asked
+    # for. Which agents those are is read off the registry
+    # (`Agent.per_launch_model`), not re-listed here, so a seventh
+    # agent inherits the guard. Refusing is safe: no first-party
+    # bundle has ever sent one - the `startsWith(agent + ':')` guard
+    # shipped in the very commit that introduced `payload.model`, and
+    # the model combo has only ever offered `claude:`/`codex:`
+    # values - so the cached-client risk the issue flagged does not
+    # exist, and a non-browser caller learns from the 400.
+    if not agents.AGENTS[agent].per_launch_model:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{agents.AGENTS[agent].label} takes no per-launch "
+                f"model, so {requested_model!r} cannot be applied - "
+                "launch without one and choose the model in the agent"
+            ),
+        )
+    # Second: for the two that do, an out-of-catalog *value* used to
+    # launch silently on the CLI's own default.
+    # build_claude_flags / build_codex_flags emit no --model at all
+    # for a value they don't recognise *and* discard the persisted
+    # model (model_override is not None), so a phone holding a
+    # pre-rename cached bundle got a 200 and a session on the wrong
+    # model with nothing said. Reject it instead, as the Life OS
+    # and Board launch routes already do. The
+    # accepted set is exactly what the builder would honour, so a
+    # legacy-but-still-supported alias keeps working.
+    if model_value not in _LAUNCH_MODEL_CATALOG[agent]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported model for {agent}: {model_value!r}",
+        )
+    return model_value
 
 
-@router.post("/api/apps/{app_id}/launch")
-async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
-    cfg: WebappConfig = request.app.state.webapp_config
-    registry = load_registry()
-    # coding rows aren't persisted — resolve them against the live
-    # directory scan first; bat-based rows come from the registry.
-    entry = next(
-        (e for e in _coding_entries(cfg) if e.id == app_id), None
-    ) or get_by_id(registry, app_id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail=f"unknown app {app_id}")
-    if entry.kind == KIND_CODING:
-        return await _launch_coding_entry(entry, cfg, request)
-    return _launch_bat_entry(entry)
+def _coding_flags(
+    cfg: WebappConfig, agent: str, resume: bool, model_value: str,
+    effort: Optional[str] = None,
+) -> List[str]:
+    """The agent's CLI flags for a Coding launch, or its resume invocation.
+
+    ``effort`` is a launch preset's, already checked against the model."""
+    if resume:
+        # Swap the normal flags for the agent's resume invocation; the
+        # requested `mode` decides where its picker renders — a detached
+        # console (mode="remote") or a streamed PTY.
+        return build_resume_flags(
+            cfg, agent, model_override=model_value or None, effort_override=effort
+        )
+    return _NO_MODEL_FLAG_BUILDERS[agent](cfg, effort_override=effort)
 
 
 @router.get("/api/apps/running")
 async def get_running_apps(request: Request) -> Dict[str, Any]:
     """List apps spawned from the launcher, each bound to its port + URL.
 
-    State is in-process only (see :mod:`src.app_runtime`) — a webapp
-    restart returns an empty list. ``port`` is null until a descendant
+    Records survive a webapp restart (see :mod:`src.app_runtime`), and the
+    apps they name keep running through it. ``port`` is null until a descendant
     of the spawned bat binds a socket; ``url`` is null when ``port`` is
     null or ``tailnet_host`` is unset.
     """
@@ -381,12 +517,111 @@ async def stop_app_instance(app_id: str, pid: int) -> Dict[str, Any]:
     return {"stopped": pid}
 
 
+# App ids with a refresh in flight: a second tap while the first is still
+# stopping or starting must not stack a second relaunch.
+_refreshing: set[str] = set()
+
+
+def _refresh_refusal(entry: AppEntry, cfg: WebappConfig) -> Optional[str]:
+    """Why this row must not be refreshed, or ``None`` when it may be.
+
+    The launcher itself and the session-host are never refreshable: stopping
+    either from a request they serve ends the request (the launcher) or every
+    live Coding session (the session-host). Both are matched on what they are,
+    the bat's folder and the ports their processes listen on, not on a name.
+    """
+    if entry.kind == KIND_CLAUDE_CODE or not entry.bat_path:
+        return f"{entry.name} has nothing to refresh"
+    if app_refresh.is_launcher_bat(Path(entry.bat_path)):
+        return f"{entry.name} is the launcher itself and cannot refresh itself"
+    tracked = [i for i in app_runtime.list_running() if i.app_id == entry.id]
+    port = app_refresh.protected_port_in_use(
+        tracked, (cfg.port, cfg.session_host_port)
+    )
+    if port is not None:
+        return f"{entry.name} is serving :{port}, a launcher port, and is not refreshed"
+    return None
+
+
+@router.post("/api/apps/{app_id}/refresh")
+async def refresh_app(app_id: str, request: Request) -> Dict[str, Any]:
+    """Stop every tracked instance of an app, wait for it to exit, relaunch hidden.
+
+    A stop that did not take is a 409 naming the pid and nothing is relaunched.
+    A tray is not tracked (see ``_spawn_and_track``), so it has nothing to stop
+    here and is restarted through its own ``tray.bat --restart`` instead.
+    """
+    cfg: WebappConfig = request.app.state.webapp_config
+    entry = get_by_id(load_registry(), app_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"unknown app {app_id}")
+    app_runtime.prune_dead()
+    refusal = await asyncio.to_thread(_refresh_refusal, entry, cfg)
+    if refusal:
+        raise HTTPException(status_code=403, detail=refusal)
+    if entry.id in _refreshing:
+        raise HTTPException(
+            status_code=409, detail=f"{entry.name} is already refreshing"
+        )
+    _refreshing.add(entry.id)
+    try:
+        return await _refresh(entry)
+    finally:
+        _refreshing.discard(entry.id)
+
+
+async def _refresh(entry: AppEntry) -> Dict[str, Any]:
+    instances = [i for i in app_runtime.list_running() if i.app_id == entry.id]
+    stops = [await asyncio.to_thread(app_refresh.stop_instance, i) for i in instances]
+    result: Dict[str, Any] = {
+        "refreshed": entry.id,
+        "name": entry.name,
+        "kind": entry.kind,
+        "stops": [{"pid": s.pid, "stopped": s.stopped} for s in stops],
+    }
+    stuck = [s.pid for s in stops if not s.stopped]
+    if stuck:
+        pids = ", ".join(str(p) for p in stuck)
+        logger.warning(f"⚠️ refresh of {entry.name!r} skipped the relaunch: pid {pids} did not stop")
+        raise HTTPException(
+            status_code=409,
+            detail=f"{entry.name}: pid {pids} did not stop, so it was not relaunched",
+        )
+    bat = Path(entry.bat_path)
+    try:
+        if entry.kind == KIND_TRAY:
+            code = await asyncio.to_thread(restart_tray_bat, bat)
+            if code != 0:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"{entry.name}: tray.bat --restart exited {code}",
+                )
+            result["restart"] = {"exit_code": code}
+        else:
+            await asyncio.to_thread(_spawn_and_track, entry, True)
+            result["launched"] = {"stealth": True}
+    except subprocess.TimeoutExpired:
+        raise HTTPException(
+            status_code=504,
+            detail=f"{entry.name}: tray restart not confirmed within "
+            f"{TRAY_RESTART_TIMEOUT_SECONDS:.0f}s",
+        )
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    logger.info(f"🔄 refreshed {entry.name!r}: stopped {len(stops)}, relaunched hidden")
+    return result
+
+
 # --------------------------------------------------------------- helpers
 
 # Health for tunnel apps — probed server-side, behind a short TTL cache
 # so the 4 s /api/apps poll doesn't hammer the sibling tunnels.
 _HEALTH_TTL_SECONDS = 5.0
-_health_cache: Dict[str, Tuple[float, str]] = {}
+# Re-probe interval grows with consecutive failures (5s -> 30s -> 120s) so a
+# down tunnel isn't re-dialled at the healthy-path cadence for as long as any
+# browser tab keeps polling; resets to the base TTL on the first success.
+_HEALTH_RETRY_TTLS: Tuple[float, ...] = (_HEALTH_TTL_SECONDS, 30.0, 120.0)
+_health_cache: Dict[str, Tuple[float, str, int]] = {}
 _health_session = requests.Session()
 _health_session.verify = False
 try:  # silence the self-signed-cert warning on sibling probes
@@ -407,19 +642,29 @@ def _probe_health_sync(tunnel_url: str) -> str:
         return "down"
 
 
+def _health_ttl_for(consecutive_failures: int) -> float:
+    """TTL for the next re-probe, escalating with consecutive failures."""
+    index = min(consecutive_failures, len(_HEALTH_RETRY_TTLS) - 1)
+    return _HEALTH_RETRY_TTLS[index]
+
+
 async def _health_for(urls: List[str]) -> Dict[str, str]:
-    """Health per url, served from a short TTL cache; cache misses are
-    probed concurrently in worker threads so the event loop never blocks."""
+    """Health per url, served from a failure-aware TTL cache; cache misses
+    are probed concurrently in worker threads so the event loop never
+    blocks. A failing url backs off (5s -> 30s -> 120s) instead of being
+    re-probed at the healthy-path cadence; the first success resets it."""
     now = time.time()
-    stale = [
-        u
-        for u in urls
-        if now - _health_cache.get(u, (0.0, ""))[0] > _HEALTH_TTL_SECONDS
-    ]
+    stale = []
+    for u in urls:
+        ts, _status, failures = _health_cache.get(u, (0.0, "", 0))
+        if now - ts > _health_ttl_for(failures):
+            stale.append(u)
     if stale:
         results = await asyncio.gather(
             *(asyncio.to_thread(_probe_health_sync, u) for u in stale)
         )
         for url, status in zip(stale, results):
-            _health_cache[url] = (now, status)
-    return {u: _health_cache.get(u, (0.0, "down"))[1] for u in urls}
+            _, _prev_status, prev_failures = _health_cache.get(url, (0.0, "", 0))
+            failures = 0 if status == "up" else prev_failures + 1
+            _health_cache[url] = (now, status, failures)
+    return {u: _health_cache.get(u, (0.0, "down", 0))[1] for u in urls}

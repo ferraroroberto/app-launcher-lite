@@ -14,8 +14,11 @@ import threading
 from types import SimpleNamespace
 from typing import List
 
+from app.cli.commands import run_job_supervision
+from app.cli.commands.run_job_supervision import (
+    tee_pipe_to_file_and_console,
+)
 from src import jobs as jobs_mod
-from src import run_supervision
 from src.jobs import config as jc
 from src.jobs.config import (
     Job,
@@ -25,7 +28,6 @@ from src.jobs.config import (
     save_jobs,
     update_job,
 )
-from src.run_supervision import tee_pipe_to_file_and_console
 
 
 def _mk_completed(stdout: str = "", rc: int = 0) -> subprocess.CompletedProcess:
@@ -159,7 +161,7 @@ class TestTeeStalledConsole:
     def test_stalled_console_does_not_block_file_half(self, monkeypatch):
         # More chunks than the console queue can hold, so a stalled
         # console is guaranteed to hit the drop path rather than block.
-        chunk_count = run_supervision.CONSOLE_QUEUE_MAX_CHUNKS * 4
+        chunk_count = run_job_supervision._CONSOLE_QUEUE_MAX_CHUNKS * 4
         data = b"".join(bytes([65 + (i % 26)]) * 4096 for i in range(chunk_count))
         console = _StalledConsole()
         monkeypatch.setattr(
@@ -167,13 +169,9 @@ class TestTeeStalledConsole:
         )
         # A wedged console can't consume the EOF sentinel, so the helper
         # waits out this bounded join; keep the test fast.
-        monkeypatch.setattr(
-            run_supervision, "CONSOLE_DRAIN_TIMEOUT_SECONDS", 0.5
-        )
+        monkeypatch.setattr(run_job_supervision, "_CONSOLE_DRAIN_TIMEOUT_SECONDS", 0.5)
         drops: List[int] = []
-        monkeypatch.setattr(
-            run_supervision, "_log_console_tee_drops", drops.append
-        )
+        monkeypatch.setattr(run_job_supervision, "_log_console_tee_drops", drops.append)
 
         fh = io.BytesIO()
         done = threading.Event()

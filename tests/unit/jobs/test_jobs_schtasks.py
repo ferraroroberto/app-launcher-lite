@@ -1,16 +1,15 @@
-"""Jobs tab plumbing — schtasks argv mapping, detached spawn and sync (issue #47). Every schtasks call goes through a mocked runner."""
+"""src.jobs schtasks plumbing: argv mapping, sync, list and delete, all through a mocked runner."""
 
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 from typing import List
 from unittest.mock import MagicMock
 
 from src import jobs as jobs_mod
 from src.jobs import schtasks as jobs_schtasks_mod
-from src.jobs.argv import decode_params_token, encode_params_token
+from src.jobs import spawn as jobs_spawn_mod
 from src.jobs.config import (
     Job,
     Schedule,
@@ -99,9 +98,9 @@ class TestSpawnRunJobDetached:
             captured["kwargs"] = kwargs
             return _FakeProc()
 
-        monkeypatch.setattr(jobs_schtasks_mod.subprocess, "Popen", fake_popen)
+        monkeypatch.setattr(jobs_spawn_mod.subprocess, "Popen", fake_popen)
 
-        pid = jobs_schtasks_mod.spawn_run_job_detached("demo", "run-1", "manual")
+        pid = jobs_spawn_mod.spawn_run_job_detached("demo", "run-1", "manual")
 
         assert pid == 4242
         argv = captured["argv"]
@@ -129,53 +128,17 @@ class TestSpawnRunJobDetached:
             captured["argv"] = argv
             return _FakeProc()
 
-        monkeypatch.setattr(jobs_schtasks_mod.subprocess, "Popen", fake_popen)
+        monkeypatch.setattr(jobs_spawn_mod.subprocess, "Popen", fake_popen)
 
-        jobs_schtasks_mod.spawn_run_job_detached(
+        jobs_spawn_mod.spawn_run_job_detached(
             "demo", "run-2", "manual", params={"x": 1}, dry_run=True
         )
 
         argv = captured["argv"]
         assert argv[:5] == ["cmd", "/c", "start", "", "/b"]
-        token = argv[argv.index("--params-b64") + 1]
-        assert json.loads(decode_params_token(token)) == {"x": 1}
+        assert "--params" in argv
+        assert json.dumps({"x": 1}) in argv
         assert "--dry-run" in argv
-
-    def test_spawn_argv_after_the_interpreter_is_plain_tokens(self, monkeypatch):
-        """cmd.exe re-reads the spawn's command line, so every token after
-        the interpreter and script paths must come through it unchanged:
-        letters, digits and ``-_.:=`` only, whatever the param values hold."""
-        captured = {}
-
-        class _FakeProc:
-            pid = 1
-
-        def fake_popen(argv, **kwargs):
-            captured["argv"] = argv
-            return _FakeProc()
-
-        monkeypatch.setattr(jobs_schtasks_mod.subprocess, "Popen", fake_popen)
-        values = {"msg": 'a & b | c > d < e ^ f % g ! h " i ñ€'}
-
-        jobs_schtasks_mod.spawn_run_job_detached(
-            "demo", "run-3", "manual", params=values
-        )
-
-        tail = captured["argv"][captured["argv"].index("run-job"):]
-        for token in tail:
-            assert re.fullmatch(r"[A-Za-z0-9._:=\-]+", token), token
-        decoded = decode_params_token(tail[tail.index("--params-b64") + 1])
-        assert json.loads(decoded) == values
-
-    def test_executor_parser_reads_the_encoded_params(self):
-        from app.cli.main import _build_parser
-
-        values = {"msg": 'x & y "z"'}
-        args = _build_parser().parse_args([
-            "run-job", "demo", "--run-id", "r1", "--trigger", "manual",
-            "--params-b64", encode_params_token(values),
-        ])
-        assert json.loads(decode_params_token(args.params_b64)) == values
 
 
 class TestSyncSchtasks:
@@ -199,10 +162,23 @@ class TestSyncSchtasks:
 
         created = jobs_mod.sync_schtasks(job, runner=runner)
         assert created == ["\\AppLauncherLite\\demo"]
-        # Last call is the /Create for the daily task.
-        last = calls[-1]
-        assert last[:5] == ["schtasks", "/Create", "/F", "/TN", "\\AppLauncherLite\\demo"]
-        assert "/SC" in last and "DAILY" in last and "06:00" in last
+        # /Create for the daily task, followed by one power-policy call.
+        create_calls = [c for c in calls if c[:2] == ["schtasks", "/Create"]]
+        assert len(create_calls) == 1
+        last_create = create_calls[0]
+        assert last_create[:5] == [
+            "schtasks", "/Create", "/F", "/TN", "\\AppLauncherLite\\demo",
+        ]
+        assert "/SC" in last_create and "DAILY" in last_create and "06:00" in last_create
+        # Exactly one batched PowerShell power-policy call, naming the task.
+        ps_calls = [c for c in calls if c[0] == jobs_schtasks_mod._POWERSHELL_EXE]
+        assert len(ps_calls) == 1
+        ps_script = ps_calls[0][-1]
+        assert "-TaskName 'demo'" in ps_script
+        assert "StartWhenAvailable = $true" in ps_script
+        assert "DisallowStartIfOnBatteries = $false" in ps_script
+        assert "StopIfGoingOnBatteries = $false" in ps_script
+        assert "WakeToRun" not in ps_script
 
     def test_daily_times_creates_three_tasks(self):
         job = Job(
@@ -211,13 +187,67 @@ class TestSyncSchtasks:
             script_path="C:\\stub\\scrape.py",
             schedule=Schedule(type="daily_times", at=["06:00", "12:00", "18:00"]),
         )
-        runner = MagicMock(return_value=_mk_completed(rc=0))
+        calls: List[List[str]] = []
+
+        def runner(argv):
+            calls.append(argv)
+            return _mk_completed(rc=0)
+
         created = jobs_mod.sync_schtasks(job, runner=runner)
         assert created == [
             "\\AppLauncherLite\\ls-1",
             "\\AppLauncherLite\\ls-2",
             "\\AppLauncherLite\\ls-3",
         ]
+        # All three slots are batched into a single PowerShell spawn, not
+        # one per task.
+        ps_calls = [c for c in calls if c[0] == jobs_schtasks_mod._POWERSHELL_EXE]
+        assert len(ps_calls) == 1
+        ps_script = ps_calls[0][-1]
+        for suffix in ("ls-1", "ls-2", "ls-3"):
+            assert f"-TaskName '{suffix}'" in ps_script
+
+    def test_power_policy_failure_is_logged_not_raised(self, caplog):
+        job = Job(
+            id="demo",
+            name="Demo",
+            script_path="C:\\stub\\demo.py",
+            schedule=Schedule(type="daily", at="06:00"),
+        )
+
+        def runner(argv):
+            if argv[0] == jobs_schtasks_mod._POWERSHELL_EXE:
+                return _mk_completed(stdout="", rc=1)
+            return _mk_completed(rc=0)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger=jobs_schtasks_mod.logger.name):
+            created = jobs_mod.sync_schtasks(job, runner=runner)
+        # The task itself was still created — the power-policy write is
+        # best-effort and never blocks the create result.
+        assert created == ["\\AppLauncherLite\\demo"]
+        assert "power-policy" in caplog.text
+
+    def test_elevated_job_skips_power_policy(self):
+        job = Job(
+            id="hwinfo-restart",
+            name="hwinfo restart",
+            script_path="C:\\stub\\hwinfo.py",
+            schedule=Schedule(type="daily", at="03:00"),
+            elevated=True,
+        )
+        calls: List[List[str]] = []
+
+        def runner(argv):
+            calls.append(argv)
+            if argv[:2] == ["schtasks", "/Query"]:
+                return _mk_completed(stdout="", rc=0)
+            return _mk_completed(rc=0)
+
+        created = jobs_mod.sync_schtasks(job, runner=runner)
+        assert created == []
+        assert not any(c[0] == jobs_schtasks_mod._POWERSHELL_EXE for c in calls)
 
     def test_none_schedule_only_deletes(self):
         job = Job(
@@ -235,6 +265,36 @@ class TestSyncSchtasks:
             if c.args[0][:2] == ["schtasks", "/Create"]
         ]
         assert create_calls == []
+
+
+class TestListKnownTasks:
+    def test_query_failure_returns_none_and_logs(self, caplog):
+        # rc != 0 (Task Scheduler service down / no permission) must be
+        # reported, not silently folded into "no known tasks" (issue #830).
+        runner = MagicMock(
+            return_value=_mk_completed(stdout="", rc=1)
+        )
+        runner.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="RPC server unavailable."
+        )
+        with caplog.at_level("WARNING", logger=jobs_schtasks_mod.logger.name):
+            result = jobs_schtasks_mod.list_known_tasks(runner=runner)
+        assert result is None
+        assert any(
+            "schtasks query failed" in record.message
+            for record in caplog.records
+        )
+
+    def test_successful_empty_query_returns_empty_list_not_none(self):
+        # rc == 0 with real (non-empty) CSV output but no AppLauncher rows
+        # is a genuine "no tasks" answer, distinct from a failed query.
+        runner = MagicMock(
+            return_value=_mk_completed(
+                stdout='"\\Foreign\\other","ready","..."\n', rc=0
+            )
+        )
+        result = jobs_schtasks_mod.list_known_tasks(runner=runner)
+        assert result == []
 
 
 class TestDeleteSchtasks:
@@ -260,6 +320,38 @@ class TestDeleteSchtasks:
         # The foreign task is left alone.
         assert "\\AppLauncherLite\\other" not in result
 
+    def test_successful_empty_query_does_not_trigger_blind_fallback(self):
+        # A genuinely empty-but-successful query (no AppLauncher tasks at
+        # all) must not be treated the same as a failed query: there is
+        # nothing to delete, so no blind /Delete attempts should fire.
+        deletes: List[str] = []
+
+        def runner(argv):
+            if argv[:2] == ["schtasks", "/Query"]:
+                return _mk_completed(
+                    stdout='"\\Foreign\\other","ready","..."\n', rc=0
+                )
+            if argv[:2] == ["schtasks", "/Delete"]:
+                deletes.append(argv[4])  # /TN value
+                return _mk_completed(rc=0)
+            return _mk_completed(rc=0)
+
+        result = jobs_mod.delete_schtasks("ls", runner=runner)
+        assert result == []
+        assert deletes == []
+
+    def test_query_failure_falls_back_to_blind_delete(self):
+        def runner(argv):
+            if argv[:2] == ["schtasks", "/Query"]:
+                return subprocess.CompletedProcess(
+                    args=[], returncode=1, stdout="", stderr="RPC server unavailable."
+                )
+            return _mk_completed(rc=0)
+
+        result = jobs_mod.delete_schtasks("ls", runner=runner)
+        # Blind fallback: bare task + every daily_times slot variant.
+        assert "\\AppLauncherLite\\ls" in result
+
 
 class TestBulkParser:
     """``src.jobs.schtasks._parse_bulk_records`` — the bulk Next Run Time parse."""
@@ -269,9 +361,11 @@ class TestBulkParser:
             "TaskName: \\AppLauncherLite\\demo\nNext Run Time: 2026-06-01 06:00:00\n\n"
             "TaskName: \\Foreign\\task\nNext Run Time: 2026-06-01 12:00:00\n\n"
         )
-        out = jobs_schtasks_mod._parse_bulk_records(stdout)
+        out = jobs_schtasks_mod._project(
+            jobs_schtasks_mod._parse_bulk_records(stdout), "next_run"
+        )
         assert "\\AppLauncherLite\\demo" in out
-        assert out["\\AppLauncherLite\\demo"]["next_run"] == "2026-06-01 06:00:00"
+        assert out["\\AppLauncherLite\\demo"] == "2026-06-01 06:00:00"
         # Foreign task is filtered out.
         assert "\\Foreign\\task" not in out
 
@@ -280,41 +374,46 @@ class TestBulkParser:
             "TaskName: \\AppLauncherLite\\demo-1\nNext Run Time: N/A\n\n"
             "TaskName: \\AppLauncherLite\\demo-2\nNext Run Time: Disabled\n\n"
         )
-        out = jobs_schtasks_mod._parse_bulk_records(stdout)
-        assert out["\\AppLauncherLite\\demo-1"]["next_run"] is None
-        assert out["\\AppLauncherLite\\demo-2"]["next_run"] is None
+        out = jobs_schtasks_mod._project(
+            jobs_schtasks_mod._parse_bulk_records(stdout), "next_run"
+        )
+        assert out["\\AppLauncherLite\\demo-1"] is None
+        assert out["\\AppLauncherLite\\demo-2"] is None
 
 
-class TestDeleteSchtasksQueryOutcomes:
-    """A failed query and an empty-but-successful one are different facts."""
+class TestBulkQueryScope:
+    """#1516: ``_bulk_records`` asks for the ``\\AppLauncherLite\\`` folder, and
+    falls back to the whole-machine query only when that fails."""
+
+    _FOLDER = "TaskName: \\AppLauncherLite\\demo\nNext Run Time: 2026-06-01 06:00:00\n\n"
 
     @staticmethod
-    def _runner(query_rc, query_stdout, deletes):
-        def runner(argv):
-            if argv[:2] == ["schtasks", "/Query"]:
-                return _mk_completed(stdout=query_stdout, rc=query_rc)
-            if argv[:2] == ["schtasks", "/Delete"]:
-                deletes.append(argv[4])
-            return _mk_completed(rc=0)
+    def _runner(answers):
+        calls: List[List[str]] = []
 
-        return runner
+        def run(argv):
+            calls.append(argv)
+            rc, stdout, stderr = answers[len(calls) - 1]
+            return subprocess.CompletedProcess(argv, rc, stdout=stdout, stderr=stderr)
 
-    def test_failed_query_is_unknown_not_empty(self):
-        runner = self._runner(1, "", [])
-        assert jobs_mod.list_known_tasks(runner=runner) is None
+        return run, calls
 
-    def test_successful_query_with_no_app_tasks_deletes_nothing(self):
-        deletes: List[str] = []
-        runner = self._runner(0, '"\\Microsoft\\Other","ready"\n', deletes)
-        assert jobs_mod.list_known_tasks(runner=runner) == []
-        assert jobs_mod.delete_schtasks("backup", runner=runner, other_job_ids=[]) == []
-        assert deletes == []
+    def test_the_folder_query_answers_alone(self):
+        run, calls = self._runner([(0, self._FOLDER, "")])
+        out = jobs_schtasks_mod._bulk_records(runner=run)
+        assert list(out) == ["\\AppLauncherLite\\demo"]
+        assert calls == [["schtasks", "/Query", "/TN", "\\AppLauncherLite\\", "/FO", "LIST", "/V"]]
 
-    def test_blind_fallback_spares_a_sibling_jobs_task(self):
-        # Query fails; job "backup" is edited while sibling "backup-2" exists.
-        deletes: List[str] = []
-        runner = self._runner(1, "", deletes)
-        jobs_mod.delete_schtasks("backup", runner=runner, other_job_ids=["backup-2"])
-        assert "\\AppLauncherLite\\backup" in deletes
-        assert "\\AppLauncherLite\\backup-1" in deletes
-        assert "\\AppLauncherLite\\backup-2" not in deletes
+    def test_a_missing_folder_falls_back_and_still_means_no_tasks(self):
+        # schtasks refuses a folder that does not exist yet; the full query
+        # then answers, and "no AppLauncher tasks" stays {} rather than None.
+        missing = (1, "", "ERROR: The system cannot find the file specified.\n")
+        foreign = (0, "TaskName: \\Foreign\\task\nNext Run Time: N/A\n\n", "")
+        run, calls = self._runner([missing, foreign])
+        assert jobs_schtasks_mod._bulk_records(runner=run) == {}
+        assert calls[1] == ["schtasks", "/Query", "/FO", "LIST", "/V"]
+
+    def test_both_queries_failing_is_still_unknown(self):
+        run, calls = self._runner([(1, "", "boom"), (1, "", "boom")])
+        assert jobs_schtasks_mod._bulk_records(runner=run) is None
+        assert len(calls) == 2

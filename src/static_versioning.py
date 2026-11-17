@@ -30,13 +30,15 @@ import re
 from pathlib import Path
 from typing import Dict, Iterable, Optional
 
+from src.stylesheet_bundle import linked_stylesheets
+
 _HASH_LEN = 8
 
 # Files under static/ whose content feeds the fleet hash. .js/.css get
 # the hash stamped on their URLs server-side; .svg (the brand icons) is
 # stamped client-side via dom-utils.js iconUrl(), so an icon edit must
-# move the fleet hash too (otherwise stale icons survive a deploy
-# because SVG bytes never feed the hash). Everything else (manifest,
+# move the fleet hash too (stale icons survived a deploy
+# because SVG bytes never fed the hash). Everything else (manifest,
 # the xterm vendor bundle) is cached more conservatively by the
 # static-files mount itself.
 _HASHED_SUFFIXES = (".js", ".css", ".svg")
@@ -97,9 +99,15 @@ def compute_asset_hashes(static_dir: Path) -> Dict[str, str]:
         per_file[relpath] = _short_hash(path.read_bytes())
     if not per_file:
         return {}
-    fleet_input = "\n".join(
-        f"{name}:{per_file[name]}" for name in sorted(per_file)
-    ).encode("utf-8")
+    lines = [f"{name}:{per_file[name]}" for name in sorted(per_file)]
+    # The served stylesheet bundle is the sheets in index.html's link order, and
+    # index.html is not hashed: reordering the links must move the hash, or a
+    # device holding the immutable bundle would keep the old cascade.
+    index = static_dir / "index.html"
+    if index.is_file():
+        order = linked_stylesheets(index.read_text(encoding="utf-8"))
+        lines.append("stylesheets:" + ",".join(order))
+    fleet_input = "\n".join(lines).encode("utf-8")
     fleet_hash = _short_hash(fleet_input)
     return {name: fleet_hash for name in per_file}
 
@@ -148,23 +156,6 @@ def rewrite_js_imports(body: str, hashes: Dict[str, str], from_dir: str = "") ->
         return f"{prefix}{spec}?v={stamp}{quote_close}"
 
     return _JS_IMPORT_RE.sub(_sub, body)
-
-
-_INCLUDE_RE = re.compile(r"<!--#include ([\w.-]+)-->")
-
-
-def inline_includes(body: str, static_dir: Path) -> str:
-    """Splice each ``<!--#include NAME-->`` marker with ``static_dir/NAME``.
-
-    Lets a large inline block (the icon sprite) live in its own file while
-    the served document still carries it inline. ``NAME`` is a bare file
-    name, so an include can never reach outside ``static_dir``; a missing
-    file raises rather than serving a page without it.
-    """
-    return _INCLUDE_RE.sub(
-        lambda m: (static_dir / m.group(1)).read_text(encoding="utf-8").rstrip("\n"),
-        body,
-    )
 
 
 def rewrite_index_html(body: str, hashes: Dict[str, str]) -> str:

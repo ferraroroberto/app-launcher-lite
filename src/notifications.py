@@ -6,7 +6,8 @@ the executor (:mod:`app.cli.commands.run_job_cmd`) calls
 on finalisation and pushes when the run failed (or, optionally, when an
 N-failure streak ticks over).
 
-Two independent channels share this one finalisation hook:
+Three independent channels share this one finalisation hook (the third, the
+chief mailbox event, lives in :mod:`src.chief.job_failed`):
 
 * **Pushover (global)** — every job, gated by the master
   switch. Config keys live in :class:`src.webapp_config.WebappConfig`:
@@ -17,6 +18,10 @@ Two independent channels share this one finalisation hook:
     ships dormant until the user opts in).
   * ``notify_failure_streak`` — extra fire when the consecutive-failure
     count equals this value (0 = disabled).
+  * ``notify_failure_summary`` — when true, pipe the output tail through
+    the local LLM hub (``http://127.0.0.1:8000``, ``claude-haiku-4-5``)
+    for a one-line "what went wrong" summary prepended to the push body.
+    Hub unreachable → silently falls back to the raw tail.
 
 * **Telegram (per-job)** — only jobs with
   ``Job.alert_on_failure = True``, via the vendored :mod:`src.notify`
@@ -24,6 +29,10 @@ Two independent channels share this one finalisation hook:
 
   * ``telegram_bot_token`` / ``telegram_chat_id`` — credentials.
     Missing creds → :class:`NoopNotifier`.
+  * ``telegram_chat_log`` — optional second chat for routine
+    log lines (the nightly zombie-cleanup summary), mirroring the fleet's
+    ``attention`` / ``log`` split. Unset → the log category falls back to
+    ``telegram_chat_id``, so a single-chat setup is unchanged.
 
   Opt-in per job (default off) so the shared Telegram chat isn't
   spammed by every job's failures.
@@ -32,20 +41,53 @@ Two independent channels share this one finalisation hook:
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from datetime import datetime
+from pathlib import Path
+from typing import Any, List, NamedTuple, Optional, Protocol
 
 import requests
 
+from src.chief.job_failed import publish_job_failed
+from src.clients import llm as llm_client
+from src.jobs.history import read_output_tail
+from src.jobs.outcome import OUTCOME_DEFERRED, OUTCOME_UNCONFIRMED, run_outcome
+from src.jobs.run_status import RunStatus
+from src.jobs.stats import consecutive_failed_runs
 from src.notify import NotifierError as TelegramNotifierError
-from src.notify import TelegramNotifier as _VendoredTelegramNotifier
+from src.notify import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 
 PUSHOVER_URL = "https://api.pushover.net/1/messages.json"
 
+# Local LLM hub — see global CLAUDE.md "`local-llm-hub` local LLM hub".
+# The model id lives once on :mod:`src.clients.llm`
+# (:data:`llm_client.DEFAULT_MODEL`) — both hub callers route through the
+# same client.
+LOCAL_LLM_BASE_URL = "http://127.0.0.1:8000"
+LOCAL_LLM_TIMEOUT_SECONDS = 8.0
+SUMMARY_TAIL_CHARS = 500
 
-class Notifier(Protocol):
-    """Minimal push-notification surface — see :class:`PushoverNotifier`."""
+# Root-cause-focused system prompt for the failure-tail summary — distinct
+# from llm_client's driving-mode reply summary, but asked through the same
+# hub client instead of a second hand-rolled one.
+_FAILURE_SUMMARY_SYSTEM_PROMPT = (
+    "You are reviewing the tail of a failed job's stdout/stderr. Reply with "
+    "ONE sentence (<= 25 words) describing the most likely root cause. No "
+    "preamble."
+)
+_FAILURE_SUMMARY_MAX_TOKENS = 120
+
+
+class JobNotifier(Protocol):
+    """Minimal push-notification surface — see :class:`PushoverNotifier`.
+
+    Named to say which channel family it belongs to: this
+    module's own Jobs-tab failure-alert protocol, distinct from the
+    vendored, domain-free :class:`src.notify.Notifier` (single method
+    ``send_text``, no ``severity``) that :class:`JobTelegramNotifier` below
+    adapts to this shape.
+    """
 
     def notify(self, title: str, body: str, severity: str) -> None: ...
 
@@ -107,17 +149,21 @@ class PushoverNotifier:
             logger.warning(f"⚠️  pushover send failed: {exc}")
 
 
-class TelegramNotifier:
+class JobTelegramNotifier:
     """Adapts the vendored :class:`src.notify.TelegramNotifier` to the
-    ``Notifier`` protocol used by the executor.
+    :class:`JobNotifier` protocol used by the executor.
 
     ``title`` and ``body`` are joined into one plain-text message —
     Telegram has no separate subject line. Errors are logged and
-    swallowed, same contract as :class:`PushoverNotifier`.
+    swallowed, same contract as :class:`PushoverNotifier`. Named distinctly
+    from the vendored ``TelegramNotifier`` it wraps — the two
+    classes have incompatible methods (``notify(title, body, severity)``
+    here vs. ``send_text(text)`` there), and a shared name would force an
+    import alias purely to avoid the collision.
     """
 
     def __init__(self, bot_token: str, chat_id: str) -> None:
-        self._notifier = _VendoredTelegramNotifier(bot_token, chat_id)
+        self._notifier = TelegramNotifier(bot_token, chat_id)
 
     def notify(self, title: str, body: str, severity: str = "warning") -> None:
         try:
@@ -126,8 +172,47 @@ class TelegramNotifier:
             logger.warning(f"⚠️  telegram send failed: {exc}")
 
 
-def build_notifier_from_config(cfg: Any) -> Notifier:
-    """Construct a Notifier from a :class:`WebappConfig`-shaped object.
+def summarise_failure(
+    tail: str, *, base_url: Optional[str] = None
+) -> Optional[str]:
+    """Ask the local LLM hub for a one-line summary of ``tail``.
+
+    Routes through the shared :func:`src.clients.llm.summarize` hub client
+    instead of hand-rolling a second one — same OpenAI-shape
+    ``/v1/chat/completions`` call, model constant, and ``LlmError`` handling
+    as the Coding-tab read-aloud summary, just with a root-cause-focused
+    system prompt, a short (executor-safe) timeout, and a capped reply.
+
+    ``base_url`` is the configured hub base URL (``WebappConfig.llm_hub_url``)
+    — the caller threads it through so a user who moves the hub off ``:8000``
+    still gets failure summaries. An empty URL (the default) skips the summary.
+
+    Returns ``None`` when the hub is unreachable or the response is
+    malformed — the caller falls back to the raw tail. Bounded by a
+    short timeout so a wedged hub can't stall the executor's exit.
+    """
+    snippet = tail[-SUMMARY_TAIL_CHARS:] if tail else ""
+    if not snippet.strip():
+        return None
+    base = (base_url or "").strip()
+    if not base:
+        return None
+    try:
+        summary = llm_client.summarize(
+            base,
+            snippet,
+            system_prompt=_FAILURE_SUMMARY_SYSTEM_PROMPT,
+            max_tokens=_FAILURE_SUMMARY_MAX_TOKENS,
+            timeout=LOCAL_LLM_TIMEOUT_SECONDS,
+        )
+    except llm_client.LlmError as exc:
+        logger.debug(f"local LLM summary skipped: {exc}")
+        return None
+    return summary.splitlines()[0].strip() or None
+
+
+def build_notifier_from_config(cfg: Any) -> JobNotifier:
+    """Construct a JobNotifier from a :class:`WebappConfig`-shaped object.
 
     Returns :class:`NoopNotifier` when creds or the master switch are
     missing — every caller can unconditionally ``notifier.notify(...)``.
@@ -139,14 +224,209 @@ def build_notifier_from_config(cfg: Any) -> Notifier:
     return PushoverNotifier(api_token, user_key)
 
 
-def build_telegram_notifier_from_config(cfg: Any) -> Notifier:
-    """Construct a Telegram :class:`Notifier` from a :class:`WebappConfig`-shaped object.
+TELEGRAM_CATEGORY_LOG = "log"
+
+
+def build_telegram_notifier_from_config(
+    cfg: Any, *, category: Optional[str] = None
+) -> JobNotifier:
+    """Construct a Telegram :class:`JobNotifier` from a :class:`WebappConfig`-shaped object.
 
     Returns :class:`NoopNotifier` when either credential is missing —
     every caller can unconditionally ``notifier.notify(...)``.
+
+    ``category`` picks the chat the way fleet-config's
+    ``resolve_notify_target`` does: :data:`TELEGRAM_CATEGORY_LOG` tries
+    ``cfg.telegram_chat_log`` first and **falls back to** ``telegram_chat_id``
+    when it is unset. No category (failure alerts) always uses
+    ``telegram_chat_id`` — the alerts chat.
     """
     bot_token = getattr(cfg, "telegram_bot_token", "") or ""
-    chat_id = getattr(cfg, "telegram_chat_id", "") or ""
+    chat_id = ""
+    if category == TELEGRAM_CATEGORY_LOG:
+        chat_id = getattr(cfg, "telegram_chat_log", "") or ""
+    chat_id = chat_id or getattr(cfg, "telegram_chat_id", "") or ""
     if not (bot_token and chat_id):
         return NoopNotifier()
-    return TelegramNotifier(bot_token, chat_id)
+    return JobTelegramNotifier(bot_token, chat_id)
+
+
+def notify_failure(
+    cfg: Any,
+    job: Any,
+    run_dir: Path,
+    *,
+    status: str,
+    exit_code: Optional[int],
+    reaped: bool = False,
+    watchdog_note: Optional[str] = None,
+    notifier: Optional[JobNotifier] = None,
+    telegram_notifier: Optional[JobNotifier] = None,
+) -> None:
+    """Push failure notifications for a ``failed`` finalisation.
+
+    Shared by the executor's normal finalise
+    (:func:`app.cli.commands.run_job_cmd._finalize_run`) and the stranded-run
+    reconciler (:func:`src.jobs.reap._reap_one`) — a run that
+    fails because the launcher discovered a dead executor pages the same way
+    a run that fails on its own exit code does.
+
+    Three independent channels, all no-op on success:
+
+    * Chief mailbox — one ``job-failed`` event for the fleet chief,
+      gated by ``cfg.chief_job_failures``, a live chief and the canonical
+      instance (:func:`src.chief.job_failed.publish_job_failed`).
+
+    * Pushover (global) — gated by ``cfg.notify_on_failure``,
+      fires for every job.
+    * Telegram (per-job) — gated by ``job.alert_on_failure``,
+      fires only for jobs that opted in.
+
+    Either resolving to :class:`NoopNotifier` (no creds) is a silent
+    no-op for that channel. The optional LLM summary (Pushover only) is
+    best-effort; hub down → raw tail only. Any error inside this path is
+    logged and swallowed — finalisation must keep going.
+
+    ``exit_code`` is ``None`` for a reaped run — the dead executor never
+    reported one — and renders as ``exit=unknown`` rather than a
+    fabricated number; ``reaped=True`` appends a short note so the
+    recipient knows this failure was discovered late, not live.
+
+    ``watchdog_note`` is the executor's own
+    :attr:`~app.cli.commands.run_job_supervision.RunWatchdog.note` — e.g.
+    ``"watchdog: max runtime 33min exceeded"`` — passed through by the
+    caller that already stamped it into the run record, rather than
+    re-read from the just-written ``run.json`` here. A bare exit code
+    from a watchdog kill is otherwise indistinguishable from the job's own
+    failure and actively misleading (the process was healthy, just slow).
+    Composes with ``reaped`` if a future caller ever has both.
+
+    **Not every ``failed`` finalisation is reported as a failure.**
+    Both channels consult :func:`src.jobs.outcome.run_outcome`: an exit
+    code meaning "delivery was never established" pages as ``❓ … not
+    confirmed`` at ``warning`` severity (Pushover priority 0 — no quiet-hour
+    bypass) instead of ``❌ … failed`` at ``error``, and both bodies name the
+    exit code's own meaning so the recipient need not open the log to learn
+    that 124 is a stall. A run this launcher killed, reaped or watchdogged is
+    a failure regardless of the code the torn-down tree reported. An exit code
+    the job itself declares ``deferred`` sends nothing at all.
+    """
+    try:
+        if status != RunStatus.FAILED:
+            return
+        wording = _failure_wording(job, run_dir, status, exit_code, reaped, watchdog_note)
+        if wording is None:
+            return
+
+        # Third channel, independent of the two below: its own switch and its
+        # own swallow, so neither a missing push credential nor a push error
+        # can keep the chief from hearing about the run.
+        publish_job_failed(
+            cfg, job, run_dir,
+            exit_code=exit_code,
+            outcome="not-confirmed" if wording.unconfirmed else "failed",
+        )
+
+        if cfg.notify_on_failure:
+            _push_failure(cfg, job, run_dir, notifier or build_notifier_from_config(cfg), wording)
+
+        if job.alert_on_failure:
+            telegram_notifier = telegram_notifier or build_telegram_notifier_from_config(cfg)
+            if not isinstance(telegram_notifier, NoopNotifier):
+                when = datetime.now().strftime("%Y-%m-%d %H:%M")
+                telegram_notifier.notify(
+                    f"{wording.mark} {job.name} {wording.verdict}",
+                    f"{when} — {wording.detail}",
+                    severity=wording.severity,
+                )
+    except Exception as exc:  # noqa: BLE001 — never block finalisation
+        logger.warning(f"⚠️  notification path raised: {exc}")
+
+
+class _FailureWording(NamedTuple):
+    """How one failed finalisation is worded on every channel."""
+
+    unconfirmed: bool
+    mark: str
+    verdict: str
+    severity: str
+    exit_text: str
+    detail: str     # "run=<id> exit=<code>" plus the origin and reason notes
+
+
+def _failure_wording(
+    job: Any, run_dir: Path, status: str, exit_code: Optional[int], reaped: bool,
+    watchdog_note: Optional[str],
+) -> Optional[_FailureWording]:
+    """The alert wording for a ``failed`` run, or ``None`` when its job
+    declared the exit code a deferral and nothing is sent."""
+    exit_text = "unknown" if exit_code is None else str(exit_code)
+    origin_note = " (reaped — end time not confirmed)" if reaped else ""
+    if watchdog_note:
+        origin_note += f" ({watchdog_note})"
+
+    # A run this launcher itself ended or found dead is a failure whatever
+    # exit code the torn-down tree reported; otherwise the scheduled-run
+    # adapter's exit code decides whether this alert may use the word
+    # "failed" at all. An unconfirmed run still pages —
+    # nobody established that it delivered — but calling it a failure is
+    # exactly what made these alerts stop being read.
+    outcome, outcome_reason = run_outcome({
+        "status": status,
+        "exit_code": exit_code,
+        "reaped": reaped,
+        "watchdog": bool(watchdog_note),
+    }, job.exit_outcomes)
+    if outcome == OUTCOME_DEFERRED:
+        # The job declared this exit code a designed deferral: the
+        # child chose not to do the work, and paging about it every night
+        # is what trains a reader to ignore the real failures.
+        logger.info(
+            f"ℹ️ {job.id} run {run_dir.name} deferred (exit {exit_text}); "
+            f"no failure alert"
+        )
+        return None
+    unconfirmed = outcome == OUTCOME_UNCONFIRMED
+    reason_note = f" — {outcome_reason}" if outcome_reason else ""
+    return _FailureWording(
+        unconfirmed=unconfirmed,
+        mark="❓" if unconfirmed else "❌",
+        verdict="not confirmed" if unconfirmed else "failed",
+        severity="warning" if unconfirmed else "error",
+        exit_text=exit_text,
+        detail=f"run={run_dir.name} exit={exit_text}{origin_note}{reason_note}",
+    )
+
+
+def _push_failure(cfg: Any, job: Any, run_dir: Path, notifier: JobNotifier, wording: _FailureWording) -> None:
+    """The Pushover failure alert, plus the streak alert when it is reached."""
+    if isinstance(notifier, NoopNotifier):
+        return
+    tail = read_output_tail(run_dir, max_bytes=8 * 1024)
+    body_parts: List[str] = []
+    if cfg.notify_failure_summary:
+        summary = summarise_failure(tail, base_url=cfg.llm_hub_url)
+        if summary:
+            body_parts.append(summary)
+    # The raw tail is what an operator wants when the summary is
+    # missing or wrong — always include the last 500 chars.
+    body_parts.append(tail[-500:] if tail else "(no output captured)")
+    body_parts.append(f"— job={job.id} {wording.detail}")
+    # The failed title is unchanged — "❌ <job>" already said it.
+    # Only the new state needs the word, because ❓ alone is not
+    # self-explanatory the way ❌ is.
+    title = f"{wording.mark} {job.name}" + (
+        f" — {wording.verdict}" if wording.unconfirmed else ""
+    )
+    notifier.notify(title, "\n\n".join(body_parts), severity=wording.severity)
+
+    streak = cfg.notify_failure_streak
+    if streak and streak > 1:
+        count = consecutive_failed_runs(job.id)
+        if count == streak:
+            notifier.notify(
+                f"🔁 {job.name} — {count} consecutive failures",
+                f"Failure streak reached {count} runs.\n"
+                f"Most recent: {run_dir.name} (exit {wording.exit_text}).",
+                severity="error",
+            )

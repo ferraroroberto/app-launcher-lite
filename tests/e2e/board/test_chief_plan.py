@@ -1,0 +1,780 @@
+"""The chief's plan: model chips, the Answer button, the repo filter, shared answered marks and its row layout."""
+
+from __future__ import annotations
+
+import json as _json
+import re
+
+import pytest
+from playwright.sync_api import Page, expect
+
+from src.chief import plan as chief_plan
+from tests.e2e import _fake_clock
+from tests.e2e.board._chief_support import (
+    _QUESTIONS,
+    _board_payload,
+    _capture_chief_input,
+    _mock_board,
+    _mock_ensure,
+    _open_board,
+    _plan_with,
+    _route_plan_from,
+    _SharedPlanServer,
+)
+from tests.e2e.fixtures.pages import seed_token_init_script
+from tests.e2e.fixtures.waits import (
+    flush_requests,
+    stable_eval,
+    stable_read,
+    wait_until,
+)
+
+pytestmark = pytest.mark.smoke
+
+
+def test_plan_rows_show_the_model_only_when_the_chief_named_one(
+    authed_page: Page, base_url: str, tmp_path
+) -> None:
+    """#1352: a lane or queue row that carries a `model` shows it as quiet
+    text before its status chip; a row without one (or with a non-string one)
+    shows nothing extra, and keeps its status chip and title."""
+    _mock_board(authed_page, _board_payload(with_chief=True))
+    f = tmp_path / "chief-plan.json"
+    f.write_text(_json.dumps({
+        "version": 1, "updated_at": "2026-09-27T09:00:00Z",
+        "lanes": [
+            {"repo": "app-launcher", "session": "s-a", "item": "#1352", "status": "building",
+             "model": "opus"},
+            {"repo": "fleet-config", "session": "s-f", "item": "#959", "status": "gate"},
+        ],
+        "queue": [
+            {"repo": "app-launcher", "ref": "#1199", "title": "pin the model", "status": "queued",
+             "model": "sonnet"},
+            {"repo": "app-launcher", "ref": "#1354", "title": "photo batch", "status": "queued",
+             "model": 5},
+        ],
+    }), encoding="utf-8")
+    _route_plan_from(authed_page, {"plan": chief_plan.read_chief_plan(f, "octo")})
+    _open_board(authed_page, base_url)
+
+    plan_body = authed_page.locator("#boardChiefPlan .board-plan-body")
+    expect(plan_body).to_have_attribute("data-state", "ok")
+    lanes = plan_body.locator(".board-plan-group").nth(0).locator("li")
+    queue = plan_body.locator(".board-plan-group").nth(1).locator("li")
+    expect(lanes).to_have_count(2)
+    expect(queue).to_have_count(2)
+
+    expect(lanes.nth(0).locator(".board-plan-model")).to_have_text("Opus")
+    expect(lanes.nth(0).locator(".board-plan-model")).to_be_visible()
+    expect(lanes.nth(0).locator(".board-plan-chip")).to_have_text("building")
+    expect(queue.nth(0).locator(".board-plan-model")).to_have_text("Sonnet")
+    expect(queue.nth(0).locator(".board-plan-model")).to_be_visible()
+    expect(queue.nth(0).locator(".board-plan-chip")).to_have_text("queued")
+
+    # No model (missing, or the wrong type): today's row, no extra text.
+    expect(lanes.nth(1).locator(".board-plan-model")).to_have_count(0)
+    expect(lanes.nth(1).locator(".board-plan-chip")).to_have_text("gate")
+    expect(queue.nth(1).locator(".board-plan-model")).to_have_count(0)
+    expect(queue.nth(1)).to_contain_text("photo batch")
+    expect(queue.nth(1).locator(".board-plan-chip")).to_have_text("queued")
+
+
+@pytest.mark.iphone
+def test_answer_button_shows_only_with_questions(
+    authed_page: Page, base_url: str, tmp_path
+) -> None:
+    """#1295: the Chief's-plan card offers "Answer N questions" only when
+    something waits on Roberto; with nothing waiting there is no button."""
+    _mock_board(authed_page, _board_payload(with_chief=True))
+    current = {"plan": _plan_with(tmp_path, [])}
+    _route_plan_from(authed_page, current)
+    _open_board(authed_page, base_url)
+    plan_body = authed_page.locator("#boardChiefPlan .board-plan-body")
+    expect(plan_body).to_have_attribute("data-state", "ok")
+    expect(plan_body.locator(".board-plan-answer")).to_have_count(0)
+
+    current["plan"] = _plan_with(tmp_path, _QUESTIONS)
+    authed_page.locator("#boardRefresh").click()
+    button = plan_body.locator(".board-plan-answer")
+    expect(button).to_have_text("Answer 3 questions")
+    # The card lists every item, an old text-only one included.
+    expect(plan_body.locator("li.board-plan-waiting")).to_have_count(3)
+    expect(plan_body.locator("li.board-plan-waiting").nth(2)).to_contain_text("Remember the last tab?")
+    box = stable_read(button.bounding_box)
+    assert box and box["height"] >= 44, f"answer button under the 44px tap floor: {box}"
+
+
+def _mock_repo_filter_board(page: Page, tmp_path) -> list:
+    """Mock the apps, board, plan, ensure and input routes for the repo-filter test; return the input posts."""
+    page.route(
+        re.compile(r".*/api/apps$"),
+        lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body=_json.dumps({"scan_root": "", "apps": [
+                {"id": "cc-" + name, "kind": "claude-code", "name": name,
+                 "project_dir": "E:/automation/" + name}
+                for name in ("app-launcher", "fleet-config", "life-os")
+            ]}),
+        ),
+    )
+    _mock_board(page, _board_payload(with_chief=True))
+    f = tmp_path / "chief-plan.json"
+    f.write_text(_json.dumps({
+        "version": 1, "updated_at": "2026-09-27T09:00:00Z",
+        "lanes": [
+            {"repo": "app-launcher", "session": "s-a", "item": "#1295", "status": "building"},
+            {"repo": "fleet-config", "session": "s-f", "item": "#959", "status": "gate"},
+        ],
+        "queue": [
+            {"repo": "app-launcher", "ref": "#1295", "title": "answer sheet", "status": "building"},
+            {"ref": "fleet-config#900", "title": "hooks sweep", "status": "someday"},
+        ],
+        # fleet-config (repo + ref), life-os (repo only), app-launcher (ref
+        # only), then one with no repo at all.
+        "waiting_on_roberto": _QUESTIONS + [
+            {"id": "q-pause", "text": "Pause every lane tonight?"},
+        ],
+    }), encoding="utf-8")
+    _route_plan_from(page, {"plan": chief_plan.read_chief_plan(f, "octo")})
+    ensured: dict = {}
+    _mock_ensure(page, ensured)
+    posts = _capture_chief_input(page)
+    return posts
+
+
+def test_repo_filter_narrows_the_plan_and_its_questions(
+    authed_page: Page, base_url: str, tmp_path
+) -> None:
+    """#1332: the Dispatch repo picker narrows the Chief's plan as it does
+    the columns. Questions, Lanes and Queue keep only the picked repo's
+    rows (a repo from `repo`, or the repo half of a `repo#N` ref) plus rows
+    with no repo, which are fleet-wide and never hidden; a note counts the
+    questions the filter hides; a group the filter empties is gone. "Answer
+    N questions" counts and opens only what shows, the message numbers each
+    by its place in the whole plan and doesn't list hidden ones as skipped,
+    and clearing the filter restores everything."""
+    posts = _mock_repo_filter_board(authed_page, tmp_path)
+    _open_board(authed_page, base_url)
+
+    plan_body = authed_page.locator("#boardChiefPlan .board-plan-body")
+    waiting = plan_body.locator("li.board-plan-waiting")
+    headings = plan_body.locator(".board-plan-heading")
+    button = plan_body.locator(".board-plan-answer")
+    hidden_note = plan_body.locator(".board-plan-hidden")
+    expect(waiting).to_have_count(4)
+    expect(button).to_have_text("Answer 4 questions")
+    expect(hidden_note).to_have_count(0)
+
+    def pick(repo: str) -> None:
+        authed_page.locator("#boardDispatchRepoInput").click()
+        item = authed_page.locator(f'#boardDispatchRepoList li[data-repo="{repo}"]')
+        expect(item).to_be_visible(timeout=15_000)
+        item.click()
+
+    pick("app-launcher")
+    expect(waiting).to_have_count(2)
+    expect(waiting.nth(0)).to_contain_text("Remember the last tab?")
+    expect(waiting.nth(1)).to_contain_text("Pause every lane tonight?")
+    expect(button).to_have_text("Answer 2 questions")
+    expect(hidden_note).to_have_text("2 more questions in other projects")
+    expect(headings).to_have_text(["Questions", "Lanes (1)", "Queue (1)"])
+    expect(plan_body.locator(".board-plan-group").nth(1).locator("li")).to_have_count(1)
+    expect(plan_body.locator(".board-plan-group").nth(2).locator("li")).to_have_count(1)
+    expect(plan_body.locator(".board-plan-group").nth(2)).to_contain_text("answer sheet")
+
+    # No lane or queue row is life-os's, so both groups go, not left empty.
+    pick("life-os")
+    expect(waiting).to_have_count(2)
+    expect(waiting.nth(0)).to_contain_text("Which days?")
+    expect(headings).to_have_text(["Questions"])
+    expect(hidden_note).to_have_text("2 more questions in other projects")
+
+    # The sheet asks only what shows, each numbered by its place in the plan.
+    pick("app-launcher")
+    button.click()
+    dialog = authed_page.locator("#chiefAnswersDialog")
+    blocks = dialog.locator(".chief-answer")
+    expect(blocks).to_have_count(2)
+    expect(blocks.nth(0).locator(".chief-answer-num")).to_have_text("3")
+    expect(blocks.nth(1).locator(".chief-answer-num")).to_have_text("4")
+    blocks.nth(0).locator(".tr-ask-input").fill("yes")
+    dialog.locator("#chiefAnswersDone").click()
+    expect(dialog).to_be_hidden()
+    assert posts == [{
+        "data": (
+            "Answers from the Board (1 of 2):\n"
+            "3. [app-launcher#1131] Remember the last tab? → Other: yes\n"
+            "Skipped: 4"
+        ),
+        "submit": True,
+    }], posts
+
+    # All projects again: the whole plan, and the answered mark on its row;
+    # the button no longer counts the answered question (#1487).
+    pick("")
+    expect(waiting).to_have_count(4)
+    expect(button).to_have_text("Answer 3 questions")
+    expect(hidden_note).to_have_count(0)
+    expect(headings).to_have_text(["Questions", "Lanes (2)", "Queue (2)"])
+    expect(waiting.nth(2)).to_contain_text("answered, waiting for the chief")
+    expect(waiting.nth(0)).not_to_contain_text("answered")
+
+
+def test_answered_marks_show_on_every_device_until_the_plan_moves(
+    authed_page: Page, browser, browser_context_args, auth_token: str,
+    base_url: str, tmp_path,
+) -> None:
+    """#1487: what one device answers reads "answered, waiting for the
+    chief" on another — polling or reloaded — and neither counts nor asks it
+    again. The marks clear on both when the chief rewrites the plan. Page B
+    is its own browser context (its own storage), so nothing local can carry
+    the marks across; the chief's input is the test's capture, never a real
+    PTY."""
+    server = _SharedPlanServer(tmp_path, _QUESTIONS)
+    context_b = browser.new_context(**browser_context_args)
+    if auth_token:
+        context_b.add_init_script(seed_token_init_script(auth_token))
+    page_b = context_b.new_page()
+    try:
+        pages = (authed_page, page_b)
+        for page in pages:
+            _mock_board(page, _board_payload(with_chief=True))
+            server.route(page)
+        _mock_ensure(authed_page, {})
+        posts = _capture_chief_input(authed_page)
+        posts_b = _capture_chief_input(page_b)
+        for page in pages:
+            _open_board(page, base_url)
+            expect(page.locator("#boardChiefPlan .board-plan-answer")).to_have_text("Answer 3 questions")
+
+        # Device A answers the first and third questions.
+        authed_page.locator("#boardChiefPlan .board-plan-answer").click()
+        blocks = authed_page.locator("#chiefAnswersDialog .chief-answer")
+        expect(blocks).to_have_count(3)
+        # The first is answered by its pre-picked recommendation.
+        expect(blocks.nth(0).locator(".tr-ask-opt").nth(0)).to_have_attribute("aria-pressed", "true")
+        blocks.nth(2).locator(".tr-ask-input").fill("yes")
+        authed_page.locator("#chiefAnswersDone").click()
+        expect(authed_page.locator("#chiefAnswersDialog")).to_be_hidden()
+        wait_until(authed_page, lambda: len(server.records) == 1, "the answered marks recorded")
+        assert len(posts) == 1 and server.records == [{
+            "updated_at": "2026-09-27T09:00:00Z", "ids": ["q-plans", "2"],
+        }], server.records
+
+        def expect_answered(page: Page, marked: list, button: str) -> None:
+            rows = page.locator("#boardChiefPlan li.board-plan-waiting")
+            expect(rows).to_have_count(3)
+            for i, on in enumerate(marked):
+                if on:
+                    expect(rows.nth(i)).to_contain_text("answered, waiting for the chief")
+                    expect(rows.nth(i)).to_have_class(re.compile(r"\bis-answered\b"))
+                else:
+                    expect(rows.nth(i)).not_to_contain_text("answered")
+            expect(page.locator("#boardChiefPlan .board-plan-answer")).to_have_text(button)
+
+        expect_answered(authed_page, [True, False, True], "Answer 1 question")
+        # Device B on its next poll (↻ runs the poll's fetch), then reloaded.
+        page_b.locator("#boardRefresh").click()
+        expect_answered(page_b, [True, False, True], "Answer 1 question")
+        _open_board(page_b, base_url)
+        expect_answered(page_b, [True, False, True], "Answer 1 question")
+        # B's sheet asks only what is still open, numbered by its plan place.
+        page_b.locator("#boardChiefPlan .board-plan-answer").click()
+        sheet_b = page_b.locator("#chiefAnswersDialog .chief-answer")
+        expect(sheet_b).to_have_count(1)
+        expect(sheet_b.locator(".chief-answer-num")).to_have_text("2")
+        page_b.locator("#chiefAnswersClose").click()
+        assert posts_b == [], "device B sent nothing"
+
+        # The chief rewrites the plan: both devices show every question open.
+        server.rewrite("2026-09-27T09:10:00Z")
+        for page in pages:
+            page.locator("#boardRefresh").click()
+            expect_answered(page, [False, False, False], "Answer 3 questions")
+    finally:
+        context_b.close()
+
+
+@pytest.mark.iphone
+def test_questions_are_one_line_rows_all_shown_then_one_answer(
+    authed_page: Page, base_url: str, tmp_path
+) -> None:
+    """#1502 (decision 2 of #1500): each waiting question is one shared
+    action-row, its text on one line with the ref as meta and a chevron, no
+    amber bar. Every question shows (the group starts open), then the one Answer button. A tap on a row opens the
+    answer sheet on that question."""
+    waiting = [
+        {"id": f"q-{i}", "ref": f"demo-repo#{i}",
+         "text": f"Question {i}: should the sprocket keep a deliberately long name "
+                 "that no row on a phone, nor a lane on the widest desktop grid, "
+                 "can ever hold on one line without cutting it short?",
+         "question": f"Full question {i}?"}
+        for i in range(1, 9)
+    ]
+    # The first one is dated, so it sorts first and carries a date tail beside
+    # a ref too long for the row.
+    long_ref = "a-repository-name-" + "far-too-long-" * 6 + "for-one-line#1"
+    waiting[0].update(ref=long_ref, asked_at="2020-03-02")
+    _mock_board(authed_page, _board_payload(with_chief=True))
+    _route_plan_from(authed_page, {"plan": _plan_with(tmp_path, waiting)})
+    _fake_clock.install(authed_page)
+    _open_board(authed_page, base_url)
+
+    group = authed_page.locator("#boardChiefPlan .board-plan-group-waiting")
+    rows = group.locator("li.board-plan-waiting")
+    expect(rows).to_have_count(8)
+    expect(group.locator("li.board-plan-more")).to_have_count(0)
+    expect(group.locator(".board-plan-answer")).to_have_text("Answer 8 questions")
+    expect(group.locator("li")).to_have_count(8)
+
+    first = rows.nth(0)
+    expect(first).to_have_class(re.compile(r"\baction-row\b"))
+    expect(first.locator(".action-row-meta-text")).to_have_text(long_ref)
+    expect(first.locator(".action-row-meta-tail")).to_have_text("2 Mar 2020")
+    expect(first.locator(".board-plan-chevron")).to_have_count(1)
+    # The long ref gives way; the date stays whole beside it (LAYOUT-09).
+    d = stable_eval(first.locator(".action-row-meta"), """el => {
+        const t = el.querySelector('.action-row-meta-tail').getBoundingClientRect();
+        const w = el.querySelector('.action-row-meta-text');
+        return { metaCut: el.scrollWidth > el.clientWidth + 1,
+                 tailInside: t.right <= el.getBoundingClientRect().right + 1,
+                 textCut: w.scrollWidth > w.clientWidth };
+    }""")
+    assert not d["metaCut"] and d["tailInside"], f"the date is cut: {d}"
+    assert d["textCut"], f"the long ref should be the part that ellipsizes: {d}"
+    # No amber bar or stripe left on the row.
+    expect(first).to_have_css("box-shadow", "none")
+    # One line at the rows.md height, the text clipped by its ellipsis.
+    m = stable_eval(first, (
+        "el => { const t = el.querySelector('.action-row-title');"
+        " if (!t || !t.clientWidth) return null;"
+        " return {h: el.getBoundingClientRect().height,"
+        " clipped: t.scrollWidth > t.clientWidth,"
+        " th: t.getBoundingClientRect().height,"
+        " lh: parseFloat(getComputedStyle(t).lineHeight)}; }"))
+    assert m is not None
+    assert abs(m["h"] - 52) <= 1, f"question row is not rows.md tall: {m}"
+    assert m["th"] <= m["lh"] + 1, f"question title wraps: {m}"
+    assert m["clipped"], f"a long question should ellipsize: {m}"
+
+    # A row opens the sheet on its own question: the last one, scrolled to.
+    rows.nth(7).locator(".action-row-main").click()
+    dialog = authed_page.locator("#chiefAnswersDialog")
+    expect(dialog).to_be_visible()
+    expect(dialog.locator(".chief-answer")).to_have_count(8)
+    expect(dialog.locator('.chief-answer[data-key="q-8"] .tr-ask-question')).to_be_in_viewport()
+    expect(dialog.locator('.chief-answer[data-key="q-8"] .tr-ask-question')).to_have_text(
+        "Full question 8?")
+
+
+@pytest.mark.iphone
+def test_plan_sections_split_queue_from_parked_and_rows_open_their_issue(
+    authed_page: Page, base_url: str, tmp_path
+) -> None:
+    """#1578: Lanes, Queue and Parked each carry a count; a `parked` or
+    `waiting-roberto` item leaves the Queue for Parked, which starts folded on
+    a phone. A row is two lines (title, then `repo#N · Model` with the status
+    chip at that line's right end) and the title is readable on its own line;
+    a row with a `repo#N` ref opens its issue on a tap of the row or the
+    chevron, a row without one stays inert."""
+    authed_page.add_init_script(
+        "window.__opened = [];"
+        " window.open = function (u) { window.__opened.push(u); return null; };")
+    _mock_board(authed_page, _board_payload(with_chief=True))
+    f = tmp_path / "chief-plan.json"
+    f.write_text(_json.dumps({
+        "version": 1, "updated_at": "2026-09-27T09:00:00Z",
+        "lanes": [
+            {"repo": "app-launcher", "session": "s-a", "item": "#1578", "status": "building",
+             "model": "opus"},
+        ],
+        "queue": [
+            {"repo": "app-launcher", "ref": "#1500", "title": "Adopt the usage log",
+             "status": "queued", "model": "sonnet", "note": "PR #276 70a6f93, waits #249"},
+            {"repo": "fleet-config", "ref": "#12", "title": "Second in line", "status": "building"},
+            {"repo": "app-launcher", "ref": "#1400", "title": "Parked with a ref", "status": "parked"},
+            {"repo": "automation", "ref": "", "title": "Parked without a ref",
+             "status": "waiting-roberto"},
+        ],
+    }), encoding="utf-8")
+    _route_plan_from(authed_page, {"plan": chief_plan.read_chief_plan(f, "octo")})
+    _open_board(authed_page, base_url)
+
+    plan_body = authed_page.locator("#boardChiefPlan .board-plan-body")
+    expect(plan_body).to_have_attribute("data-state", "ok")
+    expect(plan_body.locator(".board-plan-heading")).to_have_text(
+        ["Lanes (1)", "Queue (2)", "Parked (2)"])
+    queue_group = plan_body.locator(".board-plan-group").nth(1)
+    queue = queue_group.locator("li.board-plan-row")
+    expect(queue).to_have_count(2)
+    expect(queue.locator(".action-row-title")).to_have_text(["Adopt the usage log", "Second in line"])
+    expect(queue.locator(".board-plan-chip")).to_have_text(["queued", "building"])
+    expect(queue_group.locator(".board-plan-section-note")).to_contain_text("Backlog")
+
+    # Parked folds on a phone, opens on the desktop board.
+    parked = plan_body.locator(".board-plan-parked")
+    parked_rows = parked.locator("li.board-plan-row")
+    on_phone = (authed_page.viewport_size or {"width": 0})["width"] < 700
+    if on_phone:
+        expect(parked_rows.first).to_be_hidden()
+        summary = parked.locator("summary")
+        box = stable_read(summary.bounding_box)
+        assert box and box["height"] >= 44, f"Parked summary is below a 44px target: {box}"
+        summary.click()
+    expect(parked_rows).to_have_count(2)
+    expect(parked_rows.first).to_be_visible()
+    expect(parked_rows.locator(".board-plan-chip")).to_have_text(["parked", "waiting-roberto"])
+
+    # Two lines: the title over the meta, the chip at the meta line's right
+    # end, the chevron after the title's column, the whole row a 44px target.
+    expect(queue.first.locator(".action-row-meta-text")).to_have_text("app-launcher#1500 · Sonnet")
+    expect(queue.first.locator(".board-plan-model")).to_have_text("Sonnet")
+    # The chief's note carries figures, so it is the row's hover text, never in the ellipsizing meta.
+    expect(queue.first.locator(".action-row-main")).to_have_attribute("title", "PR #276 70a6f93, waits #249")
+    geo = stable_eval(queue.first, (
+        "el => { const r = el.getBoundingClientRect();"
+        " const t = el.querySelector('.action-row-title');"
+        " const tb = t.getBoundingClientRect();"
+        " const m = el.querySelector('.action-row-meta-text').getBoundingClientRect();"
+        " const c = el.querySelector('.board-plan-chip').getBoundingClientRect();"
+        " const v = el.querySelector('.board-plan-chevron').getBoundingClientRect();"
+        " return {h: r.height, titleBottom: tb.bottom, metaTop: m.top, titleRight: tb.right,"
+        " chipLeft: c.left, metaLeft: m.left, chipRight: c.right, chevLeft: v.left,"
+        " chevW: v.width, clipped: t.scrollWidth > t.clientWidth}; }"))
+    assert geo["h"] >= 44, geo
+    assert geo["metaTop"] >= geo["titleBottom"] - 1, f"meta is not under the title: {geo}"
+    assert geo["chipLeft"] > geo["metaLeft"] and geo["chipRight"] <= geo["chevLeft"] + 1, geo
+    assert geo["titleRight"] <= geo["chevLeft"] + 1, f"title runs under the chevron: {geo}"
+    assert geo["chevW"] >= 44, geo
+    assert not geo["clipped"], f"a short queue title is clipped: {geo}"
+
+    # Taps: a row with no note, then its chevron, open the issue; the lane
+    # opens its own; a parked row with no ref does nothing. A row with a note
+    # opens its sheet instead (test_a_noted_plan_row_opens_its_note_sheet).
+    def opened() -> list:
+        return authed_page.evaluate("() => window.__opened")
+
+    queue.nth(1).locator(".action-row-main").click()
+    queue.nth(1).locator(".board-plan-chevron").click()
+    plan_body.locator(".board-plan-group").nth(0).locator(".action-row-main").click()
+    assert opened() == [
+        "https://gitlab.com/octo/fleet-config/-/issues/12",
+        "https://gitlab.com/octo/fleet-config/-/issues/12",
+        "https://gitlab.com/octo/app-launcher/-/issues/1578",
+    ]
+    inert = parked_rows.nth(1)
+    expect(inert.locator(".action-row-main")).to_have_class(re.compile(r"is-inert"))
+    expect(inert.locator(".board-plan-chevron")).to_have_count(0)
+    inert.locator(".action-row-main").click()
+    assert len(opened()) == 3
+
+
+@pytest.mark.iphone
+def test_clear_merged_button_clears_only_merged_rows(
+    authed_page: Page, base_url: str, tmp_path
+) -> None:
+    """#1866: "Clear merged (N)" shows only while merged rows exist; the tap
+    posts the prune, toasts the count and the re-read card drops those rows
+    and the button. Lanes, other rows and questions stay."""
+    _mock_board(authed_page, _board_payload(with_chief=True))
+    f = tmp_path / "chief-plan.json"
+    rows = [
+        {"repo": "app-launcher", "ref": "#1", "title": "shipped one", "status": "merged"},
+        {"repo": "app-launcher", "ref": "#2", "title": "in flight", "status": "building"},
+        {"repo": "fleet-config", "ref": "#3", "title": "shipped two", "status": "merged"},
+    ]
+    f.write_text(_json.dumps({
+        "version": 1, "updated_at": "2026-10-25T09:00:00Z",
+        "lanes": [{"repo": "app-launcher", "session": "s-a", "item": "#2", "status": "building"}],
+        "queue": rows, "waiting_on_roberto": _QUESTIONS,
+    }), encoding="utf-8")
+    current = {"plan": chief_plan.read_chief_plan(f, "octo")}
+    _route_plan_from(authed_page, current)
+    posts: list = []
+
+    def _prune(route) -> None:
+        posts.append(route.request.method)
+        rows[:] = [r for r in rows if r["status"] != "merged"]
+        f.write_text(_json.dumps({
+            "version": 1, "updated_at": "2026-10-25T09:05:00Z",
+            "lanes": [{"repo": "app-launcher", "session": "s-a", "item": "#2", "status": "building"}],
+            "queue": rows, "waiting_on_roberto": _QUESTIONS,
+        }), encoding="utf-8")
+        current["plan"] = chief_plan.read_chief_plan(f, "octo")
+        route.fulfill(json={"pruned": 2})
+
+    authed_page.route(re.compile(r".*/api/board/chief-plan/prune$"), _prune)
+    _open_board(authed_page, base_url)
+    plan_body = authed_page.locator("#boardChiefPlan .board-plan-body")
+    button = plan_body.locator(".board-clear")
+    expect(button).to_have_text("Clear merged (2)")
+    box = stable_read(button.bounding_box)
+    assert box and box["height"] >= 44, f"clear button under the 44px tap floor: {box}"
+
+    button.click()
+    expect(authed_page.locator("#toast")).to_have_text("Cleared 2 merged items")
+    expect(button).to_have_count(0)
+    expect(plan_body).not_to_contain_text("shipped")
+    expect(plan_body).to_contain_text("in flight")
+    expect(plan_body.locator("li.board-plan-waiting")).to_have_count(3)
+    assert posts == ["POST"], posts
+
+
+def test_questions_show_their_date_and_sort_newest_first(
+    authed_page: Page, base_url: str, tmp_path
+) -> None:
+    """A question shows the day it was asked in its meta; the newest sits on
+    top and an undated one sorts last with no date of its own."""
+    waiting = [
+        {"id": "q-old", "ref": "demo-repo#1", "text": "Older", "asked_at": "2020-01-15"},
+        {"id": "q-none", "ref": "demo-repo#2", "text": "Undated"},
+        {"id": "q-new", "ref": "demo-repo#3", "text": "Newer", "asked_at": "2020-03-02"},
+    ]
+    _mock_board(authed_page, _board_payload(with_chief=True))
+    _route_plan_from(authed_page, {"plan": _plan_with(tmp_path, waiting)})
+    _open_board(authed_page, base_url)
+
+    rows = authed_page.locator("#boardChiefPlan .board-plan-group-waiting li.board-plan-waiting")
+    expect(rows).to_have_count(3)
+    expect(rows.locator(".action-row-title")).to_have_text(["Newer", "Older", "Undated"])
+    # The date is the non-shrinking tail beside the ref; an undated question
+    # has none, so its meta is the ref alone.
+    expect(rows.locator(".action-row-meta-text")).to_have_text(["demo-repo#3", "demo-repo#1"])
+    expect(rows.locator(".action-row-meta-tail")).to_have_text(["2 Mar 2020", "15 Jan 2020"])
+    expect(rows.nth(2).locator(".action-row-meta")).to_have_text("demo-repo#2")
+
+
+@pytest.mark.iphone
+def test_lanes_queue_and_parked_each_fold_on_their_own(
+    authed_page: Page, base_url: str, tmp_path
+) -> None:
+    """Lanes and Queue fold on the Parked row's summary and start open; folding
+    one hides its rows (and the Queue's note) and leaves the others alone."""
+    _mock_board(authed_page, _board_payload(with_chief=True))
+    f = tmp_path / "chief-plan.json"
+    f.write_text(_json.dumps({
+        "version": 1, "updated_at": "2026-09-27T09:00:00Z",
+        "lanes": [{"repo": "app-launcher", "session": "s-a", "item": "#1578", "status": "building"}],
+        "queue": [
+            {"repo": "app-launcher", "ref": "#1500", "title": "In the queue", "status": "queued"},
+            {"repo": "app-launcher", "ref": "#1400", "title": "Set aside", "status": "parked"},
+        ],
+    }), encoding="utf-8")
+    _route_plan_from(authed_page, {"plan": chief_plan.read_chief_plan(f, "octo")})
+    _open_board(authed_page, base_url)
+
+    body = authed_page.locator("#boardChiefPlan .board-plan-body")
+    lanes = body.locator("details.board-plan-fold").nth(0)
+    queue = body.locator("details.board-plan-fold").nth(1)
+    parked = body.locator("details.board-plan-parked")
+    expect(lanes.locator("summary")).to_have_text("Lanes (1)")
+    expect(queue.locator("summary")).to_have_text("Queue (1)")
+    expect(lanes).to_have_attribute("open", "")
+    expect(queue).to_have_attribute("open", "")
+    expect(lanes.locator("li.board-plan-row")).to_be_visible()
+    expect(queue.locator(".board-plan-section-note")).to_be_visible()
+    for group in (lanes, queue):
+        box = stable_read(group.locator("summary").bounding_box)
+        assert box and box["height"] >= 44, f"fold row is below a 44px target: {box}"
+
+    lanes.locator("summary").click()
+    expect(lanes.locator("li.board-plan-row")).to_be_hidden()
+    expect(queue.locator("li.board-plan-row")).to_be_visible()
+    queue.locator("summary").click()
+    expect(queue.locator("li.board-plan-row")).to_be_hidden()
+    expect(queue.locator(".board-plan-section-note")).to_be_hidden()
+    expect(queue.locator("summary")).to_have_text("Queue (1)")
+    lanes.locator("summary").click()
+    expect(lanes.locator("li.board-plan-row")).to_be_visible()
+    expect(parked.locator("summary")).to_have_text("Parked (1)")
+
+    # Collapse all / Expand all drives the same open state: every lane card
+    # and nested group folds, a refresh keeps them folded, one chevron still
+    # works, and the label follows what is really open.
+    toggle = authed_page.locator("#boardFoldAll")
+    cards = authed_page.locator(
+        "#boardColBacklog, #boardChiefPlan, #boardColClaude, #boardColYours, #boardColOther, #boardColDone")
+    groups = body.locator("details.board-plan-fold")
+    box = stable_read(toggle.bounding_box)
+    assert box and box["width"] >= 43.5 and box["height"] >= 43.5, f"below a 44px target: {box}"
+    expect(toggle).to_have_attribute("aria-label", "Collapse all cards")
+    toggle.click()
+    expect(toggle).to_have_attribute("aria-label", "Expand all cards")
+    for i in range(cards.count()):
+        expect(cards.nth(i)).not_to_have_attribute("open", "")
+    for i in range(groups.count()):
+        expect(groups.nth(i)).not_to_have_attribute("open", "")
+    expect(authed_page.locator("#boardRefresh")).to_be_enabled()
+    authed_page.locator("#boardRefresh").click()
+    flush_requests(authed_page)
+    expect(authed_page.locator("#boardRefresh")).to_be_enabled()
+    expect(groups.first).not_to_have_attribute("open", "")
+    expect(toggle).to_have_attribute("aria-label", "Expand all cards")
+    authed_page.locator("#boardChiefPlan > summary").click()
+    expect(toggle).to_have_attribute("aria-label", "Collapse all cards")
+    toggle.click()
+    toggle.click()
+    expect(toggle).to_have_attribute("aria-label", "Collapse all cards")
+    for i in range(cards.count()):
+        expect(cards.nth(i)).to_have_attribute("open", "")
+    for i in range(groups.count()):
+        expect(groups.nth(i)).to_have_attribute("open", "")
+    groups.first.locator("summary").click()
+    expect(groups.first).not_to_have_attribute("open", "")
+    expect(groups.nth(1)).to_have_attribute("open", "")
+
+
+@pytest.mark.iphone
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_questions_fold_with_their_answer_button_in_the_shared_heading(
+    authed_page: Page, base_url: str, tmp_path, theme: str
+) -> None:
+    """The Questions group folds like Lanes and Queue, the Answer button folds
+    away with it, and its heading differs from theirs in colour only."""
+    waiting = [
+        {"id": "q-1", "ref": "demo-repo#1", "text": "First question?", "question": "First?"},
+        {"id": "q-2", "ref": "demo-repo#2", "text": "Second question?", "question": "Second?"},
+    ]
+    _mock_board(authed_page, _board_payload(with_chief=True))
+    _route_plan_from(authed_page, {"plan": _plan_with(tmp_path, waiting)})
+    _open_board(authed_page, base_url)
+    authed_page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
+
+    body = authed_page.locator("#boardChiefPlan .board-plan-body")
+    questions = body.locator("details.board-plan-group-waiting")
+    queue = body.locator("details.board-plan-fold").nth(1)
+    expect(questions).to_have_attribute("open", "")
+    expect(questions.locator("li.board-plan-waiting")).to_have_count(2)
+    expect(questions.locator(".board-plan-answer")).to_be_visible()
+
+    questions.locator("summary").click()
+    expect(questions).not_to_have_attribute("open", "")
+    expect(questions.locator("li.board-plan-waiting").first).to_be_hidden()
+    expect(questions.locator(".board-plan-answer")).to_be_hidden()
+    expect(queue).to_have_attribute("open", "")
+    questions.locator("summary").click()
+    expect(questions.locator(".board-plan-answer")).to_be_visible()
+
+    style_js = ("el => { const s = getComputedStyle(el);"
+                " return [s.fontSize, s.fontWeight, s.textTransform, s.letterSpacing, s.color]; }")
+    q_style = stable_eval(questions.locator("summary"), style_js)
+    f_style = stable_eval(queue.locator("summary"), style_js)
+    assert q_style[:4] == f_style[:4], f"Questions heading differs from Queue's: {q_style} vs {f_style}"
+    assert q_style[4] != f_style[4], "Questions keeps its attention colour"
+    box = stable_read(questions.locator("summary").bounding_box)
+    assert box and box["height"] >= 44, f"fold row is below a 44px target: {box}"
+
+
+def _check_note_sheet_dismissals(page: Page, row, sheet) -> None:
+    """The chevron opens the same sheet as the row; ✕, a backdrop tap and Escape close it."""
+    row.locator(".board-plan-chevron").click()
+    expect(sheet).to_be_visible()
+    sheet.locator("#planNoteClose").click()
+    expect(sheet).to_be_hidden()
+    row.locator(".action-row-main").click()
+    expect(sheet).to_be_visible()
+    page.mouse.click(2, 2)
+    expect(sheet).to_be_hidden()
+    row.locator(".action-row-main").click()
+    expect(sheet).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(sheet).to_be_hidden()
+
+
+def _check_parked_note_sheets(page: Page, parked_rows, sheet) -> None:
+    """A parked row opens its note; a row with a note and no link has no Open button."""
+    parked_rows.first.locator(".action-row-main").click()
+    expect(sheet.locator(".plan-note-text")).to_have_text("parked until the hub ships")
+    expect(sheet.locator("#planNoteOpen")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(sheet).to_be_hidden()
+    parked_rows.nth(1).locator(".action-row-main").click()
+    expect(sheet.locator(".plan-note-text")).to_have_text("a note on a row with no issue")
+    expect(sheet.locator("#planNoteOpen")).to_be_hidden()
+    page.keyboard.press("Escape")
+    expect(sheet).to_be_hidden()
+
+
+@pytest.mark.iphone
+def test_a_noted_plan_row_opens_its_note_sheet(
+    authed_page: Page, base_url: str, tmp_path
+) -> None:
+    """#2439: a queue or parked row that carries the chief's note shows
+    the note glyph and opens a sheet with the note in full, never the issue;
+    the sheet's Open on GitLab opens the issue, and ✕, a backdrop tap and
+    Escape close it. A row without a note still opens GitHub on a tap. Both
+    paths, light and dark."""
+    authed_page.add_init_script(
+        "window.__opened = [];"
+        " window.open = function (u) { window.__opened.push(u); return null; };")
+    _mock_board(authed_page, _board_payload(with_chief=True))
+    note = "PR #276 merged as 70a6f93, waits on #249 <b>not html</b>"
+    f = tmp_path / "chief-plan.json"
+    f.write_text(_json.dumps({
+        "version": 1, "updated_at": "2026-09-27T09:00:00Z",
+        "lanes": [],
+        "queue": [
+            {"repo": "app-launcher", "ref": "#1500", "title": "Adopt the usage log",
+             "status": "queued", "model": "sonnet", "note": note},
+            {"repo": "fleet-config", "ref": "#12", "title": "Second in line", "status": "building"},
+            {"repo": "app-launcher", "ref": "#1400", "title": "Parked with a note",
+             "status": "parked", "note": "parked until the hub ships"},
+            {"repo": "automation", "ref": "", "title": "Noted, no link",
+             "status": "waiting-roberto", "note": "a note on a row with no issue"},
+        ],
+    }), encoding="utf-8")
+    _route_plan_from(authed_page, {"plan": chief_plan.read_chief_plan(f, "octo")})
+    _open_board(authed_page, base_url)
+
+    plan_body = authed_page.locator("#boardChiefPlan .board-plan-body")
+    expect(plan_body).to_have_attribute("data-state", "ok")
+    parked = plan_body.locator(".board-plan-parked")
+    if (authed_page.viewport_size or {"width": 0})["width"] < 700:
+        parked.locator("summary").click()
+    queue = plan_body.locator(".board-plan-group", has_text="Queue (2)").locator("li.board-plan-row")
+    parked_rows = parked.locator("li.board-plan-row")
+    sheet = authed_page.locator("#planNoteDialog")
+
+    def opened() -> list:
+        return authed_page.evaluate("() => window.__opened")
+
+    # Only the rows with a note carry the glyph.
+    expect(queue.first.locator(".board-plan-note-glyph")).to_have_count(1)
+    expect(queue.nth(1).locator(".board-plan-note-glyph")).to_have_count(0)
+    expect(parked_rows.locator(".board-plan-note-glyph")).to_have_count(2)
+
+    for theme in ("light", "dark"):
+        authed_page.emulate_media(color_scheme=theme)
+        authed_page.evaluate("t => { document.documentElement.dataset.theme = t; }", theme)
+
+        # A row without a note opens GitHub, as before.
+        queue.nth(1).locator(".action-row-main").click()
+        expect(sheet).to_be_hidden()
+        assert opened()[-1] == "https://gitlab.com/octo/fleet-config/-/issues/12"
+        before = len(opened())
+
+        # A noted row opens the sheet: its title, ref, model, status and the note as text.
+        queue.first.locator(".action-row-main").click()
+        expect(sheet).to_be_visible()
+        assert len(opened()) == before
+        expect(sheet.locator(".plan-note-title")).to_have_text("Adopt the usage log")
+        expect(sheet.locator(".plan-note-meta")).to_contain_text("app-launcher#1500")
+        expect(sheet.locator(".plan-note-meta")).to_contain_text("Sonnet")
+        expect(sheet.locator(".plan-note-meta .board-plan-chip")).to_have_text("queued")
+        expect(sheet.locator(".plan-note-text")).to_have_text(note)
+        expect(sheet.locator(".plan-note-text b")).to_have_count(0)
+        box = stable_read(sheet.bounding_box)
+        viewport = authed_page.viewport_size or {"width": 0}
+        assert box and box["x"] >= 0 and box["x"] + box["width"] <= viewport["width"], box
+        action = sheet.locator("#planNoteOpen")
+        abox = stable_read(action.bounding_box)
+        assert abox and abox["height"] >= 44, f"Open on GitLab under the 44px floor: {abox}"
+
+        # Open on GitLab opens the issue and closes the sheet.
+        action.click()
+        expect(sheet).to_be_hidden()
+        assert opened()[-1] == "https://gitlab.com/octo/app-launcher/-/issues/1500"
+
+        _check_note_sheet_dismissals(authed_page, queue.first, sheet)
+        _check_parked_note_sheets(authed_page, parked_rows, sheet)
+        assert opened()[-1] == "https://gitlab.com/octo/app-launcher/-/issues/1500"

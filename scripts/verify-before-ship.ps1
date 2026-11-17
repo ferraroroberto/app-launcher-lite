@@ -1,82 +1,76 @@
-# Pre-ship verification gate.
+# Pre-ship verification gate (Phone-validation 4/5).
 #
 # Runs the full validation pipeline locally before a change is declared
-# "done": byte-compile, the non-e2e pytest suite, the static ratchet (no new
-# duplicate block / unused import / likely bug or security finding beyond the
-# committed baseline), the docs
-# ratchet (no new history marker, README within its size budget), the structure
-# ratchet (no file/function/directory growth, root layout matches the shape), the
-# conventions ratchet (no fleet-convention rule count above the baseline), the
-# comment ratchet (no more issue references in code comments than the baseline),
-# the runtime write ratchet (no new write target resolving under a code folder), the
-# usage track ratchet (no new untracked control, sheet or built id, usage log wired), then
-# the Playwright e2e suite (Chromium — this app is Android-only) against a disposable
-# webapp the script boots itself on a free port, then the screenshot baseline
-# (no visible change against the committed PNGs under tests/e2e/shots).
+# "done": byte-compile, the non-e2e pytest suite, then the Playwright e2e
+# suite (Chromium + WebKit/iPhone projections) against a disposable webapp
+# the script boots itself on a free port.
 #
 # Usage:
 #   C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/verify-before-ship.ps1
 #   powershell -File scripts\verify-before-ship.ps1   # Windows PowerShell 5.1 works too
 #
-# A tray on :8465 may be running or not — autoboot picks a free port for its
-# own webapp and adopts the tray's session-host on :8466 if one is up. Exits
-# non-zero on the first failure with the offending output left visible.
+# A tray on :8465 may be running or not -- autoboot always picks a free port
+# for its own webapp and spawns its own disposable session-host on a free
+# port, never adopting the tray's live :8466. Exits non-zero on
+# the first failure with the offending output left visible.
 #
-# The last stdout line is `GATE-RESULT: PASS` or `GATE-RESULT: FAIL`, on every
-# path that can still run code. Never pipe the gate when its exit code matters
-# (`... | tail -40` reports tail's status, so a red run reads green); a caller
-# that cannot avoid a pipe asserts on that line. A run with no such line is not
-# a pass. Exit codes stay 0 (pass) and 1 (anything else).
+# Never pipe this script when its exit code matters -- a
+# pipeline's status is its last command's, so `... | tail -40` reports 0 for a
+# failed gate. Redirect and read the file:
+#   C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/verify-before-ship.ps1 > gate.log 2>&1; echo "exit=$?"
+# A caller that cannot avoid a pipe asserts on the final `GATE-RESULT: PASS`
+# / `GATE-RESULT: FAIL` line, which a pipe cannot rewrite.
 
 $ErrorActionPreference = "Stop"
 
-# gate-verdict:begin
-# The verdict is the last stdout line of every path that can still run code. A
-# terminating error under the "Stop" preference above would otherwise print to
-# stderr only and exit 1, leaving a piped caller an empty, apparently clean run,
-# so the trap reports it on stdout first. Exit codes stay 0 (pass) and 1 (fail).
+# Machine-greppable verdict, emitted as the last line of every path this
+# script can still run code on. A pipeline's status is its
+# *last* command's status, so `verify-before-ship.ps1 | tail -40` hands the
+# caller tail's 0 and the genuine failure disappears -- a verification gate
+# reporting green on a red run. A caller that cannot avoid a pipe asserts on
+# this line instead of `$?`.
+#
+# Defined first, and paired with the trap below, because the paths that most
+# need it are the early ones: a terminating error under the "Stop" preference
+# above (a read-only progress-log directory, a missing helper, an unusable
+# interpreter path) printed its error to *stderr* and exited 1, so a caller
+# piping stdout saw an empty, entirely silent, apparently-successful run --
+# zero lines and $? of 0, worse than the failure this issue was filed for.
+#
+# Its absence still means something, for what is left: the script was killed,
+# an outer timeout fired, or PowerShell could not parse the file at all. None
+# of those is a pass either.
 function Write-GateResult($verdict) {
     Write-Host "GATE-RESULT: $verdict"
 }
 
-function Complete-Gate([int]$Code) {
-    Write-GateResult $(if ($Code -eq 0) { "PASS" } else { "FAIL" })
-    exit $Code
-}
-
+# Any terminating error anywhere below lands here: report it on *stdout* where
+# a piped caller can see it, then emit the verdict and keep the exit code the
+# script already had (a terminating error under -File exits 1). Deliberately
+# defensive -- it runs before $progressLog and the logging helpers exist, so
+# the progress-log write is best-effort and never masks the original error.
 trap {
     Write-Host ""
-    Write-Host "[FAIL] the gate aborted on an unhandled error:" -ForegroundColor Red
-    Write-Host ("       {0}" -f $_.Exception.Message) -ForegroundColor Red
-    Complete-Gate 1
-}
-# gate-verdict:end
-
-# e2e-target:begin
-# The classifier prints E2E_PYTEST_TARGET as one or more space-joined paths. Pytest
-# needs each as its own argument: handed whole, a two-module target is one path with
-# a space in it and collects nothing.
-function Split-E2eTarget([string]$Target) {
-    return @($Target -split '\s+' | Where-Object { $_ })
-}
-
-# A target that runs the whole suite or the capture module has just recaptured every
-# shot, so the baseline stage only compares; any other slice leaves the capture to it.
-function Test-ShotsRecaptured([string[]]$Targets) {
-    $capturing = @("tests/e2e", "tests/e2e/screens/test_screen_shots.py")
-    foreach ($t in $Targets) {
-        if ($capturing -contains ($t -replace '\\', '/').TrimEnd('/')) { return $true }
+    Write-Host "[X] the gate aborted on an unhandled error:" -ForegroundColor Red
+    Write-Host ("    {0}" -f $_.Exception.Message) -ForegroundColor Red
+    if ($_.InvocationInfo) {
+        Write-Host ("    at {0}:{1}" -f $_.InvocationInfo.ScriptName,
+                                        $_.InvocationInfo.ScriptLineNumber) -ForegroundColor Red
     }
-    return $false
+    try { Log-Progress ("ABORTED: {0}" -f $_.Exception.Message) } catch { }
+    try { Remove-Item Env:\LAUNCHER_VERIFY_PROGRESS_LOG -ErrorAction SilentlyContinue } catch { }
+    Write-GateResult "FAIL"
+    exit 1
 }
-# e2e-target:end
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $python = Join-Path $repoRoot ".venv\Scripts\python.exe"
+# e2e tests that timed out under load and passed on their one retry.
+$e2eFlaky = @()
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
 # Persistent progress log: phase markers land here from this
-# script, per-test START/DONE lines from the pytest hook in tests/conftest.py
+# script, per-test START/DONE lines from the pytest hook in tests/_progress_log.py
 # (via LAUNCHER_VERIFY_PROGRESS_LOG). If an outer timeout kills the gate, the
 # last lines name the active phase + node id and the per-test timings survive.
 # Gitignored via the blanket *.log rule; overwritten each run.
@@ -93,6 +87,26 @@ function Log-Progress($message) {
     )
 }
 
+# Append this run to the durable history in the primary checkout. The
+# caller holds the e2e gate mutex, which is what serialises two gates ending at
+# once in sibling worktrees. A history that could not be written is reported
+# loudly but never fails a gate whose tests passed.
+function Publish-ProgressHistory {
+    try {
+        $historyLog = Get-ProgressHistoryPath -RepoRoot $repoRoot
+        if (-not $historyLog) { throw "git could not name the primary checkout" }
+        $run = [System.IO.File]::ReadAllText($progressLog)
+        $old = if (Test-Path $historyLog) { [System.IO.File]::ReadAllText($historyLog) } else { "" }
+        [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $historyLog))
+        [System.IO.File]::WriteAllText($historyLog, (Merge-ProgressHistory -History $old -Run $run),
+                                       (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host "    e2e run recorded in $historyLog" -ForegroundColor DarkGray
+    }
+    catch {
+        Write-Host ("[!] e2e run history NOT recorded: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
+    }
+}
+
 function Phase($message) {
     Write-Host "==> $message" -ForegroundColor Cyan
     Log-Progress "==> phase: $message"
@@ -104,8 +118,68 @@ function Fail($message) {
     Write-Host ("Failed after {0:n1}s." -f $sw.Elapsed.TotalSeconds) -ForegroundColor Red
     Log-Progress ("FAILED: {0} (after {1:n1}s)" -f $message, $sw.Elapsed.TotalSeconds)
     Remove-Item Env:\LAUNCHER_VERIFY_PROGRESS_LOG -ErrorAction SilentlyContinue
-    Complete-Gate 1
+    Write-GateResult "FAIL"
+    exit 1
 }
+
+# Every ratchet stage reads the whole tree, so none is path-routed. Exit 3 means
+# the count could not be established, which is its own failure and never a pass;
+# one handler owns that rule so a stage added to the table cannot get it wrong.
+function Invoke-RatchetStage($stage) {
+    Phase "$($stage.Name) ratchet..."
+    & $python @($stage.Argv)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -eq 3) { Fail "$($stage.Name) ratchet NOT CONFIRMED ($($stage.NotConfirmed))." }
+    if ($exitCode -ne 0) { Fail "$($stage.Name) ratchet failed (exit $exitCode): $($stage.Failed)" }
+}
+
+# ratchet-stages:begin
+$ratchetStages = @(
+    @{ Name = "comment"; Argv = @("scripts/comment_ratchet.py")
+       NotConfirmed = "a file could not be scanned or git was unusable"
+       Failed = "a file has more #NNN comment references than .comment-ratchet-baseline.json." }
+    # tests/ lines over src/ + app/ lines may not rise above .fleet.toml [test_weight] ratio_ceiling.
+    @{ Name = "suite weight"; Argv = @("-m", "scripts.suite_weight_ratchet")
+       NotConfirmed = "git was unusable or a file could not be read"
+       Failed = "the test-to-code ratio is above .fleet.toml [test_weight] ratio_ceiling, or the table is malformed." }
+    # Duplicate blocks (jscpd via npx) and unused imports/variables (ruff).
+    @{ Name = "static"; Argv = @("scripts/static_ratchet.py")
+       NotConfirmed = "a detector could not run: Node/npx or ruff missing, or output unparseable"
+       Failed = "a new duplicate block or unused import/variable, or a baseline problem; see .static-ratchet-baseline.json." }
+    # README size and history markers (issue references, dated and changelog headings).
+    @{ Name = "docs"; Argv = @("scripts/docs_ratchet.py")
+       NotConfirmed = "git was unusable, or a doc is not UTF-8 or has a fence/comment that never closes"
+       Failed = "README.md grew past its size budget, or a doc gained an issue reference or dated/changelog heading; see .docs-ratchet-baseline.json." }
+    # File size, function length, flat directories, the src -> app layer contract and the root layout.
+    @{ Name = "structure"; Argv = @("scripts/structure_ratchet.py")
+       NotConfirmed = "git was unusable, a file could not be read or parsed, or the declared shape is unknown"
+       Failed = "a new or grown file, function or directory, a src -> app import, or a root folder the shape does not list; see docs/layout.md and .structure-ratchet-baseline.json." }
+    # Lint rules over CLAUDE.md, AGENTS.md and every SKILL.md: AGENTS.md decides how CLAUDE.md is read.
+    @{ Name = "instruction"; Argv = @("scripts/instruction_ratchet.py")
+       NotConfirmed = "git was unusable, or an instruction file is not UTF-8, has a fence that never closes, or a skill description that cannot be read"
+       Failed = "an instruction file gained a lint hit or passed its size cap beyond .instruction-ratchet-baseline.json; see the named rule and lines above." }
+    # A code change can strand a doc reference without touching the doc.
+    @{ Name = "doc refs"; Argv = @("scripts/doc_refs_ratchet.py")
+       NotConfirmed = "git was unusable, or a doc is not UTF-8 or has a fence or HTML comment that never closes"
+       Failed = "a doc names a repo path, module, link or port that does not exist beyond .doc-refs-ratchet-baseline.json; see the named reference above." }
+    # Deleting the last caller in one file strands a definition in another.
+    @{ Name = "dead code"; Argv = @("scripts/dead_code_ratchet.py")
+       NotConfirmed = "git was unusable, or a tracked .py file cannot be read or does not parse"
+       Failed = "a function, class or method nothing refers to is not in .dead-code-ratchet-baseline.json; see the named definition above." }
+    # A rule added to .fleet.toml must see every file.
+    @{ Name = "conventions"; Argv = @("scripts/conventions_ratchet.py")
+       NotConfirmed = "git was unusable, or a tracked .py file cannot be read or does not parse"
+       Failed = "a file's count for a convention rule rose above .conventions-ratchet-baseline.json; see the named rule and lines above." }
+    # Writes resolving under a code folder: runtime output belongs under the runtime root.
+    @{ Name = "runtime write"; Argv = @("scripts/runtime_write_ratchet.py")
+       NotConfirmed = "a new write target could not be resolved, git was unusable, or a tracked .py file does not parse"
+       Failed = "a file gained a write target resolving under a code folder beyond .runtime-write-ratchet-baseline.json; see the named target above." }
+    # Every UX control tracked in the usage log: a new untracked control or sheet fails the ship.
+    @{ Name = "usage track"; Argv = @("scripts/usage_track_ratchet.py")
+       NotConfirmed = "a web file could not be read or its JS never closed, so it was not checked"
+       Failed = "a rule's hits rose above .usage-track-ratchet-baseline.json, or the usage log is not wired; see the named control above." }
+)
+# ratchet-stages:end
 
 if (-not (Test-Path $python)) {
     Fail ".venv missing -- run setup.bat first."
@@ -119,251 +193,220 @@ try {
     & $python -m compileall -q app src tests
     if ($LASTEXITCODE -ne 0) { Fail "byte-compile failed." }
 
+    foreach ($stage in $ratchetStages) { Invoke-RatchetStage $stage }
+
+    # Worker counts for both pytest phases live in e2e-gate-route.ps1;
+    # a bad override fails here, before any phase runs.
+    . (Join-Path $PSScriptRoot "e2e-gate-route.ps1")
+    try {
+        $unitPlan = Get-UnitWorkerArgs -Setting $env:UNIT_WORKERS
+    }
+    catch {
+        Fail $_.Exception.Message
+    }
+    $unitLabel = if ($unitPlan.Workers -gt 1) { "$($unitPlan.Workers) workers" } else { "serial" }
+
     # Runtime write probe, first half: what already sits untracked or ignored under the
     # code folders, so the probe after the test runs names only what they wrote.
     $runtimeSnapshot = Join-Path ([IO.Path]::GetTempPath()) "runtime-write-snapshot-$PID.json"
     Phase "runtime write probe (snapshot)..."
-    & $python "scripts/runtime_write_ratchet.py" --snapshot $runtimeSnapshot
+    & $python scripts/runtime_write_ratchet.py --snapshot $runtimeSnapshot
     if ($LASTEXITCODE -ne 0) { Fail "runtime write probe could not take its snapshot (exit $LASTEXITCODE)." }
-
-    Phase "pytest (non-e2e)..."
-    & $python -m pytest -q --ignore=tests/e2e
+    Phase "pytest (non-e2e, $unitLabel)..."
+    & $python -m pytest -q --ignore=tests/e2e @($unitPlan.Args)
     if ($LASTEXITCODE -ne 0) { Fail "non-e2e pytest suite failed." }
-
-    # Static ratchet (scaffold docs/static-ratchet.md): no new duplicate block
-    # (jscpd via npx), unused import/variable (ruff F401,F841) or likely bug /
-    # security finding (curated ruff B and S rules, S113 strict) beyond
-    # .static-ratchet-baseline.json. Whole tree, so never diff-routed. Runs
-    # through the wrapper, which fails exit 3 (a detector could not run) as
-    # NOT CONFIRMED instead of letting it read as a pass.
-    Phase "static ratchet..."
-    & $python -m scripts.static_ratchet_gate
-    if ($LASTEXITCODE -ne 0) { Fail "static ratchet failed or NOT CONFIRMED: a new duplicate block or unused import/variable, a detector that could not run (Node/npx or ruff missing), or a baseline problem; see the output above and .static-ratchet-baseline.json." }
-
-    # Docs ratchet (scaffold docs/docs-ratchet.md): README.md within its size
-    # budget and no new history marker (issue reference, dated or changelog
-    # heading) in README.md / docs/**/*.md beyond .docs-ratchet-baseline.json.
-    # Whole tree, so never diff-routed. Same wrapper shape as the static ratchet:
-    # exit 3 (a file could not be read) is NOT CONFIRMED and fails.
-    Phase "docs ratchet..."
-    & $python -m scripts.docs_ratchet_gate
-    if ($LASTEXITCODE -ne 0) { Fail "docs ratchet failed or NOT CONFIRMED: a new history marker, a README past its size budget, a file that could not be read, or a baseline problem; see the output above and .docs-ratchet-baseline.json." }
-
-    # Structure ratchet (scaffold docs/structure-ratchet.md): no file past 1,000
-    # lines, function past 100, directory past 40 modules or src->app import
-    # beyond .structure-ratchet-baseline.json, and root folders matching the
-    # shape declared in .fleet.toml (docs/layout.md). Whole tree, so never
-    # diff-routed. Same wrapper shape as the other ratchets: exit 3 (part of the
-    # tree could not be measured) is NOT CONFIRMED and fails.
-    Phase "structure ratchet..."
-    & $python -m scripts.structure_ratchet_gate
-    if ($LASTEXITCODE -ne 0) { Fail "structure ratchet failed or NOT CONFIRMED: a file, function or directory grew past its baseline, a new offender, a root folder outside the declared shape, a file that could not be measured, or a baseline problem; see the output above, docs/layout.md and .structure-ratchet-baseline.json." }
-
-    # Instruction ratchet (scaffold docs/instruction-ratchet.md): no instruction file
-    # (CLAUDE.md, AGENTS.md, .claude/rules, SKILL.md and the docs a skill links to) may
-    # carry more weekly-prompt-audit rule hits than .instruction-ratchet-baseline.json
-    # records or pass its size cap. Whole tree, so never diff-routed. Same wrapper shape
-    # as the other ratchets: exit 3 (a file could not be read) is NOT CONFIRMED and fails.
-    Phase "instruction ratchet..."
-    & $python -m scripts.instruction_ratchet_gate
-    if ($LASTEXITCODE -ne 0) { Fail "instruction ratchet failed or NOT CONFIRMED: an instruction file has a new rule hit or passed its size cap, a file could not be read, or a baseline problem; see the output above and .instruction-ratchet-baseline.json." }
-
-    # Doc-refs ratchet (scaffold docs/doc-refs-ratchet.md): README.md, CLAUDE.md and
-    # docs/**/*.md may not name a repo path, python -m module, relative link or loopback
-    # port that does not exist beyond .doc-refs-ratchet-baseline.json. Whole tree, so
-    # never diff-routed: a code change can strand a doc reference without touching the
-    # doc. Same wrapper shape as the other ratchets: exit 3 (git or a doc could not be
-    # read) is NOT CONFIRMED and fails.
-    Phase "doc refs ratchet..."
-    & $python -m scripts.doc_refs_ratchet_gate
-    if ($LASTEXITCODE -ne 0) { Fail "doc refs ratchet failed or NOT CONFIRMED: a doc names a path, module, link or port that does not exist, git or a doc could not be read, or a baseline problem; see the output above and .doc-refs-ratchet-baseline.json." }
-
-    # Dead-code ratchet (scaffold docs/dead-code-ratchet.md): no new function, class or
-    # method that nothing in the tracked Python tree refers to, beyond
-    # .dead-code-ratchet-baseline.json. Whole tree, so never diff-routed: deleting the
-    # last caller in one file strands a definition in another. Same wrapper shape as the
-    # other ratchets: exit 3 (git unusable, or a .py file that cannot be read or parsed)
-    # is NOT CONFIRMED and fails.
-    Phase "dead code ratchet..."
-    & $python -m scripts.dead_code_ratchet_gate
-    if ($LASTEXITCODE -ne 0) { Fail "dead code ratchet failed or NOT CONFIRMED: a function, class or method nothing references, git or a Python file could not be read or parsed, or a baseline problem; see the output above and .dead-code-ratchet-baseline.json." }
-
-    # Conventions ratchet (scaffold docs/conventions-ratchet.md): fleet conventions held
-    # as ast rules (no-window, logging-not-print, no-drive-path, secret-compare,
-    # git-wrapper); no rule's per-file count may rise above
-    # .conventions-ratchet-baseline.json. Whole tree, so never diff-routed: a rule added
-    # to `rules` must see every file. Same wrapper shape as the other ratchets: exit 3
-    # (git unusable, or a .py file that cannot be read or parsed) is NOT CONFIRMED and fails.
-    Phase "conventions ratchet..."
-    & $python -m scripts.conventions_ratchet_gate
-    if ($LASTEXITCODE -ne 0) { Fail "conventions ratchet failed or NOT CONFIRMED: a convention rule's count rose above its baseline, git or a Python file could not be read or parsed, or a baseline problem; see the output above and .conventions-ratchet-baseline.json." }
-
-    # Comment ratchet (scaffold docs/comment-ratchet.md): no file may carry more
-    # issue references (#NNN) inside code comments than .comment-ratchet-baseline.json
-    # records, and a new file may carry none. Whole tree, so never diff-routed. Same
-    # wrapper shape as the other ratchets: exit 3 (a file could not be scanned) is
-    # NOT CONFIRMED and fails.
-    Phase "comment ratchet..."
-    & $python -m scripts.comment_ratchet_gate
-    if ($LASTEXITCODE -ne 0) { Fail "comment ratchet failed or NOT CONFIRMED: a file carries more issue references in comments than its baseline, a file could not be scanned, or a baseline problem; see the output above and .comment-ratchet-baseline.json." }
-
-    # Runtime write ratchet (scaffold docs/runtime-write-ratchet.md): no file may gain a
-    # write target (open for writing, Path.write_*, mkdir, a log handler, sqlite3.connect)
-    # resolving under a code folder beyond .runtime-write-ratchet-baseline.json. Whole
-    # tree, so never diff-routed. Same wrapper shape as the other ratchets: exit 3 (a new
-    # target it cannot resolve) is NOT CONFIRMED and fails.
-    Phase "runtime write ratchet..."
-    & $python -m scripts.runtime_write_ratchet_gate
-    if ($LASTEXITCODE -ne 0) { Fail "runtime write ratchet failed or NOT CONFIRMED: a file gained a write under a code folder, a target could not be resolved, or a baseline problem; see the output above and .runtime-write-ratchet-baseline.json." }
-
-    # Usage track ratchet (scaffold docs/usage-track-ratchet.md): no web control without a
-    # constant tracking id, no <dialog> without data-track-view, no built id, and the usage
-    # log wired, beyond .usage-track-ratchet-baseline.json. Whole tree, so never diff-routed.
-    # Same wrapper shape as the other ratchets: exit 3 (a file that cannot be read or closed)
-    # is NOT CONFIRMED and fails.
-    Phase "usage track ratchet..."
-    & $python -m scripts.usage_track_ratchet_gate
-    if ($LASTEXITCODE -ne 0) { Fail "usage track ratchet failed or NOT CONFIRMED: an untracked control or sheet, a built id, the usage log not wired, a file that could not be read, or a baseline problem; see the output above and .usage-track-ratchet-baseline.json." }
 
     # Diff-proportionate e2e routing. Classify the branch's
     # changed files vs main and run an e2e slice proportionate to the diff:
     # static assets -> Chromium smoke only, real UI/behaviour -> the full
-    # suite, backend/docs-only -> no browser suite. Fail-safe: any
-    # mixed/ambiguous/unrecognized diff runs the full suite. The path->tier
-    # rules live in .fleet.toml's [e2e] table (scripts/classify_e2e.py is the vendored mechanism). On CI the
-    # full suite always runs -- the local gate is where routing is proven first.
-    $tier = "full"; $e2eTarget = "tests/e2e"; $e2eBrowsers = ""; $routeReason = ""
-    $sessionHostTouched = "unknown"
-    if ($env:CI -eq "true") {
-        $routeReason = "CI always runs the full e2e suite"
-    } else {
-        # classify_e2e.py sets GIT_OPTIONAL_LOCKS=0 on every git call it makes, and
-        # session_host_touched.py reads its diff through that same function.
+    # dual-projection suite, or only one declared surface's tests when every
+    # full-tier path sits in that surface, backend/docs-only -> no browser
+    # suite. Fail-safe: any mixed/ambiguous/unrecognized diff runs the full
+    # suite. The path->tier rules and surfaces live in .fleet.toml [e2e];
+    # scripts/classify_e2e.py is the scaffold's mechanism, and
+    # scripts/e2e-gate-route.ps1 turns its verdict into pytest arguments. On CI
+    # the browser suite is skipped entirely -- that job runs the
+    # clean-machine half, and this gate, here, is the contract for the rest.
+    $classifyOut = @()
+    if ($env:CI -ne "true") {
         $classifyOut = & $python (Join-Path $repoRoot "scripts\classify_e2e.py")
-        $shTouchedOut = & $python (Join-Path $repoRoot "scripts\session_host_touched.py")
-        $kv = @{}
-        foreach ($line in @($classifyOut) + @($shTouchedOut)) {
-            if ($line -match '^(E2E_[A-Z_]+)=(.*)$') { $kv[$matches[1]] = $matches[2] }
-        }
-        if ($kv.ContainsKey("E2E_TIER") -and $kv["E2E_TIER"]) {
-            $tier = $kv["E2E_TIER"]
-            $e2eTarget = $kv["E2E_PYTEST_TARGET"]
-            $e2eBrowsers = $kv["E2E_BROWSERS"]
-            $routeReason = $kv["E2E_REASON"]
-            if ($kv.ContainsKey("E2E_SESSION_HOST_TOUCHED")) { $sessionHostTouched = $kv["E2E_SESSION_HOST_TOUCHED"] }
-        } else {
-            $routeReason = "classifier gave no verdict -- defaulting to full suite (fail-safe)"
-        }
     }
+    $route = Get-E2ERoute -ClassifierOutput $classifyOut -IsCI ($env:CI -eq "true")
+    $tier = $route.Tier
+    $routeReason = $route.Reason
+    $e2eTargetLabel = @($route.Targets) -join " "
+    $e2eBrowsers = @($route.Browsers) -join ","
 
     if ($tier -eq "skip") {
-        Phase "e2e routing: SKIP browser suite (backend/docs-only diff)"
+        Phase "e2e routing: SKIP browser suite"
         Write-Host "    reason: $routeReason" -ForegroundColor DarkGray
         Log-Progress "e2e routing: tier=skip reason=$routeReason"
         Write-Host "    shot baseline skipped too: no screen was recaptured or compared" -ForegroundColor DarkGray
     } else {
+        # Parallel workers for the dual-projection tiers: the one
+        # setting is $E2EDefaultWorkers in e2e-gate-route.ps1, overridable
+        # with E2E_WORKERS. Resolved before the mutex so a bad value fails
+        # fast instead of after queueing.
+        try {
+            $workerPlan = Get-E2EWorkerArgs -Route $route -Setting $env:E2E_WORKERS
+        }
+        catch {
+            Fail $_.Exception.Message
+        }
         Phase "e2e routing: $tier ($routeReason)"
-        Log-Progress "e2e routing: tier=$tier target=$e2eTarget browsers=$e2eBrowsers reason=$routeReason"
+        Log-Progress "e2e routing: tier=$tier target=$e2eTargetLabel browsers=$e2eBrowsers workers=$($workerPlan.Workers) reason=$routeReason"
 
-        # Serialize full-tier e2e legs across concurrent primary/worktree gate
-        # runs on this machine. Two overlapping full-tier runs --
-        # a normal outcome of the fleet's own claim-or-worktree concurrency
-        # model -- each spinning up ~400 browser contexts is the
-        # ephemeral-port burst this suite can cause (Tcpip
-        # 4231, TIME_WAIT 206->979). A kernel-managed
-        # named mutex, not a lockfile: auto-released if a holder crashes, no
-        # stale-file cleanup path. Scoped to only this e2e leg -- byte-compile
-        # and the non-e2e pytest phase above never wait on it -- and only to
-        # the "full" tier; "static" (chromium-smoke-only) runs are cheap
-        # enough not to need it.
+        # Serialize dual-projection e2e legs across concurrent primary/worktree
+        # gate runs on this machine. Two overlapping runs -- a
+        # normal outcome of the fleet's own claim-or-worktree concurrency
+        # model -- each spinning up hundreds of browser contexts is the
+        # ephemeral-port burst fleet-config traced to this suite (Tcpip
+        # 4231, TIME_WAIT 206->979). A kernel-managed named mutex, not a
+        # lockfile: auto-released if a holder crashes, no stale-file cleanup
+        # path. Scoped to only this e2e leg -- byte-compile and the non-e2e
+        # pytest phase above never wait on it -- and taken by the "full" and
+        # "surface" tiers, which both run both projections; "static"
+        # (chromium-smoke-only) runs are cheap enough not to need it.
         $e2eMutexName = "Global\AppLauncherFullE2EGate"
         $e2eMutex = $null
         $e2eMutexAcquired = $false
-        if ($tier -eq "full") {
+        if ($route.Serialize) {
             $e2eMutex = New-Object System.Threading.Mutex($false, $e2eMutexName)
-            $e2eMutexAcquired = $e2eMutex.WaitOne(0)
+            # A holder that died without releasing hands the mutex to the next
+            # waiter as AbandonedMutexException; Wait-E2EGateMutex turns that
+            # into "acquired" so it is logged, not an aborted gate.
+            $e2eWait = Wait-E2EGateMutex -Mutex $e2eMutex -Timeout ([TimeSpan]::Zero)
+            $e2eMutexAcquired = $e2eWait.Acquired
             if (-not $e2eMutexAcquired) {
-                Phase "e2e gate: queued behind another full gate run (waiting on $e2eMutexName)..."
-                Log-Progress "e2e gate: queued -- another verify-before-ship full e2e run holds $e2eMutexName"
-                $e2eMutexAcquired = $e2eMutex.WaitOne([TimeSpan]::FromMinutes(30))
+                Phase "e2e gate: queued behind another dual-projection gate run (waiting on $e2eMutexName)..."
+                Log-Progress "e2e gate: queued -- another verify-before-ship dual-projection e2e run holds $e2eMutexName"
+                $e2eWait = Wait-E2EGateMutex -Mutex $e2eMutex -Timeout ([TimeSpan]::FromMinutes(30))
+                $e2eMutexAcquired = $e2eWait.Acquired
                 if (-not $e2eMutexAcquired) {
                     $e2eMutex.Dispose()
-                    Fail ("Timed out after 30 min waiting for another full e2e gate run to release " +
+                    Fail ("Timed out after 30 min waiting for another dual-projection e2e gate run to release " +
                           "$e2eMutexName -- check for a stuck/hung gate elsewhere on this machine (issue #685).")
                 }
-                Log-Progress "e2e gate: acquired $e2eMutexName after queueing"
+                if (-not $e2eWait.Abandoned) { Log-Progress "e2e gate: acquired $e2eMutexName after queueing" }
+            }
+            if ($e2eWait.Abandoned) {
+                Phase "e2e gate: the previous holder of $e2eMutexName ended without releasing it; taking over (#1682)."
+                Log-Progress "e2e gate: abandoned mutex -- previous holder of $e2eMutexName exited without releasing it; acquired it"
             }
         }
 
+        # Every disposable server this phase boots records its pid here; the
+        # sweep in the finally below stops whichever is still running. Only
+        # pids this run recorded, never a process matched by name or command line.
+        $pidLedger = Join-Path $repoRoot "webapp\e2e-autoboot-pids.jsonl"
+        New-Item -ItemType File -Force -Path $pidLedger | Out-Null
+        $env:LAUNCHER_E2E_PID_LEDGER = $pidLedger
         try {
             $env:LAUNCHER_E2E_AUTOBOOT = "1"
-            # Taken before the run: a shot written after it was recaptured by it.
-            $shotSince = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
             # On CI run verbose + unbuffered so a hung test (pytest-timeout aborts
             # the process via os._exit, skipping the summary) is named by the last
             # nodeid logged at test start. Locally keep the compact dotted output.
             $verbosity = if ($env:CI -eq "true") { "-v" } else { "-q" }
             if ($env:CI -eq "true") { $env:PYTHONUNBUFFERED = "1" }
-            $e2eTargets = Split-E2eTarget $e2eTarget
-            $e2eArgs = @($e2eTargets) + @($verbosity)
-            foreach ($b in ($e2eBrowsers -split ',' | Where-Object { $_ })) {
-                $e2eArgs += @("--browser", $b)
+            $e2eBase = @($route.Targets) + @($verbosity)
+            $browserArgs = @()
+            foreach ($b in @($route.Browsers)) {
+                $browserArgs += @("--browser", $b)
             }
-            $projLabel = if ($e2eBrowsers) { $e2eBrowsers } else { "Chromium" }
-            Phase "pytest e2e ($e2eTarget, $projLabel, auto-booted)..."
+            $e2eArgs = $e2eBase + @($workerPlan.Args) + $browserArgs
+            # Taken before the run: a shot written after it was recaptured by it.
+            $shotSince = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
+            $projLabel = if ($e2eBrowsers) { $e2eBrowsers } else { "Chromium + WebKit/iPhone" }
+            $workerLabel = if ($workerPlan.Workers -gt 1) { "$($workerPlan.Workers) workers" } else { "serial" }
+            Phase "pytest e2e ($e2eTargetLabel, $projLabel, $workerLabel, auto-booted)..."
+            $e2eExit = $null
+            $serialExit = $null
             try {
-                & $python -m pytest @e2eArgs
-                $e2eExit = $LASTEXITCODE
+                # A red pass whose failures are all timeouts or socket errors
+                # re-runs those tests once (Invoke-E2EPass, tests/_load_retry.py).
+                $failuresFile = Join-Path $repoRoot "webapp\e2e-failures.jsonl"
+                $retryArgs = @($verbosity) + $browserArgs
+                $pass = Invoke-E2EPass -Python $python -FailuresFile $failuresFile -Label "parallel pass" -PassArgs $e2eArgs -RetryArgs $retryArgs
+                $e2eExit = $pass.Exit
+                $e2eFlaky += @($pass.Flaky)
+                # The load-sensitive `serial` tests, once the workers are gone.
+                # Runs even after a red parallel pass, so one gate
+                # run reports both.
+                if (@($workerPlan.SerialArgs).Count -gt 0) {
+                    Phase "pytest e2e serial pass (tests marked serial, after the workers)..."
+                    Log-Progress "e2e serial pass: tests marked serial"
+                    $pass = Invoke-E2EPass -Python $python -FailuresFile $failuresFile -Label "serial pass" -PassArgs @($e2eBase + @($workerPlan.SerialArgs) + $browserArgs) -RetryArgs $retryArgs
+                    $serialExit = $pass.Exit
+                    $e2eFlaky += @($pass.Flaky)
+                }
             }
             finally {
                 Remove-Item Env:\LAUNCHER_E2E_AUTOBOOT -ErrorAction SilentlyContinue
                 if ($env:CI -eq "true") { Remove-Item Env:\PYTHONUNBUFFERED -ErrorAction SilentlyContinue }
+                # Only a run that took the mutex is recorded: the history is
+                # written under it, and the static smoke slice is not a timing
+                # source. Red and green alike, so /e2e-audit reads both.
+                if ($e2eMutexAcquired) {
+                    Log-Progress ("e2e browser phase ended: pytest exit {0}, serial pass exit {1}, checkout {2}" -f
+                        $e2eExit, $serialExit, (Split-Path -Leaf $repoRoot))
+                    Publish-ProgressHistory
+                }
+            }
+            if ($null -ne $serialExit) {
+                # Exit 5 is "no tests collected": a narrowed target can hold no
+                # serial test, or nothing but. One of the two passes must run.
+                if ($e2eExit -eq 5 -and $serialExit -eq 5) { Fail "Playwright e2e: neither pass collected a test." }
+                if ($e2eExit -eq 5) { $e2eExit = 0 }
+                if ($serialExit -eq 5) { $serialExit = 0 }
+                if ($serialExit -ne 0) { Fail "Playwright e2e serial pass failed." }
             }
             if ($e2eExit -ne 0) { Fail "Playwright e2e suite failed." }
 
-            # Screenshot baseline (scaffold docs/playwright-ui-testing.md): the last
-            # stage. A slice that ran the whole suite or the capture test just
-            # recaptured the shots, so only compare; a narrower slice did not, so
-            # the stage captures them itself (it needs the autoboot switch the e2e
-            # leg above already cleared). The baseline belongs to the machine that
-            # captured it -- fonts and the rasteriser differ on a CI runner -- so
-            # CI leaves the comparison to the local gate.
-            if ($env:CI -eq "true") {
-                Phase "shot baseline: skipped on CI (the baseline is this machine's)"
-            } else {
-                $env:LAUNCHER_E2E_AUTOBOOT = "1"
-                # The vendored script spawns git without setting this itself.
-                $env:GIT_OPTIONAL_LOCKS = "0"
-                try {
-                    if (Test-ShotsRecaptured $e2eTargets) {
-                        $since = $shotSince.ToString([Globalization.CultureInfo]::InvariantCulture)
-                        Phase "shot baseline (compare)..."
-                        & $python scripts/shot_baseline.py --check-tree --since $since
-                    } else {
-                        Phase "shot baseline (capture + compare)..."
-                        & $python scripts/shot_baseline.py --baseline
-                    }
-                    $shotExit = $LASTEXITCODE
+            # Screenshot baseline (scaffold docs/playwright-ui-testing.md): the
+            # last stage. A slice that ran the whole suite or the capture test just
+            # recaptured the shots, so only compare; a narrower slice did not, so the stage
+            # captures them itself. Either way the tree is put back. Exit 3 is
+            # NOT CONFIRMED (no baseline, nothing recaptured, capture failed):
+            # a failure, never a pass.
+            $env:LAUNCHER_E2E_AUTOBOOT = "1"
+            try {
+                if (@($route.Targets | Where-Object { $_ -eq "tests/e2e" -or $_ -eq "tests/e2e/screens/test_screen_shots.py" }).Count -gt 0) {
+                    $since = $shotSince.ToString([Globalization.CultureInfo]::InvariantCulture)
+                    Phase "shot baseline (compare)..."
+                    & $python scripts/shot_baseline.py --check-tree --since $since
+                } else {
+                    Phase "shot baseline (capture + compare)..."
+                    & $python scripts/shot_baseline.py --baseline
                 }
-                finally {
-                    Remove-Item Env:\LAUNCHER_E2E_AUTOBOOT -ErrorAction SilentlyContinue
-                    Remove-Item Env:\GIT_OPTIONAL_LOCKS -ErrorAction SilentlyContinue
-                }
-                if ($shotExit -eq 3) { Fail "shot baseline NOT CONFIRMED (no baseline, no shot recaptured, an unreadable image, or the capture failed)." }
-                if ($shotExit -ne 0) { Fail "shot baseline failed (exit $shotExit): a screen drifted from tests/e2e/shots. A deliberate UI change re-baselines (CLAUDE.md); anything else is unpinned content." }
+                $shotExit = $LASTEXITCODE
             }
+            finally {
+                Remove-Item Env:\LAUNCHER_E2E_AUTOBOOT -ErrorAction SilentlyContinue
+            }
+            if ($shotExit -eq 3) { Fail "shot baseline NOT CONFIRMED (no baseline, no shot recaptured, an unreadable image, or the capture failed)." }
+            if ($shotExit -ne 0) { Fail "shot baseline failed (exit $shotExit): a screen drifted from tests/e2e/shots. A deliberate UI change re-baselines (CLAUDE.md); anything else is unpinned content." }
         }
         finally {
+            Remove-Item Env:\LAUNCHER_E2E_PID_LEDGER -ErrorAction SilentlyContinue
+            # A worker that died before its teardown leaves its servers running;
+            # the job object normally takes them with it, and this is the backstop.
+            # reaped:0 is the normal outcome; an orphan reaped here is reported.
+            $sweepOut = & $python -m tests.e2e._owned_processes $pidLedger
+            $sweepExit = $LASTEXITCODE
+            $sweepOut | ForEach-Object { Write-Host "    $_" }
+            Log-Progress ("e2e orphan sweep: exit {0} {1}" -f $sweepExit, (@($sweepOut) | Select-Object -First 1))
             if ($e2eMutex) {
                 if ($e2eMutexAcquired) { $e2eMutex.ReleaseMutex() }
                 $e2eMutex.Dispose()
             }
+            if ($sweepExit -eq 1) { Fail "e2e orphan sweep: a recorded disposable server survived the kill and still pins this checkout (see ORPHANS= above)." }
+            if ($sweepExit -ne 0) { Fail "e2e orphan sweep NOT CONFIRMED (exit $sweepExit): could not establish that no disposable server outlived the run." }
         }
     }
 
     # Runtime write probe, second half: any file the unit, e2e and shot runs left under a code folder.
     Phase "runtime write probe..."
-    & $python "scripts/runtime_write_ratchet.py" --probe $runtimeSnapshot
+    & $python scripts/runtime_write_ratchet.py --probe $runtimeSnapshot
     $probeExit = $LASTEXITCODE
     if ($probeExit -eq 3) { Fail "runtime write probe NOT CONFIRMED (the snapshot could not be read)." }
     if ($probeExit -ne 0) { Fail "runtime write probe failed: the test runs left a file under a code folder." }
@@ -377,21 +420,26 @@ Log-Progress ("OK: all checks passed in {0:n1}s" -f $sw.Elapsed.TotalSeconds)
 Remove-Item Env:\LAUNCHER_VERIFY_PROGRESS_LOG -ErrorAction SilentlyContinue
 Write-Host ""
 Write-Host ("[OK] Ready to ship -- all checks passed in {0:n1}s." -f $sw.Elapsed.TotalSeconds) -ForegroundColor Green
+if ($e2eFlaky.Count -gt 0) {
+    Write-Host ("[!] {0} e2e test(s) timed out under load and passed on retry (flaky):" -f $e2eFlaky.Count) -ForegroundColor Yellow
+    $e2eFlaky | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+}
 
 # A green gate + merge + tray.bat --restart still does not make a
 # session-host-path change live -- that process is deliberately excluded
 # from the reclaim sweep and can run stale code for
-# days with nothing else surfacing that. scripts/session_host_touched.py answers from CLAUDE.md's
-# `## session-host` block (the list /api/version's stale_relevant also reads), not
-# from its e2e route labels, so the warning cannot drift from that list. On CI the
-# classifier is not run, so the answer stays "unknown" and nothing is printed.
-if ($sessionHostTouched -eq "yes") {
+# days with nothing else surfacing that (demonstrated live once). Reuse
+# classify_e2e.py's own path categorization (the "session-host"
+# / "session-host/launcher" label it already computes for e2e routing) so
+# this warning never drifts out of sync with that classifier's path list.
+if ($routeReason -match "session-host") {
     Write-Host ""
     Write-Host "[!] SESSION-HOST PATHS TOUCHED -- this is NOT live after tray.bat --restart." -ForegroundColor Yellow
-    Write-Host "    Check GET /api/version's session_host.stale_relevant field before reporting" -ForegroundColor Yellow
+    Write-Host "    Check GET /api/version's session_host.freshness field before reporting" -ForegroundColor Yellow
     Write-Host "    this change as shipped -- if true, report it as merged but not yet live." -ForegroundColor Yellow
     Write-Host "    (Raw session_host.stale is true after ANY merge, not just a session-host" -ForegroundColor Yellow
     Write-Host "    one -- #635; null in either field means unknown, never a confident false.)" -ForegroundColor Yellow
-    Write-Host "    See CLAUDE.md's restart section for the one supported way to restart :8466." -ForegroundColor Yellow
+    Write-Host "    See CLAUDE.md's session-host block for the one supported way to restart :8466." -ForegroundColor Yellow
 }
-Complete-Gate 0
+Write-GateResult "PASS"
+exit 0

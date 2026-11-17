@@ -1,342 +1,252 @@
-"""src.gitlab_client — the Board's ``glab`` fetch layer (Phase 5).
+"""src.clients.gitlab — the Board's ``glab`` fetch-and-write layer.
 
-All subprocess calls are mocked (``glab`` is not assumed installed anywhere);
-the canned rows encode the REAL GitLab API shapes, fetched live from
-gitlab.com on 2026-08-01 — ``iid`` not ``number``, plain-string ``labels``,
-``web_url`` possibly in the ``/-/work_items/N`` form, ``references.full``
-carrying the (possibly subgroup-nested) project path.
+Every subprocess call is mocked (``glab`` is not assumed installed). The canned
+rows follow GitLab's REST v4 shapes: ``iid`` rather than ``number``, plain
+string ``labels``, ``web_url``, ``references.full`` carrying the (possibly
+subgroup-nested) project path, ``draft`` on a merge request, ``merged_at``
+and ``description`` on a merged one. The open-issue shape was read live from
+gitlab.com; the merge-request and write shapes are the documented API and are
+not yet proven against a live instance.
 """
 
 from __future__ import annotations
 
 import json
 import subprocess
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from src import gitlab_client
-from src.gitlab_client import GlabError
+from src.clients import gitlab as forge
 
-
-@pytest.fixture(autouse=True)
-def _pristine_cache():
-    gitlab_client.reset_cache()
-    yield
-    gitlab_client.reset_cache()
-
-
-# Real shape: GET /groups/<group>/issues (gitlab.com, 2026-08-01).
-_REAL_ISSUE = {
+_ISSUE = {
     "iid": 2323,
     "project_id": 5261717,
     "title": "Editor slash commands do not work",
     "state": "opened",
     "updated_at": "2026-07-30T17:30:59.585Z",
     "closed_at": None,
-    "web_url": "https://gitlab.com/gitlab-org/gitlab-vscode-extension/-/work_items/2323",
+    "web_url": "https://gitlab.com/grp/tool/-/work_items/2323",
     "labels": ["type::bug", "category:vs code"],
-    "references": {
-        "short": "#2323",
-        "relative": "#2323",
-        "full": "gitlab-org/gitlab-vscode-extension#2323",
-    },
+    "references": {"short": "#2323", "relative": "#2323", "full": "grp/tool#2323"},
 }
-
-# Subgroup project: repo short name = LAST segment before the '#'.
 _SUBGROUP_ISSUE = {
-    "iid": 1079,
-    "project_id": 999,
-    "title": "CI health incident",
-    "state": "opened",
-    "updated_at": "2026-07-29T09:00:00.000Z",
-    "closed_at": None,
-    "web_url": "https://gitlab.com/gitlab-org/quality/analytics/ci-health-incidents/-/issues/1079",
-    "labels": [],
-    "references": {
-        "short": "#1079",
-        "relative": "#1079",
-        "full": "gitlab-org/quality/analytics/ci-health-incidents#1079",
-    },
+    **_ISSUE, "iid": 1079, "labels": [],
+    "references": {"full": "grp/quality/ci-health#1079"},
 }
-
-
-def _fake_run(rows_by_match, calls=None):
-    """subprocess.run stand-in: pick canned rows by substring of the api path."""
-
-    def run(argv, **kwargs):
-        if calls is not None:
-            calls.append((argv, kwargs))
-        path = argv[-1]
-        rows = []
-        for needle, canned in rows_by_match.items():
-            if needle in path:
-                rows = canned
-                break
-        return subprocess.CompletedProcess(
-            argv, 0, stdout=json.dumps(rows), stderr=""
-        )
-
-    return run
+_MR = {
+    "iid": 67, "title": "fix chunk merge", "web_url": "https://gitlab.com/grp/tool/-/merge_requests/67",
+    "updated_at": "2026-07-02T08:00:00Z", "draft": True, "labels": [],
+    "references": {"full": "grp/tool!67"},
+}
 
 
 def _gl_iso(moment: datetime) -> str:
-    """GitLab's timestamp format: UTC, milliseconds, trailing Z."""
-    return (
-        moment.astimezone(timezone.utc)
-        .isoformat(timespec="milliseconds")
-        .replace("+00:00", "Z")
-    )
+    return moment.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def test_full_page_marks_snapshot_truncated(monkeypatch):
-    full_page = [
-        {**_REAL_ISSUE, "iid": n} for n in range(gitlab_client._ISSUE_LIMIT)
-    ]
-    monkeypatch.setattr(
-        gitlab_client.subprocess, "run",
-        _fake_run({"/issues?state=opened": full_page}),
-    )
-    snap = gitlab_client.refresh("gitlab-org")
-    assert snap["truncated"] is True
-    assert len(snap["issues"]) == gitlab_client._ISSUE_LIMIT
+class _FakeGlab:
+    """subprocess.run stand-in: answers by the first matching substring of the api path."""
+
+    def __init__(self, answers):
+        self.answers = answers
+        self.calls = []
+
+    def __call__(self, argv, **kwargs):
+        self.calls.append((argv, kwargs))
+        path = argv[argv.index("api") + 1]
+        body = []
+        for needle, canned in self.answers.items():
+            if needle in path:
+                body = canned
+                break
+        return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(body), stderr="")
 
 
-def test_short_page_is_not_truncated(monkeypatch):
-    monkeypatch.setattr(
-        gitlab_client.subprocess, "run",
-        _fake_run({"/issues?state=opened": [_REAL_ISSUE]}),
-    )
-    assert gitlab_client.refresh("gitlab-org")["truncated"] is False
+def _install(monkeypatch, answers):
+    fake = _FakeGlab(answers)
+    monkeypatch.setattr(forge.subprocess, "run", fake)
+    return fake
 
 
-# ---------------------------------------------------------- normalization
+# ---------------------------------------------------------- refresh / normalisation
 
 
-def test_norm_issue_maps_real_shape(monkeypatch):
-    monkeypatch.setattr(
-        gitlab_client.subprocess, "run",
-        _fake_run({"/issues?state=opened": [_REAL_ISSUE, _SUBGROUP_ISSUE]}),
-    )
-    issues, truncated = gitlab_client.search_open_issues("gitlab-org")
-    assert truncated is False
-    assert issues[0] == {
-        "kind": "issue",
-        "repo": "gitlab-vscode-extension",
-        "number": 2323,
-        "title": "Editor slash commands do not work",
-        # web_url used verbatim — including the /-/work_items/N form.
-        "url": "https://gitlab.com/gitlab-org/gitlab-vscode-extension/-/work_items/2323",
-        "updated_at": "2026-07-30T17:30:59.585Z",
-        # Plain strings, verbatim (gh gave [{name}] dicts; glab gives strings).
-        "labels": ["type::bug", "category:vs code"],
-    }
-    # Subgroup project: last path segment of references.full before '#'.
-    assert issues[1]["repo"] == "ci-health-incidents"
-    assert issues[1]["number"] == 1079
+def test_refresh_normalises_issues_and_merge_requests(monkeypatch):
+    _install(monkeypatch, {
+        "merge_requests?state=opened": [_MR],
+        "merge_requests?state=merged": [],
+        "issues?state=opened": [_ISSUE, _SUBGROUP_ISSUE],
+        "issues?state=closed": [],
+    })
+    snap = forge.refresh("grp")
+    assert snap["error"] is None and snap["fetched_at"]
+    assert [(i["repo"], i["number"]) for i in snap["issues"]] == [("tool", 2323), ("ci-health", 1079)]
+    assert snap["issues"][0]["labels"] == ["type::bug", "category:vs code"]
+    assert snap["issues"][0]["url"].endswith("/work_items/2323")
+    [mr] = snap["prs"]
+    assert (mr["kind"], mr["repo"], mr["number"], mr["is_draft"]) == ("pr", "tool", 67, True)
 
 
-def test_audit_meta_label_filtered_from_issues(monkeypatch):
-    ledger_issue = {**_REAL_ISSUE, "iid": 37, "labels": ["Audit-Meta"]}
-    monkeypatch.setattr(
-        gitlab_client.subprocess, "run",
-        _fake_run({
-            "/issues?state=opened": [_REAL_ISSUE, ledger_issue],
-        }),
-    )
-    assert [i["number"] for i in gitlab_client.search_open_issues("g")[0]] == [2323]
-
-
-# ------------------------------------------------------- query construction
-
-
-def test_group_is_url_encoded_as_one_path_segment(monkeypatch):
-    calls: list = []
-    monkeypatch.setattr(
-        gitlab_client.subprocess, "run", _fake_run({}, calls)
-    )
-    gitlab_client.search_open_issues("grp/sub")
-    (argv, _kwargs) = calls[0]
-    assert argv[0] == "glab" and argv[1] == "api"
-    assert argv[2].startswith("groups/grp%2Fsub/issues?")
-    assert "state=opened" in argv[2]
-    assert "order_by=updated_at" in argv[2]
-    assert "sort=desc" in argv[2]
-    assert "per_page=100" in argv[2]
-
-
-def test_host_rides_gitlab_host_env(monkeypatch):
-    calls: list = []
-    monkeypatch.setattr(
-        gitlab_client.subprocess, "run", _fake_run({}, calls)
-    )
-    gitlab_client.search_open_issues("grp", host="gitlab.example.com")
-    gitlab_client.search_open_issues("grp")
-    env_with_host = calls[0][1].get("env")
-    assert env_with_host is not None
-    assert env_with_host["GITLAB_HOST"] == "gitlab.example.com"
-    # No host → glab's own default context: env untouched (None).
-    assert calls[1][1].get("env") is None
-
-
-# --------------------------------------------------------------- done today
-
-
-def test_done_today_filters_on_closed_at_since_local_midnight(monkeypatch):
-    """Group issues have no closed_after param — the query is
-    state=closed&updated_after=<midnight>, so a row *updated* today but
-    *closed* yesterday still comes back and must be dropped client-side,
-    as must a closed_at of null."""
-    midnight = datetime.now().astimezone().replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-    closed_today = {
-        **_REAL_ISSUE, "iid": 9, "state": "closed",
-        "closed_at": _gl_iso(midnight + timedelta(hours=1)),
-        "updated_at": _gl_iso(midnight + timedelta(hours=1)),
-    }
-    closed_yesterday_updated_today = {
-        **_REAL_ISSUE, "iid": 10, "state": "closed",
-        "closed_at": _gl_iso(midnight - timedelta(hours=3)),
-        "updated_at": _gl_iso(midnight + timedelta(hours=2)),
-    }
-    closed_at_null = {
-        **_REAL_ISSUE, "iid": 11, "state": "closed",
-        "closed_at": None,
-        "updated_at": _gl_iso(midnight + timedelta(hours=3)),
-    }
-    audit_meta_closed = {
-        **_REAL_ISSUE, "iid": 12, "state": "closed",
-        "labels": ["audit-meta"],
-        "closed_at": _gl_iso(midnight + timedelta(hours=1)),
-        "updated_at": _gl_iso(midnight + timedelta(hours=1)),
-    }
-    later_today = {
-        **_REAL_ISSUE, "iid": 13, "state": "closed",
-        "closed_at": _gl_iso(midnight + timedelta(hours=5)),
-        "updated_at": _gl_iso(midnight + timedelta(hours=5)),
-    }
-    calls: list = []
-    monkeypatch.setattr(
-        gitlab_client.subprocess, "run",
-        _fake_run({"state=closed": [
-            closed_today, closed_yesterday_updated_today,
-            closed_at_null, audit_meta_closed, later_today,
-        ]}, calls),
-    )
-    done, _truncated = gitlab_client.search_done_today("grp")
-    # Newest first by updated_at; done cards are stripped to state+no labels.
-    assert [(d["number"], d["state"], d["labels"]) for d in done] == [
-        (13, "closed", []), (9, "closed", []),
-    ]
-    # The query itself carries updated_after=<url-encoded local midnight>.
-    path = calls[0][0][2]
-    assert "state=closed" in path
-    assert "updated_after=" in path
-    assert "%3A" in path  # ISO offset got URL-encoded into the one segment
-
-
-# ------------------------------------------------------------------ errors
-
-
-def test_missing_binary_raises_glab_error(monkeypatch):
-    def _boom(argv, **kwargs):
-        raise FileNotFoundError("glab not on PATH")
-
-    monkeypatch.setattr(gitlab_client.subprocess, "run", _boom)
-    with pytest.raises(GlabError, match="glab"):
-        gitlab_client.search_open_issues("grp")
-
-
-def test_timeout_raises_glab_error(monkeypatch):
-    def _slow(argv, **kwargs):
-        raise subprocess.TimeoutExpired(argv, 20.0)
-
-    monkeypatch.setattr(gitlab_client.subprocess, "run", _slow)
-    with pytest.raises(GlabError):
-        gitlab_client.search_open_issues("grp")
-
-
-def test_nonzero_exit_raises_glab_error_with_first_stderr_line(monkeypatch):
-    def _fail(argv, **kwargs):
-        return subprocess.CompletedProcess(
-            argv, 1, stdout="", stderr="401 Unauthorized\nrun glab auth login"
-        )
-
-    monkeypatch.setattr(gitlab_client.subprocess, "run", _fail)
-    with pytest.raises(GlabError, match="401 Unauthorized"):
-        gitlab_client.search_open_issues("grp")
-
-
-def test_unparseable_json_raises_glab_error(monkeypatch):
-    def _garbage(argv, **kwargs):
-        return subprocess.CompletedProcess(argv, 0, stdout="{not json", stderr="")
-
-    monkeypatch.setattr(gitlab_client.subprocess, "run", _garbage)
-    with pytest.raises(GlabError, match="unparseable"):
-        gitlab_client.search_open_issues("grp")
-
-
-# ------------------------------------------------------------------- cache
-
-
-def test_refresh_and_snapshot(monkeypatch):
-    calls: list = []
-    monkeypatch.setattr(
-        gitlab_client.subprocess, "run",
-        _fake_run({"/issues?state=opened": [_REAL_ISSUE]}, calls),
-    )
-    snap = gitlab_client.refresh("gitlab-org")
-    assert snap["error"] is None
-    assert snap["fetched_at"]
+def test_audit_meta_issues_become_records(monkeypatch):
+    ledger = {**_ISSUE, "iid": 9, "labels": ["audit-meta"]}
+    _install(monkeypatch, {"issues?state=opened": [_ISSUE, ledger]})
+    snap = forge.refresh("grp")
     assert [i["number"] for i in snap["issues"]] == [2323]
-    assert snap["done"] == []
-    # refresh fetches exactly what the Board consumes: issues + done today.
-    paths = [argv[2] for (argv, _kw) in calls]
-    assert len(paths) == 2
-    assert not any("merge_requests" in p for p in paths)
-    # snapshot() is the memory read the poll uses — no new subprocess calls.
-    calls_before = len(calls)
-    assert gitlab_client.snapshot()["issues"] == snap["issues"]
-    assert len(calls) == calls_before
+    assert [i["number"] for i in snap["records"]] == [9]
 
 
-def test_refresh_failure_keeps_old_data(monkeypatch):
-    monkeypatch.setattr(
-        gitlab_client.subprocess, "run",
-        _fake_run({"/issues?state=opened": [_REAL_ISSUE]}),
-    )
-    gitlab_client.refresh("gitlab-org")
-
-    def _boom(argv, **kwargs):
-        raise FileNotFoundError("glab not on PATH")
-
-    monkeypatch.setattr(gitlab_client.subprocess, "run", _boom)
-    snap = gitlab_client.refresh("gitlab-org")
-    assert "glab" in (snap["error"] or "")
-    assert [i["number"] for i in snap["issues"]] == [2323]  # data survives
+def test_a_full_page_is_flagged_truncated(monkeypatch):
+    page = [{**_ISSUE, "iid": n} for n in range(forge._PAGE)]
+    _install(monkeypatch, {"issues?state=opened": page})
+    assert forge.refresh("grp")["truncated"] is True
 
 
-def test_refresh_with_empty_group_skips_subprocess_and_hints(monkeypatch):
-    def _boom(argv, **kwargs):
-        raise AssertionError("no subprocess may run with an empty group")
+def test_the_group_path_is_one_encoded_segment(monkeypatch):
+    fake = _install(monkeypatch, {})
+    forge.refresh("grp/sub")
+    paths = [argv[argv.index("api") + 1] for argv, _ in fake.calls]
+    assert all(p.startswith("groups/grp%2Fsub/") for p in paths)
 
-    monkeypatch.setattr(gitlab_client.subprocess, "run", _boom)
-    snap = gitlab_client.refresh("")
+
+def test_empty_group_never_spawns_glab(monkeypatch):
+    def boom(*_a, **_k):
+        raise AssertionError("glab must not run without a group")
+
+    monkeypatch.setattr(forge.subprocess, "run", boom)
+    snap = forge.refresh("  ")
     assert snap["error"] == "set gitlab_group in Settings"
     assert snap["fetched_at"] is None
-    assert snap["issues"] == []
 
 
-def test_reset_cache_restores_pristine_state(monkeypatch):
-    monkeypatch.setattr(
-        gitlab_client.subprocess, "run",
-        _fake_run({"/issues?state=opened": [_REAL_ISSUE]}),
-    )
-    gitlab_client.refresh("gitlab-org")
-    assert gitlab_client.snapshot()["issues"]
-    gitlab_client.reset_cache()
-    assert gitlab_client.snapshot() == {
-        "fetched_at": None, "issues": [], "done": [], "truncated": False,
-        "error": None,
+def test_a_failed_refresh_keeps_the_previous_data(monkeypatch):
+    _install(monkeypatch, {"issues?state=opened": [_ISSUE]})
+    good = forge.refresh("grp")
+
+    def failing(argv, **_k):
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr="401 Unauthorized\n")
+
+    monkeypatch.setattr(forge.subprocess, "run", failing)
+    snap = forge.refresh("grp")
+    assert "401 Unauthorized" in snap["error"]
+    assert snap["issues"] == good["issues"] and snap["fetched_at"] == good["fetched_at"]
+
+
+def test_a_missing_glab_is_an_error_not_a_crash(monkeypatch):
+    def missing(*_a, **_k):
+        raise FileNotFoundError("glab")
+
+    monkeypatch.setattr(forge.subprocess, "run", missing)
+    snap = forge.refresh("grp")
+    assert snap["fetched_at"] is None and "glab" in snap["error"]
+
+
+def test_host_rides_gitlab_host(monkeypatch):
+    fake = _install(monkeypatch, {})
+    forge.refresh("grp", host="gitlab.example.test")
+    assert all(kw["env"]["GITLAB_HOST"] == "gitlab.example.test" for _, kw in fake.calls)
+
+
+def test_recently_filled_reads_the_cache_stamp(monkeypatch):
+    assert forge.recently_filled() is False
+    _install(monkeypatch, {})
+    forge.refresh("grp")
+    assert forge.recently_filled() is True
+
+
+def test_glab_cmd_env_must_be_a_json_argv(monkeypatch):
+    monkeypatch.setenv(forge.GLAB_CMD_ENV, "not json")
+    with pytest.raises(forge.GlabError):
+        forge.issue_title("grp", "tool", 1)
+
+
+# ---------------------------------------------------------- done today
+
+
+def test_done_keeps_only_issues_closed_inside_the_day_and_pairs_the_mr(monkeypatch):
+    day = date(2026, 7, 2)
+    start, end = forge.local_day_window(day, timezone.utc)
+    inside = {**_ISSUE, "iid": 5, "state": "closed", "closed_at": _gl_iso(start + timedelta(hours=3))}
+    before = {**_ISSUE, "iid": 6, "state": "closed", "closed_at": _gl_iso(start - timedelta(hours=1))}
+    never = {**_ISSUE, "iid": 7, "state": "closed", "closed_at": None}
+    merged = {
+        "iid": 70, "web_url": "https://gitlab.com/grp/tool/-/merge_requests/70",
+        "merged_at": _gl_iso(start + timedelta(hours=2)),
+        "description": "Closes #5\n\nVISUAL_PROOF=pass",
+        "references": {"full": "grp/tool!70"},
     }
+    merged_yesterday = {**merged, "iid": 71, "merged_at": _gl_iso(start - timedelta(hours=2)),
+                        "description": "Closes #6"}
+    fake = _install(monkeypatch, {
+        "merge_requests?state=merged": [merged, merged_yesterday],
+        "issues?state=closed": [inside, before, never],
+    })
+    done = forge.search_done_on("grp", day, timezone.utc)
+    assert [d["number"] for d in done] == [5]
+    assert (done[0]["pr"], done[0]["visual_proof"], done[0]["not_planned"]) == (70, "pass", False)
+    assert done[0]["pr_url"].endswith("/merge_requests/70")
+    issue_path = next(argv[argv.index("api") + 1] for argv, _ in fake.calls if "issues" in " ".join(argv))
+    assert "updated_after=" in issue_path
+
+
+def test_part_of_does_not_pair_an_mr(monkeypatch):
+    day = date(2026, 7, 2)
+    start, _ = forge.local_day_window(day, timezone.utc)
+    closed = {**_ISSUE, "iid": 5, "state": "closed", "closed_at": _gl_iso(start + timedelta(hours=3))}
+    mr = {"iid": 70, "merged_at": _gl_iso(start + timedelta(hours=1)), "description": "Part of #5",
+          "references": {"full": "grp/tool!70"}}
+    _install(monkeypatch, {"merge_requests?state=merged": [mr], "issues?state=closed": [closed]})
+    [row] = forge.search_done_on("grp", day, timezone.utc)
+    assert row["pr"] is None
+
+
+def test_a_failed_mr_read_leaves_done_without_pairing(monkeypatch):
+    day = date(2026, 7, 2)
+    start, _ = forge.local_day_window(day, timezone.utc)
+    closed = {**_ISSUE, "iid": 5, "state": "closed", "closed_at": _gl_iso(start + timedelta(hours=3))}
+
+    def run(argv, **_k):
+        if "merge_requests" in argv[argv.index("api") + 1]:
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="boom")
+        return subprocess.CompletedProcess(argv, 0, stdout=json.dumps([closed]), stderr="")
+
+    monkeypatch.setattr(forge.subprocess, "run", run)
+    [row] = forge.search_done_on("grp", day, timezone.utc)
+    assert row["number"] == 5 and row["pr"] is None
+
+
+# ---------------------------------------------------------- writes and single reads
+
+
+def test_create_issue_sends_json_on_stdin_and_assigns_me(monkeypatch):
+    fake = _install(monkeypatch, {
+        "user": {"id": 42},
+        "/issues": {"web_url": "https://gitlab.com/grp/tool/-/issues/8"},
+    })
+    url = forge.create_issue("grp", "tool", "Title & 'quotes'", "body")
+    assert url.endswith("/issues/8")
+    argv, kw = fake.calls[-1]
+    assert argv[argv.index("api") + 1] == "projects/grp%2Ftool/issues"
+    assert ("--method", "POST") == tuple(argv[argv.index("--method"):argv.index("--method") + 2])
+    assert json.loads(kw["input"]) == {"title": "Title & 'quotes'", "description": "body",
+                                       "assignee_ids": [42]}
+
+
+def test_create_issue_without_a_url_is_an_error(monkeypatch):
+    _install(monkeypatch, {"user": {"id": 1}, "/issues": {}})
+    with pytest.raises(forge.GlabError):
+        forge.create_issue("grp", "tool", "t", "b")
+
+
+def test_comment_issue_posts_a_note(monkeypatch):
+    fake = _install(monkeypatch, {"/notes": {"id": 1}})
+    forge.comment_issue("grp", "tool", 12, "hello")
+    argv, kw = fake.calls[-1]
+    assert argv[argv.index("api") + 1] == "projects/grp%2Ftool/issues/12/notes"
+    assert json.loads(kw["input"]) == {"body": "hello"}
+
+
+def test_issue_title_and_body(monkeypatch):
+    _install(monkeypatch, {"/issues/3": {"title": " T ", "description": "D"}})
+    assert forge.issue_title("grp", "tool", 3) == "T"
+    assert forge.issue_body("grp", "tool", 3) == "D"

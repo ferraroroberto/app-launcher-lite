@@ -1,0 +1,371 @@
+"""Basic webapp routes: /healthz, /, /api/status."""
+
+from __future__ import annotations
+
+import os
+import re
+
+from src.static_versioning import compute_asset_hashes, fleet_hash_of
+from src.stylesheet_bundle import BUNDLE_RELPATH
+from tests._css import STATIC
+
+
+class TestHealthz:
+    def test_healthz_ok(self, webapp_client):
+        client, _, _ = webapp_client
+        resp = client.get("/healthz")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["service"] == "launcher"
+
+
+class TestIndex:
+    def test_index_returns_html(self, webapp_client):
+        client, _, _ = webapp_client
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers.get("content-type", "")
+
+    def test_index_is_no_cache(self, webapp_client):
+        # Index must always be revalidated — without this, the PWA can
+        # hold a stale shell that references a JS bundle that no longer
+        # exists. Cache hygiene contract for issue #30.
+        client, _, _ = webapp_client
+        resp = client.get("/")
+        cache_control = resp.headers.get("cache-control", "")
+        assert "no-cache" in cache_control
+        assert "must-revalidate" in cache_control
+
+    def test_index_stamps_asset_urls(self, webapp_client):
+        # Every /static/<name>.(css|js) referenced from the index must
+        # carry an ?v=<8-hex-chars> stamp so iOS can't cache across an
+        # asset edit.
+        client, _, _ = webapp_client
+        resp = client.get("/")
+        body = resp.text
+        assert "/static/bundle.css?v=" in body
+        assert "/static/main.js?v=" in body
+        # No literal ?v=18 left over from the manual era. Match the complete
+        # legacy stamp (the closing quote) — a substring "?v=18" also matches
+        # valid 8-hex fleet hashes that happen to begin "18…" (the 8-hex
+        # format itself is enforced by the loop below).
+        assert '?v=18"' not in body
+        # Stamps are 8 hex chars — including subdirectory (_vendored/) URLs
+        # (issue #395: subdir assets used to be silently skipped).
+        stamps = re.findall(r"/static/[\w\-./]+\.(?:css|js)\?v=([a-f0-9]+)", body)
+        assert stamps, "expected at least one stamped asset URL"
+        for stamp in stamps:
+            assert re.fullmatch(r"[a-f0-9]{8}", stamp), stamp
+
+    def test_served_index_hashes_match_disk(self, webapp_client):
+        # Each stamp is the fleet hash of the bytes on disk, so editing a JS
+        # file changes every URL the index hands out; a stale stamp would let
+        # the phone keep the old file. The stylesheet bundle is built in
+        # memory and carries the fleet hash like every file does.
+        client, _, _ = webapp_client
+        served = dict(re.findall(
+            r"""(?:href|src)=['"]/static/([\w\-./]+\.(?:css|js))\?v=([a-f0-9]+)['"]""",
+            client.get("/").text,
+        ))
+        assert served, "no hashed /static/*.{css,js} references in the served index"
+        on_disk = compute_asset_hashes(STATIC)
+        on_disk[BUNDLE_RELPATH] = fleet_hash_of(on_disk)
+        for name, stamp in served.items():
+            assert on_disk.get(name) is not None, f"the index references {name}, not on disk"
+            assert stamp == on_disk[name], f"{name}: stamp {stamp!r} != fleet hash {on_disk[name]!r}"
+
+    def test_index_links_one_stylesheet(self, webapp_client):
+        # The 31 sheets are one request: the served page links only the bundle.
+        client, _, _ = webapp_client
+        body = client.get("/").text
+        links = re.findall(r'<link rel="stylesheet" href="([^"]+)"', body)
+        assert len(links) == 1
+        assert re.fullmatch(r"/static/bundle\.css\?v=[a-f0-9]{8}", links[0])
+
+    def test_bundle_is_the_sheets_in_link_order(self, webapp_client):
+        client, _, _ = webapp_client
+        resp = client.get("/static/bundle.css")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/css")
+        assert "immutable" in resp.headers.get("cache-control", "")
+        banners = re.findall(r"^/\* ([\w\-./]+\.css) \*/$", resp.text, re.MULTILINE)
+        source = (STATIC / "index.html").read_text(encoding="utf-8")
+        assert banners == re.findall(r'<link rel="stylesheet" href="/static/([^"?]+)"', source)
+        assert "_vendored/nav/nav-tabs.css" in banners
+        assert (STATIC / "styles/base.css").read_text(encoding="utf-8") in resp.text
+
+
+class TestStaticCaching:
+    def test_js_served_immutable_year(self, webapp_client):
+        # Hashed assets get year-long immutable cache — safe because the
+        # URL changes on edit.
+        client, _, _ = webapp_client
+        resp = client.get("/static/main.js")
+        assert resp.status_code == 200
+        cache_control = resp.headers.get("cache-control", "")
+        assert "max-age=31536000" in cache_control
+        assert "immutable" in cache_control
+
+    def test_js_imports_get_stamped(self, webapp_client):
+        # JS files have their own ES-module imports rewritten at serve
+        # time, so editing state.js invalidates everything that imports
+        # it transitively (via the shared fleet hash).
+        client, _, _ = webapp_client
+        resp = client.get("/static/main.js")
+        body = resp.text
+        # main.js imports ./state.js, ./api.js, etc — all should be stamped.
+        assert re.search(r"from\s+['\"]\./state\.js\?v=[a-f0-9]{8}['\"]", body)
+        assert re.search(r"from\s+['\"]\./api\.js\?v=[a-f0-9]{8}['\"]", body)
+
+    def test_vendored_subdir_import_gets_stamped(self, webapp_client):
+        # Regression net for issue #395: main.js's `./_vendored/icons/
+        # icons.js` import used to be silently skipped because the old
+        # regex/hash-key only matched root-level filenames.
+        client, _, _ = webapp_client
+        resp = client.get("/static/main.js")
+        body = resp.text
+        assert re.search(
+            r"from\s+['\"]\./_vendored/icons/icons\.js\?v=[a-f0-9]{8}['\"]", body
+        )
+
+
+class TestVersion:
+    def test_version_shape(self, webapp_client):
+        from app.webapp.routers import misc as misc_router
+
+        client, _, _ = webapp_client
+        resp = client.get("/api/version")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert set(body.keys()) == {
+            "git_sha", "built_at", "pid", "asset_hash", "head_sha", "session_host", "age_seconds",
+        }
+        assert body["pid"] == os.getpid()
+        assert isinstance(body["git_sha"], str) and body["git_sha"]
+        # The footer stamp is the identity this process captured at import, not a fresh read.
+        assert body["built_at"] == misc_router._IDENTITY["built_at"]
+        assert isinstance(body["asset_hash"], str)
+        assert isinstance(body["head_sha"], str) and body["head_sha"]
+
+    def test_session_host_unreachable_reports_reachable_false(self, webapp_client):
+        """Default test-env mock (#615): no session-host listening —
+        session_client.identity() returns None, never a false "up to date"."""
+        client, _, _ = webapp_client
+        body = client.get("/api/version").json()
+        assert body["session_host"] == {
+            "reachable": False, "git_sha": None, "started_at": None,
+            "stale": None, "stale_relevant": None,
+            "freshness": "unreachable",
+        }
+
+    def test_session_host_stale_relevant_true_when_declared_path_touched(
+        self, webapp_client, monkeypatch
+    ):
+        """#635: sha differs AND the diff touched a declared session-host
+        path — the actionable "needs restart" case."""
+        client, app, overrides = webapp_client
+        from app.webapp.routers import misc as misc_router
+        # #655: pin resolve_deployed_sha instead of relying on the ambient
+        # checkout -- CI's shallow PR checkout can resolve it to "unknown".
+        monkeypatch.setattr(misc_router, "resolve_deployed_sha", lambda *a, **k: "cafebee")
+        monkeypatch.setattr(misc_router, "_session_host_path_relevance", lambda h, hd: True)
+        overrides["session"].identity.return_value = {
+            "git_sha": "deadbee", "started_at": "2026-07-24T05:51:34",
+        }
+        body = client.get("/api/version").json()
+        assert body["session_host"]["reachable"] is True
+        assert body["session_host"]["git_sha"] == "deadbee"
+        assert body["session_host"]["started_at"] == "2026-07-24T05:51:34"
+        assert body["session_host"]["stale"] is True
+        assert body["session_host"]["stale_relevant"] is True
+        assert body["session_host"]["freshness"] == "stale-relevant"
+
+    def test_session_host_stale_relevant_false_when_only_unrelated_paths_touched(
+        self, webapp_client, monkeypatch
+    ):
+        """#635: sha differs but the diff only touched paths outside the
+        session-host's declaration — stale for the repo, not for :8466."""
+        client, app, overrides = webapp_client
+        from app.webapp.routers import misc as misc_router
+        # #655: pin resolve_deployed_sha instead of relying on the ambient
+        # checkout -- CI's shallow PR checkout can resolve it to "unknown".
+        monkeypatch.setattr(misc_router, "resolve_deployed_sha", lambda *a, **k: "cafebee")
+        monkeypatch.setattr(misc_router, "_session_host_path_relevance", lambda h, hd: False)
+        overrides["session"].identity.return_value = {
+            "git_sha": "deadbee", "started_at": "2026-07-24T05:51:34",
+        }
+        body = client.get("/api/version").json()
+        assert body["session_host"]["stale"] is True
+        assert body["session_host"]["stale_relevant"] is False
+        assert body["session_host"]["freshness"] == "stale-irrelevant"
+
+    def test_session_host_stale_relevant_unknown_when_scope_check_cannot_run(
+        self, webapp_client, monkeypatch
+    ):
+        """#635: sha differs but the scoped diff itself is unresolvable
+        (e.g. host sha not in local history) — must read as unknown, never
+        a confident "unaffected"."""
+        client, app, overrides = webapp_client
+        from app.webapp.routers import misc as misc_router
+        # #655: pin resolve_deployed_sha instead of relying on the ambient
+        # checkout -- CI's shallow PR checkout can resolve it to "unknown".
+        monkeypatch.setattr(misc_router, "resolve_deployed_sha", lambda *a, **k: "cafebee")
+        monkeypatch.setattr(misc_router, "_session_host_path_relevance", lambda h, hd: None)
+        overrides["session"].identity.return_value = {
+            "git_sha": "deadbee", "started_at": "2026-07-24T05:51:34",
+        }
+        body = client.get("/api/version").json()
+        assert body["session_host"]["stale"] is True
+        assert body["session_host"]["stale_relevant"] is None
+        assert body["session_host"]["freshness"] == "stale-unknown"
+
+    def test_session_host_not_stale_when_sha_matches_deployed(self, webapp_client, monkeypatch):
+        client, app, overrides = webapp_client
+        from app.webapp.routers import misc as misc_router
+        # #655: pin resolve_deployed_sha instead of relying on the ambient
+        # checkout -- CI's shallow PR checkout can resolve it to "unknown".
+        monkeypatch.setattr(misc_router, "resolve_deployed_sha", lambda *a, **k: "cafebee")
+        overrides["session"].identity.return_value = {
+            "git_sha": "cafebee", "started_at": "2026-07-27T08:00:00",
+        }
+        body = client.get("/api/version").json()
+        assert body["session_host"]["stale"] is False
+        assert body["session_host"]["stale_relevant"] is False
+        assert body["session_host"]["freshness"] == "fresh"
+
+    def test_stale_relevant_compares_against_deployed_ref_not_checkout_branch(
+        self, webapp_client, monkeypatch
+    ):
+        """#641 regression: the primary checkout can transiently sit on an
+        unrelated feature branch that never contained a merged, declared-path
+        commit. ``stale_relevant`` must compare against the resolved deployed
+        ref (``origin/main``), not that transient branch tip — else it
+        under-reports risk (reports ``false`` when the answer is ``true``)."""
+        client, app, overrides = webapp_client
+        from app.webapp.routers import misc as misc_router
+        # Simulate: the live checkout's HEAD (head_sha) is on an unrelated
+        # branch that does NOT contain the fix; the resolved deployed ref
+        # (origin/main) DOES. A pre-#641 implementation compared against
+        # head_sha and would have missed this entirely.
+        monkeypatch.setattr(misc_router, "resolve_git_sha", lambda *a, **k: "unrelated")
+        monkeypatch.setattr(misc_router, "resolve_deployed_sha", lambda *a, **k: "deployed1")
+        monkeypatch.setattr(misc_router, "_session_host_path_relevance", lambda h, d: d == "deployed1")
+        overrides["session"].identity.return_value = {
+            "git_sha": "stalehost", "started_at": "2026-07-27T08:00:00",
+        }
+        body = client.get("/api/version").json()
+        assert body["head_sha"] == "unrelated"
+        assert body["session_host"]["stale"] is True
+        assert body["session_host"]["stale_relevant"] is True
+
+    def test_unknown_sha_never_reads_as_stale(self, webapp_client):
+        """A failed git lookup on either side must degrade to unknown
+        (`stale: None`), never a confident but wrong true/false."""
+        client, app, overrides = webapp_client
+        overrides["session"].identity.return_value = {
+            "git_sha": "unknown", "started_at": "2026-07-27T08:00:00",
+        }
+        body = client.get("/api/version").json()
+        assert body["session_host"]["stale"] is None
+        assert body["session_host"]["stale_relevant"] is None
+        assert body["session_host"]["freshness"] == "unknown"
+
+    def test_freshness_is_one_of_the_six_declared_states(self):
+        """Every (reachable, stale, stale_relevant) combination the builder
+        can produce maps to one declared state, and all six are reachable."""
+        from app.webapp.routers import misc as misc_router
+
+        mapping = {
+            (False, None, None): "unreachable",
+            (True, None, None): "unknown",
+            (True, False, False): "fresh",
+            (True, True, False): "stale-irrelevant",
+            (True, True, True): "stale-relevant",
+            (True, True, None): "stale-unknown",
+        }
+        for triple, state in mapping.items():
+            assert misc_router._freshness_state(*triple) == state
+        assert set(mapping.values()) == set(misc_router.SESSION_HOST_FRESHNESS_STATES)
+        assert len(misc_router.SESSION_HOST_FRESHNESS_STATES) == 6
+
+
+class TestStatus:
+    def test_status_returns_expected_shape(self, webapp_client):
+        client, _, _ = webapp_client
+        resp = client.get("/api/status")
+        assert resp.status_code == 200
+        body = resp.json()
+        # /api/status is a kitchen-sink endpoint — narrow assertion to the
+        # keys SPA code actually depends on, so future additions don't
+        # false-fail the test.
+        assert isinstance(body, dict)
+        assert "tunnel_url" in body or "tunnel" in body or "scan_roots" in body or "terminal_reachability" in body
+
+
+class TestAgents:
+    def test_agents_shape(self, webapp_client):
+        client, _, _ = webapp_client
+        resp = client.get("/api/agents")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert isinstance(body["agents"], list) and body["agents"]
+        ids = {a["id"] for a in body["agents"]}
+        assert ids == {"copilot"}
+        for a in body["agents"]:
+            assert set(a) == {"id", "label", "available", "fullscreen", "console_input"}
+            assert isinstance(a["available"], bool)
+            assert isinstance(a["fullscreen"], bool)
+
+
+class TestTerminalThemes:
+    """GET /api/terminal-themes — the user theme file (issue #381)."""
+
+    def test_missing_file_returns_empty(self, webapp_client, monkeypatch, tmp_path):
+        from app.webapp.routers import misc as misc_router
+
+        monkeypatch.setattr(misc_router, "PROJECT_ROOT", tmp_path)
+        client, _, _ = webapp_client
+        resp = client.get("/api/terminal-themes")
+        assert resp.status_code == 200
+        assert resp.json() == {"themes": {}}
+
+    def test_valid_file_is_served(self, webapp_client, monkeypatch, tmp_path):
+        from app.webapp.routers import misc as misc_router
+
+        (tmp_path / "webapp").mkdir()
+        (tmp_path / "webapp" / "terminal-themes.json").write_text(
+            '{"light": {"background": "#fdf6e3", "minimumContrastRatio": 5}}',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(misc_router, "PROJECT_ROOT", tmp_path)
+        client, _, _ = webapp_client
+        body = client.get("/api/terminal-themes").json()
+        assert body["themes"]["light"]["background"] == "#fdf6e3"
+        assert body["themes"]["light"]["minimumContrastRatio"] == 5
+
+    def test_invalid_json_is_ignored(self, webapp_client, monkeypatch, tmp_path):
+        from app.webapp.routers import misc as misc_router
+
+        (tmp_path / "webapp").mkdir()
+        (tmp_path / "webapp" / "terminal-themes.json").write_text(
+            "{not json", encoding="utf-8"
+        )
+        monkeypatch.setattr(misc_router, "PROJECT_ROOT", tmp_path)
+        client, _, _ = webapp_client
+        resp = client.get("/api/terminal-themes")
+        assert resp.status_code == 200
+        assert resp.json() == {"themes": {}}
+
+    def test_non_object_json_is_ignored(self, webapp_client, monkeypatch, tmp_path):
+        from app.webapp.routers import misc as misc_router
+
+        (tmp_path / "webapp").mkdir()
+        (tmp_path / "webapp" / "terminal-themes.json").write_text(
+            '["not", "an", "object"]', encoding="utf-8"
+        )
+        monkeypatch.setattr(misc_router, "PROJECT_ROOT", tmp_path)
+        client, _, _ = webapp_client
+        assert client.get("/api/terminal-themes").json() == {"themes": {}}
+
+

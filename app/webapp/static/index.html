@@ -2,15 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=auto">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=auto, interactive-widget=resizes-content">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Launcher Lite">
+  <meta name="apple-mobile-web-app-title" content="Lite">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
-  <!-- Pre-paint boot: vendored _vendored/text-size/text-size-boot.html, which
-       stamps html[data-theme] and html[data-textsize] before first paint, ahead
-       of every stylesheet. Per-app edit: the localStorage prefix. -->
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  <link rel="icon" href="/static/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" href="/static/icon-512.png">
+  <!-- Pre-paint boot (#1134): the vendored text-size boot, which stamps both
+       html[data-theme] and html[data-textsize] from app-launcher.theme /
+       app-launcher.textsize before any stylesheet, so nothing flashes. -->
   <script>
     (function () {
       var app = 'app-launcher';
@@ -27,840 +31,607 @@
       root.dataset.textsize = size === 'small' || size === 'large' ? size : 'default';
     })();
   </script>
-  <link rel="manifest" href="/static/manifest.webmanifest">
-  <link rel="apple-touch-icon" href="/static/icon-180.png">
-  <link rel="icon" href="/static/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" href="/static/icon-512.png">
-  <link rel="stylesheet" href="/static/_vendored/color-scheme/color-scheme.css">
-  <link rel="stylesheet" href="/static/vendor/xterm.css">
+  <!-- base.css first: form controls inherit the page font (its README's
+       load-order contract, project-scaffolding#266). -->
+  <link rel="stylesheet" href="/static/_vendored/base/base.css">
   <link rel="stylesheet" href="/static/_vendored/card/card.css">
-  <link rel="stylesheet" href="/static/_vendored/icon-button/icon-button.css">
-  <!-- home-head.css must load AFTER card.css — it overrides the card's own
-       padding for the 52px header row (its README's load-order contract). -->
+  <!-- home-head.css overrides the card's own padding for the 52px header row
+       with a two-class rule, so its position after card.css is not load-bearing. -->
   <link rel="stylesheet" href="/static/_vendored/home-head/home-head.css">
   <link rel="stylesheet" href="/static/_vendored/disclosure/disclosure.css">
   <link rel="stylesheet" href="/static/_vendored/nav/nav-tabs.css">
-  <link rel="stylesheet" href="/static/_vendored/select-native/select-native.css">
   <link rel="stylesheet" href="/static/_vendored/button/button.css">
+  <link rel="stylesheet" href="/static/_vendored/icon-button/icon-button.css">
   <link rel="stylesheet" href="/static/_vendored/switch/switch.css">
+  <link rel="stylesheet" href="/static/_vendored/select-native/select-native.css">
   <link rel="stylesheet" href="/static/_vendored/segmented/segmented.css">
   <link rel="stylesheet" href="/static/_vendored/modal/modal.css">
   <link rel="stylesheet" href="/static/_vendored/sign-in/sign-in.css">
+  <link rel="stylesheet" href="/static/_vendored/action-row/action-row.css">
+  <link rel="stylesheet" href="/static/_vendored/row-menu/row-menu.css">
   <link rel="stylesheet" href="/static/_vendored/text-size/text-size.css">
   <link rel="stylesheet" href="/static/_vendored/page-foot/page-foot.css">
+  <link rel="stylesheet" href="/static/_vendored/empty-state/empty-state.css">
+  <link rel="stylesheet" href="/static/_vendored/rec-wave/rec-wave.css">
+  <link rel="stylesheet" href="/static/_vendored/mic-notice/mic-notice.css">
   <!-- The app's own rules, in cascade order: one file per view, base first. -->
   <link rel="stylesheet" href="/static/styles/base.css">
+  <link rel="stylesheet" href="/static/styles/settings.css">
   <link rel="stylesheet" href="/static/styles/lists.css">
-  <link rel="stylesheet" href="/static/styles/code.css">
   <link rel="stylesheet" href="/static/styles/jobs.css">
   <link rel="stylesheet" href="/static/styles/shared.css">
-  <link rel="stylesheet" href="/static/styles/settings.css">
-  <link rel="stylesheet" href="/static/styles/dialogs.css">
-  <link rel="stylesheet" href="/static/styles/terminal.css">
-  <link rel="stylesheet" href="/static/styles/team-os.css">
-  <link rel="stylesheet" href="/static/styles/board.css">
   <link rel="stylesheet" href="/static/_vendored/toast/toast.css">
   <link rel="stylesheet" href="/static/_vendored/build-watch/build-watch.css">
+  <link rel="stylesheet" href="/static/styles/chat.css">
+  <link rel="stylesheet" href="/static/styles/chat-cards.css">
+  <link rel="stylesheet" href="/static/styles/overlays.css">
+  <link rel="stylesheet" href="/static/styles/terminal.css">
+  <link rel="stylesheet" href="/static/styles/board.css">
+  <link rel="stylesheet" href="/static/styles/board-buckets.css">
+  <link rel="stylesheet" href="/static/styles/board-plan-note.css">
+  <link rel="stylesheet" href="/static/styles/board-journal.css">
+  <link rel="stylesheet" href="/static/styles/team-os.css">
+  <link rel="stylesheet" href="/static/styles/wide.css">
+  <link rel="stylesheet" href="/static/styles/code.css">
+  <link rel="stylesheet" href="/static/styles/apps.css">
   <title>App Launcher Lite</title>
 </head>
 <body>
-  <!-- Lucide icon sprite: the markup lives in icon-sprite.html (vendored from
-       _vendored/icons/, trimmed per app) and the page route splices it in at
-       request time, so it stays inline in the served document. iOS Safari
-       resolves a <use> reference only in-document. -->
-<!--#include icon-sprite.html-->
+  <!-- Lucide icon sprite — vendored from _vendored/icons/ (issue #355 PR 3).
+       Inline (not external) so iOS Safari resolves <use> references; hidden via
+       the 0-size idiom, never display:none. Symbol set is the per-app trim the
+       icons README allows; template: /static/_vendored/icons/icons-sprite.html -->
+<svg width="0" height="0" aria-hidden="true" focusable="false"
+     style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none">
+  <symbol id="i-code-xml" viewBox="0 0 24 24" fill="none">
+    <path d="m18 16 4-4-4-4" />
+    <path d="m6 8-4 4 4 4" />
+    <path d="m14.5 4-5 16" />
+  </symbol>
+  <symbol id="i-layout-grid" viewBox="0 0 24 24" fill="none">
+    <rect width="7" height="7" x="3" y="3" rx="1" />
+    <rect width="7" height="7" x="14" y="3" rx="1" />
+    <rect width="7" height="7" x="14" y="14" rx="1" />
+    <rect width="7" height="7" x="3" y="14" rx="1" />
+  </symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24" fill="none">
+    <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />
+  </symbol>
+  <symbol id="i-circle-plus" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M8 12h8" />
+    <path d="M12 8v8" />
+  </symbol>
+  <symbol id="i-square-kanban" viewBox="0 0 24 24" fill="none">
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="M8 7v7" />
+    <path d="M12 7v4" />
+    <path d="M16 7v9" />
+  </symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24" fill="none">
+    <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+    <circle cx="12" cy="12" r="3" />
+  </symbol>
+  <symbol id="i-crown" viewBox="0 0 24 24" fill="none">
+    <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.735H5.81a1 1 0 0 1-.957-.735L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" />
+    <path d="M5 21h14" />
+  </symbol>
+  <symbol id="i-sprout" viewBox="0 0 24 24" fill="none">
+    <path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3" />
+    <path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4" />
+    <path d="M5 21h14" />
+  </symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24" fill="none">
+    <path d="M12 19h8" />
+    <path d="m4 17 6-6-6-6" />
+  </symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none">
+    <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+  </symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24" fill="none">
+    <path d="m12 14 4-4" />
+    <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+  </symbol>
+  <symbol id="i-git-branch" viewBox="0 0 24 24" fill="none">
+    <path d="M15 6a9 9 0 0 0-9 9V3" />
+    <circle cx="18" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+  </symbol>
+  <symbol id="i-file-diff" viewBox="0 0 24 24" fill="none">
+    <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+    <path d="M9 10h6" />
+    <path d="M12 13V7" />
+    <path d="M9 17h6" />
+  </symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none">
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+  </symbol>
+  <symbol id="i-ellipsis-vertical" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="12" cy="5" r="1" />
+    <circle cx="12" cy="19" r="1" />
+  </symbol>
+  <symbol id="i-star" viewBox="0 0 24 24" fill="none">
+    <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+  </symbol>
+  <symbol id="i-star-fill" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+  </symbol>
+  <symbol id="i-map" viewBox="0 0 24 24" fill="none">
+    <path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" />
+    <path d="M15 5.764v15" />
+    <path d="M9 3.236v15" />
+  </symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24" fill="none">
+    <path d="M12 22v-5" />
+    <path d="M15 8V2" />
+    <path d="M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z" />
+    <path d="M9 8V2" />
+  </symbol>
+  <symbol id="i-power" viewBox="0 0 24 24" fill="none">
+    <path d="M12 2v10" />
+    <path d="M18.4 6.6a9 9 0 1 1-12.77.04" />
+  </symbol>
+  <symbol id="i-video" viewBox="0 0 24 24" fill="none">
+    <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" />
+    <rect x="2" y="6" width="14" height="12" rx="2" />
+  </symbol>
+  <symbol id="i-package" viewBox="0 0 24 24" fill="none">
+    <path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" />
+    <path d="M12 22V12" />
+    <polyline points="3.29 7 12 12 20.71 7" />
+    <path d="m7.5 4.27 9 5.15" />
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none">
+    <path d="m21 21-4.34-4.34" />
+    <circle cx="11" cy="11" r="8" />
+  </symbol>
+  <symbol id="i-calendar-days" viewBox="0 0 24 24" fill="none">
+    <path d="M8 2v4" />
+    <path d="M16 2v4" />
+    <rect width="18" height="18" x="3" y="4" rx="2" />
+    <path d="M3 10h18" />
+    <path d="M8 14h.01" />
+    <path d="M12 14h.01" />
+    <path d="M16 14h.01" />
+    <path d="M8 18h.01" />
+    <path d="M12 18h.01" />
+    <path d="M16 18h.01" />
+  </symbol>
+  <symbol id="i-clipboard-list" viewBox="0 0 24 24" fill="none">
+    <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    <path d="M12 11h4" />
+    <path d="M12 16h4" />
+    <path d="M8 11h.01" />
+    <path d="M8 16h.01" />
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none">
+    <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+  </symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none">
+    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none">
+    <path d="M5 12h14" />
+    <path d="M12 5v14" />
+  </symbol>
+  <symbol id="i-notebook-text" viewBox="0 0 24 24" fill="none">
+    <path d="M2 6h4" />
+    <path d="M2 10h4" />
+    <path d="M2 14h4" />
+    <path d="M2 18h4" />
+    <rect width="16" height="20" x="4" y="2" rx="2" />
+    <path d="M9.5 8h5" />
+    <path d="M9.5 12H16" />
+    <path d="M9.5 16H14" />
+  </symbol>
+  <symbol id="i-rocket" viewBox="0 0 24 24" fill="none">
+    <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+    <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09" />
+    <path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z" />
+    <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05" />
+  </symbol>
+  <symbol id="i-library-big" viewBox="0 0 24 24" fill="none">
+    <rect width="8" height="18" x="3" y="3" rx="1" />
+    <path d="M7 3v18" />
+    <path d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z" />
+  </symbol>
+  <symbol id="i-book-open" viewBox="0 0 24 24" fill="none">
+    <path d="M12 7v14" />
+    <path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
+  </symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none">
+    <path d="M12 19v3" />
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+    <rect x="9" y="2" width="6" height="13" rx="3" />
+  </symbol>
+  <symbol id="i-send-horizontal" viewBox="0 0 24 24" fill="none">
+    <path d="M3.714 3.048a.498.498 0 0 0-.683.627l2.843 7.627a2 2 0 0 1 0 1.396l-2.842 7.627a.498.498 0 0 0 .682.627l18-8.5a.5.5 0 0 0 0-.904z" />
+    <path d="M6 12h16" />
+  </symbol>
+  <symbol id="i-trash-2" viewBox="0 0 24 24" fill="none">
+    <path d="M10 11v6" />
+    <path d="M14 11v6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+    <path d="M3 6h18" />
+    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none">
+    <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+    <path d="m15 5 4 4" />
+  </symbol>
+  <symbol id="i-triangle-alert" viewBox="0 0 24 24" fill="none">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+    <path d="M12 9v4" />
+    <path d="M12 17h.01" />
+  </symbol>
+  <symbol id="i-messages-square" viewBox="0 0 24 24" fill="none">
+    <path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+    <path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1" />
+  </symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none">
+    <path d="M10.268 21a2 2 0 0 0 3.464 0" />
+    <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" />
+  </symbol>
+  <symbol id="i-flask-conical" viewBox="0 0 24 24" fill="none">
+    <path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2" />
+    <path d="M6.453 15h11.094" />
+    <path d="M8.5 2h7" />
+  </symbol>
+  <symbol id="i-save" viewBox="0 0 24 24" fill="none">
+    <path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+    <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" />
+    <path d="M7 3v4a1 1 0 0 0 1 1h7" />
+  </symbol>
+  <symbol id="i-volume-2" viewBox="0 0 24 24" fill="none">
+    <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" />
+    <path d="M16 9a5 5 0 0 1 0 6" />
+    <path d="M19.364 18.364a9 9 0 0 0 0-12.728" />
+  </symbol>
+  <symbol id="i-image" viewBox="0 0 24 24" fill="none">
+    <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+    <circle cx="9" cy="9" r="2" />
+    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+  </symbol>
+  <symbol id="i-keyboard" viewBox="0 0 24 24" fill="none">
+    <path d="M10 8h.01" />
+    <path d="M12 12h.01" />
+    <path d="M14 8h.01" />
+    <path d="M16 12h.01" />
+    <path d="M18 8h.01" />
+    <path d="M6 8h.01" />
+    <path d="M7 16h10" />
+    <path d="M8 12h.01" />
+    <rect width="20" height="16" x="2" y="4" rx="2" />
+  </symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24" fill="none">
+    <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+    <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+    <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+    <path d="m2 2 20 20" />
+  </symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24" fill="none">
+    <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+    <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+    <path d="M10 9H8" />
+    <path d="M16 13H8" />
+    <path d="M16 17H8" />
+  </symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24" fill="none">
+    <path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z" />
+    <circle cx="12" cy="13" r="3" />
+  </symbol>
+  <symbol id="i-scan-text" viewBox="0 0 24 24" fill="none">
+    <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+    <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+    <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+    <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+    <path d="M7 8h8" />
+    <path d="M7 12h10" />
+    <path d="M7 16h6" />
+  </symbol>
+  <symbol id="i-rotate-ccw" viewBox="0 0 24 24" fill="none">
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+  </symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none">
+    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </symbol>
+  <symbol id="i-sliders-horizontal" viewBox="0 0 24 24" fill="none">
+    <path d="M10 5H3" />
+    <path d="M12 19H3" />
+    <path d="M14 3v4" />
+    <path d="M16 17v4" />
+    <path d="M21 12h-9" />
+    <path d="M21 19h-5" />
+    <path d="M21 5h-7" />
+    <path d="M8 10v4" />
+    <path d="M8 12H3" />
+  </symbol>
+  <symbol id="i-smartphone" viewBox="0 0 24 24" fill="none">
+    <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+    <path d="M12 18h.01" />
+  </symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none">
+    <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />
+  </symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2" />
+    <path d="M12 20v2" />
+    <path d="m4.93 4.93 1.41 1.41" />
+    <path d="m17.66 17.66 1.41 1.41" />
+    <path d="M2 12h2" />
+    <path d="M20 12h2" />
+    <path d="m6.34 17.66-1.41 1.41" />
+    <path d="m19.07 4.93-1.41 1.41" />
+  </symbol>
+  <symbol id="i-square" viewBox="0 0 24 24" fill="none">
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+  </symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 16v-4" />
+    <path d="M12 8h.01" />
+  </symbol>
+  <symbol id="i-hourglass" viewBox="0 0 24 24" fill="none">
+    <path d="M5 22h14" />
+    <path d="M5 2h14" />
+    <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" />
+    <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" />
+  </symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+    <path d="M2 12h20" />
+  </symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24" fill="none">
+    <line x1="10" x2="14" y1="2" y2="2" />
+    <line x1="12" x2="15" y1="14" y2="11" />
+    <circle cx="12" cy="14" r="8" />
+  </symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24" fill="none">
+    <rect x="14" y="3" width="5" height="18" rx="1" />
+    <rect x="5" y="3" width="5" height="18" rx="1" />
+  </symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+  </symbol>
+  <symbol id="i-webhook" viewBox="0 0 24 24" fill="none">
+    <path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c.01-.7.2-1.4.57-2" />
+    <path d="m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06" />
+    <path d="m12 6 3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 0 1 0 8" />
+  </symbol>
+  <symbol id="i-circle-check" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" />
+    <path d="m9 12 2 2 4-4" />
+  </symbol>
+  <symbol id="i-circle-x" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" />
+    <path d="m15 9-6 6" />
+    <path d="m9 9 6 6" />
+  </symbol>
+  <symbol id="i-circle-help" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9.09 9a3 3 0 1 1 5.83 1c0 2-3 3-3 3" />
+    <path d="M12 17h.01" />
+  </symbol>
+  <symbol id="i-skip-forward" viewBox="0 0 24 24" fill="none">
+    <path d="M21 4v16" />
+    <path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z" />
+  </symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24" fill="none">
+    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+  </symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24" fill="none">
+    <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+  </symbol>
+  <symbol id="i-octagon-x" viewBox="0 0 24 24" fill="none">
+    <path d="m15 9-6 6" />
+    <path d="M2.586 16.726A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2h6.624a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586z" />
+    <path d="m9 9 6 6" />
+  </symbol>
+  <symbol id="i-arrow-down-up" viewBox="0 0 24 24" fill="none">
+    <path d="m3 16 4 4 4-4" />
+    <path d="M7 20V4" />
+    <path d="m21 8-4-4-4 4" />
+    <path d="M17 4v16" />
+  </symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24" fill="none">
+    <path d="m15 18-6-6 6-6" />
+  </symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none">
+    <path d="m9 18 6-6-6-6" />
+  </symbol>
+  <symbol id="i-refresh-cw" viewBox="0 0 24 24" fill="none">
+    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+    <path d="M21 3v5h-5" />
+    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+    <path d="M8 16H3v5" />
+  </symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 6v6l4 2" />
+  </symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24" fill="none">
+    <path d="M12 17v5" />
+    <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+  </symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none">
+    <path d="m6 9 6 6 6-6" />
+  </symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none">
+    <path d="M12 15V3" />
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <path d="m7 10 5 5 5-5" />
+  </symbol>
+  <symbol id="i-corner-down-right" viewBox="0 0 24 24" fill="none">
+    <path d="m15 10 5 5-5 5" />
+    <path d="M4 4v7a4 4 0 0 0 4 4h12" />
+  </symbol>
+  <symbol id="i-corner-down-left" viewBox="0 0 24 24" fill="none">
+    <path d="M20 4v7a4 4 0 0 1-4 4H4" />
+    <path d="m9 10-5 5 5 5" />
+  </symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24" fill="none">
+    <path d="m5 12 7-7 7 7" />
+    <path d="M12 19V5" />
+  </symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 24 24" fill="none">
+    <path d="M12 5v14" />
+    <path d="m19 12-7 7-7-7" />
+  </symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none">
+    <path d="m12 19-7-7 7-7" />
+    <path d="M19 12H5" />
+  </symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none">
+    <path d="M5 12h14" />
+    <path d="m12 5 7 7-7 7" />
+  </symbol>
+  <symbol id="i-arrow-big-up" viewBox="0 0 24 24" fill="none">
+    <path d="M9 18v-6H5l7-7 7 7h-4v6H9z" />
+  </symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none">
+    <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+    <circle cx="12" cy="12" r="3" />
+  </symbol>
+  <symbol id="i-mouse-pointer-2" viewBox="0 0 24 24" fill="none">
+    <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" />
+  </symbol>
+  <symbol id="i-chevrons-down-up" viewBox="0 0 24 24" fill="none">
+    <path d="m7 20 5-5 5 5" />
+    <path d="m7 4 5 5 5-5" />
+  </symbol>
+  <symbol id="i-chevrons-up-down" viewBox="0 0 24 24" fill="none">
+    <path d="m7 15 5 5 5-5" />
+    <path d="m7 9 5-5 5 5" />
+  </symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24" fill="none">
+    <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
+  </symbol>
+  <symbol id="i-git-pull-request" viewBox="0 0 24 24" fill="none">
+    <circle cx="18" cy="18" r="3" />
+    <circle cx="6" cy="6" r="3" />
+    <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+    <line x1="6" x2="6" y1="9" y2="21" />
+  </symbol>
+  <symbol id="i-square-check" viewBox="0 0 24 24" fill="none">
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="m9 12 2 2 4-4" />
+  </symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none">
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24" fill="none">
+    <rect width="20" height="14" x="2" y="3" rx="2" />
+    <line x1="8" x2="16" y1="21" y2="21" />
+    <line x1="12" x2="12" y1="17" y2="21" />
+  </symbol>
+  <symbol id="i-paperclip" viewBox="0 0 24 24" fill="none">
+    <path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551" />
+  </symbol>
+</svg>
+
+<!-- Brand sprite (#1070). Same in-document <use> mechanism as the Lucide
+     sprite above, and for the same iOS Safari reason — but a separate block
+     because these are brand marks, not the icon set: each symbol carries its
+     own viewBox and its own paint, and none of them inherits `.icon`'s stroke
+     styling. Monochrome marks paint with currentColor so they recolor per
+     theme; #361's grey CSS chip existed only because a brand <img> is a
+     separate document whose fill cannot reach page CSS vars, and with the
+     marks inline that constraint is gone. Which marks are official and which
+     are still hand-drawn approximations is recorded per symbol. -->
+<svg width="0" height="0" aria-hidden="true" focusable="false"
+     style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none">
+  <!-- GitHub Copilot CLI — the official mark, vendored from simple-icons
+       16.31.0 (CC0-1.0), replacing the hand-drawn approximation. -->
+  <symbol id="b-copilot" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.641 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.841.841 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256Zm-11.75-5.992h-.344a4.359 4.359 0 0 1-.355.508c-.77.947-1.918 1.492-3.508 1.492-1.725 0-2.989-.359-3.782-1.259a2.137 2.137 0 0 1-.085-.104L4 11.746v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.359 4.359 0 0 1-.355-.508Zm2.328 3.25c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm-5 0c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm3.313-6.185c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z"/>
+  </symbol>
+  <!-- GitLab — the tanuki silhouette (simple-icons, CC0-1.0), on
+       currentColor so it recolors per theme like the Copilot mark. -->
+  <symbol id="b-gitlab" viewBox="0 0 24 24">
+    <path fill="currentColor" fill-rule="evenodd" d="M23.955 13.587l-1.342-4.135-2.664-8.189c-.135-.423-.73-.423-.867 0L16.418 9.45H7.582L4.919 1.263C4.783.84 4.19.84 4.052 1.263L1.386 9.45.044 13.587c-.121.375.014.789.331 1.023L12 23.054l11.625-8.443c.318-.235.453-.647.33-1.024"/>
+  </symbol>
+  <!-- Visual Studio Code — the official mark in its own brand blue, which
+       clears both canvases unaided, so it does not take currentColor. -->
+  <symbol id="b-vscode" viewBox="0 0 24 24">
+    <path fill="#007acc" d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261a1 1 0 0 0-.001 1.479L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/>
+  </symbol>
+</svg>
   <!-- Body-level nav, sibling of <main class="app"> — never nested inside it
        (issue #355, _vendored/nav/README.md "Pinning the bar (iOS)"). An
        installed iOS PWA can capture a fixed nav nested inside a momentum/
        content scroller and anchor it to that scroller's content instead of
        the physical viewport (home-automation#232). -->
-  <nav class="tabs" role="tablist" aria-label="Primary navigation" data-active-tab="coding">
+  <nav class="tabs" role="tablist" aria-label="Primary navigation" data-active-tab="claude">
     <button id="tabBoard" type="button" class="tab" data-tab="board"
-            role="tab" aria-selected="false" aria-controls="paneBoard" tabindex="-1" data-track="tab-board">
+            role="tab" aria-selected="false" aria-controls="paneBoard" tabindex="-1">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-square-kanban"></use></svg>
       <span class="tab-label">Board</span>
     </button>
-    <button id="tabCoding" type="button" class="tab active" data-tab="coding"
-            role="tab" aria-selected="true" aria-controls="paneCoding" data-track="tab-coding">
+    <button id="tabClaude" type="button" class="tab active" data-tab="claude"
+            role="tab" aria-selected="true" aria-controls="paneClaude">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-code-xml"></use></svg>
       <span class="tab-label">Code</span>
     </button>
     <button id="tabTeamOS" type="button" class="tab" data-tab="teamos"
-            role="tab" aria-selected="false" aria-controls="paneTeamOS" tabindex="-1" data-track="tab-team-os">
-      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-circle-plus"></use></svg>
+            role="tab" aria-selected="false" aria-controls="paneTeamOS" tabindex="-1">
+      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-library-big"></use></svg>
       <span class="tab-label">Team</span>
     </button>
     <button id="tabApps" type="button" class="tab" data-tab="apps"
-            role="tab" aria-selected="false" aria-controls="paneApps" tabindex="-1" data-track="tab-apps">
+            role="tab" aria-selected="false" aria-controls="paneApps" tabindex="-1">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-layout-grid"></use></svg>
       <span class="tab-label">Apps</span>
     </button>
     <button id="tabJobs" type="button" class="tab" data-tab="jobs"
-            role="tab" aria-selected="false" aria-controls="paneJobs" tabindex="-1" data-track="tab-jobs">
+            role="tab" aria-selected="false" aria-controls="paneJobs" tabindex="-1">
       <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-activity"></use></svg>
       <span class="tab-label">Jobs</span>
     </button>
-    <button id="tabSettings" type="button" class="tab" data-tab="settings"
-            role="tab" aria-selected="false" aria-controls="paneSettings" tabindex="-1" data-track="tab-settings">
-      <svg class="tab-icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>
-      <span class="tab-label">Settings</span>
-    </button>
   </nav>
+
   <main class="app">
-    <section id="paneCoding" class="pane" role="tabpanel" aria-labelledby="tabCoding">
-      <!-- Vendored home-head summary card (#496): one-line dashboard row —
-           app title + live stats (sessions / running apps / git aggregate)
-           + the theme toggle pinned right (home-head.css contract). The
-           toggle keeps its #themeToggle id so main.js's wireTheme and the
-           CSS-keyed sun/moon swap carry over unchanged. -->
-      <div class="card home-head">
-        <span class="home-title">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rocket"></use></svg>
-          Launcher Lite
-        </span>
-        <span id="homeHeadStatus" class="status"></span>
-        <button type="button" data-track="cpu-reading" class="cpu-reading hit-target" data-level="unknown"
-                title="CPU load" aria-label="CPU load unknown. Show details">–</button>
-        <button type="button" id="themeToggle" class="icon-button home-toggle hit-target"
-                title="Toggle theme" aria-label="Toggle dark mode" data-track="theme-toggle">
-          <svg class="theme-toggle-icon theme-icon-moon hit-target" aria-hidden="true" focusable="false"><use href="#i-moon"></use></svg>
-          <svg class="theme-toggle-icon theme-icon-sun hit-target" aria-hidden="true" focusable="false"><use href="#i-sun"></use></svg>
-        </button>
-      </div>
-      <!-- Options moved below the launch surfaces (#496 item 2): the
-           per-agent option groups are configuration, not launch controls,
-           so the card sits last on the tab (see the bottom of this pane).
-           The launch-time Detached/Resume toggles moved into the Projects
-           card's summary — the surface sessions are actually started from. -->
-      <details class="card card--collapsible sessions-card" open>
-        <summary class="collapse-summary" data-track="coding-running-sessions">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-terminal"></use></svg>
-            <h3 class="collapse-title">Running sessions</h3>
-          </span>
-          <span class="summary-actions">
-            <div class="sessions-header-actions">
-              <button id="gitStatusBtn" type="button" class="button-ghost git-status-btn"
-                      title="Check each project's git branch + uncommitted changes"
-                      aria-label="Check git status of all projects" data-track="git-status-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-git-branch"></use></svg> status</button>
-              <div id="gitStatusSummary" class="git-summary" hidden
-                   role="list" aria-label="Projects not on their default branch"></div>
-            </div>
-            <span class="collapse-chevron" aria-hidden="true">›</span>
-          </span>
-        </summary>
-        <div class="collapse-body">
-        <ul id="sessionsList" class="card-list" aria-label="Running coding sessions"></ul>
-        <p id="sessionsEmpty" class="muted small">No sessions launched from here yet — tap a project below to start one.</p>
-        <p class="launcher-note">Only sessions launched from here appear — agent windows started directly on the PC can't be attached.</p>
-        </div>
-      </details>
-      <!-- Collapsed by default (#383 review round): the running-sessions
-           card above is the tab's working set; expand to reach the tiles.
-           Detached + Resume live here (#496 item 2): they are launch-time
-           controls, so they sit beside the tiles they modify. -->
-      <details class="card card--collapsible projects-card">
-        <summary class="collapse-summary" data-track="coding-projects">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-folder"></use></svg>
-            <h3 class="collapse-title">Projects</h3>
-          </span>
-          <span class="summary-actions">
-            <div class="coding-toggles">
-              <!-- The launch model lives in the Copilot options card below
-                   (#copilotModel) — one control, one source of truth. -->
-              <button type="button" id="codingDetached" class="detached-toggle" role="switch" aria-checked="false"
-                     aria-label="Launch detached"
-                     title="Launch detached: a console window on the PC, listed and killable here but no phone terminal" data-track="coding-detached">
-                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-cloud"></use></svg>
-              </button>
-              <button type="button" id="codingResume" class="detached-toggle" role="switch" aria-checked="false"
-                     aria-label="Resume session"
-                     title="Resume: reopen the agent's own session picker — in a phone terminal, or in the detached console when Detached is also on" data-track="coding-resume">
-                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rotate-ccw"></use></svg>
-              </button>
-            </div>
-            <button id="favFilterBtn" type="button" class="button-ghost fav-filter-btn"
-                    aria-pressed="false" title="Show only favorites" data-track="fav-filter-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg> Favorites</button>
-            <span class="collapse-chevron" aria-hidden="true">›</span>
-          </span>
-        </summary>
-        <div class="collapse-body">
-        <ul id="codingList" class="card-list" aria-label="Coding projects"></ul>
-        <div id="codingEmpty" class="empty" hidden>
-          No coding projects found — point <strong>Projects dir</strong> in Settings at a folder that has project subdirectories.
-        </div>
-        <p id="gitStatusLegend" class="muted small git-legend" hidden>
-          <span class="git-swatch off-main"></span> not on main ·
-          <span class="git-swatch dirty"></span> uncommitted changes
-        </p>
-        </div>
-      </details>
-      <details id="codingOptions" class="card card--collapsible">
-        <summary class="collapse-summary" data-track="coding-options">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>
-            <h3 class="collapse-title">options</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">›</span>
-        </summary>
-        <div class="opt-group">
-          <h3 class="opt-group-title">Visible agents</h3>
-          <p class="opt-hint">Which launch buttons each project row paints. Hiding one only trims the row — a running session still shows its agent in the sessions list and on the Board.</p>
-          <div id="agentVisibility" class="toggles"></div>
-        </div>
-        <div class="opt-group">
-          <h3 class="opt-group-title">GitHub Copilot</h3>
-          <div class="opt-row">
-            <span class="opt-name">Model</span>
-            <select id="copilotModel" class="select-native" aria-label="Copilot model" data-track="copilot-model"></select>
-          </div>
-          <div class="opt-row">
-            <span class="opt-name">Context</span>
-            <select id="copilotContext" class="select-native" aria-label="Copilot context window" data-track="copilot-context"></select>
-          </div>
-          <div class="opt-row">
-            <span class="opt-name">Effort</span>
-            <select id="copilotEffort" class="select-native" aria-label="Copilot reasoning effort" data-track="copilot-effort"></select>
-          </div>
-          <div class="toggles">
-            <span class="switch-row"><span>Autopilot</span><button type="button" id="copilotAutopilot" class="toggle" role="switch" aria-checked="false" aria-label="Copilot autopilot" data-track="copilot-autopilot"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
-            <span class="switch-row"><span>Skip permission prompts</span><button type="button" id="copilotSkipPerms" class="toggle" role="switch" aria-checked="false" aria-label="Skip Copilot permission prompts" data-track="copilot-skip-perms"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
-          </div>
-          <p class="opt-hint">Sign in with <code>/login</code> inside the session. <strong>Default (auto)</strong> lets Copilot pick the model — Effort only applies with an explicit model (the auto model rejects it). The model list comes from <code>copilot_models</code> in <code>webapp_config.json</code> (tenant-gated ids — edit it there).</p>
-          <div id="copilotFlagsPreview" class="flags-preview">copilot</div>
-        </div>
-      </details>
-    </section>
-    <section id="paneApps" class="pane" role="tabpanel" aria-labelledby="tabApps" hidden>
-      <details class="card card--collapsible sessions-card" open>
-        <summary class="collapse-summary" data-track="apps-running">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-play"></use></svg>
-            <h3 class="collapse-title">Running apps</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">›</span>
-        </summary>
-        <div class="collapse-body">
-        <ul id="runningAppsList" class="card-list" aria-label="Running apps"></ul>
-        <p id="runningAppsEmpty" class="muted small">Nothing running. (A webapp restart forgets running apps — check Port listeners for orphans.)</p>
-        <p class="launcher-note">Only apps launched from here appear — tap a registered app below to start one.</p>
-        </div>
-      </details>
-      <!-- Collapsed by default (#383 review round) — Running apps above is
-           the tab's working set. -->
-      <details class="card card--collapsible listeners-card">
-        <summary class="collapse-summary" data-track="apps-listeners">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plug"></use></svg>
-            <h3 class="collapse-title">Port listeners</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">›</span>
-        </summary>
-        <div class="collapse-body">
-        <div id="listenersList" class="listeners"></div>
-        <p id="listenersEmpty" class="muted small">Nothing running on common app ports.</p>
-        <p class="launcher-note">The launcher itself isn't listed — it can't kill its own process.</p>
-        </div>
-      </details>
-      <details class="card card--collapsible apps-list-card">
-        <summary class="collapse-summary" data-track="apps-registered">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-package"></use></svg>
-            <h3 class="collapse-title">Registered apps</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">›</span>
-        </summary>
-        <div class="collapse-body">
-        <ul id="appsList" class="card-list" aria-label="Apps"></ul>
-        <div id="appsEmpty" class="empty" hidden>
-          No apps registered yet — tap <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> to scan your projects root.
-        </div>
-        </div>
-      </details>
+    <!-- @include views/coding-pane.html -->
 
-      <!-- Collapsed by default, matching Port listeners — a setup-once panel,
-           not the tab's working set (issue #456 part 2/2). -->
-      <details class="card card--collapsible registered-trays-card">
-        <summary class="collapse-summary" data-track="apps-autostart-trays">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-package"></use></svg>
-            <h3 class="collapse-title">Autostart registered trays</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">›</span>
-        </summary>
-        <div class="collapse-body">
-        <ul id="registeredTraysList" class="card-list" aria-label="Autostart registered trays"></ul>
-        <div id="registeredTraysEmpty" class="empty" hidden>
-          No sister trays discovered yet — tap <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> in Settings to scan for <code>tray.bat</code> files.
-        </div>
-        <p class="launcher-note">Autostart-enabled trays launch one at a time, in order, once app-launcher's own webapp is up.</p>
-        </div>
-      </details>
-    </section>
+    <!-- @include views/apps-pane.html -->
 
-    <section id="paneJobs" class="pane" role="tabpanel" aria-labelledby="tabJobs" hidden>
-      <details id="jobsAgendaCard" class="card card--collapsible sessions-card jobs-agenda-card">
-        <summary class="collapse-summary" data-track="jobs-schedule">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-calendar-days"></use></svg>
-            <h3 class="collapse-title">Schedule</h3>
-          </span>
-          <span class="collapse-chevron" aria-hidden="true">›</span>
-        </summary>
-        <div id="jobsAgendaBody" class="jobs-agenda-body">
-          <p class="muted small">Loading…</p>
-        </div>
-      </details>
-      <details class="card card--collapsible sessions-card jobs-card" open>
-        <summary class="collapse-summary" data-track="jobs-registered">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard-list"></use></svg>
-            <h3 class="collapse-title">Registered jobs</h3>
-          </span>
-          <span class="summary-actions">
-            <div class="jobs-header-actions">
-              <button id="jobsAddBtn" type="button" class="button-ghost jobs-add-btn" aria-label="Add job" title="Add job" hidden data-track="jobs-add-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg></button>
-              <span class="jobs-edit-control">
-                <span class="jobs-edit-label">Edit mode</span>
-                <button type="button" id="jobsEditBtn" class="toggle" role="switch" aria-checked="false"
-                       aria-label="Edit mode"
-                       title="Edit mode — reveal Add job plus edit + remove on job rows (same switch as Settings)" data-track="jobs-edit-btn">
-                  <span class="knob"></span><span class="toggle-label">OFF</span>
-                </button>
-              </span>
-              <button id="jobsSortBtn" type="button" class="button-ghost jobs-sort-btn" aria-label="Change job sort order" data-track="jobs-sort-btn"></button>
-            </div>
-            <span class="collapse-chevron" aria-hidden="true">›</span>
-          </span>
-        </summary>
-        <div class="collapse-body">
-        <div class="jobs-search-bar" role="search">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
-          <input id="jobsSearchInput" type="search" autocomplete="off"
-                 placeholder="Search run output" aria-label="Search run output">
-          <button id="jobsSearchClear" type="button" class="button-ghost hit-target"
-                  aria-label="Clear run search" title="Clear run search" hidden data-track="jobs-search-clear">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
-          </button>
-        </div>
-        <ul id="jobsList" class="card-list" aria-label="Jobs"></ul>
-        <p id="jobsEmpty" class="muted small" hidden>
-          No jobs registered yet — tap the <strong><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></strong> edit toggle above, then <strong><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg></strong> to add one.
-        </p>
-        </div>
-      </details>
-    </section>
+    <!-- @include views/jobs-pane.html -->
 
-    <section id="paneTeamOS" class="pane" role="tabpanel" aria-labelledby="tabTeamOS" hidden>
-      <!-- No separate options card (#496 round 2, mirroring the Coding tab):
-           the model combo + Detached/Resume launch controls live in the
-           Skills card's summary below — the surface skills are launched from. The recap
-           tile leads the tab. -->
-      <section id="teamOsRecap" class="card card--row teamos-recap-card" hidden>
-        <div class="card-head">
-          <span class="teamos-recap-main">
-            <h3 class="card-title"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-notebook-text"></use></svg> Weekly recap</h3>
-            <span id="teamOsRecapBadge" class="teamos-recap-badge"></span>
-          </span>
-          <button id="teamOsRecapLaunch" type="button"
-                  class="icon-btn agent-btn teamos-recap-launch"
-                  title="Review the weekly recap (/weekly-recap)"
-                  aria-label="Launch weekly recap review" data-track="team-os-recap-launch"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rocket"></use></svg></button>
-        </div>
-      </section>
+    <!-- @include views/team-os-pane.html -->
 
-      <details class="card card--collapsible teamos-list-card" open>
-        <summary class="collapse-summary" data-track="team-os-skills">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-library-big"></use></svg>
-            <h3 class="collapse-title">Skills</h3>
-          </span>
-          <span class="summary-actions">
-            <div class="teamos-toggles">
-              <!-- Launch model: the same board-style combo as the Coding
-                   tab. Options are populated at wire time from the server
-                   config's copilot_models list (team-os.js), plus the
-                   Default option ("" = let Copilot pick auto) — nothing is
-                   hardcoded here. Copilot-only: team-os skills are invoked
-                   as /skill commands over a Copilot session. -->
-              <span class="model-combo" id="teamOsModelCombo" data-value="">
-                <button type="button" id="teamOsModelBtn" class="model-combo-trigger"
-                        aria-haspopup="listbox" aria-expanded="false" aria-controls="teamOsModelMenu"
-                        title="Model for the launched team-os skill" data-track="team-os-model-btn">Default</button>
-                <span id="teamOsModelMenu" class="model-combo-menu" role="listbox" aria-label="Skill launch model" hidden>
-                  <button type="button" role="option" data-track="team-os-model-default" data-value="" aria-selected="true">Default</button>
-                </span>
-              </span>
-              <button type="button" id="teamOsDetached" class="detached-toggle" role="switch" aria-checked="false"
-                     aria-label="Launch detached"
-                     title="Launch detached: a console window on the PC, listed and killable in the Coding tab but no phone terminal" data-track="team-os-detached">
-                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-cloud"></use></svg>
-              </button>
-              <button type="button" id="teamOsResume" class="detached-toggle" role="switch" aria-checked="false"
-                     aria-label="Resume session"
-                     title="Resume: reopen Copilot's session picker (drops the skill prompt) — in a phone terminal, or in the detached console when Detached is also on" data-track="team-os-resume">
-                <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-rotate-ccw"></use></svg>
-              </button>
-            </div>
-            <span class="collapse-chevron" aria-hidden="true">›</span>
-          </span>
-        </summary>
-        <div class="collapse-body">
-        <ul id="teamOsList" class="card-list" aria-label="Team OS skills"></ul>
-        <div id="teamOsEmpty" class="empty" hidden>
-          No team-os skills found — point <strong>Team OS dir</strong> in Settings
-          at a team-os checkout (skills live under <code>.claude/skills</code>).
-        </div>
-        </div>
-      </details>
-    </section>
+    <!-- @include views/board-pane.html -->
 
-    <section id="paneBoard" class="pane" role="tabpanel" aria-labelledby="tabBoard" hidden>
-      <div class="board-strip" role="tablist" aria-label="Board columns">
-        <button id="boardColBacklog" type="button" class="board-strip-btn" data-col="backlog"
-                role="tab" aria-selected="false" data-track="board-col-backlog">git <span class="board-count">0</span></button>
-        <button id="boardColBot" type="button" class="board-strip-btn" data-col="bot_turn"
-                role="tab" aria-selected="false" data-track="board-col-bot">bot <span class="board-count">0</span></button>
-        <button id="boardColYours" type="button" class="board-strip-btn active" data-col="your_turn"
-                role="tab" aria-selected="true" data-track="board-col-yours">you <span class="board-count">0</span></button>
-        <button id="boardColDone" type="button" class="board-strip-btn" data-col="done"
-                role="tab" aria-selected="false" data-track="board-col-done">Done <span class="board-count">0</span></button>
-        <button id="boardRefresh" type="button" class="icon-btn board-refresh"
-                title="Refresh GitLab issues / done-today (runs glab)"
-                aria-label="Refresh GitLab data" data-track="board-refresh"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-refresh-cw"></use></svg></button>
-      </div>
-      <div id="boardStatus" class="board-status" hidden></div>
-      <div id="boardColumns" class="board-columns">
-        <section class="board-col" data-col="backlog" aria-label="Backlog">
-          <h3 class="board-col-title">Backlog <span class="board-col-count" data-col="backlog">(0)</span></h3>
-          <ul class="card-list board-list" data-col="backlog"></ul>
-          <div class="empty board-empty" data-col="backlog" hidden></div>
-        </section>
-        <section class="board-col" data-col="bot_turn" aria-label="Bot's turn">
-          <h3 class="board-col-title">Bot's turn <span class="board-col-count" data-col="bot_turn">(0)</span></h3>
-          <ul class="card-list board-list" data-col="bot_turn"></ul>
-          <div class="empty board-empty" data-col="bot_turn" hidden></div>
-        </section>
-        <section class="board-col" data-col="your_turn" aria-label="Your turn">
-          <h3 class="board-col-title">Your turn <span class="board-col-count" data-col="your_turn">(0)</span></h3>
-          <ul class="card-list board-list" data-col="your_turn"></ul>
-          <div class="empty board-empty" data-col="your_turn" hidden></div>
-        </section>
-        <section class="board-col" data-col="done" aria-label="Done">
-          <h3 class="board-col-title">Done <span class="board-col-count" data-col="done">(0)</span></h3>
-          <ul class="card-list board-list" data-col="done"></ul>
-          <div class="empty board-empty" data-col="done" hidden></div>
-        </section>
-      </div>
-    </section>
+    <!-- @include views/settings-pane.html -->
 
-    <section id="paneSettings" class="pane" role="tabpanel" aria-labelledby="tabSettings" hidden>
-      <div id="settingsPanel" class="card settings-card">
-        <div class="settings-head">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>
-            <h3 class="collapse-title">Settings</h3>
-          </span>
-          <span class="summary-actions">
-            <span class="switch-row settings-edit-row"><span>Edit mode</span><button type="button" id="editMode" class="toggle" role="switch" aria-checked="false" aria-label="Edit mode" title="Edit mode — reveal rename + remove on Apps tab rows, Add on Jobs tab" data-track="edit-mode"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
-          </span>
-        </div>
-        <div class="collapse-body">
-        <label class="stacked">
-          <span>Projects dir (Coding)</span>
-          <input id="projectsDir" type="text" class="input-native">
-        </label>
-        <label class="stacked">
-          <span>Ignored folders — one per line, names or <code>*</code> globs</span>
-          <textarea id="projectsIgnore" class="input-native" rows="3"
-                    placeholder="archive&#10;*-old&#10;scratch"></textarea>
-        </label>
-        <label class="stacked">
-          <span>Apps scan root</span>
-          <input id="appsScanRoot" type="text" class="input-native">
-        </label>
-        <label class="stacked">
-          <span>Team OS dir (team-os checkout)</span>
-          <input id="teamOsDir" type="text" class="input-native">
-        </label>
-        <label class="stacked">
-          <span>GitLab group (Board issues; subgroups included)</span>
-          <input id="gitlabGroup" type="text" class="input-native" placeholder="my-group or my-group/sub">
-        </label>
-        <label class="stacked">
-          <span>GitLab host (optional — self-hosted instance; empty = glab default)</span>
-          <input id="gitlabHost" type="text" class="input-native" placeholder="gitlab.example.com">
-        </label>
-        <label class="stacked">
-          <span>Terminal scrollback (lines) — how much history a full-screen agent keeps for a reconnect</span>
-          <input id="terminalHistoryLines" type="number" class="input-native" step="100">
-        </label>
-        <div class="stacked settings-textsize">
-          <span>Text size</span>
-          <div class="segmented" id="textSizeControl" role="group" aria-label="Text size">
-            <button type="button" data-track="text-size-small" class="segmented-item" aria-pressed="false" data-textsize="small">Small</button>
-            <button type="button" data-track="text-size-default" class="segmented-item" aria-pressed="true" data-textsize="default">Default</button>
-            <button type="button" data-track="text-size-large" class="segmented-item" aria-pressed="false" data-textsize="large">Large</button>
-          </div>
-        </div>
-        <div class="switch-row settings-switch-row">
-          <span>Start App Launcher Lite at log on</span>
-          <button type="button" id="bootAutostartToggle" class="toggle" role="switch" aria-checked="false" aria-label="Start App Launcher Lite at log on" title="Start App Launcher Lite automatically at log on (Startup folder — no admin needed)" data-track="boot-autostart-toggle"><span class="knob"></span><span class="toggle-label">OFF</span></button>
-        </div>
-        <div class="row settings-actions">
-          <button id="saveSettings" type="button" class="button-ghost accent-btn" data-track="save-settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-save"></use></svg> Save</button>
-          <button id="rescanBtn" type="button" class="button-ghost" data-track="rescan-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> Scan for new apps</button>
-        </div>
-        <hr>
-        <!-- The Screen view's entry (#60): screen-view.js owns the tap. -->
-        <div class="switch-row settings-switch-row">
-          <span>Screen — the PC's desktop, live</span>
-          <button type="button" id="screenOpen" class="button-ghost" aria-haspopup="dialog" data-track="screen-open"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg> View live</button>
-        </div>
-        <p id="statusReadout" class="muted small"></p>
-        </div>
-      </div>
+    <!-- @include views/settings-sheets.html -->
 
-      <div id="tokensPanel" class="card settings-card">
-        <div class="settings-head">
-          <span class="collapse-main">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg>
-            <h3 class="collapse-title">API tokens</h3>
-          </span>
-        </div>
-        <div class="collapse-body">
-          <p class="muted small">Job-scoped bearer tokens (issue #72) — safe to bake into a Stream Deck button URL: each token can fire only its chosen job and nothing else, and revoking one never touches the main login.</p>
-          <ul id="tokensList" class="card-list"></ul>
-          <p id="tokensEmpty" class="empty muted small" hidden>No tokens minted yet.</p>
-          <label class="stacked">
-            <span>Label</span>
-            <input id="tokenLabelInput" type="text" class="input-native" placeholder="Stream Deck — daily reporting">
-          </label>
-          <label class="stacked">
-            <span>Job it may fire</span>
-            <select id="tokenJobSelect" class="input-native" data-track="token-job-select"></select>
-          </label>
-          <div class="row settings-actions">
-            <button id="tokenMintBtn" type="button" class="button-ghost accent-btn" data-track="token-mint-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"></use></svg> Mint token</button>
-          </div>
-          <div id="tokenMintResult" class="stacked" hidden>
-            <span class="muted small">Copy it now — it is shown only once.</span>
-            <div class="row">
-              <input id="tokenMintValue" type="text" class="input-native" readonly>
-              <button id="tokenCopyBtn" type="button" class="button-ghost" data-track="token-copy-btn"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg> Copy</button>
-            </div>
-            <span id="tokenMintUrl" class="muted small"></span>
-          </div>
-        </div>
-      </div>
-    </section>
+    <!-- @include views/team-os-dialogs.html -->
 
-    <div id="teamOsBrowser" class="terminal-overlay" hidden>
-      <div class="terminal-bar">
-        <button id="teamOsBrowserBack" type="button" class="term-btn" data-track="team-os-browser-back"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg> Skills</button>
-        <span id="teamOsBrowserTitle" class="terminal-title">skill</span>
-        <div class="terminal-bar-actions">
-          <button id="teamOsDocDelete" type="button" class="term-btn" title="Delete this conversation log" hidden data-track="team-os-doc-delete"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-trash-2"></use></svg></button>
-          <button id="teamOsDocRename" type="button" class="term-btn" title="Rename this conversation log" hidden data-track="team-os-doc-rename"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
-          <button id="teamOsDocClose" type="button" class="term-btn" title="Close file" hidden data-track="team-os-doc-close"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
-        </div>
-      </div>
-      <div class="teamos-browser-body">
-        <ul id="teamOsFileList" class="teamos-file-list" aria-label="Skill files"></ul>
-        <div id="teamOsFileContent" class="teamos-file-content" hidden></div>
-      </div>
-    </div>
+    <!-- @include views/jobs-dialogs.html -->
 
-    <!-- The Screen view (#60): the PC's desktop, live, full screen. Opened
-         from the Settings tab's Screen row; screen-view.js drives it. -->
-    <dialog id="screenView" class="screen-view" aria-labelledby="screenViewTitle" data-track-view="screen-view">
-      <div class="screen-view-bar">
-        <h2 id="screenViewTitle" class="screen-view-title" tabindex="-1" autofocus><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg> Screen</h2>
-        <div id="screenPicker" class="segmented screen-picker" role="group" aria-label="Display" hidden></div>
-        <button type="button" id="screenViewClose" class="icon-button" aria-label="Close" title="Close" data-track="screen-view-close">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
-        </button>
-      </div>
-      <div id="screenStage" class="screen-stage">
-        <img id="screenImage" class="screen-image" alt="The PC's screen" draggable="false" hidden>
-        <div id="screenState" class="screen-state" role="status" aria-live="polite" hidden></div>
-      </div>
-    </dialog>
+    <!-- @include views/apps-scan-dialog.html -->
 
-    <dialog id="jobDialog" class="rename-dialog" data-track-view="job-dialog">
-      <form id="jobForm">
-        <div class="dialog-head">
-          <h2 id="jobDialogTitle">Add job</h2>
-          <button type="button" id="jobCancel" class="dialog-close" aria-label="Close" data-track="job-cancel">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
-          </button>
-        </div>
-        <input type="hidden" id="jobIdField">
-        <label class="stacked">
-          <span>Name</span>
-          <input id="jobNameInput" type="text" class="input-native" required>
-        </label>
-        <label class="stacked">
-          <span>Kind</span>
-          <select id="jobKindInput" class="input-native" data-track="job-kind-input">
-            <option value="">Auto (from extension)</option>
-            <option value="python">Python (.py)</option>
-            <option value="batch">Batch (.bat)</option>
-            <option value="powershell">PowerShell (.ps1)</option>
-            <option value="shell-wsl">Shell — WSL (.sh)</option>
-            <option value="inline-shell">Inline shell (body below, no file)</option>
-            <option value="http-check">HTTP check (poll a URL)</option>
-          </select>
-        </label>
-        <label class="stacked" id="jobScriptRow">
-          <span>Script path</span>
-          <input id="jobScriptInput" type="text" class="input-native"
-                 placeholder="E:\automation\content-management\launch_reporting.bat">
-        </label>
-        <div class="job-kind-group" id="jobInlineShellFields" hidden>
-          <label class="stacked">
-            <span>Script type</span>
-            <select id="jobInlineExtInput" class="input-native" data-track="job-inline-ext-input">
-              <option value=".ps1">PowerShell (.ps1)</option>
-              <option value=".bat">Batch (.bat)</option>
-              <option value=".sh">Shell — WSL (.sh)</option>
-            </select>
-          </label>
-          <label class="stacked">
-            <span>Script body</span>
-            <textarea id="jobInlineBodyInput" class="input-native job-inline-body" rows="6"
-                      placeholder="Write-Host 'hi'"></textarea>
-          </label>
-        </div>
-        <div class="job-kind-group" id="jobHttpCheckFields" hidden>
-          <label class="stacked">
-            <span>URL</span>
-            <input id="jobHttpUrlInput" type="text" class="input-native"
-                   placeholder="https://example.com/health">
-          </label>
-          <label class="stacked">
-            <span>Method</span>
-            <select id="jobHttpMethodInput" class="input-native" data-track="job-http-method-input">
-              <option value="GET">GET</option>
-              <option value="HEAD">HEAD</option>
-              <option value="POST">POST</option>
-            </select>
-          </label>
-          <label class="stacked">
-            <span>Expected status</span>
-            <input id="jobHttpExpectStatusInput" type="number" class="input-native"
-                   min="100" max="599" placeholder="200">
-          </label>
-          <label class="stacked">
-            <span>Timeout (seconds)</span>
-            <input id="jobHttpTimeoutInput" type="number" class="input-native"
-                   min="1" max="120" placeholder="10">
-          </label>
-        </div>
-        <label class="stacked" id="jobArgsRow">
-          <span>Arguments (optional)</span>
-          <input id="jobArgsInput" type="text" class="input-native" placeholder="auto">
-        </label>
-        <label class="stacked">
-          <span>Schedule</span>
-          <select id="jobScheduleType" class="input-native" data-track="job-schedule-type">
-            <option value="none">None (manual only)</option>
-            <option value="minutes">Every N minutes</option>
-            <option value="hourly">Every N hours</option>
-            <option value="daily">Daily at HH:MM</option>
-            <option value="daily_times">Daily at multiple times</option>
-            <option value="weekly">Weekly</option>
-            <option value="once">Once (specific date + time)</option>
-          </select>
-        </label>
-        <label class="stacked" id="jobScheduleOnceRow" hidden>
-          <span>At (date + time, fires once)</span>
-          <input id="jobScheduleOnceAt" type="datetime-local" class="input-native">
-        </label>
-        <label class="stacked" id="jobScheduleEveryRow" hidden>
-          <span>Every</span>
-          <input id="jobScheduleEvery" type="number" class="input-native" min="1" value="1">
-        </label>
-        <label class="stacked" id="jobScheduleAtRow" hidden>
-          <span>At (HH:MM)</span>
-          <input id="jobScheduleAt" type="text" class="input-native" placeholder="06:00" pattern="[0-2][0-9]:[0-5][0-9]">
-        </label>
-        <label class="stacked" id="jobScheduleTimesRow" hidden>
-          <span>Times — comma-separated HH:MM list</span>
-          <input id="jobScheduleTimes" type="text" class="input-native" placeholder="06:00, 12:00, 18:00">
-        </label>
-        <label class="stacked" id="jobScheduleDayRow" hidden>
-          <span>Day</span>
-          <select id="jobScheduleDay" class="input-native" data-track="job-schedule-day">
-            <option value="MON">Monday</option>
-            <option value="TUE">Tuesday</option>
-            <option value="WED">Wednesday</option>
-            <option value="THU">Thursday</option>
-            <option value="FRI">Friday</option>
-            <option value="SAT">Saturday</option>
-            <option value="SUN">Sunday</option>
-          </select>
-        </label>
-        <label class="stacked">
-          <span>Cooldown (seconds, optional)</span>
-          <input id="jobCooldownInput" type="number" class="input-native"
-                 min="0" max="86400" placeholder="0">
-        </label>
-        <label class="stacked">
-          <span>Mutex group (optional)</span>
-          <input id="jobMutexGroupInput" type="text" class="input-native"
-                 maxlength="32" placeholder="e.g. chrome-profile">
-        </label>
-        <div class="job-alert-row switch-row">
-          <span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-bell"></use></svg> Alert to Telegram if failed</span>
-          <button type="button" id="jobAlertOnFailureInput" class="toggle" role="switch" aria-checked="false" aria-label="Alert to Telegram if failed" data-track="job-alert-on-failure-input"><span class="knob"></span><span class="toggle-label">OFF</span></button>
-        </div>
-        <div class="job-confirm-row switch-row">
-          <span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-triangle-alert"></use></svg> Require confirmation before running</span>
-          <button type="button" id="jobConfirmInput" class="toggle" role="switch" aria-checked="false" aria-label="Require confirmation before running" data-track="job-confirm-input"><span class="knob"></span><span class="toggle-label">OFF</span></button>
-        </div>
-        <section class="dialog-section">
-          <h3 class="dialog-section-title">Run on success (chain)</h3>
-          <p class="dialog-section-hint">Pick jobs to fire after a successful run.</p>
-          <ul id="jobOnSuccessList" class="job-chain-list"></ul>
-        </section>
-        <section class="dialog-section">
-          <h3 class="dialog-section-title">Run on failure (chain)</h3>
-          <p class="dialog-section-hint">Pick jobs to fire after a failed run.</p>
-          <ul id="jobOnFailureList" class="job-chain-list"></ul>
-        </section>
-        <section class="dialog-section">
-          <h3 class="dialog-section-title">Parameters (optional)</h3>
-          <p class="dialog-section-hint">
-            Typed inputs collected on Run-now. Add a row per parameter;
-            an empty list means one-tap fire as today.
-          </p>
-          <ol id="jobParamsList" class="job-params-list"></ol>
-          <button type="button" id="jobParamsAdd" class="button-ghost" data-track="job-params-add"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg> Add parameter</button>
-        </section>
-        <section class="dialog-section">
-          <h3 class="dialog-section-title">Webhook</h3>
-          <p class="dialog-section-hint">
-            Fire this job from an external service (GitHub, Stripe, or a
-            generic POST) instead of a phone tap — gated by its own
-            signature, never the app's bearer token.
-          </p>
-          <label class="stacked">
-            <span>Provider</span>
-            <select id="jobWebhookProvider" class="input-native" data-track="job-webhook-provider">
-              <option value="">None (disabled)</option>
-              <option value="github">GitHub</option>
-              <option value="stripe">Stripe</option>
-              <option value="generic">Generic</option>
-            </select>
-          </label>
-          <label class="stacked" id="jobWebhookSecretRow" hidden>
-            <span>Secret</span>
-            <input id="jobWebhookSecretInput" type="text" class="input-native"
-                   placeholder="literal value or $secret:key">
-          </label>
-          <label class="stacked" id="jobWebhookEventsRow" hidden>
-            <span>Event allowlist (comma-separated; empty = all)</span>
-            <input id="jobWebhookEventsInput" type="text" class="input-native"
-                   placeholder="push, pull_request">
-          </label>
-          <div id="jobWebhookMappingSection" hidden>
-            <p class="dialog-section-hint">
-              Map payload fields (JSONPath, e.g. <code>$.repository.full_name</code>)
-              to this job's parameter names above.
-            </p>
-            <ol id="jobWebhookMappingList" class="job-params-list"></ol>
-            <button type="button" id="jobWebhookMappingAdd" class="button-ghost" data-track="job-webhook-mapping-add"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"></use></svg> Add mapping</button>
-          </div>
-        </section>
-        <ul id="jobPreflightProblems" class="job-preflight-problems" hidden></ul>
-        <div class="dialog-actions dialog-actions--stacked">
-          <button type="button" id="jobSaveAnyway" class="button-tint warn" hidden data-track="job-save-anyway">Save anyway</button>
-          <button type="submit" id="jobSaveBtn" class="button-primary" data-track="job-save-btn">Add and verify</button>
-        </div>
-      </form>
-    </dialog>
+    <!-- @include views/jobs-sheets.html -->
 
-    <dialog id="jobRunDialog" class="rename-dialog" data-track-view="job-run-dialog">
-      <form id="jobRunForm">
-        <div class="dialog-head">
-          <h2 id="jobRunDialogTitle">Run job</h2>
-          <button type="button" id="jobRunCancel" class="dialog-close" aria-label="Close" data-track="job-run-cancel">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
-          </button>
-        </div>
-        <p id="jobRunDialogStaleNote" class="muted small" hidden></p>
-        <div id="jobRunDialogFields"></div>
-        <div class="job-run-dryrow switch-row">
-          <span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-flask-conical"></use></svg> Dry-run (sets <code>JOB_DRY_RUN=1</code> — opted-in scripts skip side effects)</span>
-          <button type="button" id="jobRunDialogDryRun" class="toggle" role="switch" aria-checked="false" aria-label="Dry-run" data-track="job-run-dialog-dry-run"><span class="knob"></span><span class="toggle-label">OFF</span></button>
-        </div>
-        <div class="dialog-actions dialog-actions--stacked">
-          <button type="submit" data-track="job-run-submit" class="button-primary"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-play"></use></svg> Run</button>
-        </div>
-      </form>
-    </dialog>
+    <!-- @include views/apps-ports-dialog.html -->
 
-    <dialog id="scanDialog" class="scan-dialog" data-track-view="scan-dialog">
-      <div class="dialog-head">
-        <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg> New entries</h2>
-        <button type="button" id="scanCancel" class="dialog-close" aria-label="Close" data-track="scan-cancel">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
-        </button>
-      </div>
-      <div id="scanResults" class="scan-results"></div>
-      <div class="dialog-actions dialog-actions--stacked">
-        <button id="scanSave" type="button" class="button-primary" data-track="scan-save">Add selected</button>
-      </div>
-    </dialog>
+    <!-- @include views/shared-dialogs.html -->
 
-    <!-- The PC load sheet (#65), behind the Coding header's CPU reading:
-         total CPU, memory and the busiest processes (names only).
-         system-load.js fills it on open and on each poll while it is open. -->
-    <dialog id="cpuSheet" class="rename-dialog" aria-labelledby="cpuSheetTitle" data-track-view="cpu-sheet">
-      <div class="dialog-head">
-        <h2 id="cpuSheetTitle"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg> PC load</h2>
-        <button type="button" id="cpuSheetClose" class="dialog-close" aria-label="Close" data-track="cpu-sheet-close">
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
-        </button>
-      </div>
-      <div id="cpuSheetBody" class="cpu-sheet-body"></div>
-      <div class="dialog-actions dialog-actions--stacked">
-        <button type="button" id="cpuSheetDone" class="button-primary" data-track="cpu-sheet-done">Done</button>
-      </div>
-    </dialog>
+    <!-- @include views/board-answers-dialog.html -->
+    <!-- @include views/board-plan-note-dialog.html -->
 
-    <dialog id="renameDialog" class="rename-dialog" data-track-view="rename-dialog">
-      <form id="renameForm">
-        <div class="dialog-head">
-          <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg> Rename</h2>
-          <button type="button" id="renameCancel" class="dialog-close" aria-label="Close" data-track="rename-cancel">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
-          </button>
-        </div>
-        <input id="renameInput" type="text" class="input-native" required>
-        <div class="dialog-actions dialog-actions--stacked">
-          <button type="submit" data-track="rename-save" class="button-primary">Save</button>
-        </div>
-      </form>
-    </dialog>
+    <!-- @include views/coding-dialogs.html -->
 
-    <dialog id="sessionRenameDialog" class="rename-dialog" data-track-view="session-rename-dialog">
-      <form id="sessionRenameForm">
-        <div class="dialog-head">
-          <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg> Rename session</h2>
-          <button type="button" id="sessionRenameCancel" class="dialog-close" aria-label="Close" data-track="session-rename-cancel">
-            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
-          </button>
-        </div>
-        <input id="sessionRenameInput" type="text" class="input-native" placeholder="Leave blank for the automatic title">
-        <div class="dialog-actions dialog-actions--stacked">
-          <button type="submit" data-track="session-rename-save" class="button-primary">Save</button>
-        </div>
-      </form>
-    </dialog>
-
+    <!-- Build identity: the vendored page-foot, last child of .app, outside every tab panel. -->
     <footer class="page-foot">
       <p id="buildReadout"></p>
     </footer>
@@ -868,63 +639,15 @@
 
   <!-- Body-level toast, sibling of <main class="app"> — never nested inside
        it (issue #404, mirrors the nav's own #355 fix above). A fixed
-       descendant of the standalone-PWA .app scroller (nav-tabs.css) can get
-       trapped/clipped behind the equally body-level floating nav bar on real
-       iOS WebKit instead of escaping to the physical viewport. -->
+       descendant of the .app content wrapper can get trapped/clipped behind
+       the equally body-level floating nav bar on real iOS WebKit instead of
+       escaping to the physical viewport. -->
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <div id="terminalOverlay" class="terminal-overlay" hidden>
-    <div class="terminal-bar">
-      <button id="terminalBack" type="button" class="term-btn" title="Back to sessions" aria-label="Back to sessions" data-track="terminal-back"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
-      <button id="terminalKill" type="button" class="term-btn term-kill" title="Stop and kill this session" aria-label="Stop and kill this session" data-track="terminal-kill"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
-      <span id="terminalTitle" class="terminal-title">session</span>
-      <div class="terminal-bar-actions">
-        <button id="terminalJumpEnd" type="button" class="term-btn" title="Jump to latest" aria-label="Jump to latest" data-track="terminal-jump-end"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-down"></use></svg></button>
-        <button id="terminalPaste" type="button" class="term-btn" title="Paste from clipboard" data-track="terminal-paste"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg></button>
-        <button id="terminalImage" type="button" class="term-btn" title="Send image" data-track="terminal-image"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-image"></use></svg></button>
-        <button id="terminalCompose" type="button" class="term-btn" title="Compose text with predictive keyboard" data-track="terminal-compose"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg></button>
-        <button id="terminalKeys" type="button" class="term-btn" title="Keyboard keys" data-track="terminal-keys"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-keyboard"></use></svg></button>
-      </div>
-      <div id="terminalKeysPopover" class="keys-popover" hidden>
-        <button type="button" data-track="term-key-esc" class="key-btn" data-key="esc">Esc</button>
-        <button type="button" data-track="term-key-up" class="key-btn" data-key="up" aria-label="Up"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-up"></use></svg></button>
-        <button type="button" data-track="term-key-tab" class="key-btn" data-key="tab">Tab</button>
-        <button type="button" data-track="term-key-left" class="key-btn" data-key="left" aria-label="Left"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-left"></use></svg></button>
-        <button type="button" data-track="term-key-enter" class="key-btn" data-key="enter" aria-label="Enter"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-corner-down-left"></use></svg></button>
-        <button type="button" data-track="term-key-right" class="key-btn" data-key="right" aria-label="Right"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-right"></use></svg></button>
-        <button type="button" data-track="term-key-shift" class="key-btn key-shift" data-key="shift" aria-pressed="false" aria-label="Shift"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-big-up"></use></svg></button>
-        <button type="button" data-track="term-key-down" class="key-btn" data-key="down" aria-label="Down"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-down"></use></svg></button>
-        <span class="key-spacer"></span>
-      </div>
-    </div>
-    <div id="terminalHost" class="terminal-host"></div>
-    <div id="terminalComposeBar" class="compose-bar" hidden>
-      <textarea
-        id="terminalComposeInput"
-        class="compose-input"
-        rows="2"
-        placeholder="Type a prompt — predictive on."
-        enterkeyhint="enter"></textarea>
-      <div class="compose-tools">
-        <!-- General attach (issue #366): same sendImage()/#terminalImageInput
-             flow as the outer-bar 🖼 button, reachable from the compose view. -->
-        <button id="terminalComposeAttach" type="button" class="compose-record" title="Attach image or file (path added to the prompt)" data-track="terminal-compose-attach"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-image"></use></svg></button>
-        <button id="terminalComposeSend" type="button" class="compose-send" title="Send (with Enter)" data-track="terminal-compose-send"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-send-horizontal"></use></svg></button>
-      </div>
-    </div>
-    <div id="terminalStatus" class="terminal-status" hidden></div>
-    <!-- No accept filter (issue #366): iOS then offers Photo Library / Take
-         Photo / Choose Files, so arbitrary files can be attached — the
-         session-host stores any type (size-capped) and returns the path.
-         `multiple` (issue #448): one gallery tap can pick several photos at
-         once instead of a pick-upload-repeat loop. -->
-    <input id="terminalImageInput" type="file" multiple hidden>
-  </div>
+  <!-- @include views/detail-empty-panes.html -->
 
-  <script src="/static/vendor/xterm.js"></script>
-  <script src="/static/vendor/addon-fit.js"></script>
-  <script src="/static/vendor/addon-web-links.js"></script>
-  <script src="/static/vendor/addon-webgl.js"></script>
+  <!-- @include views/overlays.html -->
+
   <script type="module" src="/static/main.js"></script>
 </body>
 </html>

@@ -7,13 +7,13 @@ provider-specific signature computed here — never the SPA bearer token — so
 the hook URL itself is safe to hand to a third party in plaintext.
 
 Deliberately a leaf module — no import of :mod:`src.jobs.config` — so
-``jobs_config`` can import :class:`WebhookConfig` from here without a cycle
+``src.jobs.config`` can import :class:`WebhookConfig` from here without a cycle
 (same pattern as ``src.jobs_kinds.base``).
 
 Secrets: a job's ``webhook.secret`` is either a literal string or a
 ``$secret:<key>`` reference resolved against ``webapp_config.secrets`` at
-fire time (via :mod:`src.jobs.secrets`, the general form of this module's
-in-line mechanism) — so a rotated secret lives in
+fire time (via :mod:`src.jobs.secrets`, generalized from the
+in-line mechanism this module introduced) — so a rotated secret lives in
 one gitignored place instead of ``jobs.json``.
 """
 
@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Any, Dict, List, Optional
 
-from src.api_tokens import constant_time_equals
+from src.auth.api_tokens import constant_time_equals
 from src.jobs.secrets import resolve_secret_value
 
 PROVIDERS = frozenset({"github", "stripe", "generic"})

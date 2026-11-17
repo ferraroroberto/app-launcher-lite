@@ -23,6 +23,7 @@ Windows + pywinpty only; skips cleanly elsewhere.
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import time
 from pathlib import Path
@@ -30,12 +31,13 @@ from pathlib import Path
 import pytest
 
 from src.session_host import PtyProcess, PtySession
+from tests._pty_wait import DELIVERY_CEILING_S, READY_CEILING_S, await_until
 
 pytestmark = pytest.mark.skipif(
     PtyProcess is None, reason="pywinpty (Windows ConPTY) is required"
 )
 
-_CHILD = Path(__file__).parent / "_pty_readback_child.py"
+_CHILD = Path(__file__).parent.parent.parent / "_pty_readback_child.py"
 _SENTINEL = "<<<EOP>>>"
 
 
@@ -44,12 +46,16 @@ async def _readback(size: int, tmp_path: Path) -> tuple[str, str]:
     payload through ``PtySession.write``, and return (sent, received)."""
     result = tmp_path / "readback.bin"
     ready = Path(str(result) + ".ready")
-    # No quotes around the paths: pywinpty's string-command spawn does its
-    # own tokenising that doesn't honour double-quotes the way CreateProcess
-    # would (a quoted path arrives mangled). The venv python, this test dir,
-    # and the pytest tmp_path are all space-free, so bare tokens are safe.
-    cmd = f"{sys.executable} {_CHILD} {result}"
-    pty = PtyProcess.spawn(cmd, cwd=str(_CHILD.parent), dimensions=(40, 120))
+    # The destination goes in the environment, not in argv (#822). pywinpty's
+    # string-command spawn tokenises with `shlex.split(cmd, posix=False)`, so a
+    # positional path is only as safe as the assumption that it contains no
+    # space — and when that assumption broke, the child wrote to a truncated
+    # prefix of the path instead of failing. An env var is not tokenised.
+    # Only the executable and the child script remain positional; both are
+    # repo-controlled paths.
+    cmd = f"{sys.executable} {_CHILD}"
+    env = {**os.environ, "PTY_READBACK_RESULT": str(result)}
+    pty = PtyProcess.spawn(cmd, cwd=str(_CHILD.parent), dimensions=(40, 120), env=env)
     loop = asyncio.get_running_loop()
     session = PtySession(
         session_id="readback",
@@ -62,22 +68,46 @@ async def _readback(size: int, tmp_path: Path) -> tuple[str, str]:
     )
     session.start_reader()
     try:
-        # Wait until the child has switched stdin to raw mode.
-        for _ in range(100):
-            if ready.exists():
-                break
-            await asyncio.sleep(0.05)
-        assert ready.exists(), "child never signalled raw-mode readiness"
+        # Wait until the child has switched stdin to raw mode. A polled
+        # condition with a backstop, never a fixed budget (#1108): a cold
+        # interpreter inside a fresh ConPTY costs 3.1 s here even on an idle
+        # box, so any hand-picked tick count is a flake waiting for load.
+        await await_until(
+            ready.exists,
+            ceiling_s=READY_CEILING_S,
+            what="the child never signalled raw-mode readiness",
+            env_var="PTY_READY_CEILING_S",
+        )
 
         # Distinct, newline-free characters so any dropped span shows up as
         # a length delta and a mid-stream divergence, not a benign reflow.
         payload = "".join(chr(0x41 + (i % 26)) for i in range(size))
         session.write(payload + _SENTINEL)
 
-        for _ in range(200):
-            await asyncio.sleep(0.05)
+        def delivered() -> bool:
+            """True once there is nothing further to wait for.
+
+            Two ways that happens, and conflating them is what made a slow
+            child look like byte loss. Either the file is complete, or the
+            child has exited — and a child that exited having written a
+            *short* file is precisely the loss this test exists to catch, so
+            stop waiting and let the assertions below report the delta
+            instead of burning the ceiling on a defect already proven.
+            """
             if result.exists() and result.stat().st_size >= len(payload):
-                break
+                return True
+            return not pty.isalive()
+
+        await await_until(
+            delivered,
+            ceiling_s=DELIVERY_CEILING_S,
+            what="the child never finished writing the readback file",
+            env_var="PTY_DELIVERY_CEILING_S",
+            detail=lambda: (
+                f"{result.stat().st_size if result.exists() else 0} "
+                f"of {len(payload)} bytes had landed, child still alive"
+            ),
+        )
     finally:
         try:
             pty.close(force=True)

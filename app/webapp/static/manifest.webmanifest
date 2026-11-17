@@ -1,7 +1,10 @@
 {
+  "id": "/",
   "name": "App Launcher Lite",
-  "short_name": "Launcher Lite",
+  "short_name": "Lite",
+  "description": "Phone-first launcher for Copilot coding sessions, apps, jobs, Team OS and the GitLab Board.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0d1117",
   "theme_color": "#0d1117",

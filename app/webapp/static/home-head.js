@@ -1,36 +1,182 @@
-/* Home-head summary line: the one-line stats in the vendored
- * home-head card at the top of the Coding tab — sessions, running apps,
- * and the git dirty/off-main aggregate. Pure render over shared state;
- * callers (sessions/apps/git refreshes) invoke it whenever their slice
- * changes, and the .status slot ellipsizes on overflow by contract.
+/* Page-header context lines (one per tab): the one-line
+ * status in each pane's vendored home-head. Pure render over shared state;
+ * callers (sessions, apps, jobs and skills refreshes) invoke it whenever
+ * their slice changes, and the .status slot ellipsizes on overflow by
+ * contract.
+ *
+ * The header rule (every tab): the line
+ * holds only the exceptions, each in its tone colour ("1 stalled · 1
+ * needs you"), worst first, and falls back to the plain count when nothing is wrong. At
+ * 390px that leaves about 22 characters, so at most two parts. Code, the
+ * Board, Apps, Jobs, Team and Settings
+ * are on it, all through the vendored renderHeadStatus
+ * (_vendored/home-head/home-head.js), which sorts exceptions by
+ * severity: "stalled" (danger) shows before "needs you" (attention).
  */
 
-import { els, state } from './state.js';
+import { BOARD_POLL_MS, els, state } from './state.js';
+import { renderHeadStatus } from './_vendored/home-head/home-head.js';
+import { isOffBoard } from './shared/session-kinds.js';
+import { openQuestionCount } from './board/chief-keys.js';
+import { ownerNeedsCount } from './board/owner-needs.js';
+import { sessionAttention } from './glance.js';
+import { setTabBadge } from './tabs.js';
+import { plural } from './shared/format.js';
 
-export function renderHomeHead() {
-  const el = els.homeHeadStatus;
+// The CPU reading never hides, so a line that no longer fits beside it gets
+// shorter instead: each part may carry a `short` form that still reads whole
+// ("1 you" for "1 needs you"), worn only when the full line, measured at its
+// natural width, would be cut by the slot's ellipsis (design.md page-header).
+const fitted = new WeakSet();
+
+function fitHeadStatus(el) {
+  const parts = el.querySelectorAll('.head-exception[data-short]');
+  if (!parts.length) return;
+  const wear = function (compact) {
+    parts.forEach(function (p) { p.textContent = compact ? p.dataset.short : p.dataset.full; });
+  };
+  wear(false);
+  // A hidden pane measures nothing; its observer refits once it is shown.
+  if (!el.clientWidth) return;
+  const text = document.createRange();
+  text.selectNodeContents(el);
+  if (text.getBoundingClientRect().width > el.clientWidth + 0.5) wear(true);
+}
+
+// renderHeadStatus plus the compact forms. The slot's own size depends on its
+// siblings, never on its text, so refitting on a resize cannot loop.
+export function renderFittedHeadStatus(el, exceptions, fallback) {
+  renderHeadStatus(el, exceptions, fallback);
   if (!el) return;
-  const parts = [];
-  const sessions = state.sessions.length;
-  parts.push(sessions + (sessions === 1 ? ' session' : ' sessions'));
-  // Running apps only when known non-zero — the running-apps poll gates on
-  // the Apps tab being visible, so away from that tab the count is merely
-  // last-known; a positive number is still useful, a stale 0 is noise.
-  const apps = state.runningApps.length;
-  if (apps) parts.push(apps + (apps === 1 ? ' app' : ' apps') + ' running');
-  if (state.gitStatus) {
-    let dirty = 0;
-    let offMain = 0;
-    Object.keys(state.gitStatus).forEach(function (id) {
-      const gs = state.gitStatus[id];
-      if (!gs || !gs.is_git) return;
-      // Same precedence as the tile colours: red (dirty) wins, so a repo
-      // that is both counts once, as dirty.
-      if (gs.dirty) dirty += 1;
-      else if (gs.branch && !gs.on_default_branch) offMain += 1;
-    });
-    if (dirty) parts.push(dirty + ' dirty');
-    if (offMain) parts.push(offMain + ' off-main');
+  const shorts = new Map();
+  (exceptions || []).forEach(function (x) { if (x && x.short) shorts.set(x.text, x.short); });
+  el.querySelectorAll('.head-exception').forEach(function (part) {
+    const short = shorts.get(part.textContent);
+    if (!short) return;
+    part.dataset.full = part.textContent;
+    part.dataset.short = short;
+  });
+  fitHeadStatus(el);
+  if (!fitted.has(el)) {
+    fitted.add(el);
+    new ResizeObserver(function () { fitHeadStatus(el); }).observe(el);
   }
-  el.textContent = parts.join(' · ');
+}
+
+// Code: "N needs you" / "N stalled" from the Board's own column routing
+// (glance.js sessionAttention), else "N sessions". The running-apps count
+// is the Apps tab's, and git lives in the Projects card.
+export function renderHomeHead() {
+  const shown = state.sessions;
+  let needsYou = 0;
+  let stalled = 0;
+  // The chief is listed but never waits on the owner (its chat bar is the way in).
+  shown.filter(function (s) { return !isOffBoard(s); }).forEach(function (s) {
+    const att = sessionAttention(s);
+    if (att === 'stalled') stalled += 1;
+    else if (att === 'needs-you') needsYou += 1;
+  });
+  const exceptions = [];
+  if (needsYou) exceptions.push({ text: needsYou + ' needs you', short: needsYou + ' you', tone: 'attention' });
+  if (stalled) exceptions.push({ text: stalled + ' stalled', tone: 'danger' });
+  renderFittedHeadStatus(els.homeHeadStatus, exceptions, plural(shown.length, 'session', 'sessions'));
+  renderOtherHeads();
+  renderBoardBadge();
+}
+
+// How long a Board payload stays the badge's source: two polls, so a late
+// response never hands the count back and forth between the two sources.
+const BOARD_BADGE_FRESH_MS = 2 * BOARD_POLL_MS;
+
+// The Board tab's badge: everything pending on the owner, visible from every
+// tab, the same sum the Board's own "needs you" line adds up: the sessions in
+// Your turn, the chief's unanswered questions, fleet-wide, and the owner
+// checks still waiting (both kinds; one answered Later or Problem is out).
+// While the Board is up its own payload is every part, so the badge matches
+// the lanes, external sessions included. Everywhere else the sessions poll,
+// which runs on every tab, carries each session's Board column and the
+// question and owner-check counts, from the server's same routing and the
+// same rules (chief-keys.js, owner-needs.js), so the badge stays live without
+// polling /api/board off the Board. A count that could not be read adds
+// nothing, never a made-up zero, so the badge is then a lower bound.
+export function renderBoardBadge() {
+  let sessions;
+  let questions;
+  let ownerChecks;
+  if (state.board && Date.now() - state.boardFetchedAt < BOARD_BADGE_FRESH_MS) {
+    sessions = ((state.board.columns || {}).your_turn || [])
+      .filter(function (c) { return !isOffBoard(c); }).length;
+    questions = openQuestionCount(state.chiefPlan);
+    ownerChecks = ownerNeedsCount(state.board);
+  } else {
+    sessions = state.sessions.filter(function (s) {
+      return !isOffBoard(s) && s.board_column === 'your_turn';
+    }).length;
+    questions = state.chiefQuestions;
+    ownerChecks = state.ownerChecks;
+  }
+  setTabBadge('board', sessions + (questions || 0) + (ownerChecks || 0), 'waiting');
+}
+
+// Apps: "N down" while a tunnel's probe says down, else "N apps ·
+// M running", where N is the Apps card's rows (trays and Code's projects
+// are not apps here).
+function renderAppsHead() {
+  const apps = state.apps.filter(function (a) {
+    return a.kind !== 'claude-code' && a.kind !== 'tray' && a.kind !== 'mini';
+  });
+  const down = apps.filter(function (a) {
+    return a.kind === 'tunnel' && a.health === 'down';
+  }).length;
+  const running = state.runningApps.length;
+  renderHeadStatus(
+    els.appsHeadStatus,
+    down ? [{ text: down + ' down', tone: 'danger' }] : [],
+    plural(apps.length, 'app', 'apps') + (running ? ' · ' + running + ' running' : '')
+  );
+}
+
+// Jobs: "N failing" (a failed last run, or stuck, as the Board
+// counts them) and "N not firing" (a schedule with no runs), else "N jobs".
+function renderJobsHead() {
+  let failing = 0;
+  let notFiring = 0;
+  state.jobs.forEach(function (j) {
+    const last = j.last_run || {};
+    const outcome = last.outcome || last.status;
+    if (j.stuck || (!j.running && outcome === 'failed')) failing += 1;
+    if (j.coverage && j.coverage.state === 'problem') notFiring += 1;
+  });
+  const exceptions = [];
+  if (failing) exceptions.push({ text: failing + ' failing', short: failing + ' fail', tone: 'danger' });
+  if (notFiring) exceptions.push({ text: notFiring + ' not firing', short: notFiring + ' idle', tone: 'attention' });
+  renderFittedHeadStatus(els.jobsHeadStatus, exceptions, plural(state.jobs.length, 'job', 'jobs'));
+}
+
+// Team: "recap overdue" / "recap due" while the weekly recap wants a
+// review, else "N skills". Only a recap Team OS can actually read counts.
+function renderTeamHead() {
+  const r = state.teamOsRecap;
+  const status = r && r.available ? r.staleness : '';
+  renderHeadStatus(
+    els.teamHeadStatus,
+    status === 'due' || status === 'overdue'
+      ? [{ text: 'recap ' + status, tone: 'attention' }] : [],
+    plural(state.teamOsSkills.length, 'skill', 'skills')
+  );
+}
+
+// Settings: the build this page runs ("Build a1b2c3d"), so a stale PWA
+// shows from the header. Blank until /api/version answers.
+export function renderSettingsHead() {
+  renderFittedHeadStatus(els.settingsHeadStatus, [],
+    state.buildSha ? 'Build ' + state.buildSha : '');
+}
+
+function renderOtherHeads() {
+  renderAppsHead();
+  renderJobsHead();
+  renderTeamHead();
+  // The Board's line is live: board.js writes it on every render.
+  renderSettingsHead();
 }

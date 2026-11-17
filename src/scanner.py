@@ -5,7 +5,7 @@ Two pieces of discovery share this module:
 - ``scan_project_dirs(projects_dir, ignore)`` — lists the **direct child
   directories** of ``projects_dir``, dropping VCS / build noise and any
   directory whose name matches a gitignore-style ignore pattern. Each
-  surviving directory becomes a ``coding`` row. There is no scan
+  surviving directory becomes a ``claude-code`` row. There is no scan
   step and no on-disk marker file — the directory listing is the source
   of truth, recomputed live on every request.
 
@@ -14,9 +14,9 @@ Two pieces of discovery share this module:
   returns ``(path, kind)`` pairs for kinds ``streamlit``, ``webapp``,
   ``tunnel``, ``tray``.
 
-The two scans run independently — a coding project never collides
-with an Apps row because coding rows have no ``bat_path`` (the
-launcher launches the agent in the directory directly).
+The two scans run independently — a Claude Code project never collides
+with an Apps row because Claude Code rows have no ``bat_path`` (the
+launcher launches ``claude`` in the directory directly).
 """
 
 from __future__ import annotations
@@ -33,7 +33,8 @@ from urllib.parse import urlparse
 
 import yaml
 
-from src.git_run import run_git
+from src._tunnel_config import read_tunnel_hostname
+from src.git_utils import resolve_default_ref, run_git
 
 logger = logging.getLogger(__name__)
 
@@ -41,24 +42,27 @@ APPS_SCAN_SKIP_DIRS = frozenset(
     {".venv", "venv", "__pycache__", "node_modules", "certificates", ".git", "old"}
 )
 
-# Directories never offered as coding projects, regardless of the
+# Directories never offered as Claude Code projects, regardless of the
 # user's ignore list — VCS metadata, virtualenvs, build caches, IDE dirs.
 PROJECT_SCAN_SKIP_DIRS = frozenset(
     {".git", ".venv", "venv", "__pycache__", "node_modules", ".idea", ".vscode"}
 )
 
 # kind constants — used as string literals everywhere else.
-KIND_CODING = "coding"
+KIND_CLAUDE_CODE = "claude-code"
 KIND_STREAMLIT = "streamlit"
 KIND_WEBAPP = "webapp"
 KIND_TUNNEL = "tunnel"
 KIND_TRAY = "tray"
+KIND_MINI = "mini"
 
-# ``coding`` rows are computed live (see registry.py's module
+# ``claude-code`` rows are computed live (see registry.py's module
 # docstring) and never persisted in apps.json, so it is deliberately
 # excluded here — a stray/hand-edited row with that kind must be
 # rejected by :func:`src.registry.load_registry`, not silently kept.
-VALID_KINDS = frozenset({KIND_STREAMLIT, KIND_WEBAPP, KIND_TUNNEL, KIND_TRAY})
+VALID_KINDS = frozenset(
+    {KIND_STREAMLIT, KIND_WEBAPP, KIND_TUNNEL, KIND_TRAY, KIND_MINI}
+)
 
 
 @dataclass(frozen=True)
@@ -80,10 +84,12 @@ class ProjectDir:
 
 
 def pretty_folder_name(folder: Path) -> str:
+    """A folder's name as a row label: sentence case, the one casing every
+    label of the app shares (``mass-html-to-markdown`` -> ``Mass html to markdown``)."""
     parts = [p for p in re.split(r"[_\-\s]+", folder.name) if p]
     if not parts:
         parts = [folder.name]
-    return " ".join(p.capitalize() for p in parts)
+    return " ".join([parts[0].capitalize()] + [p.lower() for p in parts[1:]])
 
 
 def slugify(value: str) -> str:
@@ -91,7 +97,7 @@ def slugify(value: str) -> str:
     return cleaned or "app"
 
 
-# ----------------------------------------------------------- coding
+# ----------------------------------------------------------- claude code
 
 
 def dir_ignored(name: str, patterns: Sequence[str]) -> bool:
@@ -146,10 +152,10 @@ def scan_project_dirs(
     return results
 
 
-# ------------------------------------------------------------- team-os skills
+# ------------------------------------------------------------- life-os skills
 
 # A skill's slash-command / folder name must be a safe slug — it is
-# interpolated into the launch command line (`copilot … /<name>`), so any
+# interpolated into the launch command line (`claude … /<name>`), so any
 # value that isn't a bare kebab token is rejected outright rather than
 # quoted. Directory names are inherently filesystem-safe; this also vets
 # the SKILL.md frontmatter `name` before it can reach a shell.
@@ -159,17 +165,25 @@ _SKILL_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$", re.IGNORECASE)
 # skills (`_template`, `_recap`); plus the usual VCS / cache noise.
 _SKILLS_SKIP_PREFIX = "_"
 
+# The optional frontmatter ``icon:``: a glyph name from the launcher's
+# icon sprite, shown in the skill row's avatar. Only the shape is checked
+# here; the page draws it only when its sprite has that glyph, and falls back
+# to a monogram otherwise. The launcher ships no per-skill glyphs: the owner
+# picks them in their own skill files.
+_SKILL_ICON_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
 
 @dataclass(frozen=True)
 class Skill:
-    """One team-os skill the Team OS tab can launch and browse.
+    """One life-os skill the Life OS tab can launch and browse.
 
     ``id`` is the on-disk folder name — the stable key threaded through
-    the API path (``/api/team-os/skills/<id>/…``). ``command`` is the
+    the API path (``/api/life-os/skills/<id>/…``). ``command`` is the
     slash-command base used at launch (``/journal-daily``); it is the
     frontmatter ``name`` when that is a valid slug, else the folder name,
     and is always validated against :data:`_SKILL_SLUG_RE`. ``name`` is
-    the display label; ``description`` the one-paragraph blurb.
+    the display label; ``description`` the one-paragraph blurb; ``icon`` the
+    frontmatter's glyph name, or ``""`` when absent or not a glyph name.
     """
 
     id: str
@@ -177,6 +191,7 @@ class Skill:
     command: str
     description: str
     skill_dir: Path
+    icon: str = ""
 
 
 def _read_frontmatter(skill_md: Path) -> dict:
@@ -217,13 +232,13 @@ def _first_paragraph(path: Path) -> str:
     return ""
 
 
-def skills_dir_for(team_os_dir: Path) -> Path:
-    """The skills root inside a team-os checkout (``.claude/skills``) — Copilot reads .claude/skills too."""
-    return team_os_dir / ".claude" / "skills"
+def skills_dir_for(life_os_dir: Path) -> Path:
+    """The skills root inside a life-os checkout (``.claude/skills``)."""
+    return life_os_dir / ".claude" / "skills"
 
 
-def scan_skills(team_os_dir: Path) -> List[Skill]:
-    """List the team-os skills under ``<team_os_dir>/.claude/skills``.
+def scan_skills(life_os_dir: Path) -> List[Skill]:
+    """List the life-os skills under ``<life_os_dir>/.claude/skills``.
 
     Modelled on :func:`scan_project_dirs`: every direct child directory
     whose name does **not** start with ``_`` (scaffolding) and isn't VCS
@@ -234,9 +249,9 @@ def scan_skills(team_os_dir: Path) -> List[Skill]:
     folder name and frontmatter name are both invalid slugs is dropped —
     it could not be launched safely anyway.
     """
-    skills_root = skills_dir_for(team_os_dir)
+    skills_root = skills_dir_for(life_os_dir)
     if not skills_root.is_dir():
-        logger.warning(f"⚠️ team-os skills dir does not exist: {skills_root}")
+        logger.warning(f"⚠️ life-os skills dir does not exist: {skills_root}")
         return []
 
     results: List[Skill] = []
@@ -261,13 +276,14 @@ def scan_skills(team_os_dir: Path) -> List[Skill]:
             command = folder
         if not command:
             logger.warning(
-                f"⚠️ skipping team-os skill with unsafe name: {folder!r}"
+                f"⚠️ skipping life-os skill with unsafe name: {folder!r}"
             )
             continue
 
         description = str(fm.get("description") or "").strip()
         if not description:
             description = _first_paragraph(child / "description.md")
+        icon = str(fm.get("icon") or "").strip().lower()
 
         results.append(
             Skill(
@@ -276,26 +292,26 @@ def scan_skills(team_os_dir: Path) -> List[Skill]:
                 command=command,
                 description=description,
                 skill_dir=child,
+                icon=icon if _SKILL_ICON_RE.match(icon) else "",
             )
         )
     results.sort(key=lambda s: s.name.lower())
     return results
 
 
-# -------------------------------------------------------------- repo link
+# ----------------------------------------------------------- github repo
 
 
-def _normalise_remote_url(url: str) -> Optional[str]:
-    """Turn a git remote URL into a browsable https web URL, or ``None``.
+def _normalise_github_url(url: str) -> Optional[str]:
+    """Turn a git remote URL into a browsable ``https://<host>/<path>`` URL, or ``None``.
 
-    Host-agnostic (Phase 5 — the fork's Board reads GitLab, projects may sit
-    on github.com, gitlab.com, or a self-hosted GitLab): handles the three
-    common remote forms — SCP-style SSH (``git@host:path.git``), HTTPS
-    (``https://host/path.git``), and the explicit ``ssh://git@host/path``
-    form — as ``https://<host>/<path>``. A trailing ``.git`` and
-    surrounding slashes are stripped.
+    Host-agnostic: this fork's projects live on gitlab.com, a self-hosted
+    GitLab or github.com alike. Handles the three common remote forms:
+    SCP-style SSH (``git@host:path.git``), HTTPS (``https://host/path.git``)
+    and the explicit ``ssh://git@host/path`` form. A trailing ``.git`` and
+    surrounding slashes are stripped; credentials in the URL never survive.
     """
-    scp = re.match(r"[^@/]+@([^:/\s]+):(.+)", url)
+    scp = re.match(r"[^@/\s]+@([^:/\s]+):(?!//)(.+)", url)
     if scp:
         host, path = scp.group(1), scp.group(2)
     else:
@@ -307,7 +323,6 @@ def _normalise_remote_url(url: str) -> Optional[str]:
         if not proto:
             return None
         host, path = proto.group(1), proto.group(2)
-
     path = path.strip("/")
     if path.lower().endswith(".git"):
         path = path[:-4]
@@ -315,13 +330,27 @@ def _normalise_remote_url(url: str) -> Optional[str]:
     return f"https://{host}/{path}" if host and path else None
 
 
-def repo_web_url(project_dir: Path) -> Optional[str]:
-    """Resolve the browsable repo URL for a project from its ``origin`` remote.
+def repo_issues_url(web_url: Optional[str]) -> Optional[str]:
+    """The open-issues page for a :func:`github_repo_url` result.
+
+    github.com keeps its plain ``/issues`` path; every other host is taken to
+    be GitLab and gets the ``/-/issues`` path. Both hide the ``audit-meta``
+    ledger label and sort by last update.
+    """
+    if not web_url:
+        return None
+    if (urlparse(web_url).hostname or "").lower() == "github.com":
+        return f"{web_url}/issues?q=is%3Aissue%20state%3Aopen%20sort%3Aupdated-desc%20-label%3Aaudit-meta"
+    return f"{web_url}/-/issues?state=opened&sort=updated_desc&not%5Blabel_name%5D%5B%5D=audit-meta"
+
+
+def github_repo_url(project_dir: Path) -> Optional[str]:
+    """Resolve the browsable repo URL (GitLab or GitHub) from its ``origin`` remote.
 
     Reads ``<project_dir>/.git/config`` directly — no ``git`` subprocess
     — and normalises the ``origin`` remote URL via
-    :func:`_normalise_remote_url`. Returns ``None`` when the folder has
-    no ``.git/config``, no ``origin`` remote, or an unparseable remote.
+    :func:`_normalise_github_url`. Returns ``None`` when the folder has
+    no ``.git/config``, no ``origin`` remote, or a non-GitHub remote.
     """
     config_path = project_dir / ".git" / "config"
     if not config_path.is_file():
@@ -341,22 +370,7 @@ def repo_web_url(project_dir: Path) -> Optional[str]:
     raw = parser.get('remote "origin"', "url", fallback=None)
     if not raw:
         return None
-    return _normalise_remote_url(raw.strip())
-
-
-def repo_issues_url(web_url: Optional[str]) -> Optional[str]:
-    """The repo's issues page for a :func:`repo_web_url` result.
-
-    Server-side host check (Phase 5): GitHub keeps the plain ``/issues``
-    path; every other host is assumed GitLab-shaped and gets the
-    ``/-/issues`` dash-namespace path. The client uses the result verbatim.
-    """
-    if not web_url:
-        return None
-    host = urlparse(web_url).hostname or ""
-    if host.lower() == "github.com":
-        return f"{web_url}/issues"
-    return f"{web_url}/-/issues"
+    return _normalise_github_url(raw.strip())
 
 
 # ------------------------------------------------------------- git status
@@ -401,25 +415,16 @@ class GitStatus:
 _NOT_GIT = GitStatus(is_git=False, branch=None, default_branch=None, dirty=False)
 
 
-#: Wider than :data:`src.git_run.DEFAULT_TIMEOUT_S` — this walks whatever
-#: project directory the user pointed the Coding tab at, which can be a large
-#: repo on a cold filesystem cache.
-_GIT_TIMEOUT_S = 10.0
-
-
 def _run_git(project_dir: Path, args: Sequence[str]) -> Optional[str]:
     """Run ``git -C <project_dir> <args>`` and return stripped stdout.
 
     Returns ``None`` on any non-zero exit, missing ``git`` binary, or
-    timeout — callers treat ``None`` as "couldn't determine". The invocation
-    contract itself lives in :func:`src.git_run.run_git`; this wrapper only
-    flattens "ran but said no" and "couldn't run" into the single ``None``
-    its callers here already expect.
+    timeout — callers treat ``None`` as "couldn't determine". Thin wrapper
+    around the shared :func:`src.git_utils.run_git` with this
+    module's own 10s timeout (``git status`` can run longer than a plain
+    rev-parse).
     """
-    proc = run_git(project_dir, args, timeout=_GIT_TIMEOUT_S)
-    if proc is None or proc.returncode != 0:
-        return None
-    return proc.stdout.strip()
+    return run_git(project_dir, args, timeout=10)
 
 
 def _default_branch(project_dir: Path) -> Optional[str]:
@@ -427,31 +432,32 @@ def _default_branch(project_dir: Path) -> Optional[str]:
 
     Prefers the symbolic ``origin/HEAD`` ref (set on clone); falls back to
     whichever of ``main`` / ``master`` exists as a local branch. ``None``
-    when none of these resolve.
+    when none of these resolve. Thin wrapper around the shared
+    :func:`src.git_utils.resolve_default_ref` that adapts the
+    local ``refs/heads/*`` fallback shape to this module's bare-name return.
     """
-    head = _run_git(
-        project_dir, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]
+    ref = resolve_default_ref(
+        project_dir,
+        fallback_refs=("refs/heads/main", "refs/heads/master"),
+        timeout=10,
     )
-    if head:
-        # "origin/main" → "main"
-        return head.split("/", 1)[1] if "/" in head else head
-    for candidate in ("main", "master"):
-        if _run_git(
-            project_dir, ["rev-parse", "--verify", "--quiet", f"refs/heads/{candidate}"]
-        ):
-            return candidate
-    return None
+    if ref is None:
+        return None
+    # "origin/main" -> "main"; "refs/heads/main" -> "main"
+    return ref.rsplit("/", 1)[-1]
 
 
 def git_status(project_dir: Path) -> GitStatus:
     """Branch + clean/dirty for one project directory.
 
-    Unlike :func:`repo_web_url` (a plain ``.git/config`` read), this
+    Unlike :func:`github_repo_url` (a plain ``.git/config`` read), this
     shells out to ``git`` — ``status --porcelain=v2 --branch`` for the
     current branch and dirty flag in one call, then a default-branch
-    resolve. That subprocess cost is why the Coding tab runs this only
-    on demand, never on render or poll. Non-git folders and any git
-    failure return :data:`_NOT_GIT`.
+    resolve. Fanned out across threads by ``/api/claude-code/git-status``
+    on a slow (~45 s) poll — the per-file detail is deliberately
+    dropped here so that poll stays cheap; :mod:`src.session_view.git_changes` lists
+    it on demand. Non-git folders and any git failure return
+    :data:`_NOT_GIT`.
     """
     if not (project_dir / ".git").exists():
         return _NOT_GIT
@@ -547,6 +553,32 @@ def scan_app_bats(scan_root: Path) -> List[Tuple[Path, str]]:
     return found
 
 
+def scan_mini_bats(mini_root: Path) -> List[Path]:
+    """The ``*.bat`` files directly inside ``mini_root``, sorted by name.
+
+    Not recursive and not classified: a mini app is any bat the owner keeps in
+    that one folder, whatever it runs, so the body checks ``scan_app_bats``
+    applies to a tree of repos have no meaning here.
+    """
+    if not mini_root.is_dir():
+        logger.warning(f"⚠️ Mini apps folder does not exist: {mini_root}")
+        return []
+    found: List[Path] = []
+    try:
+        children = list(mini_root.iterdir())
+    except OSError as exc:
+        logger.warning(f"⚠️ Could not list the mini apps folder {mini_root}: {exc}")
+        return []
+    for child in children:
+        try:
+            if child.suffix.lower() == ".bat" and child.is_file():
+                found.append(child)
+        except OSError:  # broken link / permission error
+            continue
+    found.sort(key=lambda p: p.name.lower())
+    return found
+
+
 def app_id_from_path(bat_path: Path, scan_root: Path) -> str:
     """Stable id derived from the bat's path relative to ``scan_root``."""
     try:
@@ -575,19 +607,7 @@ def tunnel_url_for(bat_path: Path) -> Optional[str]:
             return text
     except (OSError, UnicodeDecodeError):
         pass
-    return _tunnel_url_from_cloudflared_yml(webapp_dir / "cloudflared.yml")
-
-
-def _tunnel_url_from_cloudflared_yml(config_path: Path) -> Optional[str]:
-    """First ``ingress[].hostname`` in a cloudflared config → ``https://<host>``."""
-    if not config_path.is_file():
-        return None
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
-        logger.debug(f"cloudflared.yml parse failed for {config_path}: {exc}")
-        return None
-    for entry in data.get("ingress") or []:
-        if isinstance(entry, dict) and entry.get("hostname"):
-            return f"https://{str(entry['hostname']).strip()}"
-    return None
+    # Same cloudflared-config reader the tray uses — one
+    # ``yaml.safe_load`` + ``ingress[].hostname`` walk, not a second copy.
+    host = read_tunnel_hostname(webapp_dir / "cloudflared.yml")
+    return f"https://{host}" if host else None

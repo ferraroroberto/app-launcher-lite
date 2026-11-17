@@ -1,0 +1,146 @@
+"""Board Done lane: "Show earlier" reads one more local day per tap, under day headers."""
+
+from __future__ import annotations
+
+import json as _json
+import re
+from datetime import date, datetime, timedelta, timezone
+
+import pytest
+from playwright.sync_api import Page, expect
+
+from tests.e2e.board._support import (
+    _board_payload,
+    _iso_utc,
+    _mock_board,
+    _open_board,
+    _unfold,
+)
+from tests.e2e.fixtures.waits import flush_requests, wait_until
+
+pytestmark = pytest.mark.smoke
+
+
+def _closed(number: int, title: str, closed: datetime) -> dict:
+    return {
+        "kind": "issue", "repo": "app-launcher", "number": number, "title": title,
+        "url": f"u{number}", "updated_at": _iso_utc(closed), "closed_at": _iso_utc(closed),
+        "state": "closed", "labels": [],
+    }
+
+
+def _serve_days(page: Page, calls: list) -> None:
+    """GET /api/board/done?days_back=N: two rows for each day asked for."""
+    def handle(route) -> None:
+        n = int(re.search(r"days_back=(\d+)", route.request.url).group(1))
+        calls.append(n)
+        noon = datetime.combine(date.today() - timedelta(days=n), datetime.min.time()) \
+            .astimezone().replace(hour=12).astimezone(timezone.utc)
+        items = [] if n == 3 else [
+            _closed(100 * n + 2, f"day {n} second", noon),
+            _closed(100 * n + 1, f"day {n} first", noon - timedelta(hours=3)),
+        ]
+        route.fulfill(
+            status=200, content_type="application/json",
+            body=_json.dumps({
+                "days_back": n, "items": items,
+                "day": (date.today() - timedelta(days=n)).isoformat(),
+            }),
+        )
+
+    page.route(re.compile(r".*/api/board/done\?.*$"), handle)
+
+
+def _assert_more_lines_up_with_the_cards(page: Page) -> None:
+    """The Show earlier button's sides line up with the cards' sides."""
+    # On the desktop grid the lane body has no sides, so the button takes the
+    # card inset itself; the phone's body already supplies it. A late boot
+    # fetch re-renders the lane (cards and button are rebuilt), so measure
+    # until the geometry is the settled one. The grid layout is what drops the
+    # body's sides; the iPhone projection keeps the phone layout whatever its
+    # viewport width.
+    def measure() -> dict:
+        return page.evaluate(
+            """() => {
+                const b = document.querySelector('#boardColDone .board-done-more');
+                const r = document.querySelector('#boardColDone li.board-item');
+                const body = document.querySelector('#boardColDone > .collapse-body');
+                if (!b || !r || !body || !r.getClientRects().length) return null;
+                const bb = b.getBoundingClientRect(), rr = r.getBoundingClientRect();
+                return {left: bb.left - rr.left, right: rr.right - bb.right,
+                        grid: getComputedStyle(body).paddingLeft === '0px'};
+            }""")
+
+    def lined_up() -> bool:
+        m = measure()
+        inset = 14 if m and m["grid"] else 0
+        return bool(m) and abs(m["left"] - inset) <= 1 and abs(m["right"] - inset) <= 1
+
+    try:
+        wait_until(page, lined_up, "the Show earlier button lined up with the cards")
+    except AssertionError as err:
+        raise AssertionError(f"{err}: {measure()}") from None
+
+
+@pytest.mark.iphone
+def test_show_earlier_adds_one_day_per_tap_without_overflowing(
+    authed_page: Page, base_url: str
+) -> None:
+    now = datetime.now(timezone.utc)
+    payload = _board_payload()
+    payload["columns"]["done"] = [_closed(7, "closed today", now - timedelta(minutes=5))]
+    _mock_board(authed_page, payload)
+    calls: list = []
+    _serve_days(authed_page, calls)
+    authed_page.set_viewport_size({"width": 390, "height": 844})
+    _open_board(authed_page, base_url)
+    _unfold(authed_page, "boardColDone")
+
+    done = authed_page.locator("#boardColDone")
+    rows = done.locator("li.board-item")
+    more = done.locator(".board-done-more")
+    heads = done.locator(".board-day-head:visible")
+    expect(more).to_be_visible()
+    _assert_more_lines_up_with_the_cards(authed_page)
+    # Today alone: no header to tell it from, nothing read yet, one tap away.
+    expect(rows).to_have_count(1)
+    expect(heads).to_have_count(0)
+    expect(more).to_have_text("Show earlier")
+    assert calls == []
+
+    more.click()
+    expect(heads).to_have_text(["Today", "Yesterday"])
+    expect(rows).to_have_count(3)
+    more.click()
+    expect(heads).to_have_count(3)
+    two_days_ago = date.today() - timedelta(days=2)
+    expect(heads.nth(2)).to_have_text(
+        re.compile(rf"^[A-Z][a-z]{{2}},? {two_days_ago.day} [A-Z][a-z]{{2}}$"))
+    expect(rows).to_have_count(5)
+    # A day with nothing closed says so under its own header.
+    more.click()
+    expect(done.locator('.board-day[data-day="%s"] .board-day-none'
+                        % (date.today() - timedelta(days=3)).isoformat())).to_have_text("Nothing closed.")
+    # Each tap read exactly one day, in order, and the poll read none.
+    flush_requests(authed_page)
+    assert calls == [1, 2, 3]
+
+    # The newest close leads within its day.
+    expect(done.locator('.board-day[data-day="%s"] .action-row-title'
+                        % (date.today() - timedelta(days=1)).isoformat())).to_have_text(
+        ["day 1 second", "day 1 first"])
+    # Under a day header the stamp is the clock time, not the date again.
+    day = '.board-day[data-day="%s"] ' % (date.today() - timedelta(days=1)).isoformat()
+    expect(done.locator(day + '.action-row-meta-text').first).to_have_text(
+        "app-launcher #102 · closed")
+    expect(done.locator(day + '.action-row-meta-tail').first).to_have_text("12:00")
+    wait_until(authed_page, lambda: authed_page.evaluate(
+        "() => document.documentElement.scrollWidth <= window.innerWidth"),
+        "no horizontal page overflow at 390px")
+    assert authed_page.evaluate(
+        "() => { const el = document.getElementById('boardColDone');"
+        " return el.scrollWidth <= el.clientWidth; }")
+
+    # Wide, the button still lines up with the cards (the grid's own inset).
+    authed_page.set_viewport_size({"width": 1600, "height": 900})
+    _assert_more_lines_up_with_the_cards(authed_page)

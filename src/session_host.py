@@ -16,10 +16,7 @@ is the HTTP + WebSocket surface layered on top of it. It is Windows-only
 from __future__ import annotations
 
 import asyncio
-import ctypes
 import logging
-import os
-import subprocess
 import threading
 import time
 import uuid
@@ -27,25 +24,38 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TextIO, Tuple
 
+from src import runtime_files
 from src.agents import (
     DEFAULT_AGENT,
     command_for,
     is_fullscreen,
+    is_safe_command_text,
     quit_command_for,
 )
 from src.audit import transcript_path
-from src.env_path import effective_path
-from src.runtime_files import make_dirs, open_for_write
-from src.session_host_text import (
-    PROMPT_TITLE_BUF_MAX,
-    cook_input_line,
-    derive_prompt_title,
-    parse_osc_title,
-    scan_bracketed_paste_mode,
-    strip_color_osc,
-    trim_ring_head,
+from src.session_host_composer import ComposerTracker, composer_tracker_for
+from src.session_host_input import touches_composer
+from src.session_host_scan import (  # noqa: F401 — re-exported for callers/tests
+    _PROMPT_TITLE_MAX_CHARS,
+    _PROMPT_TITLE_MAX_WORDS,
+    _cook_input_line,
+    _derive_prompt_title,
+    _parse_osc_title,
+    _scan_bracketed_paste_mode,
+    _strip_color_osc,
 )
-from src.subprocess_flags import NO_WINDOW
+from src.session_hosting.channel_claims import ChannelClaims
+from src.session_hosting.child_env import agent_child_env
+from src.session_hosting.kinds import (
+    KIND_PTY,
+    STOP_GRACE_SECONDS,
+    STOP_INTERRUPT,
+    STOP_KILL,
+    STOP_QUIT,
+)
+from src.session_hosting.pending_discard import PendingInputProtocol
+from src.session_hosting.pending_input import PendingInputs
+from src.session_hosting.remote import RemoteSession, launch_detached
 from src.vt_snapshot import VtSnapshot
 
 try:  # Windows-only — ConPTY via pywinpty.
@@ -57,6 +67,13 @@ logger = logging.getLogger(__name__)
 
 # How much terminal output to keep per session for scrollback-on-reconnect.
 _RING_MAX_CHARS = 256 * 1024
+# After a hard ring truncation, advance the head to the next newline within
+# this window so a replay never starts mid-escape-sequence — a cut
+# inside a CSI/OSC renders its tail as literal garbage at the top of the
+# replayed scrollback. One rendered line (with its SGR decoration) is far
+# shorter than this; if no newline appears in the window, keep the raw cut
+# rather than discard more history.
+_RING_TRIM_SCAN = 4096
 # Chunk size for the blocking PTY read in the reader thread.
 _READ_CHUNK = 4096
 # Sentinel pushed to subscribers when the session ends.
@@ -66,7 +83,8 @@ _EOF = object()
 # A real-PTY readback harness (test_session_host_pty_realpty.py) showed the
 # write boundary itself delivers multi-KB payloads losslessly — pywinpty's
 # write into the input pipe is effectively blocking and does NOT drop the
-# tail. So chunking is not a truncation fix; it is pacing, which keeps a multi-KB burst from overrunning the
+# tail. So chunking is not a truncation fix (the original framing was
+# wrong); it is pacing, which keeps a multi-KB burst from overrunning the
 # Windows console input queue that a busy TUI drains slowly. The agent-side
 # atomic-paste fix (bracketed-paste framing) lives client-side in
 # terminal.js (framePaste). We keep small writes one-shot and split larger
@@ -77,25 +95,31 @@ _WRITE_CHUNK_THRESHOLD = 512
 _WRITE_CHUNK_SIZE = 512
 _WRITE_CHUNK_PAUSE = 0.003
 
-# Settle-then-submit for bulk input — ported from
-# app/webapp/static/terminal-compose.js's sendSubmit/bulkSettle,
-# the WS/compose-bar path's fix for the same race the HTTP /input endpoint
-# lacked: a bulk (dictation-sized) paste's bracketed-paste ingest can outrun
-# a fixed delay under machine load, so a CR arriving too soon lands mid-ingest
-# and becomes a literal newline into the still-settling composer instead of
-# Submit, leaving the message stranded as an unsent "[Pasted text #N]" chip.
-# These four values are copied verbatim from terminal-compose.js so the two
-# paths cannot drift and quietly diverge again — see that file's bulk-settle comment
-# for the calibration data (echo-then-quiet was the only protocol that ran
-# clean 20/20 against a live ConPTY probe under synthetic load).
-_BULK_SUBMIT_THRESHOLD_CHARS = 500
-_BULK_FLOOR_MS = 350
-_BULK_QUIET_MS = 350
-_BULK_CAP_MS = 3000
-# Poll interval while waiting for the bulk-settle condition — matches the
-# 50ms setInterval terminal-compose.js polls at.
-_BULK_POLL_S = 0.05
+# Smallest PTY size a resize may set. Every resize SIGWINCHes an
+# inline agent (Claude Code) into a full-viewport repaint that leaves the
+# previous copy in the client's scrollback, and the iOS keyboard sweep samples
+# 1- and 6-row sizes mid-animation that are never a real viewport. The phone
+# floors its frames to the same values (terminal.js PTY_MIN_*); this clamp
+# covers every other caller (the WS frame, POST /sessions/{sid}/resize).
+PTY_MIN_ROWS = 8
+PTY_MIN_COLS = 20
 
+# The server-initiated input-delivery protocol — bracketed-paste framing,
+# bulk settle-then-submit and ingest/echo verification — lives in
+# :mod:`src.session_host_input`, and the deferred-submit watcher that extends
+# it in :mod:`src.session_hosting.deferred_submit`, and pending-message
+# tracking and discard on top of both in :mod:`src.session_hosting.pending_discard`.
+# Only :class:`PendingInputProtocol` is imported here (as ``PtySession``'s
+# base); callers/tests needing the protocol's constants or
+# :class:`InputOutcome` import them from those modules directly.
+
+# First-prompt session title: how much un-submitted input we
+# buffer while waiting for the first submit — a line the user never sends
+# must not grow unbounded. This is session *state* (the buffer lives on
+# ``PtySession``), unlike the deterministic derivation itself
+# (``_derive_prompt_title``/``_PROMPT_TITLE_MAX_CHARS``/``_PROMPT_TITLE_MAX_WORDS``),
+# which is a pure function and lives in :mod:`src.session_host_scan`.
+_PROMPT_TITLE_BUF_MAX = 400
 
 # Manual title override: a launcher-native rename that wins over
 # every auto-derived title (live_title/prompt_title/shared_name — see
@@ -106,82 +130,93 @@ _BULK_POLL_S = 0.05
 # than persisted: it dies with the session, so it needs no cleanup/pruning.
 _MANUAL_TITLE_MAX_CHARS = 60
 
-# Upper bound on a PTY's rows/cols. No real terminal comes near it; the clamp
-# keeps a bogus client value from sizing a huge ConPTY and VT mirror grid.
-_MAX_PTY_DIM = 1000
+# Beat between the three keystrokes STOP_QUIT types. The quit
+# command is ESC, then "/quit", then the submitting CR — three separate
+# writes with this pause between them, never one burst. Two distinct races
+# make the burst wrong, and both were measured through the real launcher
+# path against all six agents, reading each harness's own composer *before*
+# any CR (so no model turn was spent):
+#
+#   1. ESC immediately followed by "/" is ambiguous at the terminal layer:
+#      a TUI that binds Alt-keys reads "ESC <char>" arriving together as one
+#      meta-key press, and swallows the slash. Pi 0.84.4, Antigravity 1.2.5
+#      and Copilot 1.0.86 all do; the harness then sees a bare "quit" and
+#      answers it as a prompt (Pi's threshold measured here: eaten at 25 ms,
+#      intact at 50 ms). Claude and Grok happen not to — which is why this
+#      looked like a two-harness quirk rather than the protocol-level
+#      ambiguity it is.
+#   2. The command and its CR in one write race the slash-command popup:
+#      Codex 0.154.0 leaves "/quit" sitting in an open popup and never acts
+#      on the CR, so *every* Codex stop fell through to the force-terminate
+#      below. This is the same lesson submit_input learned —
+#      the submitting CR is always its own write.
+#
+# A fixed pause, not submit_input's quiet-window settle: ESC produces little
+# or no output, so waiting for quiet would return before the harness's
+# escape-timeout expired and fix nothing. 250 ms clears every threshold
+# measured (and the ~100 ms xterm/crossterm/bubbletea defaults) with room to
+# spare, and the two beats together cost 0.5 s of the 5 s grace window.
+_STOP_KEY_SETTLE_SECONDS = 0.25
 
-# Stop modes accepted by SessionManager.stop / PtySession.stop.
-STOP_INTERRUPT = "interrupt"  # Ctrl+C into the PTY
-STOP_QUIT = "quit"            # type the agent's quit command (Copilot: /exit)
-STOP_KILL = "kill"            # force-terminate the ConPTY
-
-# Graceful-stop grace window: how long STOP_QUIT waits for the agent to exit
-# on its own quit command before force-terminating as a fallback.
-# A clean /quit exits in ~0.7 s empirically; 5 s is generous headroom and
-# stays under the session-client stop timeout.
-_STOP_GRACE_SECONDS = 5.0
-_TASKKILL_TIMEOUT_SECONDS = 10  # unmeasured guess; equals the client's stop timeout
-_DETACHED_SPAWN_TIMEOUT_SECONDS = 30  # unmeasured guess; under the client's 45 s create timeout
-
-# Session kinds. "pty" is a launcher-owned ConPTY streamed to the phone;
-# "remote" is a detached console window the launcher only tracks (no PTY,
-# no scrollback, no WebSocket — it is driven from its own console window).
-KIND_PTY = "pty"
-KIND_REMOTE = "remote"
-
-# Absolute Windows PowerShell 5.1 — never the bare `pwsh` execution-alias stub
-# (a 0-byte reparse point that fails when spawned non-interactively).
-_POWERSHELL = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+# The allowlist for the ``flags`` string SessionManager.create/create_remote
+# splice straight into ``cmd /c <exe> <flags>`` (create) or a PowerShell
+# ``Start-Process -ArgumentList`` (create_remote) — the boundary that
+# actually owns the command line. A superset of
+# agents.native_session_name_flags_for's title allowlist: flags legitimately
+# carry a literal `"` (a quoted prompt token, e.g. board.py's
+# `"/issue-start 123"`), `=` (a config override like
+# `model_reasoning_effort=high`), and `@` (the loopback SSH agent's
+# caller-supplied `user@host` target — README "session-host also exposes …
+# to trusted sibling services"), none of which a bare title may safely
+# contain. See agents.is_safe_command_text for the shared predicate and the
+# full metacharacter rationale.
+_SAFE_FLAGS_CHARS = ' ".,:;()[]{}_-/#?=@'
 
 
-def _ps_quote(value: str) -> str:
-    """Escape ``value`` for embedding inside a PowerShell single-quoted string."""
-    return value.replace("'", "''")
+def _validate_flags(flags: str) -> None:
+    """Raise ``ValueError`` if ``flags`` carries a command-line metacharacter.
 
-
-def _parse_started_pid(stdout: Optional[str]) -> Optional[int]:
-    """Pull the PID ``Start-Process -PassThru`` printed (last numeric line)."""
-    for line in reversed((stdout or "").splitlines()):
-        text = line.strip()
-        if text.isdigit():
-            return int(text)
-    return None
-
-
-def _pid_alive(pid: int) -> bool:
-    """True if ``pid`` names a live process (Windows, via ctypes).
-
-    Detached consoles are orphaned out of the host's process tree, so we hold no ``Popen`` handle for them — liveness is a
-    bare PID probe. ``ctypes.windll`` is touched only at call time, keeping
-    the module importable on non-Windows for ``py_compile``.
+    Every current caller already keeps ``flags`` safe at its own call site
+    (board.py's title allowlist, life_os.py's UUID/slug validation,
+    apps.py/board_spawn.py's server-computed ``build_*_flags`` output) — this
+    re-checks the same invariant at the one place that actually assembles
+    the command line, so a future caller inherits it by construction instead
+    of having to rediscover and re-apply it.
     """
-    if not pid:
-        return False
-    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-    STILL_ACTIVE = 259
-    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-    kernel32.OpenProcess.restype = ctypes.c_void_p
-    kernel32.OpenProcess.argtypes = [ctypes.c_uint, ctypes.c_int, ctypes.c_uint]
-    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-    if not handle:
-        return False
-    try:
-        code = ctypes.c_ulong()
-        kernel32.GetExitCodeProcess.argtypes = [
-            ctypes.c_void_p,
-            ctypes.POINTER(ctypes.c_ulong),
-        ]
-        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
-            return False
-        return code.value == STILL_ACTIVE
-    finally:
-        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
-        kernel32.CloseHandle(handle)
+    if not is_safe_command_text(flags, _SAFE_FLAGS_CHARS):
+        raise ValueError(f"unsafe characters in flags: {flags!r}")
+
+
+def _trim_ring_head(ring: str) -> str:
+    """Advance a freshly hard-truncated ring to the next newline boundary.
+
+    Escape sequences never span a literal ``\\n`` (CSI parameter bytes are
+    printable; OSC titles carry no newlines), so resuming right after one
+    guarantees the replay head is not mid-sequence. Bounded by
+    ``_RING_TRIM_SCAN``: with no newline in the window (one enormous
+    unbroken line), the raw cut stands — better an approximate head than
+    throwing away more history.
+    """
+    nl = ring.find("\n", 0, _RING_TRIM_SCAN)
+    if nl == -1:
+        return ring
+    return ring[nl + 1 :]
 
 
 @dataclass
-class PtySession:
-    """One agent process running inside a launcher-owned ConPTY."""
+class PtySession(PendingInputProtocol):
+    """One ``claude`` process running inside a launcher-owned ConPTY.
+
+    The server-initiated input-delivery protocol (``submit_input`` and
+    everything downstream of it — settle-then-submit, ingest/echo
+    verification, the deferred-submit watcher, pending messages and their
+    discard) is supplied by
+    :class:`~src.session_host_input.InputProtocol`,
+    :class:`~src.session_hosting.deferred_submit.DeferredSubmit` and
+    :class:`~src.session_hosting.pending_discard.PendingInputProtocol`, not defined here; this
+    class keeps only the raw PTY-lifecycle concerns plus ``write``/
+    ``_write_locked``, the chunk-and-pace write path the protocol builds on.
+    """
 
     kind = KIND_PTY
 
@@ -193,13 +228,25 @@ class PtySession:
     _loop: asyncio.AbstractEventLoop
     _pty: "PtyProcess"  # type: ignore[name-defined]
     agent: str = DEFAULT_AGENT
-    # Free-form role tag set at create time so callers can find a
-    # purpose-built session deterministically; "" for normal ones.
+    # Free-form role tag set at create time (e.g. "chief") so callers
+    # can find a purpose-built session deterministically; "" for normal ones.
     label: str = ""
     rows: int = 40
     cols: int = 120
     _ring: str = ""
     _ring_lock: threading.Lock = field(default_factory=threading.Lock)
+    # Serializes the *input* side. ``_ring_lock`` guards output
+    # only, and the manager's own lock guards the sessions registry — neither
+    # covers the PTY write path, which has had two concurrent writers since
+    # the HTTP ``/sessions/{sid}/input`` route was added alongside the
+    # WebSocket pump. A PC mirror (``role=pc``) and a phone (``role=phone``)
+    # attached to the same session is the intended shape, so two writers on
+    # one PTY is normal, not exotic. Held across the whole chunk loop in
+    # :meth:`write` and across the whole text→settle→CR sequence in
+    # :meth:`submit_input`, so a keystroke can neither interleave at ~512 B
+    # chunk granularity inside somebody else's paste nor land between a
+    # paste and its submitting CR.
+    _write_lock: threading.Lock = field(default_factory=threading.Lock)
     _subscribers: "set[asyncio.Queue]" = field(default_factory=set)
     _reader: Optional[threading.Thread] = None
     _exited: bool = False
@@ -211,9 +258,9 @@ class PtySession:
     _color_osc_carry: str = ""
     _prompt_raw: str = ""
     _prompt_captured: bool = False
-    # Headless VT mirror of the full-screen (ratatui) Copilot TUI, used to
-    # repaint a reconnecting client. None only before SessionManager wires
-    # it in.
+    # Headless VT mirror for full-screen (ratatui) agents only
+    # — Claude's raw-ring replay path never needs one. None for a
+    # non-fullscreen agent, or before SessionManager wires it in.
     _vt: Optional["VtSnapshot"] = None
     # Settle-then-submit state for server-initiated writes.
     # _bracketed_paste_mode mirrors xterm's term.modes.bracketedPasteMode,
@@ -224,14 +271,80 @@ class PtySession:
     _bracketed_paste_mode: bool = False
     _decset_carry: str = ""
     _last_output_at: float = 0.0
+    # Monotonic count of every character ever pumped out of this PTY. Unlike
+    # to_api()'s output_chars — the ring's length, which
+    # saturates at _RING_MAX_CHARS — this keeps counting, so a write can mark
+    # a position and later ask "what has the terminal painted since?" even on
+    # a long-lived session whose ring has wrapped many times over.
+    _output_total: int = 0
+    # The most recent server-initiated write's outcome, surfaced
+    # in to_api() so a session that has gone deaf to API input is visible as
+    # such instead of being indistinguishable from a busy agent.
+    last_input: Optional[Dict[str, Any]] = None
+    # Deferred-submit generation counter. Every new
+    # server-initiated write — and every stop — bumps it, which supersedes any
+    # watcher still waiting to press Enter: its "my payload is the thing
+    # sitting unsent in the composer" premise no longer holds once somebody
+    # else has written to the PTY. A superseded watcher exits without firing
+    # and without touching ``last_input``, which by then belongs to the newer
+    # call. Raw keystrokes from the WebSocket pump deliberately do *not* bump
+    # it — a PC mirror typing anywhere would otherwise cancel every steer, and
+    # the pre-fire re-check already handles a composer the human has changed.
+    # That re-check is what carries the weight now the watcher's window is long
+    # enough to outlast a gate run, so it identifies *which* payload is
+    # sitting there rather than merely that one is — see
+    # ``session_host_input.chip_visible``.
+    _defer_seq: int = 0
+    # Set by _submit_input_locked when it hands a submit to the watcher, read
+    # (and cleared) by submit_input once the ``deferred`` verdict is recorded,
+    # so the watcher can never record its own outcome first.
+    # ``(seq, mark, needles, chip_id, touches)`` — chip_id is the paste or
+    # image chip pinned at ingest, or None when the composer
+    # echoed the payload verbatim instead of collapsing it into a chip;
+    # touches is ``_composer_touches`` at ingest.
+    _defer_args: Optional[Tuple[int, int, List[str], Optional[str], int]] = None
+    # Keystrokes that can change what the composer holds:
+    # ``write()`` — the keyboard path — bumps it for any write carrying a
+    # control key (Enter, Backspace, Ctrl-C, Esc, arrows, a paste), while
+    # plain typed text and the terminal's own query replies leave it alone.
+    # Nothing leaves the composer without one, so a deferred watcher whose
+    # count is unchanged knows its payload is still sitting there — a fact a
+    # differential renderer that never repaints an unchanged composer cannot
+    # show it. ``submit_input`` writes through ``_write_locked`` and is
+    # counted by ``_defer_seq`` instead.
+    _composer_touches: int = 0
+    # Turn state read off the agent's own screen, kept by the
+    # reader thread (``InputProtocol._track_turn_state``). ``_bg_waiting`` is
+    # True while the main agent sits idle at its prompt with background
+    # agents running — the one state that is ready for a submit yet never
+    # goes quiet. ``_main_turn_at`` is the ``_output_total`` reading at the
+    # last main-turn spinner, which is how the deferred watcher confirms its
+    # CR started a turn. ``_main_turn_seen_at`` is the wall time of that same
+    # spinner: a recent one means the main turn is running right now,
+    # which is when a type-ahead agent queues an Enter.
+    _bg_waiting: bool = False
+    _main_turn_at: int = 0
+    _main_turn_seen_at: float = 0.0
+    # Whether the composer holds typed-but-unsent text, fed by
+    # every write in ``_write_locked``. None for an agent whose composer was
+    # never probed, which reports ``composer_dirty: None``.
+    _composer: Optional[ComposerTracker] = field(default=None, init=False)
+    # Messages accepted through ``/input`` that the agent has not taken yet:
+    # waiting in the composer for the watcher, or queued by the agent mid-turn.
+    _pending: PendingInputs = field(default_factory=PendingInputs, init=False)
+
+    def __post_init__(self) -> None:
+        self._composer = composer_tracker_for(self.agent)
 
     # ------------------------------------------------------------ lifecycle
     def start_reader(self) -> None:
         """Spawn the background thread that pumps PTY output to subscribers."""
         try:
             path = transcript_path(self.session_id)
-            make_dirs(path.parent)
-            self._transcript = open_for_write(path, "a", encoding="utf-8", errors="replace")
+            runtime_files.make_dirs(path.parent)
+            self._transcript = runtime_files.open_for_write(
+                path, "a", encoding="utf-8", errors="replace"
+            )
             self._transcript.write(
                 f"\n=== session {self.session_id} :: {self.name} :: "
                 f"{time.strftime('%Y-%m-%d %H:%M:%S')} ===\n"
@@ -264,7 +377,7 @@ class PtySession:
             # source — before scrollback + broadcast — so the leak never
             # reaches a fresh OR reconnecting client. Stateful: a sequence
             # split across two reads is held in _color_osc_carry.
-            chunk, self._color_osc_carry = strip_color_osc(
+            chunk, self._color_osc_carry = _strip_color_osc(
                 chunk, self._color_osc_carry
             )
             if not chunk:
@@ -273,7 +386,7 @@ class PtySession:
             # Track DECSET 2004 (bracketed-paste mode) off the raw output —
             # BEFORE any stripping below, since this must see exactly what a
             # real terminal client would.
-            paste_mode, self._decset_carry = scan_bracketed_paste_mode(
+            paste_mode, self._decset_carry = _scan_bracketed_paste_mode(
                 chunk, self._decset_carry
             )
             if paste_mode is not None:
@@ -282,14 +395,16 @@ class PtySession:
                 self._vt.feed(chunk)
             # Parse OSC window-title sequences and cache the latest title.
             self._osc_buffer += chunk
-            self._osc_buffer, title = parse_osc_title(self._osc_buffer)
+            self._osc_buffer, title = _parse_osc_title(self._osc_buffer)
             if title:
                 self.live_title = title
             with self._ring_lock:
+                self._output_total += len(chunk)
                 self._ring += chunk
                 if len(self._ring) > _RING_MAX_CHARS:
-                    self._ring = trim_ring_head(self._ring[-_RING_MAX_CHARS:])
+                    self._ring = _trim_ring_head(self._ring[-_RING_MAX_CHARS:])
                 subscribers = list(self._subscribers)
+            self._track_turn_state(chunk)
             if self._transcript is not None:
                 try:
                     self._transcript.write(chunk)
@@ -356,11 +471,11 @@ class PtySession:
                 # No submit yet. If the user has typed a wall of input without
                 # ever sending it, give up and title from what we have rather
                 # than buffering without bound.
-                if len(self._prompt_raw) > PROMPT_TITLE_BUF_MAX:
+                if len(self._prompt_raw) > _PROMPT_TITLE_BUF_MAX:
                     self._finalize_prompt_title(self._prompt_raw)
                 return
             end = min(ends)
-            title = derive_prompt_title(cook_input_line(self._prompt_raw[:end]))
+            title = _derive_prompt_title(_cook_input_line(self._prompt_raw[:end]))
             if title:
                 self._finalize_prompt_title_with(title)
                 return
@@ -375,7 +490,7 @@ class PtySession:
 
     def _finalize_prompt_title(self, raw_line: str) -> None:
         self._finalize_prompt_title_with(
-            derive_prompt_title(cook_input_line(raw_line))
+            _derive_prompt_title(_cook_input_line(raw_line))
         )
 
     def _finalize_prompt_title_with(self, title: str) -> None:
@@ -393,6 +508,21 @@ class PtySession:
         drop into an honest failure instead of an unconditional
         ``{"ok": true}`` regardless of outcome. An empty payload is trivially
         ``True``: there was nothing to deliver, so nothing was dropped.
+
+        Serialized on ``_write_lock`` so a concurrent writer
+        can't interleave its own bytes between this payload's chunks.
+        """
+        with self._write_lock:
+            if touches_composer(data):
+                self._composer_touches += 1
+            return self._write_locked(data)
+
+    def _write_locked(self, data: str) -> bool:
+        """:meth:`write`'s body, assuming ``_write_lock`` is already held.
+
+        Exists so :meth:`submit_input` can hold the lock across its whole
+        text→settle→CR sequence while still reusing the chunk-and-pace
+        logic, without needing a reentrant lock.
         """
         if not data:
             return True
@@ -403,95 +533,44 @@ class PtySession:
         try:
             if len(data) <= _WRITE_CHUNK_THRESHOLD:
                 self._pty.write(data)
-                return True
-            # Long write (paste / large input): pace it in ~512 B chunks so
-            # the burst doesn't overrun the console input queue a busy TUI
-            # drains slowly. pywinpty's return value is deliberately
-            # ignored — interpreting it as a bytes-accepted count amplified a
-            # single keystroke into thousands.
-            logger.debug(
-                f"PTY {self.session_id[:8]} chunked write "
-                f"({len(data)} chars / "
-                f"{(len(data) + _WRITE_CHUNK_SIZE - 1) // _WRITE_CHUNK_SIZE} chunks)"
-            )
-            first = True
-            for i in range(0, len(data), _WRITE_CHUNK_SIZE):
-                if not first:
-                    time.sleep(_WRITE_CHUNK_PAUSE)
-                self._pty.write(data[i : i + _WRITE_CHUNK_SIZE])
-                first = False
-            return True
+            else:
+                # Long write (paste / large input): pace it in ~512 B chunks
+                # so the burst doesn't overrun the console input queue a busy
+                # TUI drains slowly. pywinpty's return value is
+                # deliberately ignored — interpreting it as a bytes-accepted
+                # count amplified a single keystroke into thousands.
+                logger.debug(
+                    f"PTY {self.session_id[:8]} chunked write "
+                    f"({len(data)} chars / "
+                    f"{(len(data) + _WRITE_CHUNK_SIZE - 1) // _WRITE_CHUNK_SIZE} chunks)"
+                )
+                first = True
+                for i in range(0, len(data), _WRITE_CHUNK_SIZE):
+                    if not first:
+                        time.sleep(_WRITE_CHUNK_PAUSE)
+                    self._pty.write(data[i : i + _WRITE_CHUNK_SIZE])
+                    first = False
         except Exception as exc:  # noqa: BLE001
             logger.debug(f"PTY {self.session_id[:8]} write failed: {exc}")
+            if self._composer is not None:
+                # Some of the bytes may have landed before the raise.
+                self._composer.mark_unknown()
             return False
-
-    def submit_input(self, data: str, submit: bool) -> bool:
-        """Write ``data`` and, if ``submit``, follow it with a submitting CR.
-
-        Ported from ``app/webapp/static/terminal-compose.js``'s
-        ``framePaste``/``sendSubmit``/``bulkSettle``
-        for the HTTP ``/input`` path: writing the (unconditionally bracketed)
-        text and the CR back-to-back with no settle logic fails because
-        Claude Code's composer classifies a bulk write as a
-        paste, and a CR arriving mid-ingest is absorbed as a literal newline
-        instead of Submit, stranding the message as an unsent
-        ``[Pasted text #N]`` chip while the caller was told ``ok: true``.
-
-        - Bracketed-paste framing (``\\x1b[200~ … \\x1b[201~``) is applied
-          only when ``self._bracketed_paste_mode`` is currently on (tracked
-          from the PTY's own DECSET 2004 output — see
-          ``scan_bracketed_paste_mode``), matching ``framePaste``'s gate on
-          xterm's client-side ``term.modes.bracketedPasteMode`` exactly: a
-          literal ``\\x1b[200~`` sent to an agent that never asked for it is
-          garbage, not a paste.
-        - The CR is always its own separate ``write()`` call, never
-          concatenated onto the framed text.
-        - ``data`` blank + ``submit`` → a bare submit against whatever is
-          already sitting in the composer, with no text write at all — the
-          escape hatch for a message already stranded by this exact race
-          (previously both ``{"data": "", "submit": true}`` and any other
-          blank-data call 400'd, leaving no recovery but a human tapping the
-          phone's own Send control).
-        - Payloads at/above ``_BULK_SUBMIT_THRESHOLD_CHARS`` hold the CR
-          until the session's output stream shows the paste was echoed and
-          has gone quiet (floor/quiet/cap); shorter payloads submit
-          immediately, matching ``sendSubmit``'s "short sends stay instant".
-
-        Returns whether everything asked for reached the PTY — ``False`` on
-        the same drop conditions as :meth:`write` (never claim delivery for a message
-        that didn't land).
-        """
-        if not data:
-            if not submit:
-                return True
-            return self.write("\r")
-        framed = "\x1b[200~" + data + "\x1b[201~" if self._bracketed_paste_mode else data
-        sent_at = time.time()
-        if not self.write(framed):
-            return False
-        if not submit:
-            return True
-        if len(data) >= _BULK_SUBMIT_THRESHOLD_CHARS:
-            floor_at = sent_at + _BULK_FLOOR_MS / 1000
-            deadline = sent_at + _BULK_CAP_MS / 1000
-            quiet_s = _BULK_QUIET_MS / 1000
-            while True:
-                if self._exited:
-                    break
-                now = time.time()
-                settled = (
-                    now >= floor_at
-                    and self._last_output_at > sent_at
-                    and (now - self._last_output_at) >= quiet_s
-                )
-                if settled or now >= deadline:
-                    break
-                time.sleep(_BULK_POLL_S)
-        return self.write("\r")
+        if self._composer is not None:
+            self._composer.feed(data)
+        return True
 
     def resize(self, rows: int, cols: int) -> None:
-        rows = max(1, min(rows, _MAX_PTY_DIM))
-        cols = max(1, min(cols, _MAX_PTY_DIM))
+        rows = max(PTY_MIN_ROWS, min(rows, 1000))
+        cols = max(PTY_MIN_COLS, min(cols, 1000))
+        if (rows, cols) == (self.rows, self.cols):
+            # Nothing to change — a same-size setwinsize would only cost a
+            # round-trip, and must never be what repaints the agent.
+            return
+        logger.info(
+            f"↔️ PTY {self.session_id[:8]} resize "
+            f"{self.rows}x{self.cols} -> {rows}x{cols}"
+        )
         self.rows = rows
         self.cols = cols
         if self._vt is not None:
@@ -513,19 +592,27 @@ class PtySession:
         return self._vt.render()
 
     def stop(
-        self, mode: str = STOP_QUIT, grace_seconds: float = _STOP_GRACE_SECONDS
+        self,
+        mode: str = STOP_QUIT,
+        grace_seconds: float = STOP_GRACE_SECONDS,
+        key_settle_seconds: float = _STOP_KEY_SETTLE_SECONDS,
     ) -> None:
         """Stop the session: graceful agent-own quit, then force-fallback.
 
         ``STOP_QUIT`` (the path the single "Stop and kill" button drives)
-        types the agent's *own* quit command — Copilot's ``/exit`` (see
-        :func:`quit_command_for`) — after an ESC that clears any partial
-        prompt, then waits up to ``grace_seconds`` for the agent to exit on
-        its own. The clean exit lets the agent run its shutdown path
-        (session-end hooks, transcript finalisation, …) deterministically,
-        rather than relying on the abnormal console-close path a bare
-        force-terminate triggers. Only if the agent has not exited within
-        the grace window do we force-terminate the ConPTY — the guarantee that a stop always ends
+        types the agent's *own* quit command — Claude's ``/quit``,
+        Copilot's ``/exit``, … (see :func:`quit_command_for`) — after an
+        ESC that clears any partial prompt, then waits up to
+        ``grace_seconds`` for the agent to exit on its own. Those are three
+        keystrokes, not one burst: ESC, the command, the submitting CR, with
+        ``key_settle_seconds`` between them so neither the ESC nor the
+        command runs into what follows it (see
+        ``_STOP_KEY_SETTLE_SECONDS``). The clean exit
+        lets the agent run its shutdown path (Claude Code SessionEnd hooks,
+        transcript finalisation, …) deterministically, rather than relying
+        on the abnormal console-close path a bare force-terminate triggers.
+        Only if the agent has not exited within the grace window do we
+        force-terminate the ConPTY — the guarantee that a stop always ends
         the session.
 
         ``STOP_KILL`` force-terminates immediately (no graceful step);
@@ -533,7 +620,19 @@ class PtySession:
         Every *terminating* stop signals subscribers so the mirror page
         self-closes; an interrupt does not.
         """
+        # Cancel any deferred submit still waiting to press Enter —
+        # every stop mode writes to or tears down this PTY, so a watcher's
+        # CR landing in the middle of an interrupt or a "/quit" sequence
+        # would be answering a terminal state it never verified.
+        self._defer_seq += 1
+        # Every stop ends the turn the listed messages were waiting on, so what
+        # the list says about them no longer holds.
+        self._pending.clear()
         if mode == STOP_INTERRUPT:
+            if self._composer is not None:
+                # An interrupt never went through write(), and an interrupted
+                # turn can put its prompt back in the composer.
+                self._composer.mark_unknown()
             try:
                 self._pty.sendintr()
             except Exception as exc:  # noqa: BLE001
@@ -544,10 +643,19 @@ class PtySession:
             if mode == STOP_KILL:
                 self._pty.terminate(force=True)
             else:  # STOP_QUIT — graceful, agent-appropriate, with fallback.
-                # ESC clears any partial input so the quit command lands on
-                # an empty prompt.
+                # Three keystrokes, each its own write, with a beat between:
+                # ESC clears any partial input so the quit
+                # command lands on an empty prompt; the beat after it stops
+                # the leading "/" being read as part of a meta-key sequence;
+                # the beat before the CR lets the harness's slash-command
+                # popup open so the CR submits the command instead of being
+                # swallowed. Bytes and order are unchanged — only the gaps
+                # are new.
                 self._pty.write("\x1b")
-                self._pty.write(quit_command_for(self.agent) + "\r")
+                time.sleep(key_settle_seconds)
+                self._pty.write(quit_command_for(self.agent))
+                time.sleep(key_settle_seconds)
+                self._pty.write("\r")
                 deadline = time.monotonic() + max(0.0, grace_seconds)
                 while time.monotonic() < deadline:
                     if not self.alive:
@@ -595,11 +703,14 @@ class PtySession:
 
     def to_api(self) -> Dict[str, object]:
         # output_chars: cumulative-ish output signal (the scrollback ring's
-        # length, so it saturates at _RING_MAX_CHARS). Callers only need
-        # "has the agent painted anything yet" — a monotonic counter would
-        # be overkill.
+        # length, so it saturates at _RING_MAX_CHARS). The board's dispatch
+        # readiness probe only needs "has the agent painted anything
+        # yet" — a monotonic counter would be overkill.
         with self._ring_lock:
             output_chars = len(self._ring)
+        composer_dirty, composer_dirty_since = (
+            self._composer.state() if self._composer is not None else (None, None)
+        )
         return {
             "session_id": self.session_id,
             "kind": self.kind,
@@ -616,157 +727,28 @@ class PtySession:
             "prompt_title": self.prompt_title,
             "manual_title": self.manual_title,
             "output_chars": output_chars,
-            # Raw PTY-activity timestamp (epoch seconds; 0.0 until the first read).
+            # Raw PTY-activity timestamp: lets a reader tell
+            # "still genuinely producing output" apart from "live_title frozen
+            # on a busy glyph because the PTY wedged". Consumed by
+            # src.board.transcript's _pty_output_is_fresh (via src.board.sessions
+            # and the session_transcript router).
             "last_output_at": self._last_output_at,
+            # The most recent server-initiated write's verdict,
+            # or None if nothing has been sent through /input yet. This is
+            # what makes "this session has gone deaf to API input" a visible
+            # state rather than something only a human with a keyboard can
+            # tell apart from a busy agent.
+            "last_input": self.last_input,
+            # Typed-but-unsent text in the composer: True,
+            # False, or None when it can't be established — see
+            # src/session_host_composer.py. A typer holds off on True and
+            # None alike.
+            "composer_dirty": composer_dirty,
+            "composer_dirty_since": composer_dirty_since,
+            # Messages the agent has not taken yet, oldest first: what the
+            # Chat view's queued chip lists and can discard.
+            "pending_input": self.pending_input_api(),
         }
-
-
-class RemoteSession:
-    """A detached agent window the launcher tracks but does not stream.
-
-    Spawned in its own console window and deliberately **orphaned out of the
-    session-host's process tree** (see :meth:`SessionManager.create_remote`),
-    so it stays visible on the PC and survives a session-host *or* a
-    ``tray.bat --restart`` tear-down — that survival is the whole
-    point of the detached mode. The launcher keeps only the console PID, so the
-    session shows up in the running-sessions list and can be killed from the
-    phone — there is no PTY, no scrollback, and no WebSocket. The session is
-    driven from its own console window on the PC.
-    """
-
-    kind = KIND_REMOTE
-
-    def __init__(
-        self,
-        session_id: str,
-        project_dir: str,
-        name: str,
-        flags: str,
-        started_at: float,
-        pid: int,
-        agent: str = DEFAULT_AGENT,
-    ) -> None:
-        self.session_id = session_id
-        self.project_dir = project_dir
-        self.name = name
-        self.flags = flags
-        self.started_at = started_at
-        self._pid = pid
-        self.agent = agent
-        self.manual_title = ""
-
-    @property
-    def alive(self) -> bool:
-        return _pid_alive(self._pid)
-
-    def stop(
-        self, mode: str = STOP_KILL, grace_seconds: float = _STOP_GRACE_SECONDS
-    ) -> None:
-        """Stop and close the detached console session.
-
-        Detached processes (RemoteSession) cannot be gracefully stopped without
-        closing the window, since they have no stdin/PTY. We use taskkill /T /F
-        to terminate the console's whole subtree (cmd.exe + agent + children).
-        The console is orphaned from the host tree, but it is still reachable by
-        its own PID, so an explicit Stop from the phone still works.
-
-        ``mode`` / ``grace_seconds`` are accepted for interface parity with
-        :class:`PtySession` but ignored — there is no PTY to type a quit into.
-        """
-        if not _pid_alive(self._pid):
-            return
-
-        try:
-            subprocess.run(
-                ["taskkill", "/PID", str(self._pid), "/T", "/F"],
-                capture_output=True,
-                creationflags=NO_WINDOW,
-                timeout=_TASKKILL_TIMEOUT_SECONDS,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            logger.debug(f"remote {self.session_id[:8]} taskkill failed: {exc}")
-
-    def force_kill(self) -> None:
-        self.stop()
-
-    def to_api(self) -> Dict[str, object]:
-        return {
-            "session_id": self.session_id,
-            "kind": self.kind,
-            "agent": self.agent,
-            "project_dir": self.project_dir,
-            "name": self.name,
-            "flags": self.flags,
-            "started_at": self.started_at,
-            "alive": self.alive,
-            "live_title": "",
-            "manual_title": self.manual_title,
-        }
-
-
-# Environment variables a *parent* coding agent injects into the short-lived,
-# non-interactive subprocesses it spawns for its own tool calls. They are
-# correct there and actively wrong for the long-lived interactive agent we are
-# about to host:
-#
-#   NO_COLOR                   strips every ANSI colour out of the child's TUI,
-#                              so the session renders monochrome.
-#   CLAUDE_CODE_CHILD_SESSION  makes Claude Code treat itself as a nested run
-#                              and disable transcript saving — no .jsonl, no
-#                              --resume, no history for the whole session.
-#
-# The rest are the parent's own identity, stale the moment we inherit it.
-#
-# They reach us whenever the tray was (re)started from inside an agent's tool
-# subprocess — an agent running `tray.bat --restart` is the usual route — since
-# the whole tray → webapp → session-host chain inherits that environment and we
-# then hand our own os.environ to everything we spawn. Scrubbing here makes a
-# launcher-hosted session independent of *how* the host happened to be started.
-#
-# Deliberately NOT scrubbed: user-scope settings.json vars that are meant for
-# every agent run (CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, telemetry), and
-# GIT_TERMINAL_PROMPT — restoring git's interactive credential prompt could
-# hang an agent's own git call on a prompt nobody is watching.
-_INHERITED_AGENT_MARKERS = frozenset(
-    {
-        "AI_AGENT",
-        "CLAUDECODE",
-        "CLAUDE_CODE_BRIDGE_SESSION_ID",
-        "CLAUDE_CODE_CHILD_SESSION",
-        "CLAUDE_CODE_ENTRYPOINT",
-        "CLAUDE_CODE_SESSION_ID",
-        "CLAUDE_PID",
-        "FORCE_COLOR",
-        "NO_COLOR",
-    }
-)
-
-
-def agent_child_env(session_id: str, agent: str) -> Dict[str, str]:
-    """Build the environment for a launcher-spawned agent process.
-
-    The host's own environment minus :data:`_INHERITED_AGENT_MARKERS`, plus
-    this session's ``APP_LAUNCHER_SESSION_ID``/``APP_LAUNCHER_AGENT`` stamp,
-    plus the **effective** ``PATH``.
-
-    That last part is what lets ``cmd /c <exe>`` find a CLI installed after
-    this host process started: the inherited block is frozen at spawn, so
-    without it the child inherits a ``PATH`` that predates the install. It
-    must be the *same* path :func:`src.agents.is_installed` resolves against
-    — a button that lights up for a launch that then dies with "is not
-    recognized as an internal or external command" is the worse failure.
-    Only ``PATH`` is refreshed: the marker-scrubbing policy above is
-    deliberate and stays exactly as it is.
-    """
-    env = {
-        key: value
-        for key, value in os.environ.items()
-        if key.upper() not in _INHERITED_AGENT_MARKERS
-    }
-    env["PATH"] = effective_path()
-    env["APP_LAUNCHER_SESSION_ID"] = session_id
-    env["APP_LAUNCHER_AGENT"] = agent
-    return env
 
 
 class SessionManager:
@@ -775,6 +757,7 @@ class SessionManager:
     def __init__(self) -> None:
         self._sessions: Dict[str, Any] = {}
         self._lock = threading.Lock()
+        self._channel_claims = ChannelClaims()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
@@ -792,13 +775,43 @@ class SessionManager:
         history_lines: Optional[int] = None,
         label: str = "",
     ) -> PtySession:
+        """:meth:`_spawn_pty`, refusing a second live session on a channel label.
+
+        The claim is held from the check until the session is in ``_sessions``:
+        the spawn runs outside ``_lock`` and takes real time.
+        """
+        if not ChannelClaims.applies(label):
+            return self._spawn_pty(
+                project_dir, name, flags, agent, rows, cols, history_lines, label
+            )
+        with self._lock:
+            self._channel_claims.claim(label, self._sessions.values())
+        try:
+            return self._spawn_pty(
+                project_dir, name, flags, agent, rows, cols, history_lines, label
+            )
+        finally:
+            with self._lock:
+                self._channel_claims.release(label)
+
+    def _spawn_pty(
+        self,
+        project_dir: str,
+        name: str,
+        flags: str,
+        agent: str = DEFAULT_AGENT,
+        rows: int = 40,
+        cols: int = 120,
+        history_lines: Optional[int] = None,
+        label: str = "",
+    ) -> PtySession:
         """Spawn ``<agent> <flags>`` inside a fresh ConPTY in ``project_dir``.
 
         ``agent`` selects which coding CLI to run; see :mod:`src.agents`.
 
         ``rows``/``cols`` size the ConPTY at spawn time. The phone passes
         its real terminal dimensions through the launch request so a
-        full-screen differential TUI (ratatui-style) paints its *first*
+        full-screen differential TUI (Codex's ratatui) paints its *first*
         frame at the correct width instead of the legacy ``40×120`` — which
         wrapped/cut on a portrait phone. They are clamped to
         the same bounds as :meth:`PtySession.resize`; an omitted value
@@ -814,20 +827,27 @@ class SessionManager:
             raise RuntimeError("pywinpty is not available — cannot spawn a PTY")
         if self._loop is None:
             raise RuntimeError("SessionManager has no event loop attached")
+        _validate_flags(flags)
         directory = Path(project_dir)
         if not directory.is_dir():
             raise OSError(f"Project directory not found: {project_dir}")
 
-        rows = max(1, min(int(rows), _MAX_PTY_DIM))
-        cols = max(1, min(int(cols), _MAX_PTY_DIM))
+        # The same floors :meth:`PtySession.resize` applies, as the docstring
+        # above promises. `POST /sessions` forwards the request's rows
+        # unfloored (`int(body.get("rows") or 40)` only catches a falsy value,
+        # so a literal 1 survives), and a 1-row ConPTY's first real resize
+        # fires exactly the full-viewport repaint PTY_MIN_ROWS exists to
+        # prevent.
+        rows = max(PTY_MIN_ROWS, min(int(rows), 1000))
+        cols = max(PTY_MIN_COLS, min(int(cols), 1000))
         session_id = uuid.uuid4().hex
-        # `cmd /c` resolves the agent command (e.g. copilot.cmd)
+        # `cmd /c` resolves the agent command (e.g. claude.cmd / agy.cmd)
         # off PATH the way a normal shell would; when the agent exits, cmd
         # exits, the PTY closes, and the reader thread sees EOF.
         #
         # APP_LAUNCHER_SESSION_ID/AGENT ride the child's environment
         # (``env=``), NOT a `set "VAR=val" && ...` chain baked into the
-        # command string (the root cause of vars not landing): PtyProcess.spawn() re-tokenizes a
+        # command string: PtyProcess.spawn() re-tokenizes a
         # str argv via shlex.split() then rebuilds it with
         # subprocess.list2cmdline(), which backslash-escapes the quotes
         # around "VAR=val" — cmd.exe's own SET parser doesn't strip that
@@ -888,38 +908,13 @@ class SessionManager:
 
         Tracked for listing and kill only — see :class:`RemoteSession`.
         """
+        _validate_flags(flags)
         directory = Path(project_dir)
         if not directory.is_dir():
             raise OSError(f"Project directory not found: {project_dir}")
         session_id = uuid.uuid4().hex
-        # `cmd /c` resolves the agent command (e.g. copilot.cmd) off PATH and
-        # closes the window when the agent exits — same shape as the PTY spawn.
         exe = command_for(agent)
-        inner = (
-            f'set "APP_LAUNCHER_SESSION_ID={session_id}" && '
-            f'set "APP_LAUNCHER_AGENT={agent}" && '
-            f"{exe} {flags}"
-        ).strip()
-        ps_command = (
-            "(Start-Process -FilePath 'cmd' "
-            f"-ArgumentList '/c {_ps_quote(inner)}' "
-            f"-WorkingDirectory '{_ps_quote(str(directory))}' -PassThru).Id"
-        )
-        # The console inherits its environment through this PowerShell, so the
-        # scrub has to happen here too — otherwise a detached session gets the
-        # same monochrome, transcript-less child a PTY session would.
-        result = subprocess.run(
-            [_POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", ps_command],
-            capture_output=True,
-            text=True,
-            creationflags=NO_WINDOW,
-            timeout=_DETACHED_SPAWN_TIMEOUT_SECONDS,
-            env=agent_child_env(session_id, agent),
-        )
-        pid = _parse_started_pid(result.stdout)
-        if pid is None:
-            detail = (result.stderr or result.stdout or "").strip()[:200]
-            raise RuntimeError(f"Failed to launch detached session: {detail}")
+        pid = launch_detached(directory, session_id, agent, exe, flags)
         session = RemoteSession(
             session_id=session_id,
             project_dir=str(directory),
@@ -949,7 +944,7 @@ class SessionManager:
 
     def stop(
         self, session_id: str, mode: str = STOP_QUIT,
-        grace_seconds: float = _STOP_GRACE_SECONDS,
+        grace_seconds: float = STOP_GRACE_SECONDS,
     ) -> bool:
         session = self.get(session_id)
         if session is None:
@@ -964,9 +959,8 @@ class SessionManager:
         :class:`PtySession` and :class:`RemoteSession` — the one title channel
         that reaches a detached session, and the only one the
         launcher needs: it names the session in the UI, the window title, the
-        Coding tab, and the Board without any PTY involvement. (Forwarding the
-        rename into the agent's own CLI is deliberately not done: it is
-        unfixably racy against the live TUI.)
+        Coding tab, and the Board without any PTY involvement. (The rename is never forwarded into the
+        agent's own CLI: that is unfixably racy against the live TUI.)
         """
         session = self.get(session_id)
         if session is None:
@@ -974,13 +968,12 @@ class SessionManager:
         session.manual_title = title.strip()[:_MANUAL_TITLE_MAX_CHARS]
         return session
 
-    def reap_dead(self) -> int:
-        """Drop sessions whose process has exited. Returns the count reaped."""
+    def reap_dead(self) -> List[Any]:
+        """Drop sessions whose process has exited. Returns the sessions
+        reaped, so the caller can clean up after them (their large uploads)."""
         with self._lock:
             dead = [sid for sid, s in self._sessions.items() if not s.alive]
-            for sid in dead:
-                self._sessions.pop(sid, None)
-        return len(dead)
+            return [self._sessions.pop(sid) for sid in dead]
 
     def shutdown(self) -> None:
         """Force-kill PTY sessions on host exit; leave detached ones running.

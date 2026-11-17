@@ -18,6 +18,7 @@ node_modules/
 # --- Runtime state --------------------------------------------------------
 .tray.pid
 *.log
+*.log.*
 
 # --- Editor / OS ----------------------------------------------------------
 .vscode/
@@ -28,9 +29,15 @@ Thumbs.db
 # --- Config overrides (keep the committed templates) ---------------------
 config/config.json
 config/webapp_config.json
+config/app_password.json
+config/process_auto_restart.json
 config/apps.json
 config/jobs.json
+config/channel_profiles.json
 config/webauthn_devices.json
+# msvcrt.locking sidecars written beside the JSON they guard (src/_json_io.py);
+# the webapp/jobs/ ones are already covered by that directory's entry below
+config/*.lock
 
 # --- Webapp runtime data --------------------------------------------------
 webapp/last_tunnel_url.txt
@@ -38,13 +45,45 @@ webapp/certificates/
 webapp/cloudflared.yml
 webapp/terminal-themes.json
 webapp/sessions/
+# Board issue-start dispatch briefs (issue #1114) — launcher-written, TTL-pruned
+webapp/briefs/
+# Files agents sent to their session's Chat (issue #1530) — launcher-written, TTL-pruned
+webapp/outbox/
 webapp/jobs/
-# e2e-gate temp copy of the real config (issue #441) — carries auth secrets
+# durable chief-conversation pointer (issue #675) — machine-written state
+webapp/chief-pointer.json
+webapp/restart-baseline.json
+# the Board's answered marks on the chief's plan (issue #1487) — machine-written state
+webapp/chief-answered.json
+webapp/chief-journal-look.json
+# Failed job runs the owner dismissed from the Board (issue #1669) — machine-written state
+webapp/jobs-dismissed.json
+# Red CI runs already seen by the chief's ci-failed feed — machine-written state
+webapp/ci-failed-seen.json
+# Open machine-critical incidents the chief feed already published — machine-written state
+webapp/machine-critical-open.json
+# Red CI runs the owner dismissed from the Board — machine-written state
+webapp/ci-dismissed.json
+# The lid keep-awake switch's saved power plan values — machine-written state
+webapp/lid-keep-awake.json
+# The Board's Later and Problem marks on owner checks — machine-written state
+webapp/owner-check-marks.json
+# Fleet daily GitHub totals (lines, PRs, issues) — machine-written cache
+webapp/progress-totals.json
+# Skill-instruction fingerprints of resumed Life OS conversations — machine-written state
+webapp/life-os-skill-hashes.json
+# Record of the apps the launcher spawned, read back after a restart — machine-written state
+webapp/spawned-apps.json
+# Former e2e-gate config path (issue #441). No longer written — the gate's
+# config moved to pytest's temp dir, credential-free (issue #907) — but kept
+# ignored so a file left by an older run can never be committed.
 webapp/e2e-autoboot-webapp-config.json
+# pids of the gate's disposable servers, swept at the end of the browser phase — machine-written state
+webapp/e2e-autoboot-pids.jsonl
+# failed e2e node ids the gate reads to decide its one load retry — machine-written state
+webapp/e2e-failures.jsonl
 
 # --- Interactive-terminal scratch (image uploads land here) --------------
 .launcher-tmp/
+# Visual-proof store (fleet-config ui_proof): screenshots of a running app, never tracked
 .proof/
-
-# The app password hash (src/password.py)
-config/app_password.json

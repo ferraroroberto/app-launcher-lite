@@ -1,0 +1,177 @@
+"""Smoke + regression coverage for the Apps-tab Running apps panel (issue #35).
+
+The panel lists apps spawned from the launcher, binds each to its port,
+and offers tap-to-open over Tailscale plus a per-app Stop. A real
+Streamlit launch is too heavy + flaky for the smoke suite, so the
+running-apps API is route-mocked here; real-spawn integration is covered
+by the issue's manual validation. Runs against the live tray (or the
+autoboot disposable webapp); skips if neither is up.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+
+import pytest
+from playwright.sync_api import Page, expect
+
+from tests.e2e.fixtures.ui import open_row_menu
+
+pytestmark = pytest.mark.smoke
+
+
+def _navigate(page: Page, base_url: str) -> list[str]:
+    """Open the SPA, return the list that collects uncaught JS errors."""
+    errors: list[str] = []
+    page.on("pageerror", lambda exc: errors.append(str(exc)))
+    page.goto(f"{base_url}/", wait_until="domcontentloaded")
+    page.wait_for_selector("#runningAppsList", state="attached", timeout=5_000)
+    return errors
+
+
+def _two_row_payload() -> dict:
+    return {
+        "running": [
+            {
+                "app_id": "voice-transcriber-webapp",
+                "name": "Voice Transcriber",
+                "kind": "webapp",
+                "pid": 12345,
+                "started_at": 1736179200,
+                "port": 8501,
+                "url": "https://pc.example-tailnet.ts.net:8501/",
+                "alive": True,
+            },
+            {
+                "app_id": "photo-ocr-streamlit",
+                "name": "Photo OCR",
+                "kind": "streamlit",
+                "pid": 23456,
+                "started_at": 1736179200,
+                "port": None,
+                "url": None,
+                "alive": True,
+            },
+        ]
+    }
+
+
+@pytest.mark.iphone
+def test_section_renders_empty(authed_page: Page, base_url: str) -> None:
+    authed_page.route(
+        "**/api/apps/running",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"running": []}),
+        ),
+    )
+    # The phone's empty state: the wide layout shows one plain line instead
+    # (#1505, test_apps_wide_layout.py).
+    authed_page.set_viewport_size({"width": 390, "height": 844})
+    errors = _navigate(authed_page, base_url)
+    authed_page.locator("#tabApps").click()
+
+    expect(authed_page.locator("#runningAppsList")).to_be_attached()
+    expect(authed_page.locator("#runningAppsEmpty")).to_be_visible()
+    # #1437: one line, and the "launched here" footer only while empty.
+    expect(authed_page.locator("#runningAppsEmpty .empty-state-message")).to_have_text(
+        "Nothing launched from here is running.")
+    expect(authed_page.locator("#runningAppsNote")).to_be_visible()
+    # The block names its way forward: Show apps opens the Apps list.
+    authed_page.evaluate("document.querySelector('details.apps-list-card').open = false")
+    authed_page.locator("#runningAppsEmptyAction").click()
+    expect(authed_page.locator("details.apps-list-card")).to_have_attribute("open", "")
+    authed_page.wait_for_timeout(300)
+    assert errors == [], "JS errors:\n  - " + "\n  - ".join(errors)
+
+
+def test_stop_confirms_and_posts(authed_page: Page, base_url: str) -> None:
+    """The rows, Open and a confirmed Stop on one page load: read-only
+    steps first, then the Stop, the one step that posts."""
+    stop_calls: list[str] = []
+    payload = _two_row_payload()
+    target = payload["running"][0]["url"]
+
+    def _running_handler(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(payload if not stop_calls else {"running": []}),
+        )
+
+    def _stop_handler(route):
+        stop_calls.append(route.request.url)
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"stopped": 12345}),
+        )
+
+    authed_page.route("**/api/apps/running", _running_handler)
+    authed_page.route(
+        "**/api/apps/*/instances/*/stop", _stop_handler
+    )
+    # Capture window.open before the SPA loads — don't actually navigate.
+    authed_page.add_init_script(
+        "window.__opened = [];"
+        "window.open = function (u) { window.__opened.push(u); return null; };"
+    )
+    # The vendored confirm sheet asks, never native confirm() (#1437).
+    native: list = []
+    authed_page.on("dialog", lambda d: (native.append(d.message), d.dismiss()))
+
+    _navigate(authed_page, base_url)
+    authed_page.locator("#tabApps").click()
+
+    # -- was test_section_renders_rows --
+    rows = authed_page.locator("#runningAppsList li.action-row")
+    expect(rows).to_have_count(2, timeout=5_000)
+
+    # Row 0 has a URL — Open enabled; row 1 has none — Open disabled.
+    row0, row1 = rows.nth(0), rows.nth(1)
+    # The row itself is Open (#1129, an action-row): enabled with a URL.
+    # Since #1437 the kind is the avatar's glyph, which wears the alive
+    # badge, and the context line is ":port" with "up …" as its tail figure; the
+    # pid moved to the menu's header line.
+    expect(row0.locator(".action-row-title")).to_have_text("Voice Transcriber")
+    expect(row0.locator(".action-row-meta-text")).to_have_text(":8501")
+    expect(row0.locator(".action-row-meta-tail")).to_have_text(re.compile(r"^up .+$"))
+    expect(row0.locator(".action-open")).to_be_enabled()
+    expect(row0.locator(".action-open .avatar")).to_have_attribute("data-badge", "alive")
+    expect(row0.locator(".avatar use")).to_have_attribute("href", "#i-globe")
+    expect(row1.locator(".avatar use")).to_have_attribute("href", "#i-gauge")
+    row0.locator(".action-row-kebab").click()
+    expect(open_row_menu(authed_page).locator(".row-menu-head")).to_have_text("pid 12345")
+    authed_page.keyboard.press("Escape")
+
+    expect(row1.locator(".action-row-title")).to_have_text("Photo OCR")
+    expect(row1.locator(".action-row-meta")).to_contain_text("binding")
+    expect(row1.locator(".action-open")).to_be_disabled()
+    # Something is running, so the empty state and its footer are gone.
+    expect(authed_page.locator("#runningAppsEmpty")).to_be_hidden()
+    expect(authed_page.locator("#runningAppsNote")).to_be_hidden()
+
+    # -- was test_open_button_opens_new_tab --
+    row0.locator(".action-open").click()
+    opened = authed_page.evaluate("window.__opened")
+    assert opened == [target], f"window.open called with {opened!r}, expected [{target!r}]"
+
+    # Stop is the ⋮ menu's last, danger item now (#1129), still confirmed.
+    row0.locator(".action-row-kebab").click()
+    open_row_menu(authed_page).locator("[data-item=action-stop-close]").click()
+    confirm = authed_page.locator("#confirmDialog")
+    expect(confirm).to_be_visible()
+    expect(confirm.locator("#confirmDialogTitle")).to_have_text("Stop Voice Transcriber?")
+    # The modal contract (#545): a header ✕ and one full-width action.
+    expect(confirm.locator(".detail-header .detail-close")).to_have_count(1)
+    expect(confirm.locator(".detail-actions button")).to_have_count(1)
+    confirm.locator("#confirmDialogOk").click()
+
+    expect(rows).to_have_count(0, timeout=5_000)
+    assert native == [], f"a native dialog fired: {native!r}"
+    assert len(stop_calls) == 1, f"expected one stop POST, got {stop_calls!r}"
+    assert stop_calls[0].endswith(
+        "/api/apps/voice-transcriber-webapp/instances/12345/stop"
+    ), f"stop POST hit the wrong path: {stop_calls[0]}"

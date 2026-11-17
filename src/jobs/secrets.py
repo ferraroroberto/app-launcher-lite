@@ -5,15 +5,15 @@ One gitignored place for secret *values* — the ``secrets`` block in
 opaque ``$secret:<key>`` strings so the jobs registry never carries a
 real credential. Two consumers:
 
-* ``Job.env``: a per-job env-var overlay whose values may be
+* ``Job.env`` (this issue): a per-job env-var overlay whose values may be
   literals or ``$secret:`` references, resolved by the executor at fire
   time and merged into the child's environment.
-* ``webhook.secret`` (the in-line analogue of this mechanism):
-  :func:`src.jobs.webhook.resolve_secret`
+* ``webhook.secret`` (the original in-line
+  analogue of this mechanism): :func:`src.jobs.webhook.resolve_secret`
   delegates here.
 
 Deliberately a leaf module — no imports from the jobs/webapp packages —
-so both ``jobs_webhook`` and the executor can use it without cycles.
+so both ``src.jobs.webhook`` and the executor can use it without cycles.
 """
 
 from __future__ import annotations

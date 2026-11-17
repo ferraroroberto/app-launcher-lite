@@ -14,14 +14,9 @@ from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.jobs.config import Job
-from src.jobs.history import latest_run, list_runs
-from src.jobs.run_state import (
-    RunState,
-    derive_run_state,
-    is_failure,
-    is_real_fire,
-    parse_iso,
-)
+from src.jobs.history import latest_run, list_runs, parse_stamp
+from src.jobs.outcome import OUTCOME_DEFERRED, OUTCOME_UNCONFIRMED
+from src.jobs.run_status import FINISHED, NOT_A_FIRE, RunStatus, run_status
 
 # Process-local TTL cache. Reset per job by `invalidate_stats_cache` once a
 # run finalises so the row updates promptly without waiting out the TTL.
@@ -55,21 +50,21 @@ def cooldown_check(
     cooldown = job.cooldown_seconds
     if not cooldown:
         return None
-    reference = now or datetime.now()
     anchor: Optional[Dict[str, Any]] = None
     for run in list_runs(job.id):
         # skipped (cooldown no-ops) and dry-run records are
         # not real fires — counting them as the anchor would let a dry
         # verification reset the cooldown window.
-        if not is_real_fire(derive_run_state(run, now=reference).state):
+        if run_status(run) in NOT_A_FIRE:
             continue
         anchor = run
         break
     if anchor is None:
         return None
-    started = parse_iso(anchor.get("started_at"))
+    started = parse_stamp(anchor.get("started_at"))
     if started is None:
         return None
+    reference = now or datetime.now()
     elapsed = (reference - started).total_seconds()
     remaining = cooldown - elapsed
     if remaining <= 0:
@@ -82,8 +77,8 @@ def _duration_for(record: Dict[str, Any]) -> Optional[float]:
     persisted = record.get("duration_seconds")
     if isinstance(persisted, (int, float)) and persisted >= 0:
         return float(persisted)
-    started = parse_iso(record.get("started_at"))
-    finished = parse_iso(record.get("finished_at"))
+    started = parse_stamp(record.get("started_at"))
+    finished = parse_stamp(record.get("finished_at"))
     if started and finished and finished >= started:
         return (finished - started).total_seconds()
     return None
@@ -107,23 +102,44 @@ def _compute_stats(job_id: str, *, now: Optional[datetime] = None) -> Dict[str, 
     completed_durations: List[float] = []
     success_recent = 0
     failed_recent = 0
+    unconfirmed_recent = 0
     cutoff = now - timedelta(days=30)
     for r in runs:
-        state = derive_run_state(r, now=now).state
-        started = parse_iso(r.get("started_at"))
-        succeeded = state is RunState.SUCCEEDED
-        if succeeded or is_failure(state):
+        status = r.get("status")
+        outcome = r.get("outcome") or status
+        started = parse_stamp(r.get("started_at"))
+        if outcome == OUTCOME_DEFERRED:
+            # A deferred run declined the work on purpose. It is
+            # neither side of the success ratio, and its seconds-long
+            # duration says nothing about how long the real work takes, so it
+            # stays out of the p95 that sets the stuck and watchdog
+            # thresholds.
+            continue
+        if run_status(r) in FINISHED:
             d = _duration_for(r)
             if d is not None:
                 completed_durations.append(d)
             if started and started >= cutoff:
-                if succeeded:
+                # An unconfirmed run leaves the ratio entirely
+                # rather than joining either side of it: counting it as a
+                # failure is the false alarm this issue is about, and counting
+                # it as a success is the worse half of the same mistake. It is
+                # reported as its own number instead.
+                if outcome == OUTCOME_UNCONFIRMED:
+                    unconfirmed_recent += 1
+                elif run_status(r) is RunStatus.SUCCESS:
                     success_recent += 1
                 else:
                     failed_recent += 1
     # last7 oldest-left so the sparkline reads left→right chronologically.
+    # Both keys ride: ``status`` for older consumers, ``outcome``
+    # for the dot colour.
     last7 = [
-        {"status": r.get("status"), "run_id": r.get("run_id")}
+        {
+            "status": r.get("status"),
+            "outcome": r.get("outcome") or r.get("status"),
+            "run_id": r.get("run_id"),
+        }
         for r in list(reversed(runs[:7]))
     ]
     p50 = _percentile(completed_durations, 0.5)
@@ -133,6 +149,7 @@ def _compute_stats(job_id: str, *, now: Optional[datetime] = None) -> Dict[str, 
         "p50": p50,
         "p95": p95,
         "success_rate_30d": (success_recent / total_recent) if total_recent else None,
+        "unconfirmed_30d": unconfirmed_recent,
         "completed_count": len(completed_durations),
         "last7": last7,
     }
@@ -147,9 +164,18 @@ def run_stats(job_id: str, *, fresh: bool = False) -> Dict[str, Any]:
           "p50": Optional[float],          # seconds, completed runs only
           "p95": Optional[float],
           "success_rate_30d": Optional[float],  # None when zero recent runs
+          "unconfirmed_30d": int,          # runs whose delivery was never
+                                           # established; excluded from the
+                                           # ratio above
           "completed_count": int,
-          "last7": [{"status": str, "run_id": str}, ...]  # oldest-left
+          "last7": [{"status": str, "outcome": str, "run_id": str}, ...]
         }
+
+    ``success_rate_30d`` is a ratio over runs with a *known* outcome only. A
+    job whose every recent run was unconfirmed reports ``None`` there and a
+    non-zero ``unconfirmed_30d`` — "we cannot say", not "0%". A ``deferred``
+    run is left out of the ratio, the durations and
+    ``completed_count``. It still appears in ``last7``.
 
     ``fresh=True`` skips the cache — used by the stuck-run check, which
     pays the cost rarely (only when the latest run is still running).
@@ -177,6 +203,12 @@ def invalidate_stats_cache(job_id: Optional[str] = None) -> None:
             _stats_cache.clear()
         else:
             _stats_cache.pop(job_id, None)
+    # The polls' snapshot holds these stats too. The run's own
+    # write_run_json marked it dirty a moment earlier, and a read in between
+    # may have stored the old stats and consumed that mark, so mark it again.
+    from src.jobs.snapshot import mark_dirty
+
+    mark_dirty(job_id)
 
 
 # How many *completed* runs a job needs before its derived duration
@@ -189,11 +221,9 @@ def invalidate_stats_cache(job_id: Optional[str] = None) -> None:
 # explicitly to give it one.
 WATCHDOG_MIN_COMPLETED_RUNS = 5
 
-
-# A run is "stuck" past max(p95 x STUCK_P95_FACTOR, STUCK_FLOOR_SECONDS). Both are
-# judgement calls, not measurements: 3x p95 leaves room for ordinary run-to-run
-# variance, and the 5-minute floor stops a job with a tiny p95 from tripping on
-# a routine slow run.
+# A run looks stuck once it outlasts three times the job's own p95 (tail
+# jitter alone rarely does), and never before the floor (a job with a tiny or
+# missing p95 would otherwise flag within seconds).
 STUCK_P95_FACTOR = 3.0
 STUCK_FLOOR_SECONDS = 300.0
 
@@ -207,7 +237,10 @@ def _threshold_from_stats(
 
 
 def stuck_threshold_seconds(
-    job_id: str, *, p95_factor: float = STUCK_P95_FACTOR, floor_seconds: float = STUCK_FLOOR_SECONDS
+    job_id: str,
+    *,
+    p95_factor: float = STUCK_P95_FACTOR,
+    floor_seconds: float = STUCK_FLOOR_SECONDS,
 ) -> float:
     """Seconds a run may sit ``running`` before it looks stuck.
 
@@ -243,22 +276,29 @@ def derived_runtime_ceiling_seconds(
 
 
 def is_stuck(
-    job_id: str, *, p95_factor: float = STUCK_P95_FACTOR, floor_seconds: float = STUCK_FLOOR_SECONDS
+    job_id: str,
+    *,
+    latest: Optional[Dict[str, Any]] = None,
+    p95_factor: float = STUCK_P95_FACTOR,
+    floor_seconds: float = STUCK_FLOOR_SECONDS,
 ) -> bool:
-    """``True`` when the latest run is ``RUNNING`` past a sane threshold.
+    """``True`` when the latest run is ``running`` past a sane threshold.
 
     Threshold = :func:`stuck_threshold_seconds`. Surface-only — the UI
     shows ⚠️ and exposes a manual kill button. The *auto*-kill lives in
     the executor's watchdog, which derives its ceiling from
     the same helper but demands a minimum sample first.
+
+    ``latest`` lets a caller that already holds the newest run record
+    (e.g. one poll's worth of job decoration) pass it in and skip a
+    redundant :func:`~src.jobs.history.latest_run` walk; omitted, it's
+    fetched here exactly as before.
     """
-    latest = latest_run(job_id)
-    if (
-        not latest
-        or derive_run_state(latest, now=datetime.now()).state is not RunState.RUNNING
-    ):
+    if latest is None:
+        latest = latest_run(job_id)
+    if run_status(latest) is not RunStatus.RUNNING:
         return False
-    started = parse_iso(latest.get("started_at"))
+    started = parse_stamp(latest.get("started_at"))
     if not started:
         return False
     threshold = stuck_threshold_seconds(
@@ -269,16 +309,21 @@ def is_stuck(
 
 
 def consecutive_failed_runs(job_id: str) -> int:
-    """Count the contiguous failed runs (failed, killed or reaped) at the top of
-    the history.
+    """Count the contiguous genuinely-failed runs at the top of the history.
 
-    Stops at the first run that is not a failure (success / running / pending /
-    unknown). Used by the notification streak gate.
+    Stops at the first run that is not a failure — success, running, pending,
+    unknown, or ``unconfirmed``. An unconfirmed run is not
+    evidence of a failure, so it must not extend a failure streak; the whole
+    point of the streak gate is to escalate a job that is provably broken, and
+    a run of "we could not tell" is the opposite of proof. It breaks the streak
+    rather than being skipped over: the runs on either side of it are not
+    contiguous failures either.
+
+    Used by the notification streak gate.
     """
     n = 0
-    now = datetime.now()
     for r in list_runs(job_id):
-        if not is_failure(derive_run_state(r, now=now).state):
+        if (r.get("outcome") or r.get("status")) != "failed":
             break
         n += 1
     return n

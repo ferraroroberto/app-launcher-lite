@@ -1,4 +1,4 @@
-"""Loopback socket exhaustion in the e2e harness: name a drained port pool, retry a full buffer.
+"""Name a drained loopback port pool instead of reporting it as a page failure.
 
 Every closed TCP connection to a local server leaves an (ephemeral port, server
 port) pair in TIME_WAIT for minutes, and Windows answers a ``connect()`` that
@@ -15,17 +15,10 @@ made them.
 
 from __future__ import annotations
 
-import logging
-import subprocess
-import time
 from collections.abc import Generator
 from typing import Any
 
 import pytest
-from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import Page
-
-logger = logging.getLogger(__name__)
 
 PORT_POOL_MARKERS = ("ERR_ADDRESS_IN_USE", "connect ENOBUFS")
 PORT_POOL_HEADLINE = (
@@ -62,47 +55,3 @@ def write_summary(terminalreporter: Any) -> None:
     terminalreporter.write_line(PORT_POOL_HEADLINE)
     for nodeid in dict.fromkeys(hit):
         terminalreporter.write_line(f"  {nodeid}")
-
-
-def _tcp_state_counts() -> str:
-    """One-line TCP state histogram (``TIME_WAIT=412 ESTABLISHED=38 …``)."""
-    try:
-        out = subprocess.run(
-            ["netstat", "-an", "-p", "tcp"], capture_output=True, text=True,
-            timeout=10, creationflags=subprocess.CREATE_NO_WINDOW,
-            encoding="oem", errors="replace",
-        ).stdout
-    except (OSError, subprocess.SubprocessError) as exc:
-        return f"netstat unavailable ({exc.__class__.__name__})"
-    counts: dict = {}
-    for line in out.splitlines():
-        fields = line.split()
-        if len(fields) == 4 and fields[0] == "TCP":
-            counts[fields[3]] = counts.get(fields[3], 0) + 1
-    return " ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "no sockets"
-
-
-def retry_goto_on_no_buffer_space(page: Page) -> None:
-    """Retry a navigation once when Windows runs out of socket buffers.
-
-    ``net::ERR_NO_BUFFER_SPACE`` (WSAENOBUFS) is the hosted runner's TCP stack
-    failing a loopback connect, not anything the page did: it reddened
-    ``Page.goto`` in two CI runs. Only that exact error is retried, once,
-    after a short pause; the socket-state histogram is logged so a recurrence
-    is diagnosable from the run log. Every other navigation error, and a
-    second ``ERR_NO_BUFFER_SPACE``, still fails the test.
-    """
-    original = page.goto
-
-    def goto(*args, **kwargs):
-        try:
-            return original(*args, **kwargs)
-        except PlaywrightError as exc:
-            if "ERR_NO_BUFFER_SPACE" not in str(exc):
-                raise
-            logger.warning("⚠️  goto hit ERR_NO_BUFFER_SPACE (%s); retrying once",
-                           _tcp_state_counts())
-            time.sleep(2)
-            return original(*args, **kwargs)
-
-    page.goto = goto

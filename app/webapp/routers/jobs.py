@@ -11,14 +11,16 @@ goes through ``launcher.py run-job <id>``. The route pre-creates the run
 directory so it can return the new ``run_id`` immediately, then spawns
 the executor detached.
 
-The webhook route lives in :mod:`app.webapp.routers.jobs_webhook_routes`
-(mounted here via ``include_router`` so ``app/webapp/server.py`` registers
+Split off a single-file god-router (``/codebase-audit``): the webhook
+route lives in :mod:`app.webapp.routers.jobs_webhook_routes` (mounted
+here via ``include_router`` so ``app/webapp/server.py`` still registers
 one ``jobs.router``), and the two dry-run modes plus the shared
 cooldown+mutex admission/spawn tail live in
 :mod:`app.webapp.routers.jobs_run` (imported by both this module and
 the webhook one, so neither route module depends on the other). Artifact
 downloads, pin updates, and the live-output WebSocket live in
-:mod:`app.webapp.routers.jobs_run_store_routes`.
+:mod:`app.webapp.routers.jobs_run_store_routes`; files a running Job sends
+to the owner live in :mod:`app.webapp.routers.jobs_outbox_routes`.
 """
 
 from __future__ import annotations
@@ -31,8 +33,12 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.webapp.routers import jobs_run_store_routes, jobs_webhook_routes
-from app.webapp.routers._helpers import maybe_json
+from app.webapp.routers import (
+    jobs_outbox_routes,
+    jobs_run_store_routes,
+    jobs_webhook_routes,
+)
+from app.webapp.routers._helpers import known_run_dir, maybe_json
 from app.webapp.routers.jobs_run import (
     _admit_and_spawn,
     _dry_run_check,
@@ -40,7 +46,9 @@ from app.webapp.routers.jobs_run import (
 )
 from src import jobs as jobs_mod
 from src.diagnostics import kill_process_tree
+from src.jobs import dismissed as jobs_dismissed
 from src.jobs import index as jobs_index
+from src.jobs import snapshot as jobs_snapshot
 from src.jobs.argv import compose_argv
 from src.jobs.config import (
     Job,
@@ -58,8 +66,10 @@ from src.jobs.config import (
     update_job,
     validate_kind_shape,
 )
+from src.jobs.outcome import OUTCOME_DEFERRED
 from src.jobs.preflight import has_errors, preflight
-from src.jobs.run_state import STATUS_FAILED, derive_run_state, is_killable, run_view
+from src.jobs.run_status import RunStatus, is_active, run_status
+from src.jobs.script_missing import script_missing
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -67,6 +77,7 @@ router = APIRouter()
 # mounted here so callers of ``app/webapp/server.py`` still see one router.
 router.include_router(jobs_webhook_routes.router)
 router.include_router(jobs_run_store_routes.router)
+router.include_router(jobs_outbox_routes.router)
 
 # Job fields that are plain optional passthroughs on both create and edit —
 # ``create_job`` reads each via ``body.get(field)``, ``edit_job`` reads each
@@ -83,9 +94,11 @@ JOB_OPTIONAL_FIELDS = (
     "on_success",
     "on_failure",
     "confirm",
+    "rerun_safe",
     "alert_on_failure",
     "visible",
     "elevated",
+    "session_less",
     "kind",
     "kind_config",
     "webhook",
@@ -101,12 +114,14 @@ def _truthy(value: Optional[str]) -> bool:
 def _decorate_job(
     job: Job,
     run_counts: Optional[tuple[int, int]] = None,
-    all_job_ids: Optional[List[str]] = None,
+    runtime: Optional[jobs_snapshot.JobRuntime] = None,
 ) -> Dict[str, Any]:
     """API shape for one job — base fields plus runtime decoration.
 
     ``next_run`` is queried from schtasks (best-effort, ``None`` on
-    error or N/A); ``last_run`` is the most recent on-disk run record;
+    error or N/A); ``last_run`` is the most recent on-disk run record,
+    carrying both its persisted ``status`` and the derived ``outcome`` /
+    ``outcome_reason`` pair;
     ``running`` is a quick "is the latest run still in progress" flag;
     ``stats`` carries the p50/p95/success-rate aggregates plus the
     ``last7`` sparkline payload; ``stuck`` flags an over-long running run;
@@ -114,8 +129,17 @@ def _decorate_job(
     queue (0 when no group); ``coverage`` flags a schedule that isn't
     firing at all — a missing/disabled Task Scheduler entry or
     an elapsed slot with no run record, read from one cached scan per poll.
+
+    Blocking (a ``schtasks`` query plus a run-history disk walk) — async
+    callers wrap it in ``asyncio.to_thread``. The ``/api/jobs``
+    poll passes ``runtime`` from the in-memory snapshot, so it skips
+    the walk; a single-job route, or a job whose snapshot entry holds a read
+    error, walks inline as before (and raises as before).
     """
     payload = job.to_dict()
+    # Always present (``to_dict`` omits a False): the chief reads this key
+    # from every row and treats only a literal ``true`` as safe to re-run.
+    payload["rerun_safe"] = job.rerun_safe
     # Paused jobs render with a "paused — was X" chip so the user sees
     # both that the schedule isn't ticking AND what it will restore to.
     if job.is_paused and job.paused_schedule is not None:
@@ -129,10 +153,19 @@ def _decorate_job(
     # This non-elevated webapp can show its history and validate its target,
     # but cannot safely run it now or change the external task's state.
     payload["manual_run_allowed"] = not job.elevated
-    payload["schedule_controls_allowed"] = not job.elevated
-    payload["next_run"] = jobs_mod.query_next_run(
-        job.id, other_job_ids=all_job_ids
+    # A session-less job's entry is externally managed too, so
+    # pause/resume/schedule edits here would not reach Task Scheduler — the
+    # controls are withheld rather than allowed to lie. Manual "run now" is
+    # *not* withheld: that spawns the executor in this session directly and
+    # never touches the scheduled entry's principal.
+    payload["schedule_controls_allowed"] = not (job.elevated or job.session_less)
+    # The elevated PowerShell that registers (or re-registers) this job's
+    # session-less entries — the one thing this process cannot do itself.
+    # None for every other job, so a normal row's payload is unchanged.
+    payload["registration_command"] = (
+        jobs_mod.registration_script(job) if job.session_less else None
     )
+    payload["next_run"] = jobs_mod.query_next_run(job.id)
     # Computed next fire from the schedule shape. Unlike the
     # schtasks string above, this is sortable + countdown-able. None for
     # manual-only / paused / already-elapsed-once jobs.
@@ -141,11 +174,11 @@ def _decorate_job(
     payload["next_run_iso"] = (
         nf.isoformat(timespec="seconds") if nf is not None else None
     )
-    # A run stranded "running" by a dead executor is reconciled
-    # opportunistically here, on every poll, before it's decorated for the
-    # client — mirrors src.app_runtime.prune_dead's lazy-on-read pattern.
-    jobs_mod.reap_stranded_runs(job)
-    latest = jobs_mod.latest_run(job.id)
+    if runtime is None or runtime.error is not None:
+        runtime = jobs_snapshot.compute_job(job)
+        if runtime.error is not None:
+            raise runtime.error
+    latest = runtime.latest
     if latest is not None:
         payload["last_run"] = {
             "run_id": latest.get("run_id"),
@@ -153,19 +186,24 @@ def _decorate_job(
             "started_at": latest.get("started_at"),
             "finished_at": latest.get("finished_at"),
             "exit_code": latest.get("exit_code"),
+            # ``status`` widened with "unconfirmed" plus the exit code's own
+            # one-liner — a run the adapter could not verify is
+            # not a failed run, and "stalled" beats a bare `exit 124`.
+            "outcome": latest.get("outcome"),
+            "outcome_reason": latest.get("outcome_reason"),
             "trigger": latest.get("trigger"),
             "duration_seconds": latest.get("duration_seconds"),
-            **run_view(latest, now=datetime.now()),
         }
     else:
         payload["last_run"] = None
-    payload["running"] = jobs_mod.is_running(job.id)
-    payload["stats"] = jobs_mod.run_stats(job.id)
-    payload["stuck"] = jobs_mod.is_stuck(job.id)
+    payload["running"] = run_status(latest) is RunStatus.RUNNING
+    payload["stats"] = runtime.stats
+    payload["stuck"] = runtime.stuck
     # Missed-fire coverage. Reads a process-local cached scan —
     # the schtasks half rides the same 30 s bulk-query cache `next_run` uses,
-    # so this adds no shell-out to the poll path.
+    # and the snapshot tick refreshes both before they expire.
     payload["coverage"] = jobs_mod.coverage_for_job(job.id)
+    payload["script_missing"] = script_missing(job) is True  # unestablished reads False
     payload["queue_depth"] = (
         len(jobs_mod.peek_mutex_queue(job.mutex_group)) if job.mutex_group else 0
     )
@@ -218,15 +256,17 @@ async def get_jobs(request: Request) -> Dict[str, Any]:
     # it transparently before the first decorated row queries its counts.
     await asyncio.to_thread(jobs_index.ensure_index)
     counts = await asyncio.to_thread(jobs_index.run_counts_by_job)
-    # query_next_run shells out to schtasks per job — offload the whole
-    # decoration to a worker thread so the event loop doesn't block.
-    job_ids = [j.id for j in cfg.jobs]
+    # The run-history walk comes from the in-memory snapshot; what is
+    # left per job is cheap, but query_next_run can still shell out to
+    # schtasks on a cache miss, so the decoration stays off the event loop.
+    snap = await asyncio.to_thread(jobs_snapshot.current, cfg.jobs)
     decorated = await asyncio.to_thread(
         lambda: [
-            _decorate_job(j, counts.get(j.id, (0, 0)), job_ids) for j in cfg.jobs
+            _decorate_job(j, counts.get(j.id, (0, 0)), runtime=snap.jobs.get(j.id))
+            for j in cfg.jobs
         ]
     )
-    return {"jobs": decorated}
+    return {"jobs": decorated, "snapshot": jobs_snapshot.describe(snap)}
 
 
 @router.get("/api/jobs/agenda")
@@ -340,7 +380,8 @@ async def create_job(request: Request) -> Dict[str, Any]:
     # Re-sync the Task Scheduler entries for this job. Best-effort —
     # schtasks failures log a warning but don't undo the registry write.
     await asyncio.to_thread(jobs_mod.sync_schtasks, job)
-    return {"job": _decorate_job(job), "saved": True, "warnings": warnings}
+    decorated = await asyncio.to_thread(_decorate_job, job)
+    return {"job": decorated, "saved": True, "warnings": warnings}
 
 
 @router.put("/api/jobs/{job_id}")
@@ -402,7 +443,8 @@ async def edit_job(job_id: str, request: Request) -> Dict[str, Any]:
     if job is None:
         raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
     await asyncio.to_thread(jobs_mod.sync_schtasks, job)
-    return {"job": _decorate_job(job), "saved": True, "warnings": warnings}
+    decorated = await asyncio.to_thread(_decorate_job, job)
+    return {"job": decorated, "saved": True, "warnings": warnings}
 
 
 @router.delete("/api/jobs/{job_id}")
@@ -427,7 +469,10 @@ async def pause(job_id: str) -> Dict[str, Any]:
     existing = get_by_id(cfg, job_id)
     if existing is None:
         raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
-    if existing.elevated:
+    # elevated and session_less are both externally managed:
+    # sync_schtasks does not touch their entries, so parking the schedule
+    # here would leave Task Scheduler firing on the old one.
+    if existing.elevated or existing.session_less:
         raise HTTPException(
             status_code=409,
             detail="schedule is externally managed and cannot be paused here",
@@ -440,7 +485,7 @@ async def pause(job_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
     # Schedule is now ``none`` → sync_schtasks deletes the entries.
     await asyncio.to_thread(jobs_mod.sync_schtasks, job)
-    return {"job": _decorate_job(job)}
+    return {"job": await asyncio.to_thread(_decorate_job, job)}
 
 
 @router.post("/api/jobs/{job_id}/resume")
@@ -450,7 +495,7 @@ async def resume(job_id: str) -> Dict[str, Any]:
     existing = get_by_id(cfg, job_id)
     if existing is None:
         raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
-    if existing.elevated:
+    if existing.elevated or existing.session_less:
         raise HTTPException(
             status_code=409,
             detail="schedule is externally managed and cannot be resumed here",
@@ -459,7 +504,7 @@ async def resume(job_id: str) -> Dict[str, Any]:
     if job is None:
         raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
     await asyncio.to_thread(jobs_mod.sync_schtasks, job)
-    return {"job": _decorate_job(job)}
+    return {"job": await asyncio.to_thread(_decorate_job, job)}
 
 
 # ----------------------------------------------------------- run / dry-run
@@ -554,17 +599,20 @@ async def kill_job_run(job_id: str, run_id: str) -> Dict[str, Any]:
     job = get_by_id(cfg, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
-    run_dir = jobs_mod.runs_dir(job_id) / run_id
-    if not run_dir.is_dir():
+    run_dir = known_run_dir(job_id, run_id)
+    if run_dir is None:
         raise HTTPException(status_code=404, detail=f"unknown run {run_id}")
     record = await asyncio.to_thread(jobs_mod.read_run, run_dir)
-    state = derive_run_state(record, now=datetime.now()).state
-    if not is_killable(state):
+    status = record.get("status")
+    if not is_active(record):
         raise HTTPException(
             status_code=409,
-            detail=f"run is {record.get('status')!r}, not killable",
+            detail=f"run is {status!r}, not killable",
         )
     pid = record.get("pid")
+    signalled: List[int] = []
+    if isinstance(pid, int) and pid > 0:
+        signalled = await asyncio.to_thread(kill_process_tree, pid, 5.0)
     finished_at = datetime.now().isoformat(timespec="seconds")
     started_at = record.get("started_at")
     duration: Optional[float] = None
@@ -579,22 +627,17 @@ async def kill_job_run(job_id: str, run_id: str) -> Dict[str, Any]:
     await asyncio.to_thread(
         jobs_mod.write_run_json,
         run_dir,
-        status=STATUS_FAILED,
+        status=RunStatus.FAILED,
         exit_code=-9,
         finished_at=finished_at,
         duration_seconds=duration,
         killed=True,
     )
-    # The record is stamped before the tree dies: ``pid`` is the job's child,
-    # so the executor survives it, wakes from ``proc.wait()`` and must already
-    # see ``killed`` to skip its own notify / chain / drain.
-    signalled: List[int] = []
-    if isinstance(pid, int) and pid > 0:
-        signalled = await asyncio.to_thread(kill_process_tree, pid, 5.0)
     jobs_mod.invalidate_stats_cache(job_id)
-    # The surviving executor skips its finalisation for a killed run, so the
-    # route owns the single mutex drain (a head-of-group kill would otherwise
-    # wedge the queue).
+    # If the killed run was the head of a mutex group, drain so the
+    # queue doesn't wedge waiting for a finalisation that already
+    # happened (the executor we just killed will not run its own
+    # finalisation block).
     if job.mutex_group:
         await asyncio.to_thread(jobs_mod.drain_mutex_queue, job.mutex_group)
     logger.info(
@@ -605,6 +648,35 @@ async def kill_job_run(job_id: str, run_id: str) -> Dict[str, Any]:
 
 
 # ----------------------------------------------------------- run history
+
+
+@router.post("/api/jobs/{job_id}/runs/{run_id}/dismiss")
+async def dismiss_job_run(job_id: str, run_id: str) -> Dict[str, Any]:
+    """Mark a failed or unconfirmed run as dealt with.
+
+    Drops its card (and the header's failing count) from the Board; the run
+    record is untouched, so the Jobs tab still shows it. Only a finished,
+    non-deferred failure is dismissible: a running, stuck or succeeded run
+    describes a live problem or none, so it answers 409.
+    """
+    cfg = load_jobs()
+    if get_by_id(cfg, job_id) is None:
+        raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
+    run_dir = known_run_dir(job_id, run_id)
+    if run_dir is None:
+        raise HTTPException(status_code=404, detail=f"unknown run {run_id}")
+    record = await asyncio.to_thread(jobs_mod.read_run, run_dir)
+    if run_status(record) is not RunStatus.FAILED or record.get("outcome") == OUTCOME_DEFERRED:
+        raise HTTPException(
+            status_code=409,
+            detail=f"run is {record.get('outcome') or record.get('status')!r}, not dismissible",
+        )
+    try:
+        await asyncio.to_thread(jobs_dismissed.dismiss, job_id, run_id)
+    except OSError as exc:
+        logger.warning("⚠️ job alert dismissal not written: %s", exc)
+        raise HTTPException(status_code=500, detail="dismissal not written")
+    return {"dismissed": True, "job_id": job_id, "run_id": run_id}
 
 
 @router.get("/api/jobs/runs/search")
@@ -642,8 +714,7 @@ async def get_job_runs(job_id: str) -> Dict[str, Any]:
     if get_by_id(cfg, job_id) is None:
         raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
     runs = await asyncio.to_thread(jobs_mod.list_runs, job_id)
-    now = datetime.now()
-    return {"runs": [{**r, **run_view(r, now=now)} for r in runs]}
+    return {"runs": runs}
 
 
 @router.get("/api/jobs/{job_id}/runs/{run_id}")
@@ -651,8 +722,8 @@ async def get_job_run(job_id: str, run_id: str) -> Dict[str, Any]:
     cfg = load_jobs()
     if get_by_id(cfg, job_id) is None:
         raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
-    run_dir = jobs_mod.runs_dir(job_id) / run_id
-    if not run_dir.is_dir():
+    run_dir = known_run_dir(job_id, run_id)
+    if run_dir is None:
         raise HTTPException(status_code=404, detail=f"unknown run {run_id}")
     record = await asyncio.to_thread(jobs_mod.read_run, run_dir)
     record.setdefault("run_id", run_id)
@@ -665,5 +736,8 @@ async def get_job_run(job_id: str, run_id: str) -> Dict[str, Any]:
         jobs_mod.read_webhook_payload, run_dir
     )
     record["artifacts"] = await asyncio.to_thread(jobs_mod.list_artifacts, run_dir)
-    record.update(run_view(record, now=datetime.now()))
+    # Only the count: the files themselves (names, captions, bytes) are
+    # passkey-gated, so the panel asks the outbox route for them.
+    sent = await asyncio.to_thread(jobs_outbox_routes.run_outbox_listing, run_dir)
+    record["sent_files"] = len(sent["entries"])
     return {"run": record}

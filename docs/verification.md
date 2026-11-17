@@ -1,52 +1,111 @@
 # Verification
 
-The pre-ship gate and its browser routing. `CLAUDE.md` keeps the one-line rule (run the gate before declaring a webapp, launcher or session-host change done); this page holds the procedure. The structure, instruction, doc-refs, dead-code, conventions and comment ratchets and the screenshot baseline have their own bullets in `CLAUDE.md`.
+The test and gate reference. `CLAUDE.md` names the one command that decides whether a change is done; this file explains what it runs and why.
 
-## The gate
+## Pytest suite
 
-Before declaring any webapp, launcher or session-host change done, run the pre-ship gate:
+An in-process FastAPI `TestClient` suite under `tests/` covers the webapp's API surface (config, auth, Apps, Jobs, Board, coding-agent detection and launch) plus unit tests by domain and a few static convention guards that parse the tree rather than exercise it (every `#i-NAME` icon resolves to a sprite symbol; every `subprocess.*` spawn carries the no-window flag).
 
+```powershell
+& .\.venv\Scripts\python.exe -m pytest tests -m "not smoke" -v
 ```
-C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/verify-before-ship.ps1
+
+Every `glab` call and every session-host call is mocked at the client seams, so the suite runs on a machine with no `glab` and no `copilot` installed. GitLab response shapes are pinned in the `tests/unit/board/test_gitlab_client.py` fixtures; those fixtures follow the documented REST shape and are not a recording of a live GitLab (not yet verified live, see [gitlab.md](gitlab.md)).
+
+Runtimes live in `CLAUDE.md` and only there: they are a property of the machine measuring them, and a copy here would go stale unnoticed. `-m "not smoke"` excludes the live-tray Playwright suite below.
+
+## Playwright suite
+
+A `pytest-playwright` suite under `tests/e2e/` holds a boot smoke test and one focused regression test per behaviour worth pinning, in one folder per tab (`apps/`, `board/`, `chat/`, `coding/`, `jobs/`, `session/`, `settings/`, `terminal/`, ...). Every test runs on Chromium-desktop; tests whose outcome depends on the engine or the phone shape also run on WebKit projected onto an iPhone viewport (the `iphone` marker). Real Android Chrome is checked on a device, not here: see [android.md](android.md).
+
+One-time setup:
+
+```powershell
+& .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+& .\.venv\Scripts\python.exe -m playwright install chromium webkit
 ```
 
-It boots its own disposable webapp and session-host, so no tray is needed.
+Dev loop, with the tray up (`tray.bat`):
 
-The last stdout line of a run is `GATE-RESULT: PASS` or `GATE-RESULT: FAIL` (failed stage, missing `.venv`, unhandled error, box lock timeout); exit codes are 0 and 1 (3 for the lock timeout). Never pipe the gate when its exit code matters (`| tail` reports `tail`'s status); a caller that must pipe asserts on that line, and a run without one is not a pass. `tests/unit/tooling/test_gate_result.py` pins it.
+```powershell
+.\scripts\run-e2e.ps1                       # both projections
+.\scripts\run-e2e.ps1 --browser chromium    # the faster loop
+```
 
-## Stages that always run
+The dev loop targets the live tray on `https://127.0.0.1:8465` and boots nothing itself; if the tray is not up every test is skipped with a message. Because that instance is the one the phone uses, targeting it is an explicit opt-in (`LAUNCHER_E2E_LIVE=1`, which `run-e2e.ps1` sets): a bare `pytest tests/e2e` exits with a guard message instead of driving a live instance. Loopback access bypasses the bearer-token middleware and the passkey gate.
 
-- **Byte-compile** and the **non-e2e pytest suite**.
-- **Static ratchet.** `scripts/static_ratchet_gate.py` around the vendored `scripts/static_ratchet.py` fails on any duplicate block, unused import or variable (`ruff` `F401,F841`), or likely bug or security finding (a curated set of `ruff` `B` and `S` rules, `S113` strict) that is not in `.static-ratchet-baseline.json`. Exit 3 means a detector such as Node/`npx` or ruff could not run; that fails as NOT CONFIRMED, never a skip. It needs `ruff` in `.venv`.
-- **Docs ratchet.** `scripts/docs_ratchet_gate.py` around the vendored `scripts/docs_ratchet.py` fails when `README.md` is over its size budget, or when `README.md` or `docs/**/*.md` carries a new history marker (an issue reference, a dated heading or a changelog heading) beyond `.docs-ratchet-baseline.json`. Exit 3 means a file could not be read; that fails as NOT CONFIRMED.
+Terminal tests get a live PTY from `launched_pty_session`, a deterministic lightweight stub child that needs only Python, so the suite does not depend on `copilot` being installed. `launched_claude_pty_session` (a real agent child, for the few assertions that depend on the real agent's rendered output) skips on a machine without the CLI.
 
-## Browser slice
+Byte loss at the PTY write boundary and concurrent first paint have non-browser guards in the pytest suite (`tests/unit/session_host/`, Windows/pywinpty-gated). Leaked browser helpers, stub children and disposable servers are swept after every session (`tests/e2e/_browser_sweep.py`, `tests/e2e/_process_teardown.py`, `tests/e2e/_owned_processes.py`).
 
-The browser slice is diff-proportionate, routed against `main` by the vendored `scripts/classify_e2e.py` from the `[e2e]` rule table in `.fleet.toml` (`tests/unit/tooling/test_classify_e2e.py` pins the table):
+The reasoning behind the suite's conventions (mocking boot fetches, the fake clock, `stable_read`, the port-pool guard) is in [e2e-conventions.md](e2e-conventions.md).
 
-- static-asset-only diff → Chromium-only smoke;
-- backend-only or docs-only diff → no browser suite;
-- any `.js`/`.css`/real-page/session-host/e2e-test change, or any ambiguous diff → the full suite, Chromium driving both a desktop and a phone (Android device-emulated) projection. This is an Android-only fork: no WebKit or iPhone engine.
+## Design review on synthetic data
 
-Routing is fail-safe: uncertainty escalates to full, never narrows. The chosen tier prints to the console and to `webapp/verify-progress.log`. Separately, `scripts/session_host_touched.py` reads CLAUDE.md's `## session-host` block and makes the gate warn when the diff touched a path the `:8466` session-host loads, whatever tier it routed to.
 
-## The e2e budget
+- **Code:** a `git archive` copy of `HEAD` on free ports, so the checkout is never written.
+- **Data:** synthetic only: a demo project, one stub PTY session with a synthetic transcript, one job and one app. Config paths and the user profile point at the temp tree.
+- **Lifecycle:** it prints `URL=` once ready and, when its stdin closes, stops its servers and deletes the temp tree. The live tray and the `:8466` session-host are never touched.
 
-The fleet budget is fewer than 15 e2e tests; this suite holds one `test_*` per user-visible flow, listed by `pytest tests/e2e --co -q`. A flow test takes the `run_flow` fixture from `tests/e2e/conftest.py` and hands it plain `scenario_*` functions. Each scenario gets its own page, a context reset to a fresh one's state (see the next section) and, when it asks for `launched_pty_session`, its own PTY session, so route mocks and storage never leak between scenarios, exactly as when each was a separate test. A scenario that fails does not stop the others: the flow fails once, at the end, with every failing scenario's name and traceback; a flow whose scenarios all skip is skipped. Each flow carries `@pytest.mark.timeout(FLOW_TIMEOUT_S)` because the 120 s per-test cap is sized for one scenario.
+## Pre-ship gate
 
-Add a browser check as a `scenario_*` function in the flow it belongs to, never as a new `test_*`. Checks that read one page's geometry from a single boot (the Coding row layout) are one test that shares the page.
+`run-e2e.ps1` is the dev loop: fast, but it skips the whole browser suite when the tray is not up, which is the wrong default for a final check (a forgotten tray looks like a green run). The gate closes that hole:
 
-## Keep the harness off the loopback port pool; a drained pool names itself
+```powershell
+C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts\verify-before-ship.ps1
+```
 
-Every closed connection to a local server leaves an (ephemeral port, server port) pair in TIME_WAIT for about two minutes, and Windows fails a `connect()` that lands on one with `net::ERR_ADDRESS_IN_USE` instead of trying another port. A browser context opens its own connections to the app (one HTTP/2 connection plus a socket per WebSocket), so a fresh context per scenario spends a pair per scenario from a pool every other lane's gate draws on too.
+Run it before declaring any change to `app/webapp/`, `src/launching/launcher.py` or the session-host done. It runs, as one pass/fail, in order:
 
-- **One context per distinct context arguments per projection.** `run_flow` leases the scenario's context from `tests/e2e/_shared_context.py`, which resets it after the scenario: pages closed, routes, cookies and permissions cleared, and the app origin's storage and service workers cleared through a routed scratch page, which opens no socket to the app. The bearer token is seeded once per context as an init script, not per scenario.
-- **State a reset cannot undo marks the context.** An init script, the page clock, a WebSocket route, offline mode, geolocation, extra headers, an exposed function or a context listener set on the *context* makes that context close after the scenario instead of being reset, so no scenario inherits it and none has to declare it. Page-level calls (`page.add_init_script`, `page.route_web_socket`) die with the page and cost nothing. A reset that raises discards the context too. `shared contexts: N created for M scenarios` closes every run; the screenshot baseline builds its own pinned-clock contexts.
-- **Keep-alive.** The app speaks HTTP/2 on one connection per context, and the harness's own HTTP calls (health polling, session launch and stop) go through `src/_loopback_http.py::pooled_request`, one pooled session, instead of a connection per call.
-- **A drained pool reads as one.** A failure whose text carries `ERR_ADDRESS_IN_USE` or `connect ENOBUFS` leads with `PORT POOL EXHAUSTED`, and the run ends with a section of that name listing the tests (`tests/e2e/_port_pool.py`), so a gate reader waits out the TIME_WAIT pairs and re-runs instead of debugging a page.
-- **Measure before cutting.** Sample `netstat -ano -p tcp` once a second through one full run and count each (local, remote) TIME_WAIT pair once, each time it appears, grouped by server port; count only the disposable app's own ports, since other apps on the box add their own. Never change the dynamic port range or `TcpTimedWaitDelay` to hide it.
+1. **Byte-compile** `app`, `src` and `tests`.
+2. **Ratchets**, each failing only when a count rises above its committed `.<name>-ratchet-baseline.json`: comment, suite weight, static, docs, structure, instruction, doc refs, dead code, conventions, runtime write and usage track. Every ratchet reads the whole tree and is never diff-routed. Exit 3 means the ratchet could not establish its fact (git unusable, a file unreadable) and fails as NOT CONFIRMED, never as a skip. Where code goes: [layout.md](layout.md).
+3. **Runtime write probe** snapshot, then the **non-e2e pytest suite**.
+4. **Browser slice**, routed to the diff (below), against a disposable webapp and session-host.
+5. **Screenshot baseline**, the last browser stage.
+6. **Orphan sweep and runtime write probe**: no disposable server may outlive the run, and no test run may leave a file under a code folder.
 
-## Dev-loop commands
+The last line is always `GATE-RESULT: PASS` or `GATE-RESULT: FAIL`, on every path the script can still run code on. Never pipe the gate when its exit code matters: a pipeline reports its last command's status, so a trailing `tail` turns a failed gate into exit 0. Redirect to a file and read the file; a caller that cannot avoid a pipe asserts on the final `GATE-RESULT:` line.
 
-- Smoke against the live tray: `.\scripts\run-e2e.ps1` (sets `LAUNCHER_E2E_LIVE=1`). A bare `pytest tests/e2e` without opt-in env vars exits with a guard.
-- Non-browser suite alone: `pytest tests -m "not smoke" -v`.
+```bash
+C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/verify-before-ship.ps1 > gate.log 2>&1; echo "exit=$?"
+tail -40 gate.log
+```
+
+### What the disposable instance isolates
+
+- A tray on `:8465` may be running or not. Autoboot picks a free port for its own webapp and always spawns its own disposable session-host on another free port, never the live `:8466`, whose sessions are real Copilot PTYs. The tray is left untouched.
+- It serves HTTPS with `webapp/certificates/` when a cert pair exists, plain HTTP otherwise. Subprocess output goes to `webapp/e2e-autoboot-*.log`.
+- It reads and writes its own temp config (`LAUNCHER_WEBAPP_CONFIG`), built from a per-run disposable `auth_token` and pinned paths, so no test can mutate `config/webapp_config.json` and no live credential reaches a test run.
+- It scans only the launch-target checkout for projects, so the Coding list is deterministic.
+- Its audit trail (`webapp/sessions`) and upload directory are redirected so a throwaway session never lands in the real ones.
+- No gate run reaches a real forge: forge calls are mocked or answered by synthetic rows, so no real issue title enters a screenshot.
+
+### Routing the browser slice
+
+Byte-compile, the ratchets and the non-e2e suite always run. Only the browser slice scales with what the branch changed, classified by `scripts/classify_e2e.py` against `main` from the rules in `.fleet.toml` `[e2e]`:
+
+- **skip**: every changed path is declared to have no browser impact (docs, backend-only code outside the session-host and launcher closure).
+- **static**: the worst path is an inert asset; a narrow smoke target runs.
+- **surface**: the diff would route full but every full path belongs to one declared `[[e2e.surface]]`; only that surface's tests run.
+- **full**: any path matches a full rule, any path matches no rule, or the diff is empty or mixed. Uncertainty always escalates, never narrows.
+
+The full and surface tiers run on parallel `pytest-xdist` workers, each with its own disposable webapp and session-host, then a short serial pass for the tests marked `serial`. A browser test that timed out under load gets one retry; a timeout that passes on retry is listed as flaky in the output. Two full-tier gates in sibling worktrees queue on a machine-wide mutex rather than overlap. The e2e suite size is a ratchet: `.fleet.toml` `[e2e] test_budget` equals the collected node count and moves only with a written reason.
+
+### Screenshot baseline
+
+The last stage runs `scripts/shot_baseline.py` (with `tests/e2e/_shot.py`) over `tests/e2e/shots`: the five work tabs at phone and desktop width, light and dark, captured by `tests/e2e/screens/test_screen_shots.py` from route-mocked fictional data, local gate only. A move-only change touches no PNG and ends with `shot baseline: PASS -- N of N committed shot(s) recaptured, 0 drifted`. A deliberate UI change re-baselines in the same change:
+
+```powershell
+$env:LAUNCHER_E2E_AUTOBOOT = "1"; & .\.venv\Scripts\python.exe -m pytest tests/e2e/screens/test_screen_shots.py
+git diff --stat -- tests/e2e/shots
+```
+
+then stage the changed PNGs. A drift that is not deliberate means something on screen is unpinned: fix the capture, never widen the bands. Exit 3 is NOT CONFIRMED and fails.
+
+### Progress log
+
+The gate writes `webapp/verify-progress.log` (gitignored, overwritten each run): phase markers plus one `START`/`DONE` line per test with its total including fixture cost, and a slowest-tests summary. If an outer timeout kills the gate, the last lines name the active phase and test node. Recent browser-leg runs are also appended to `webapp/verify-progress-history.log` in the primary checkout.
+
+### After the gate: restart and confirm
+
+The gate proves the code, not that the running process has it. The webapp has no hot reload: restart it with `tray.bat --restart` and confirm with a bounded poll of `GET /api/version` that `git_sha` matches `HEAD` and `asset_hash` changed. A session-host change is not live until the `:8466` process itself restarts, which `tray.bat --restart` never does: read `session_host.stale_relevant` from the same endpoint. See [restart-and-liveness.md](restart-and-liveness.md).

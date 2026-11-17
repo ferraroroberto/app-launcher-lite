@@ -3,18 +3,22 @@
 Binds ``127.0.0.1`` exclusively — it is **never** directly reachable from
 the network. The main webapp (which owns all auth, Tailscale gating, and
 WebAuthn) proxies to it. Keeping the PTYs in this separate long-lived
-process means a webapp restart doesn't kill running agent sessions.
+process means a webapp restart doesn't kill running Claude sessions.
 
 Routes:
 
     POST   /sessions                  → spawn a registered terminal command
     GET    /sessions                  → list live sessions
     GET    /sessions/{sid}            → one session's detail
-    POST   /sessions/{sid}/input      → write text to the PTY
+    POST   /sessions/{sid}/input      → write text to the PTY (or, for a
+                                        detached session, type it into its
+                                        console — delivered "unconfirmed")
     POST   /sessions/{sid}/resize     → resize the PTY
     POST   /sessions/{sid}/stop       → interrupt | quit | kill
     POST   /sessions/{sid}/rename     → set/clear a manual title override
     POST   /sessions/{sid}/image      → save an uploaded image, type its path
+    POST   /sessions/{sid}/large-file → stream a large file to disk, return
+                                        its path (never typed)
     WS     /sessions/{sid}/ws?role=   → scrollback snapshot + live duplex stream
 
 Only ``kind=pty`` sessions have a WebSocket. ``role`` (``pc`` | ``phone``,
@@ -35,20 +39,32 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
+import stat
 import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request, UploadFile, WebSocket
+from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 
+from src import runtime_files
 from src.agents import DEFAULT_AGENT, SESSION_HOST_AGENTS, is_fullscreen
 from src.build_info import build_identity
-from src.runtime_files import make_dirs, save_bytes
-from src.session_host import _EOF, SessionManager
+from src.chief_session_end import publish_session_ends, resolve_paths
+from src.session_host import _EOF, PTY_MIN_COLS, SessionManager
+from src.session_host_input import (
+    INPUT_CONSOLE_FAILED,
+    INPUT_DEFERRED,
+    INPUT_DISCARD_PENDING,
+    INPUT_DROPPED,
+    INPUT_NOT_INGESTED,
+)
+from src.session_hosting.channel_claims import DuplicateChannelSession
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +82,8 @@ _repaint_tasks: "set[asyncio.Task]" = set()
 _REPAINT_SETTLE = 0.15
 _REPAINT_TOGGLE_GAP = 0.05
 
-# Clean-frame preamble for a full-screen TUI (re)connect (avoids a tail-jump).
-# A no-alt-screen differential agent paints the *main* buffer, so on a
+# Clean-frame preamble for a full-screen TUI (re)connect.
+# A no-alt-screen agent (Codex/ratatui) paints the *main* buffer, so on a
 # reconnect — where the client reuses the same xterm instance with the stale
 # frame still in its buffer — the forced repaint is appended *below* that
 # stale content, and xterm auto-follows to the bottom, scrolling through the
@@ -75,10 +91,10 @@ _REPAINT_TOGGLE_GAP = 0.05
 # clear-screen + home preamble before the repaint nudge wipes the client's
 # buffer so the fresh frame lands on an empty screen — the reopened session
 # jumps straight to the current frame. CSI only (no OSC/DA), so it can't
-# reintroduce the query leak the query strip removed.
+# reintroduce the query leak the strip removed.
 _CLEAR_FRAME = "\x1b[H\x1b[2J\x1b[3J"
 
-# Where uploaded files land inside the project so the agent can read them.
+# Where uploaded files land inside the project so `claude` can read them.
 # Any file type is accepted (the compose-bar attach covers
 # documents, not just photos): the file is only ever *stored* here and its
 # path pasted into the user's own prompt, nothing executes it; the surface
@@ -87,6 +103,37 @@ _CLEAR_FRAME = "\x1b[H\x1b[2J\x1b[3J"
 _IMAGE_DIR_NAME = ".launcher-tmp"
 _SAFE_SUFFIX_RE = re.compile(r"^\.[A-Za-z0-9]{1,10}$")
 _MAX_IMAGE_BYTES = 12 * 1024 * 1024
+# Harness-only override for the *root* those uploads hang off,
+# the same shape as `LAUNCHER_AUDIT_DIR`. Nothing in production sets
+# it, so where a real upload lands is unchanged; the e2e gate points it at a
+# per-run temp dir, because the disposable session-host it spawns runs
+# sessions whose project dir is this very checkout — so every image-upload
+# test wrote into the checkout's own `.launcher-tmp`, where 3,423 of the
+# 3,600 files turned out to be its 1x1 test PNGs, with nothing pruning them.
+UPLOAD_ROOT_ENV = "LAUNCHER_UPLOAD_ROOT"
+
+# Large-file uploads: a file put *on the machine* for the agent to
+# move, archive or process by path, never read into its context. The body
+# streams to disk in chunks and is never held whole in memory. Each session
+# gets its own leaf, `.launcher-tmp/large/<sid>/`, so a session's end deletes
+# exactly its own uploads and nobody else's. The size limit is the caller's
+# (`max_bytes`, from the webapp's `large_upload_max_mb` setting): the webapp
+# owns that setting, and passing it per call means a Settings change applies
+# without restarting this process.
+_LARGE_DIR_NAME = "large"
+# Buffered up to this much before each off-loop disk write, so a multi-GB
+# upload costs a few thousand thread hops rather than one per network chunk.
+_LARGE_FLUSH_BYTES = 1024 * 1024
+# Advertised on /healthz so the webapp can tell a session-host that predates
+# the route ("restart needed") from one that is down ("unreachable").
+_FEATURES = ("large_upload",)
+# TTL fallbacks for whatever session-end cleanup misses: a host restart or
+# crash loses the end of a session, and ordinary attachments had no pruning
+# at all before the large-upload sweep. A large upload is meant for the session that took it,
+# so a day is plenty. An ordinary attachment is a path in a prompt that a
+# resumed conversation may still point at, so it is kept for a week.
+_LARGE_TTL_SECONDS = 24 * 3600
+_UPLOAD_TTL_SECONDS = 7 * 24 * 3600
 
 # Captured once at import — the whole point is that this does NOT track live
 # git state: it's what this specific process loaded when it started,
@@ -115,11 +162,14 @@ async def _reap_loop() -> None:
             await asyncio.sleep(30)
             reaped = manager.reap_dead()
             if reaped:
-                logger.info(f"🧹 Reaped {reaped} dead PTY session(s)")
+                logger.info(f"🧹 Reaped {len(reaped)} dead PTY session(s)")
+                await asyncio.to_thread(_cleanup_ended_sessions, reaped)
+                await asyncio.to_thread(_publish_chief_session_ends, reaped)
     except asyncio.CancelledError:  # pragma: no cover
         pass
 
 
+# Every route lives on this router; create_app mounts it.
 router = APIRouter()
 
 
@@ -131,26 +181,28 @@ async def healthz() -> Dict[str, Any]:
         "sessions": len(manager.list()),
         "git_sha": _IDENTITY["git_sha"],
         "started_at": _IDENTITY["built_at"],
+        "features": list(_FEATURES),
     }
+
 
 @router.post("/sessions")
 async def create_session(request: Request) -> Dict[str, Any]:
     body = await _json(request)
     project_dir = str(body.get("project_dir") or "").strip()
-    name = str(body.get("name") or "coding").strip() or "coding"
+    name = str(body.get("name") or "claude").strip() or "claude"
     flags = str(body.get("flags") or "").strip()
     kind = str(body.get("kind") or "pty").strip().lower()
     agent = str(body.get("agent") or DEFAULT_AGENT).strip().lower()
-    # Role tag so callers can find a purpose-built session
-    # deterministically. PTY-only; remote sessions ignore it.
+    # Role tag (e.g. "chief") so callers can find a purpose-built
+    # session deterministically. PTY-only; remote sessions ignore it.
     label = str(body.get("label") or "").strip().lower()
     # Phone-supplied spawn dimensions: size the PTY to the
     # real viewport before first paint so a ratatui TUI isn't cut.
     # Omitted → the manager's legacy 40×120 default.
     rows = int(body.get("rows") or 40)
     cols = int(body.get("cols") or 120)
-    # User-configurable scrollback depth for full-screen agents (set from
-    # the Settings tab). Omitted/absent → SessionManager's
+    # User-configurable scrollback depth for full-screen agents (Settings
+    # tab). Omitted/absent → SessionManager's
     # own default (older webapp builds, or a caller that doesn't set it).
     history_lines_raw = body.get("history_lines")
     history_lines = int(history_lines_raw) if history_lines_raw else None
@@ -177,13 +229,18 @@ async def create_session(request: Request) -> Dict[str, Any]:
                 rows=rows, cols=cols, history_lines=history_lines,
                 label=label,
             )
-    except (OSError, RuntimeError) as exc:
+    except DuplicateChannelSession as exc:
+        logger.info(f"ℹ️ refused a second spawn for {exc.label}: {exc}")
+        raise HTTPException(status_code=409, detail=str(exc))
+    except (OSError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return session.to_api()
+
 
 @router.get("/sessions")
 async def list_sessions() -> Dict[str, Any]:
     return {"sessions": [s.to_api() for s in manager.list()]}
+
 
 @router.get("/sessions/{sid}")
 async def get_session(sid: str) -> Dict[str, Any]:
@@ -191,6 +248,7 @@ async def get_session(sid: str) -> Dict[str, Any]:
     if session is None:
         raise HTTPException(status_code=404, detail=f"unknown session {sid}")
     return session.to_api()
+
 
 @router.post("/sessions/{sid}/input")
 async def session_input(sid: str, request: Request) -> Dict[str, Any]:
@@ -201,11 +259,15 @@ async def session_input(sid: str, request: Request) -> Dict[str, Any]:
     data = str(body.get("data") or "")
     submit = bool(body.get("submit", True))
     # submit_input() blocks in real time — a bulk payload's settle wait
-    # plus write()'s own chunk-and-pace pauses over ~512
-    # bytes — so offload it like .stop so it doesn't stall
-    # every other live session's WS pump.
-    delivered = await asyncio.to_thread(session.submit_input, data, submit)
-    if not delivered:
+    # plus its ingest verification plus write()'s own
+    # chunk-and-pace pauses over ~512 bytes — so offload it like .stop
+    # so it doesn't stall every other live session's WS pump.
+    # Both session kinds implement submit_input: a PtySession
+    # writes the PTY with the framing/settle protocol, a RemoteSession
+    # spawns the console-input helper against its console PID and can
+    # only ever answer ``delivered: "unconfirmed"``.
+    outcome = await asyncio.to_thread(session.submit_input, data, submit)
+    if outcome.reason == INPUT_DROPPED:
         # The session had already exited (or the PTY write raised) — it
         # can still be sitting in manager.get() for up to the 30s reap
         # window. Report the drop instead of the previous unconditional
@@ -214,7 +276,78 @@ async def session_input(sid: str, request: Request) -> Dict[str, Any]:
         raise HTTPException(
             status_code=409, detail=f"session {sid} not accepting input (exited)"
         )
-    return {"ok": True}
+    if outcome.reason == INPUT_DISCARD_PENDING:
+        # Nothing was written: a discarded payload is still waiting in the
+        # composer to be cleared, and this one would land behind it and be
+        # submitted with it. Retry once the discard has gone through.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"session {sid} is still clearing a discarded message from "
+                f"its input box — nothing was sent, try again in a moment"
+            ),
+        )
+    if outcome.reason == INPUT_NOT_INGESTED:
+        # Written, but the terminal never painted it back — the silent
+        # drop the ingest check exists for. A distinct status from the 409 above:
+        # the session is alive and may well still take keyboard input, it
+        # just did not take *this*. No CR was sent, so nothing is
+        # half-done and a caller can safely resend once the terminal is
+        # back in a state that accepts a paste.
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"session {sid} never echoed the input after "
+                f"{outcome.waited_ms}ms — NOT delivered, and no submit was "
+                f"sent; the terminal may be in a modal/dialog state"
+            ),
+        )
+    if outcome.reason == INPUT_CONSOLE_FAILED:
+        # Detached target: the helper could not attach to or
+        # type into the console — the session is alive by PID but its
+        # console did not take the keystrokes (or the agent was never
+        # probed for console input). Nothing was typed, nothing was
+        # submitted; a caller may retry once the console is back.
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"session {sid} console input failed — NOT typed, no "
+                f"submit was sent: {outcome.error}"
+            ),
+        )
+    if outcome.reason == INPUT_DEFERRED:
+        # The payload is in the composer but the agent was still working,
+        # so the submitting CR is with a background watcher rather
+        # than fired blind mid-repaint. 202 is the honest status for that:
+        # accepted, not yet completed. The final verdict lands on the
+        # session's ``last_input`` (GET /sessions/{sid}), so a caller can
+        # follow it up without holding the request open.
+        return JSONResponse(status_code=202, content={"ok": True, **outcome.to_api()})
+    # 200 carries the whole verdict: a submit that went out unverified is
+    # a success-shaped response that must still say so
+    # (submit_state="unconfirmed") rather than imply a confirmed landing.
+    # ``delivered`` is never true for a submit that was not sent.
+    return {"ok": True, **outcome.to_api()}
+
+
+@router.delete("/sessions/{sid}/pending-input/{entry_id}")
+async def session_discard_pending_input(sid: str, entry_id: str) -> JSONResponse:
+    """Discard one message the agent has not taken yet (the session's
+    ``pending_input``). The status is the verdict: 200 removed, 202 being
+    cleared from the composer, 404 already taken, 409 not possible now (the
+    body's ``reason`` says why), 502 a key write failed."""
+    session = manager.get(sid)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"unknown session {sid}")
+    discard = getattr(session, "discard_pending_input", None)
+    if discard is None:
+        # A detached console session tracks no pending messages.
+        raise HTTPException(status_code=409, detail="this session tracks no pending messages")
+    # The queue edit holds the write lock across timed key presses, so it
+    # runs off the loop like /input.
+    status, body = await asyncio.to_thread(discard, entry_id)
+    return JSONResponse(status_code=status, content=body)
+
 
 @router.post("/sessions/{sid}/resize")
 async def session_resize(sid: str, request: Request) -> Dict[str, Any]:
@@ -224,6 +357,7 @@ async def session_resize(sid: str, request: Request) -> Dict[str, Any]:
     body = await _json(request)
     session.resize(int(body.get("rows") or 40), int(body.get("cols") or 120))
     return {"ok": True}
+
 
 @router.post("/sessions/{sid}/stop")
 async def session_stop(sid: str, request: Request) -> Dict[str, Any]:
@@ -237,6 +371,7 @@ async def session_stop(sid: str, request: Request) -> Dict[str, Any]:
     await asyncio.to_thread(session.stop, mode)
     return {"ok": True, "mode": mode}
 
+
 @router.post("/sessions/{sid}/rename")
 async def session_rename(sid: str, request: Request) -> Dict[str, Any]:
     session = manager.get(sid)
@@ -245,6 +380,7 @@ async def session_rename(sid: str, request: Request) -> Dict[str, Any]:
     body = await _json(request)
     manager.rename(sid, str(body.get("title") or ""))
     return session.to_api()
+
 
 @router.post("/sessions/{sid}/image")
 async def session_image(
@@ -257,9 +393,28 @@ async def session_image(
     # inline=1 (compose bar open): skip the paste — the caller drops the
     # returned path into the textarea for review-before-send.
     if not inline:
-        # Bracketed paste so the agent TUI takes the path as one unit.
+        # Bracketed paste so the Claude TUI takes the path as one unit.
         session.write(f"\x1b[200~{path}\x1b[201~")
     return {"ok": True, "path": path, "inline": inline}
+
+
+@router.post("/sessions/{sid}/large-file")
+async def session_large_file(
+    sid: str, request: Request, max_bytes: int, name: str = ""
+) -> Dict[str, Any]:
+    """Stream a raw request body to disk. The body is the file
+    itself, not a multipart form, so it can be written as it arrives;
+    ``name`` carries the original filename. The path is only returned,
+    never typed into the PTY: the caller drops it into the composer with
+    a note telling the agent not to read the file."""
+    session = manager.get(sid)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"unknown session {sid}")
+    path, size = await _save_large_upload(
+        session.project_dir, sid, name, request, max_bytes
+    )
+    return {"ok": True, "path": path, "bytes": size}
+
 
 @router.websocket("/sessions/{sid}/ws")
 async def session_ws(websocket: WebSocket, sid: str) -> None:
@@ -274,23 +429,23 @@ async def session_ws(websocket: WebSocket, sid: str) -> None:
     role = (websocket.query_params.get("role") or "phone").strip().lower()
     await websocket.accept()
     snapshot, queue = session.subscribe()
-    # Breadcrumb for the "terminal opens blank and never paints" symptom: an
+    # Breadcrumb for "terminal opens blank and never paints": an
     # empty ring at attach is expected for a session that hasn't
     # printed yet, but if a future report recurs, this timestamp +
     # ring size lets it be correlated against a concurrent create burst
-    # (see the asyncio.to_thread create above) without guessing blind.
+    # (see the asyncio.to_thread fix above) without guessing blind.
     logger.info(
         f"🔌 WS attach {sid[:8]} role={role} ring_chars={len(snapshot)}"
     )
     try:
         if is_fullscreen(getattr(session, "agent", DEFAULT_AGENT)):
-            # Full-screen differential TUI: do NOT replay
+            # Full-screen differential TUI (Codex/ratatui): do NOT replay
             # the raw scrollback ring. Replaying its stale move-cursor /
             # clear deltas garbles a fresh xterm, and replaying the
             # agent's startup terminal queries makes xterm re-answer them
             # as input — the `[?1;2c` DA leak.
             #
-            # Wipe the client's buffer first (avoids a tail-jump): the xterm
+            # Wipe the client's buffer first: the xterm
             # instance is reused across a reconnect, so without this a
             # repaint appends below the stale frame and crawls through it.
             await websocket.send_text(_CLEAR_FRAME)
@@ -312,7 +467,7 @@ async def session_ws(websocket: WebSocket, sid: str) -> None:
         elif snapshot:
             # Wipe the client's buffer before the raw-ring replay.
             # The phone reuses the same xterm instance across
-            # reconnects — the backoff re-runs connectTerminalWs on
+            # reconnects — the reconnect backoff re-runs connectTerminalWs on
             # the same terminal, and the warm cache keeps it alive
             # across overlay close/re-open — so without the wipe this
             # full-ring replay is APPENDED below the stale buffer,
@@ -334,41 +489,9 @@ async def session_ws(websocket: WebSocket, sid: str) -> None:
         session.unsubscribe(queue)
 
 
-class _RefuseBrowserRequests:
-    """Refuse any HTTP request or WebSocket handshake that carries ``Origin``.
-
-    The only legitimate callers are local processes (the webapp's proxy and
-    sibling scripts), and their HTTP and WebSocket clients send no
-    ``Origin``. A browser always sends one on a POST and on every WebSocket
-    handshake, so a page open on this PC is turned away before any route
-    runs.
-    """
-
-    def __init__(self, app: Any) -> None:
-        self.app = app
-
-    async def __call__(self, scope: Dict[str, Any], receive: Any, send: Any) -> None:
-        if scope["type"] in ("http", "websocket") and any(
-            name == b"origin" for name, _ in scope.get("headers") or ()
-        ):
-            logger.info(f"ℹ️ session-host refused a {scope['type']} request to {scope.get('path')}")
-            if scope["type"] == "websocket":
-                await send({"type": "websocket.close", "code": 4403})
-                return
-            await send({
-                "type": "http.response.start",
-                "status": 403,
-                "headers": [(b"content-type", b"application/json")],
-            })
-            await send({"type": "http.response.body", "body": b'{"detail":"forbidden"}'})
-            return
-        await self.app(scope, receive, send)
-
-
 def create_app() -> FastAPI:
-    app = FastAPI(title="App Launcher Lite session-host", version="0.1.0", lifespan=_lifespan)
+    app = FastAPI(title="Launcher session-host", version="0.1.0", lifespan=_lifespan)
     app.include_router(router)
-    app.add_middleware(_RefuseBrowserRequests)
     return app
 
 
@@ -390,15 +513,18 @@ async def _force_repaint(session) -> None:
     We skip the raw differential-ring replay for these agents, so the
     viewport is blank until the agent next draws. Toggle the PTY width by
     one column and back: each ``setwinsize`` fires a SIGWINCH-equivalent,
-    so the TUI clears and redraws the *current* frame at the real size.
+    so ratatui clears and redraws the *current* frame at the real size.
     The toggle guarantees a change even on a same-size reconnect (where a
-    single ``setwinsize`` to the unchanged size is a no-op). Best-effort —
-    a dead PTY's ``resize`` already swallows its own errors.
+    single ``setwinsize`` to the unchanged size is a no-op). A PTY already at
+    the width floor toggles one column *up* instead — ``resize`` clamps to
+    the floor and skips an unchanged size, so a toggle down would be
+    swallowed and fire no SIGWINCH. Best-effort — a dead PTY's ``resize``
+    already swallows its own errors.
     """
     try:
         await asyncio.sleep(_REPAINT_SETTLE)
         rows, cols = session.rows, session.cols
-        session.resize(rows, max(1, cols - 1))
+        session.resize(rows, cols - 1 if cols - 1 >= PTY_MIN_COLS else cols + 1)
         await asyncio.sleep(_REPAINT_TOGGLE_GAP)
         session.resize(rows, cols)
     except asyncio.CancelledError:  # pragma: no cover
@@ -444,29 +570,223 @@ async def _pump_from_client(
             session.resize(int(msg.get("rows") or 40), int(msg.get("cols") or 120))
 
 
-async def _save_image(project_dir: str, file: UploadFile) -> str:
-    """Persist an uploaded file under ``<project>/.launcher-tmp`` and return
-    its absolute path. Any type is stored; oversize and empty
-    uploads are rejected, and an odd-looking extension is stripped rather
-    than written."""
-    suffix = Path(file.filename or "").suffix.lower()
+def _upload_dir(project_dir: str) -> Path:
+    """Where an upload for ``project_dir`` lands.
+
+    Normally ``<project>/.launcher-tmp`` — beside the code the agent is
+    working on, so the path pasted into its prompt is already inside the
+    directory it has access to. ``LAUNCHER_UPLOAD_ROOT`` replaces the *root*
+    only and keeps the ``.launcher-tmp`` leaf, so a redirected upload is
+    still recognisably one. Blank or whitespace counts as unset, so an empty
+    variable can't silently turn the path into a relative one off the CWD.
+
+    Read per call rather than resolved at import — unlike ``src.audit`` this
+    module builds no import-time state from it, and per-call keeps the
+    override exercisable without reloading a module that owns the FastAPI app
+    and the live ``SessionManager``.
+    """
+    override = os.environ.get(UPLOAD_ROOT_ENV, "").strip()
+    return Path(override or project_dir) / _IMAGE_DIR_NAME
+
+
+def _upload_name(filename: str) -> str:
+    """A stored upload's file name: ``<stamp>-<id>-<stem><suffix>``. The stem
+    is reduced to safe characters and an odd-looking extension is dropped
+    rather than trusted, so nothing the client sends shapes the path beyond
+    those characters."""
+    suffix = Path(filename or "").suffix.lower()
     if not _SAFE_SUFFIX_RE.match(suffix):
         suffix = ""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    safe = re.sub(r"[^a-zA-Z0-9._-]", "_", Path(filename or "img").stem)[:40]
+    return f"{stamp}-{uuid.uuid4().hex[:6]}-{safe}{suffix}"
+
+
+def _large_dir(project_dir: str, sid: str) -> Path:
+    """Where session ``sid``'s large uploads land:
+    ``<upload dir>/large/<sid>``."""
+    return _upload_dir(project_dir) / _LARGE_DIR_NAME / re.sub(r"[^A-Za-z0-9_-]", "_", sid)
+
+
+async def _save_image(project_dir: str, file: UploadFile) -> str:
+    """Persist an uploaded file under ``<project>/.launcher-tmp`` (see
+    :func:`_upload_dir`) and return its absolute path. Any type is stored;
+    oversize and empty uploads are rejected, and an odd-looking
+    extension is stripped rather than written."""
     data = await file.read()
     if len(data) > _MAX_IMAGE_BYTES:
         raise HTTPException(status_code=400, detail="file exceeds 12 MB")
     if not data:
         raise HTTPException(status_code=400, detail="empty upload")
-    target_dir = Path(project_dir) / _IMAGE_DIR_NAME
+    target_dir = _upload_dir(project_dir)
     try:
-        make_dirs(target_dir)
-        stamp = time.strftime("%Y%m%d-%H%M%S")
-        safe = re.sub(r"[^a-zA-Z0-9._-]", "_", Path(file.filename or "img").stem)[:40]
-        out = target_dir / f"{stamp}-{uuid.uuid4().hex[:6]}-{safe}{suffix}"
-        save_bytes(out, data)
-    except (OSError, ValueError) as exc:
+        runtime_files.make_dirs(target_dir)
+        out = target_dir / _upload_name(file.filename or "")
+        runtime_files.save_bytes(out, data)
+    except OSError as exc:
         raise HTTPException(status_code=400, detail=f"could not save image: {exc}")
+    await asyncio.to_thread(_prune_uploads, project_dir)
     return str(out)
+
+
+async def _save_large_upload(
+    project_dir: str, sid: str, filename: str, request: Request, max_bytes: int
+) -> Tuple[str, int]:
+    """Stream ``request``'s body to ``<upload dir>/large/<sid>/`` and return
+    ``(path, size)``.
+
+    Written as it arrives, buffered to :data:`_LARGE_FLUSH_BYTES` and flushed
+    off the event loop, which keeps serving every live PTY meanwhile. A body
+    over ``max_bytes`` is refused as soon as it is known to be over: from
+    ``Content-Length`` before a byte is written, or mid-stream when there is
+    none. Any failure, including the client going away mid-upload, deletes
+    the partial file.
+    """
+    if max_bytes <= 0:
+        raise HTTPException(status_code=400, detail="max_bytes must be positive")
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > max_bytes:
+        raise HTTPException(status_code=413, detail="file exceeds the large-file limit")
+    target_dir = _large_dir(project_dir, sid)
+    out = target_dir / _upload_name(filename)
+    try:
+        await asyncio.to_thread(target_dir.mkdir, parents=True, exist_ok=True)
+        handle = await asyncio.to_thread(open, out, "xb")
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"could not save file: {exc}")
+    size = 0
+    buf = bytearray()
+    try:
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > max_bytes:
+                raise HTTPException(status_code=413, detail="file exceeds the large-file limit")
+            buf += chunk
+            if len(buf) >= _LARGE_FLUSH_BYTES:
+                data, buf = buf, bytearray()
+                await asyncio.to_thread(handle.write, data)
+        if buf:
+            await asyncio.to_thread(handle.write, buf)
+        await asyncio.to_thread(handle.close)
+        if not size:
+            raise HTTPException(status_code=400, detail="empty upload")
+    except BaseException as exc:
+        # BaseException: a client that disconnects mid-upload cancels this
+        # task, and its partial file must go too.
+        handle.close()
+        _unlink_quietly(out)
+        if isinstance(exc, OSError):
+            raise HTTPException(status_code=400, detail=f"could not save file: {exc}")
+        logger.info(f"ℹ️ large upload for {sid[:8]} abandoned after {size} B: {exc!r}")
+        raise
+    logger.info(f"ℹ️ large upload for {sid[:8]}: {size} B → {out}")
+    await asyncio.to_thread(_prune_uploads, project_dir)
+    return str(out), size
+
+
+def _unlink_quietly(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning(f"⚠️ could not remove {path}: {exc}")
+
+
+def _prune_files(directory: Path, ttl_seconds: float, now: float) -> int:
+    """Delete the regular files directly in ``directory`` whose mtime is more
+    than ``ttl_seconds`` old; return how many went.
+
+    Never recurses and never follows a link or junction: only files this
+    process wrote live at this level. What it can't establish it keeps — an
+    entry it can't stat, or one dated in the future, is not "expired".
+    """
+    try:
+        entries = list(os.scandir(directory))
+    except FileNotFoundError:
+        return 0
+    except OSError as exc:
+        logger.warning(f"⚠️ upload prune: cannot list {directory}: {exc}")
+        return 0
+    removed = 0
+    for entry in entries:
+        try:
+            info = entry.stat(follow_symlinks=False)
+            if not stat.S_ISREG(info.st_mode) or now - info.st_mtime <= ttl_seconds:
+                continue
+            os.unlink(entry.path)
+            removed += 1
+        except OSError as exc:
+            logger.warning(f"⚠️ upload prune: kept {entry.path}: {exc}")
+    return removed
+
+
+def _prune_uploads(project_dir: str, now: Optional[float] = None) -> int:
+    """TTL-prune one project's upload dir: ordinary attachments past
+    :data:`_UPLOAD_TTL_SECONDS`, large uploads past :data:`_LARGE_TTL_SECONDS`,
+    then any per-session large dir left empty. Returns the files removed."""
+    now = time.time() if now is None else now
+    root = _upload_dir(project_dir)
+    removed = _prune_files(root, _UPLOAD_TTL_SECONDS, now)
+    large_root = root / _LARGE_DIR_NAME
+    try:
+        session_dirs = [
+            Path(e.path) for e in os.scandir(large_root)
+            if e.is_dir(follow_symlinks=False)
+        ]
+    except FileNotFoundError:
+        session_dirs = []
+    except OSError as exc:
+        logger.warning(f"⚠️ upload prune: cannot list {large_root}: {exc}")
+        session_dirs = []
+    for session_dir in session_dirs:
+        removed += _prune_files(session_dir, _LARGE_TTL_SECONDS, now)
+        _rmdir_if_empty(session_dir)
+    if removed:
+        logger.info(f"🧹 upload prune: removed {removed} expired file(s) under {root}")
+    return removed
+
+
+def _rmdir_if_empty(path: Path) -> None:
+    try:
+        path.rmdir()
+    except OSError:
+        pass  # not empty (the agent left something there), or already gone
+
+
+def _drop_session_uploads(project_dir: str, sid: str) -> int:
+    """Session end: delete the large uploads ``sid`` took, i.e. the
+    regular files directly in its leaf. A file the agent moved elsewhere is
+    simply no longer there; anything the agent created inside the leaf (a
+    subfolder it extracted into) is left alone, and so is the leaf then."""
+    session_dir = _large_dir(project_dir, sid)
+    removed = _prune_files(session_dir, -1, float("inf"))
+    _rmdir_if_empty(session_dir)
+    if removed:
+        logger.info(f"🧹 session {sid[:8]} ended: removed {removed} large upload(s)")
+    return removed
+
+
+def _cleanup_ended_sessions(sessions: Iterable[Any]) -> None:
+    """Upload cleanup for sessions the reaper just dropped: each one's large
+    uploads, then a TTL prune of every project they worked in."""
+    projects = set()
+    for session in sessions:
+        project_dir = getattr(session, "project_dir", "")
+        sid = getattr(session, "session_id", "")
+        if not project_dir or not sid:
+            continue
+        _drop_session_uploads(project_dir, sid)
+        projects.add(project_dir)
+    for project_dir in projects:
+        _prune_uploads(project_dir)
+
+
+def _publish_chief_session_ends(sessions: Iterable[Any]) -> None:
+    """Tell the chief about reaped chief-managed sessions. Never raises."""
+    try:
+        registry, inbox = resolve_paths()
+        publish_session_ends(sessions, registry=registry, inbox=inbox)
+    except Exception as exc:  # noqa: BLE001 -- the reaper must keep running
+        logger.warning(f"❌ chief session-end publish failed: {exc}")
 
 
 def run_session_host(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> int:

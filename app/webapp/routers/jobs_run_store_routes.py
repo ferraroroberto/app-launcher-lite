@@ -3,36 +3,26 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
-from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse
 from starlette.websockets import WebSocketDisconnect
 
-from app.webapp.middleware import LOOPBACK_HOSTS
-from app.webapp.routers._helpers import maybe_json
-from src import api_tokens
+from app.webapp.routers._helpers import known_run_dir, maybe_json
 from src import jobs as jobs_mod
-from src.jobs.config import get_by_id, load_jobs
-from src.jobs.run_state import STATUS_PENDING, run_view
+from src.middleware import (
+    credential_accepted,
+    credential_required,
+    is_pc_itself,
+)
 
 router = APIRouter()
-
-
-def _known_run_dir(job_id: str, run_id: str) -> Optional[Path]:
-    """Return a registered job's existing run dir, else ``None``."""
-    if get_by_id(load_jobs(), job_id) is None:
-        return None
-    run_dir = jobs_mod.runs_dir(job_id) / run_id
-    return run_dir if run_dir.is_dir() else None
 
 
 @router.put("/api/jobs/{job_id}/runs/{run_id}")
 async def update_job_run(job_id: str, run_id: str, request: Request) -> dict:
     """Update the keep-forever flag on one canonical run record."""
-    run_dir = _known_run_dir(job_id, run_id)
+    run_dir = known_run_dir(job_id, run_id)
     if run_dir is None:
         raise HTTPException(status_code=404, detail="unknown job or run")
     body = await maybe_json(request)
@@ -47,7 +37,7 @@ async def update_job_run(job_id: str, run_id: str, request: Request) -> dict:
 @router.get("/api/jobs/{job_id}/runs/{run_id}/artifacts/{filename:path}")
 async def download_job_artifact(job_id: str, run_id: str, filename: str) -> FileResponse:
     """Serve one artifact while keeping resolution strictly inside its run."""
-    run_dir = _known_run_dir(job_id, run_id)
+    run_dir = known_run_dir(job_id, run_id)
     if run_dir is None:
         raise HTTPException(status_code=404, detail="unknown job or run")
     base = (run_dir / "artifacts").resolve()
@@ -71,14 +61,27 @@ async def stream_job_run(websocket: WebSocket, job_id: str, run_id: str) -> None
     await websocket.accept()
     cfg = websocket.app.state.webapp_config
     client_host = websocket.client.host if websocket.client else ""
-    if client_host not in LOOPBACK_HOSTS and not api_tokens.full_scope_credential_ok(
-        websocket.query_params.get("token", "").strip(),
-        cfg.auth_token,
-        getattr(cfg, "api_tokens", None) or [],
-    ):
-        await websocket.close(code=4401, reason="missing or invalid bearer token")
-        return
-    run_dir = _known_run_dir(job_id, run_id)
+    # Starlette middleware never sees a WebSocket handshake, so the HTTP
+    # choke point's gate is re-applied inline here. Go through the shared
+    # helpers rather than keeping a local copy of the rule: `is_pc_itself`
+    # declines to treat an edge-forwarded request as the PC however its
+    # client address happens to resolve, and `credential_required` /
+    # `credential_accepted` honour both credential classes with the scope
+    # re-checked per request. Same credential leg `sessions.proxy_session_ws`
+    # runs — that socket is terminal-grade and adds Tailscale + passkey legs
+    # on top; this one is not, so the shape it owes is the HTTP choke point's.
+    # The shared contract is pinned by tests/api/webapp/test_ws_gate_contract.py.
+    if not is_pc_itself(client_host, websocket.headers):
+        if credential_required(cfg):
+            presented = websocket.query_params.get("token", "").strip()
+            if not credential_accepted(
+                cfg, presented, "GET", websocket.url.path
+            ):
+                await websocket.close(
+                    code=4401, reason="missing or invalid bearer token"
+                )
+                return
+    run_dir = known_run_dir(job_id, run_id)
     if run_dir is None:
         await websocket.close(code=4404, reason="unknown job or run")
         return
@@ -86,13 +89,11 @@ async def stream_job_run(websocket: WebSocket, job_id: str, run_id: str) -> None
     output_path = run_dir / "output.log"
     offset = 0
     first = True
+    live_statuses = {"queued", "pending", "running"}
     try:
         while True:
             record = await asyncio.to_thread(jobs_mod.read_run, run_dir)
-            # run.json lands just after the run dir; until then it is pending.
-            record = record or {"status": STATUS_PENDING}
-            view = run_view(record, now=datetime.now())
-            status = str(record.get("status") or STATUS_PENDING)
+            status = str(record.get("status") or "pending")
             try:
                 size = output_path.stat().st_size if output_path.is_file() else 0
             except OSError:
@@ -100,12 +101,7 @@ async def stream_job_run(websocket: WebSocket, job_id: str, run_id: str) -> None
             if first or size < offset:
                 snapshot = await asyncio.to_thread(jobs_mod.read_output_tail, run_dir)
                 await websocket.send_json(
-                    {
-                        "type": "snapshot",
-                        "output": snapshot,
-                        "status": status,
-                        "live": view["live"],
-                    }
+                    {"type": "snapshot", "output": snapshot, "status": status}
                 )
                 offset = size
                 first = False
@@ -125,13 +121,10 @@ async def stream_job_run(websocket: WebSocket, job_id: str, run_id: str) -> None
                             "type": "chunk",
                             "output": delta.decode("utf-8", errors="replace"),
                             "status": status,
-                            "live": view["live"],
                         }
                     )
-            if not view["open"]:
-                await websocket.send_json(
-                    {"type": "status", "status": status, "live": view["live"]}
-                )
+            if status not in live_statuses:
+                await websocket.send_json({"type": "status", "status": status})
                 await websocket.close(code=1000)
                 return
             await asyncio.sleep(0.1)

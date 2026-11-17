@@ -1,0 +1,349 @@
+"""src.scanner.git_status — branch + clean/dirty flags (issue #115).
+
+Unlike github_repo_url (a plain .git/config read), git_status shells out
+to real git, so these build real repos in tmp_path and skip cleanly where
+git isn't on PATH.
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from src.scanner import GitStatus, git_status
+from src.subprocess_flags import NO_WINDOW
+
+pytestmark = pytest.mark.skipif(
+    shutil.which("git") is None, reason="git not on PATH"
+)
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        creationflags=NO_WINDOW,
+    )
+
+
+def _init_repo(repo: Path, default: str = "main") -> None:
+    """A repo with one commit on a known default branch."""
+    repo.mkdir(parents=True, exist_ok=True)
+    # -b is git >= 2.28; pin the default branch name so the test is
+    # independent of the host's init.defaultBranch.
+    _git(repo, "init", "-b", default)
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "Test")
+    (repo / "README.md").write_text("hi\n", encoding="utf-8")
+    _git(repo, "add", "README.md")
+    # --no-verify: the dev box has a global pre-commit hook (author-email
+    # allowlist) inherited via core.hooksPath; the throwaway test repo
+    # must not be subject to it.
+    _git(repo, "commit", "--no-verify", "-m", "init")
+
+
+def test_clean_repo_on_default_branch(tmp_path: Path):
+    _init_repo(tmp_path, default="main")
+    gs = git_status(tmp_path)
+    assert gs.is_git is True
+    assert gs.branch == "main"
+    assert gs.default_branch == "main"
+    assert gs.on_default_branch is True
+    assert gs.dirty is False
+
+
+def test_dirty_repo_is_flagged(tmp_path: Path):
+    _init_repo(tmp_path, default="main")
+    # An untracked file makes the tree dirty (porcelain reports "? ...").
+    (tmp_path / "scratch.txt").write_text("wip\n", encoding="utf-8")
+    gs = git_status(tmp_path)
+    assert gs.is_git is True
+    assert gs.dirty is True
+    assert gs.on_default_branch is True  # still on main, just dirty
+
+
+def test_off_default_branch_is_flagged(tmp_path: Path):
+    _init_repo(tmp_path, default="main")
+    _git(tmp_path, "checkout", "-b", "feature/x")
+    gs = git_status(tmp_path)
+    assert gs.is_git is True
+    assert gs.branch == "feature/x"
+    assert gs.default_branch == "main"  # main still exists as a local branch
+    assert gs.on_default_branch is False
+    assert gs.dirty is False
+
+
+def test_master_default_branch_resolves(tmp_path: Path):
+    _init_repo(tmp_path, default="master")
+    _git(tmp_path, "checkout", "-b", "wip")
+    gs = git_status(tmp_path)
+    assert gs.default_branch == "master"
+    assert gs.on_default_branch is False
+
+
+def test_non_git_folder(tmp_path: Path):
+    gs = git_status(tmp_path)
+    assert gs == GitStatus(
+        is_git=False, branch=None, default_branch=None, dirty=False
+    )
+    assert gs.on_default_branch is True  # ambiguous → never yellow
+
+
+def test_on_default_branch_property_when_default_unknown():
+    # A repo on a branch but with no resolvable default must not read as
+    # "off main" — that would paint it yellow on ambiguous data.
+    gs = GitStatus(is_git=True, branch="dev", default_branch=None, dirty=False)
+    assert gs.on_default_branch is True
+
+
+def test_route_fan_out_leaves_the_default_thread_pool_free(webapp_client, monkeypatch):
+    """#1264: the route fanned one git_status per repo onto the loop's
+    default executor, so while it ran every other ``asyncio.to_thread``
+    caller (``/api/version``, sessions, config writes) queued behind it.
+    With 64 repos at 0.3 s each in flight, a trivial ``to_thread`` call on
+    the same loop must still come back promptly."""
+    import asyncio
+    import time
+
+    import httpx
+
+    from app.webapp.routers import claude_code
+    from src.scanner import ProjectDir
+
+    _, app, _ = webapp_client
+    repos = [ProjectDir(id=f"p{i}", name=f"p{i}", project_dir=f"C:/fake/p{i}") for i in range(64)]
+    monkeypatch.setattr(claude_code, "scan_project_dirs", lambda *a, **k: repos)
+
+    def slow_status(_path):
+        time.sleep(0.3)
+        return GitStatus(is_git=False, branch=None, default_branch=None, dirty=False)
+
+    monkeypatch.setattr(claude_code, "git_status", slow_status)
+
+    async def run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            fan_out = asyncio.create_task(client.get("/api/claude-code/git-status"))
+            await asyncio.sleep(0.1)
+            started = time.perf_counter()
+            await asyncio.to_thread(lambda: None)
+            waited = time.perf_counter() - started
+            return waited, (await fan_out).json()["projects"]
+
+    waited, projects = asyncio.run(run())
+    assert len(projects) == 64
+    assert waited < 0.2, (
+        f"a to_thread call waited {waited:.2f}s behind the git-status fan-out: "
+        "it is occupying the shared default thread pool"
+    )
+
+
+def test_route_concurrent_callers_share_one_scan(webapp_client, monkeypatch):
+    """#1268: every page load's boot fetches git-status, and each call used to
+    run its own fleet-wide scan, so concurrent callers queued behind N scans.
+    Calls that arrive while a scan runs share ONE follow-up scan; a call after
+    both finished and asks ``?fresh=true`` starts a fresh one."""
+    import asyncio
+    import time
+
+    import httpx
+
+    from app.webapp.routers import claude_code
+    from src.scanner import ProjectDir
+
+    _, app, _ = webapp_client
+    repos = [ProjectDir(id=f"p{i}", name=f"p{i}", project_dir=f"C:/fake/p{i}") for i in range(5)]
+    monkeypatch.setattr(claude_code, "scan_project_dirs", lambda *a, **k: repos)
+    scanned: list = []
+
+    def slow_status(path):
+        scanned.append(path)
+        time.sleep(0.3)
+        return GitStatus(is_git=False, branch=None, default_branch=None, dirty=False)
+
+    monkeypatch.setattr(claude_code, "git_status", slow_status)
+
+    async def run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            together = await asyncio.gather(*(client.get("/api/claude-code/git-status") for _ in range(4)))
+            after = await client.get("/api/claude-code/git-status", params={"fresh": "true"})
+            return [r.json()["projects"] for r in together], after.json()["projects"]
+
+    together, after = asyncio.run(run())
+    assert all(len(p) == 5 for p in together) and len(after) == 5
+    # The first call's scan, one follow-up shared by the other three, then the later call's.
+    assert len(scanned) == 15, f"{len(scanned)} repo scans for 4 overlapping calls + 1 later one, wanted 5 + 5 + 5"
+
+
+
+def test_route_a_caller_never_gets_a_scan_older_than_its_arrival(webapp_client, monkeypatch):
+    """#1268: sharing must not go stale. A repo dirtied while a scan is
+    already running is reported dirty to the call that arrives after the
+    change: it waits for the next scan rather than joining the running one,
+    which read the repo before the change.
+
+    Ordering is driven by events, not sleeps (#1511): the first scan is held
+    open until the second call has queued behind it, so a loaded runner can
+    neither start the first scan late (it would read the dirtied repo) nor
+    finish it early (the second call would just start its own scan)."""
+    import asyncio
+    import threading
+    import time
+
+    import httpx
+
+    from app.webapp.routers import claude_code
+    from src.scanner import ProjectDir
+
+    _, app, _ = webapp_client
+    repos = [ProjectDir(id="alpha", name="alpha", project_dir="C:/fake/alpha")]
+    monkeypatch.setattr(claude_code, "scan_project_dirs", lambda *a, **k: repos)
+    repo = {"dirty": False}
+    first_scan_read = threading.Event()
+    release_first_scan = threading.Event()
+
+    def slow_status(_path):
+        seen = repo["dirty"]          # read at scan start, like git would
+        first_scan_read.set()
+        # Held open until the test says so; the follow-up scan finds it already set.
+        assert release_first_scan.wait(timeout=30), "test never released the first scan"
+        return GitStatus(is_git=True, branch="main", default_branch="main", dirty=seen)
+
+    monkeypatch.setattr(claude_code, "git_status", slow_status)
+
+    async def until(predicate, what):
+        deadline = time.monotonic() + 30
+        while not predicate():
+            assert time.monotonic() < deadline, f"timed out waiting for {what}"
+            await asyncio.sleep(0.01)
+
+    async def run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            before = asyncio.create_task(client.get("/api/claude-code/git-status"))
+            await until(first_scan_read.is_set, "the first scan to read the repo")
+            repo["dirty"] = True
+            after = asyncio.create_task(client.get("/api/claude-code/git-status"))
+            await until(
+                lambda: any(not f.done() for f in claude_code._GIT_STATUS_NEXT.values()),
+                "the second call to queue behind the running scan",
+            )
+            release_first_scan.set()
+            return (await before).json()["projects"][0], (await after).json()["projects"][0]
+
+    try:
+        before, after = asyncio.run(run())
+    finally:
+        release_first_scan.set()      # never strand a pool thread on a failed run
+    assert before["dirty"] is False
+    assert after["dirty"] is True, "a call after the change was served the scan that began before it"
+
+
+def _git_status_scan_counter(monkeypatch):
+    """Fake one repo and count how many times git is asked about it."""
+    from app.webapp.routers import claude_code
+    from src.scanner import ProjectDir
+
+    repos = [ProjectDir(id="alpha", name="alpha", project_dir="C:/fake/alpha")]
+    monkeypatch.setattr(claude_code, "scan_project_dirs", lambda *a, **k: repos)
+    scanned: list = []
+    state = {"branch": "main"}
+
+    def status(path):
+        scanned.append(path)
+        return GitStatus(is_git=True, branch=state["branch"], default_branch="main", dirty=False)
+
+    monkeypatch.setattr(claude_code, "git_status", status)
+    return scanned, state
+
+
+def test_route_second_call_is_served_from_memory_without_spawning_git(webapp_client, monkeypatch):
+    """#1926: a scan is ~700 ms of git spawns; the poll and every page-load
+    boot used to pay it. A call right after a scan answers from memory, marked
+    with its age, and runs no git."""
+    import httpx
+
+    from app.webapp.routers import claude_code  # noqa: F401  (patched by the helper)
+
+    _, app, _ = webapp_client
+    scanned, _ = _git_status_scan_counter(monkeypatch)
+
+    async def run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            first = await client.get("/api/claude-code/git-status")
+            second = await client.get("/api/claude-code/git-status")
+            return first.json(), second.json()
+
+    import asyncio
+
+    first, second = asyncio.run(run())
+    assert len(scanned) == 1, f"{len(scanned)} git scans for two calls, wanted 1"
+    assert second["projects"] == first["projects"]
+    assert first["age_seconds"] == 0.0 and 0.0 <= second["age_seconds"] < 5.0
+
+
+def test_route_a_stale_cache_answers_at_once_and_refreshes_behind_it(webapp_client, monkeypatch):
+    """#1926: past the fresh window the call still answers from memory (the
+    phone never waits on git), and one background scan makes the next call right."""
+    import asyncio
+
+    import httpx
+
+    from app.webapp.routers import claude_code
+
+    _, app, _ = webapp_client
+    scanned, repo = _git_status_scan_counter(monkeypatch)
+    monkeypatch.setattr(claude_code, "GIT_STATUS_FRESH_S", 0.0)
+
+    async def run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.get("/api/claude-code/git-status")
+            repo["branch"] = "feat/x"        # a branch switch after the first scan
+            stale = await client.get("/api/claude-code/git-status")
+            while claude_code._GIT_STATUS_RUNNING:
+                await asyncio.sleep(0.01)
+            monkeypatch.setattr(claude_code, "GIT_STATUS_FRESH_S", 10.0)
+            refreshed = await client.get("/api/claude-code/git-status")
+            return stale.json(), refreshed.json()
+
+    stale, refreshed = asyncio.run(run())
+    assert stale["projects"][0]["branch"] == "main", "the stale answer waited for a scan"
+    assert refreshed["projects"][0]["branch"] == "feat/x", "the background scan never landed"
+    assert len(scanned) == 2
+
+
+def test_route_fresh_param_and_an_expired_cache_wait_for_a_new_scan(webapp_client, monkeypatch):
+    """#1926: ``?fresh=true`` (the toolbar refresh) and a cache past its stated
+    bound both read git again before answering."""
+    import asyncio
+
+    import httpx
+
+    from app.webapp.routers import claude_code
+
+    _, app, _ = webapp_client
+    scanned, repo = _git_status_scan_counter(monkeypatch)
+
+    async def run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.get("/api/claude-code/git-status")
+            repo["branch"] = "feat/x"
+            forced = await client.get("/api/claude-code/git-status", params={"fresh": "true"})
+            monkeypatch.setattr(claude_code, "GIT_STATUS_STALE_MAX_S", 0.0)
+            repo["branch"] = "feat/y"
+            expired = await client.get("/api/claude-code/git-status")
+            return forced.json(), expired.json()
+
+    forced, expired = asyncio.run(run())
+    assert forced["projects"][0]["branch"] == "feat/x"
+    assert expired["projects"][0]["branch"] == "feat/y"
+    assert len(scanned) == 3

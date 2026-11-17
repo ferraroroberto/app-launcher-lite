@@ -8,23 +8,39 @@ listener→app label mapping uses the registry but doesn't mutate it.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
+import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
+import psutil
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
-from app.webapp.routers._helpers import PROJECT_ROOT, STATIC_DIR
-from src import session_client, system_load
+from app.webapp.demand_cache import DemandCache
+from app.webapp.routers._helpers import PROJECT_ROOT, STATIC_DIR, maybe_json
+from app.webapp.shell_html import assemble_shell, shell_stat_key
+from src import instance_role, system_load
 from src.agents import detect_agents
 from src.build_info import build_identity, resolve_git_sha
-from src.diagnostics import find_pids_on_port, kill_pids, list_app_listeners
-from src.git_run import resolve_deployed_sha
+from src.clients import session as session_client
+from src.desktop import session_kind
+from src.desktop.browser import is_web_url, open_url
+from src.diagnostics import (
+    detect_local_scheme,
+    find_pids_on_port,
+    kill_pids,
+    list_app_listeners,
+)
+from src.git_utils import resolve_deployed_sha
+from src.launching.vscode_workspace import is_vscode_installed
+from src.middleware import is_pc_itself, via_cloudflare
 from src.registry import load_registry
 from src.scanner import pretty_folder_name
 from src.session_host_paths import declared_session_host_paths, paths_touched_between
-from src.static_versioning import asset_hash_for, inline_includes, rewrite_index_html
+from src.static_versioning import asset_hash_for, rewrite_index_html
+from src.stylesheet_bundle import link_bundle
 from src.webapp_config import WebappConfig
 
 _log = logging.getLogger(__name__)
@@ -35,25 +51,57 @@ _IDENTITY = build_identity()
 _GIT_SHA = _IDENTITY["git_sha"]
 _BUILT_AT = _IDENTITY["built_at"]
 _CLAUDE_MD_PATH = PROJECT_ROOT / "CLAUDE.md"
+# How often the snapshot behind /api/version is rebuilt while it is polled. The
+# restart recipes poll this route for a changed sha, so the delay stays small.
+VERSION_TICK_S = 5.0
+
+
+def _stamped_index(app: Any) -> Tuple[str, str]:
+    """The hash-stamped index.html and its ETag, re-rendered only on change.
+
+    Every page load used to re-read the 135 KB file and regex-rewrite its
+    asset_hashes. The rendered body is cached on the app, keyed on
+    the mtime and size of index.html and its view fragments, so an edit on
+    disk is still picked up on the next load without a restart; the asset
+    hashes are fixed per process.
+    """
+    index_path = STATIC_DIR / "index.html"
+    try:
+        key = shell_stat_key(index_path)
+        cached = getattr(app.state, "index_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1], cached[2]
+        shell = assemble_shell(index_path)
+    except (OSError, ValueError):
+        _log.exception("❌ could not assemble index.html")
+        raise HTTPException(status_code=500, detail="index.html missing")
+    asset_hashes = getattr(app.state, "asset_hashes", {}) or {}
+    if getattr(app.state, "stylesheet_bundle", None) is not None:
+        shell = link_bundle(shell)
+    stamped = rewrite_index_html(shell, asset_hashes)
+    etag = '"' + hashlib.sha256(stamped.encode("utf-8")).hexdigest()[:20] + '"'
+    app.state.index_cache = (key, stamped, etag)
+    return stamped, etag
+
+
+def _etag_matches(header: str, etag: str) -> bool:
+    return any(
+        tag.strip().removeprefix("W/") in (etag, "*") for tag in header.split(",")
+    )
 
 
 @router.get("/")
-async def index(request: Request) -> HTMLResponse:
-    index_path = STATIC_DIR / "index.html"
-    if not index_path.exists():
-        raise HTTPException(status_code=500, detail="index.html missing")
-    asset_hashes = getattr(request.app.state, "asset_hashes", {}) or {}
-    body = inline_includes(index_path.read_text(encoding="utf-8"), STATIC_DIR)
-    stamped = rewrite_index_html(body, asset_hashes)
+async def index(request: Request) -> Response:
+    stamped, etag = _stamped_index(request.app)
     # Force Safari (iPhone PWA especially) to revalidate the HTML on every
     # load. Without this, a stale cached index.html keeps pointing at a
     # `?v=<old hash>` script that no longer exists after a refactor — the
-    # page renders the static skeleton but no JS runs. The HTML body is
-    # tiny (~9 KB) so the round-trip cost is negligible.
-    return HTMLResponse(
-        content=stamped,
-        headers={"Cache-Control": "no-cache, must-revalidate"},
-    )
+    # page renders the static skeleton but no JS runs. The ETag makes
+    # that revalidation a body-less 304 while the page hasn't changed.
+    headers = {"Cache-Control": "no-cache, must-revalidate", "ETag": etag}
+    if _etag_matches(request.headers.get("if-none-match", ""), etag):
+        return Response(status_code=304, headers=headers)
+    return HTMLResponse(content=stamped, headers=headers)
 
 
 @router.get("/api/version")
@@ -63,13 +111,15 @@ async def version(request: Request) -> Dict[str, Any]:
 
     The session-host is deliberately excluded from ``tray.bat --restart``'s
     reclaim sweep (to protect live PTYs), so it can
-    keep running code that is days old with nothing else surfacing that.
-    ``session_host.stale``
+    keep running code that is days old with nothing else surfacing that —
+    a merged fix can sit unapplied on the live session-host indefinitely
+    unless something checks for it. ``session_host.stale``
     compares the session-host's own loaded ``git_sha`` (captured once, at
     *its* process start) against ``deployed_sha`` — the repo's resolved
     default remote branch (``origin/HEAD``, normally ``origin/main``),
-    resolved fresh on every call. This is **not** ``head_sha`` (below): comparing against the
-    *live checkout's current branch tip* reports a false ``stale_relevant=false`` whenever the primary checkout
+    resolved fresh on every call. This is **not** ``head_sha`` (below):
+    comparing against the *live checkout's current branch tip* instead
+    reports a false ``stale_relevant=false`` whenever the primary checkout
     transiently sits on an unrelated feature branch (e.g. a worker occupying
     the tree mid-issue) that never contained the merged fix being checked
     for. ``deployed_sha`` instead tracks what's actually mergeable/shippable
@@ -84,29 +134,88 @@ async def version(request: Request) -> Dict[str, Any]:
     can't be reached at all; both ``stale`` and ``stale_relevant`` stay
     ``None`` (never a confident answer) whenever either sha, or the scoped
     diff itself, can't be resolved — e.g. a non-repo test env, an unknown
-    host sha, or no resolvable ``origin`` remote.
+    host sha, or no resolvable ``origin`` remote. ``session_host.freshness``
+    is the same verdict as one declared state (see
+    :data:`SESSION_HOST_FRESHNESS_STATES`); prefer it to re-deriving from the
+    three fields above, which stay as they are.
+
+    The live part (``head_sha`` and ``session_host``) costs git spawns and a
+    session-host round trip, so it is read from a snapshot that the lifespan
+    rebuilds every :data:`VERSION_TICK_S` while this route is polled
+    (:class:`app.webapp.demand_cache.DemandCache`); an older one is rebuilt
+    before it answers. ``age_seconds`` is the snapshot's age.
     """
-    cfg: WebappConfig = request.app.state.webapp_config
     asset_hashes = getattr(request.app.state, "asset_hashes", {}) or {}
-    head_sha, deployed_sha, host_identity = await asyncio.gather(
-        asyncio.to_thread(resolve_git_sha),
-        asyncio.to_thread(resolve_deployed_sha),
-        asyncio.to_thread(session_client.identity, cfg.session_host_port),
-    )
-    session_host = _session_host_freshness(host_identity, deployed_sha)
+    facts, age_seconds = await version_cache(request.app).get()
     return {
         "git_sha": _GIT_SHA,
         "built_at": _BUILT_AT,
+        "pid": os.getpid(),
         "asset_hash": asset_hash_for(asset_hashes, "styles/base.css") or "",
-        "head_sha": head_sha,
-        "session_host": session_host,
+        "head_sha": facts["head_sha"],
+        "session_host": facts["session_host"],
+        "age_seconds": age_seconds,
     }
+
+
+async def _build_version_facts(port: int) -> Dict[str, Any]:
+    """The live part of ``/api/version``: the checkout's HEAD, the deployed
+    sha and the session-host's identity. The staleness verdict can spawn
+    ``git diff``, so it runs off the loop with the rest."""
+    head_sha, deployed_sha, host_identity = await asyncio.gather(
+        asyncio.to_thread(resolve_git_sha),
+        asyncio.to_thread(resolve_deployed_sha),
+        asyncio.to_thread(session_client.identity, port),
+    )
+    session_host = await asyncio.to_thread(_session_host_freshness, host_identity, deployed_sha)
+    return {"head_sha": head_sha, "session_host": session_host}
+
+
+def version_cache(app: Any) -> DemandCache[Dict[str, Any]]:
+    """The app's ``/api/version`` snapshot (its lifespan keeps it fresh while polled)."""
+    cache = getattr(app.state, "version_cache", None)
+    if cache is None:
+        cache = app.state.version_cache = DemandCache(
+            "GET /api/version",
+            lambda: _build_version_facts(app.state.webapp_config.session_host_port),
+            tick_s=VERSION_TICK_S,
+            max_age_s=3 * VERSION_TICK_S,
+        )
+    return cache
+
+
+# The one declared value set of ``session_host.freshness``; every state the
+# (reachable, stale, stale_relevant) triple can encode maps to exactly one.
+SESSION_HOST_FRESHNESS_STATES = (
+    "unreachable", "unknown", "fresh", "stale-irrelevant", "stale-relevant", "stale-unknown",
+)
+
+
+def _freshness_state(
+    reachable: bool, stale: Optional[bool], stale_relevant: Optional[bool]
+) -> str:
+    """Collapse the triple into one of :data:`SESSION_HOST_FRESHNESS_STATES`.
+
+    ``unknown`` (a sha could not be resolved) and ``stale-unknown`` (the shas
+    differ but the scoped diff could not run) are their own states, never
+    folded into ``fresh``.
+    """
+    if not reachable:
+        return "unreachable"
+    if stale is None:
+        return "unknown"
+    if not stale:
+        return "fresh"
+    if stale_relevant is None:
+        return "stale-unknown"
+    return "stale-relevant" if stale_relevant else "stale-irrelevant"
 
 
 def _session_host_freshness(
     identity: Optional[Dict[str, Any]], deployed_sha: str
 ) -> Dict[str, Any]:
-    """``{"reachable", "git_sha", "started_at", "stale", "stale_relevant"}``
+    """``{"reachable", "git_sha", "started_at", "stale", "stale_relevant",
+    "freshness"}``
     from the session-host's own
     ``/healthz`` body and the repo's resolved ``deployed_sha`` (its default
     remote branch tip, e.g. ``origin/main`` — not the live checkout's current
@@ -120,11 +229,15 @@ def _session_host_freshness(
     and ``None`` when ``stale`` itself is unknown, or the scoped diff can't be
     resolved (e.g. the host sha isn't in local git history) — never a
     confident "unaffected" when the comparison couldn't actually run.
+
+    ``freshness`` folds the three verdict fields into one declared state
+    (:func:`_freshness_state`) so a reader does not re-derive it from the triple.
     """
     if identity is None:
         return {
             "reachable": False, "git_sha": None, "started_at": None,
             "stale": None, "stale_relevant": None,
+            "freshness": _freshness_state(False, None, None),
         }
     host_sha = identity.get("git_sha")
     stale: Optional[bool] = None
@@ -140,6 +253,7 @@ def _session_host_freshness(
         "started_at": identity.get("started_at"),
         "stale": stale,
         "stale_relevant": stale_relevant,
+        "freshness": _freshness_state(True, stale, stale_relevant),
     }
 
 
@@ -189,8 +303,13 @@ async def agents() -> Dict[str, Any]:
 
     The Coding tab uses ``available`` to disable an agent's per-tile
     launch button (with a hover hint) when its CLI isn't installed.
+
+    ``vscode_available`` rides along for the row's VS Code button.
+    It is detected the same way but is *not* an agent — it opens a GUI
+    editor, not a PTY session, so it has no entry in ``src.agents``. One
+    already-polled endpoint beats a second fetch for a single boolean.
     """
-    return {"agents": detect_agents()}
+    return {"agents": detect_agents(), "vscode_available": is_vscode_installed()}
 
 
 @router.get("/healthz")
@@ -205,18 +324,112 @@ async def system_load_reading() -> Dict[str, Any]:
     return system_load.read()
 
 
+def _is_this_pc(request: Request) -> bool:
+    """Is the caller a browser on this PC, over loopback or its own address?
+
+    A browser on the PC reaches the launcher by its Tailscale name as often
+    as by loopback, so the caller's address counts when it is one of this
+    host's own. Anything through the public tunnel never is.
+    """
+    host = request.client.host if request.client else ""
+    if is_pc_itself(host, request.headers):
+        return True
+    if not host or via_cloudflare(request.headers):
+        return False
+    try:
+        return any(
+            addr.address.split("%")[0] == host
+            for addrs in psutil.net_if_addrs().values()
+            for addr in addrs
+        )
+    except OSError:
+        return False
+
+
+@router.get("/api/desktop-session")
+async def desktop_session(request: Request) -> Dict[str, Any]:
+    """Whether the PC's interactive session is a Remote Desktop one.
+
+    ``state`` is ``remote`` / ``local`` / ``unknown`` (never guessed), and
+    ``this_pc`` says whether the caller is a browser on this PC: only that
+    browser's mic is the one a Remote Desktop session lacks, so a phone or
+    another computer keeps the generic message. The page shows the hint only
+    for ``remote`` plus ``this_pc``.
+    """
+    state = await asyncio.to_thread(session_kind.read)
+    return {"state": state, "this_pc": _is_this_pc(request)}
+
+
+# Each listener's scheme, keyed by (pid, port). The TLS probe can
+# take up to a second a port and the Apps tab polls this route, so a live
+# listener is probed once; entries for listeners that are gone are dropped
+# on every call.
+_LISTENER_SCHEMES: Dict[Tuple[int, int], str] = {}
+
+
+async def _listener_url(tailnet_host: str, pid: int, port: int) -> Optional[str]:
+    """The phone-openable URL for a listener, or ``None`` without a
+    ``tailnet_host`` — the same shape as a running app's Open (apps.py)."""
+    if not tailnet_host:
+        return None
+    key = (pid, port)
+    scheme = _LISTENER_SCHEMES.get(key)
+    if scheme is None:
+        scheme = await asyncio.to_thread(detect_local_scheme, port)
+        _LISTENER_SCHEMES[key] = scheme
+    return f"{scheme}://{tailnet_host}:{port}/"
+
+
+@router.post("/api/open-url")
+async def open_link_on_pc(request: Request) -> Dict[str, Any]:
+    """Open a link from Chat or a transcript in the PC's browser.
+
+    Only the PC itself may ask: the page calls this when it is running on the
+    PC (a loopback connection, or a session's mirror window), so the link
+    lands in Chrome rather than in Edge, the browser hosting the page. A
+    laptop or the phone over the tailnet keeps opening links itself; opening
+    them on the PC would put the page in front of nobody. ``http``/``https``
+    only.
+    """
+    host = request.client.host if request.client else ""
+    if not is_pc_itself(host, request.headers):
+        raise HTTPException(status_code=403, detail="links open on the PC only for the PC itself")
+    body = await maybe_json(request)
+    url = str((body or {}).get("url") or "").strip()
+    if not is_web_url(url):
+        raise HTTPException(status_code=400, detail="only http(s) links")
+    # A disposable instance never opens anything on the desktop.
+    if instance_role.is_disposable():
+        _log.info("ℹ️ open-url: disposable instance, not opening a browser")
+        return {"opened": False, "browser": "none"}
+    cfg: WebappConfig = request.app.state.webapp_config
+    browser = await asyncio.to_thread(open_url, url, cfg.desktop_browser)
+    return {"opened": True, "browser": browser}
+
+
 @router.get("/api/ports/probe")
-async def probe_ports() -> Dict[str, Any]:
+async def probe_ports(request: Request) -> Dict[str, Any]:
     """Discover every LISTEN socket owned by a python/streamlit process.
 
     Streamlit auto-increments its port past 8501, so a fixed port
     list misses apps — this enumerates listeners dynamically. Each
     listener is labelled with the app it belongs to (matched on the
-    process's working directory) so you know what you're killing.
+    process's working directory) so you know what you're killing, and
+    carries the ``url`` its row's Open uses.
     """
     dir_names = _registered_dir_names()
-    owners = list_app_listeners()
+    # psutil's socket + process scan takes ~1 s. On the event loop it stalled
+    # every other request the webapp was serving, and the Apps tab polls
+    # this route every 5 s.
+    owners = await asyncio.to_thread(list_app_listeners)
     pid_to_port = {o.pid: o.port for o in owners}
+    tailnet_host = (request.app.state.app_config.tailnet_host or "").strip()
+    live = {(o.pid, o.port) for o in owners}
+    for key in [k for k in _LISTENER_SCHEMES if k not in live]:
+        del _LISTENER_SCHEMES[key]
+    urls = await asyncio.gather(
+        *(_listener_url(tailnet_host, o.pid, o.port) for o in owners)
+    )
     out = [
         {
             "port": owner.port,
@@ -229,8 +442,9 @@ async def probe_ports() -> Dict[str, Any]:
             # the parent app's row instead of duplicating the app name.
             "parent_port": pid_to_port.get(owner.parent_pid) if owner.parent_pid else None,
             "service": _service_label(owner.cmdline),
+            "url": url,
         }
-        for owner in owners
+        for owner, url in zip(owners, urls)
     ]
     return {"listeners": out}
 
@@ -239,10 +453,11 @@ async def probe_ports() -> Dict[str, Any]:
 async def kill_port(port: int) -> Dict[str, Any]:
     if port < 1 or port > 65535:
         raise HTTPException(status_code=400, detail="port out of range")
-    pids = find_pids_on_port(port)
+    # The same psutil scan as the probe, plus the kills: off the loop.
+    pids = await asyncio.to_thread(find_pids_on_port, port)
     if not pids:
         return {"port": port, "killed": [], "detail": "nothing was listening"}
-    killed, errors = kill_pids(pids)
+    killed, errors = await asyncio.to_thread(kill_pids, pids)
     return {"port": port, "killed": killed, "errors": errors}
 
 
@@ -260,7 +475,7 @@ def _registered_dir_names() -> Dict[str, str]:
     """Map every registered app's directory → display name.
 
     For bat-based apps the directory is the bat's parent; for
-    coding apps it's the project dir. Used to label a running
+    claude-code apps it's the project dir. Used to label a running
     listener with the app it belongs to.
     """
     registry = load_registry()

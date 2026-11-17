@@ -8,8 +8,8 @@ executor-side composition exactly.
 
 The function is pure: no I/O, no globals, no subprocess. The router
 calls it up front so bad values become 400 before any run directory is
-written; the executor calls it again after decoding the params payload
-from its argv so a scheduled invocation goes through the same validator.
+written; the executor calls it again after un-marshalling the ``--params``
+JSON blob so a scheduled invocation goes through the same validator.
 
 Composition rules (also enforced by the editor / dialog client-side):
 
@@ -26,9 +26,6 @@ Composition rules (also enforced by the editor / dialog client-side):
 
 from __future__ import annotations
 
-import base64
-import binascii
-import json
 import re
 from typing import Any, Dict, List, Tuple
 
@@ -36,6 +33,70 @@ from src.jobs.config import Job, Param
 
 _INT_RE = re.compile(r"^-?\d+$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# Characters ``cmd.exe`` re-interprets when it tokenizes a command line a
+# second time. Any argv that passes through cmd (a ``.bat`` dispatch, or the
+# ``cmd /c start`` re-parent in ``src.jobs.schtasks``) loses Python's
+# ``subprocess.list2cmdline`` quoting guarantees at that hop: cmd does not
+# honour the ``\"`` escape, so each one flips its quote state and the rest of
+# the value lands outside quoting, where these characters are operators
+# rather than text.
+#
+# Values reaching those hops are not all locally authored — a webhook-target
+# job maps provider payload fields straight into string params
+# (``src.jobs.webhook.resolve_mapping``), and the HMAC proves only who sent
+# the payload, not what is inside it. Refusing loudly here is also strictly
+# better than today's silent outcome for an ordinary value that happens to
+# contain one (a URL query string, "R&D"): the command line splits mid-value
+# and the executor fails to parse its own arguments.
+#
+# Single source for both hops (established first for ``.bat``).
+CMD_UNSAFE_CHARS = frozenset('"&|^<>')
+
+# ``%`` is deliberately *not* in ``CMD_UNSAFE_CHARS``. cmd.exe
+# only substitutes a **paired** ``%name%`` reference (or ``%1``-``%9`` /
+# ``%*``) during its own re-tokenization of the command line — a lone ``%``
+# is inert. Blocking on the bare character would also refuse the common
+# ordinary case of a URL-encoded value in a webhook-mapped field
+# (``...?q=100%20off``), which is a behaviour change for existing jobs the
+# character-set check was never meant to make. Instead, refuse only the
+# shape cmd.exe actually expands: a ``%`` pair wrapping a conventional
+# environment-variable name. That still catches the real risk — a mapped
+# value like ``%PATH%`` or ``%USERPROFILE%`` reaching the child with the
+# PC's environment substituted in — without touching percent-encoding.
+_PERCENT_VAR_RE = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*%")
+
+
+class ArgvRejected(ValueError):
+    """A value can't survive a cmd.exe re-tokenization hop.
+
+    Subclasses ``ValueError`` so every existing ``except (OSError,
+    ValueError)`` still catches it; callers that need to tell a *refused*
+    argv apart from a *genuine* spawn failure (the difference
+    between an HTTP 400 and a 500) can ``isinstance``-check for this type
+    specifically.
+    """
+
+
+def reject_cmd_unsafe(values: List[str], what: str) -> None:
+    """Raise :class:`ArgvRejected` if any of ``values`` can't survive cmd.exe.
+
+    ``what`` names the caller's surface so the message says which command
+    line was refused rather than just that something was.
+    """
+    for value in values:
+        bad = CMD_UNSAFE_CHARS.intersection(value)
+        if bad:
+            raise ArgvRejected(
+                f"{what} contains character(s) that cannot be passed through "
+                f"cmd.exe safely: {''.join(sorted(bad))!r} in {value!r}"
+            )
+        match = _PERCENT_VAR_RE.search(value)
+        if match:
+            raise ArgvRejected(
+                f"{what} contains a %VAR%-shaped reference cmd.exe would "
+                f"expand: {match.group()!r} in {value!r}"
+            )
 
 
 def _coerce(param: Param, raw_value: Any) -> Any:
@@ -159,25 +220,3 @@ def _stringify(param: Param, value: Any) -> str:
     if param.kind == "int":
         return str(int(value))
     return str(value)
-
-
-def encode_params_token(values: Dict[str, Any]) -> str:
-    """``values`` as base64url-encoded JSON, for the detached executor's argv.
-
-    The detached spawn goes through ``cmd /c start``, and cmd.exe re-reads
-    its own command line: only a token made of letters, digits, ``-``, ``_``
-    and ``=`` is guaranteed to reach the executor exactly as written.
-    """
-    raw = json.dumps(values, ensure_ascii=False).encode("utf-8")
-    return base64.urlsafe_b64encode(raw).decode("ascii")
-
-
-def decode_params_token(token: str) -> str:
-    """The JSON text :func:`encode_params_token` encoded.
-
-    Raises ``ValueError`` when ``token`` is not valid base64url or UTF-8.
-    """
-    try:
-        return base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8")
-    except (binascii.Error, UnicodeError) as exc:
-        raise ValueError(f"not a base64url params token ({exc})") from exc

@@ -1,0 +1,96 @@
+    <section id="paneClaude" class="pane" role="tabpanel" aria-labelledby="tabClaude">
+      <!-- Vendored home-head summary card (#496): one-line dashboard row —
+           app title + live stats (sessions / running apps / git aggregate)
+           + the theme toggle pinned right (home-head.css contract). The
+           toggle keeps its #themeToggle id so main.js's wireTheme and the
+           CSS-keyed sun/moon swap carry over unchanged. -->
+      <div class="card home-head page-head">
+        <span class="home-title">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-code-xml"></use></svg>
+          Code
+        </span>
+        <span id="homeHeadStatus" class="status"></span>
+        <button data-track="cpu-load" type="button" class="cpu-reading hit-target" data-level="unknown"
+                title="CPU load" aria-label="CPU load unknown. Show details">–</button>
+        <button type="button" id="themeToggle" class="icon-button home-toggle hit-target theme-toggle-btn" data-track="theme-toggle"
+                title="Toggle theme" aria-label="Toggle dark mode">
+          <svg class="theme-toggle-icon theme-icon-moon hit-target" aria-hidden="true" focusable="false"><use href="#i-moon"></use></svg>
+          <svg class="theme-toggle-icon theme-icon-sun hit-target" aria-hidden="true" focusable="false"><use href="#i-sun"></use></svg>
+        </button>
+        <button type="button" id="settingsOpen" class="icon-button home-toggle hit-target settings-open-btn" data-track="settings-open"
+                title="Settings" aria-label="Settings">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>
+        </button>
+      </div>
+
+      <!-- Sessions (#1434): "what is running?". The chief's row first, then
+           then the shared session rows (#1433). Card controls never sit in the
+           <summary> (#1132). -->
+      <details class="card card--collapsible sessions-card" open>
+        <summary data-track="coding.fold-sessions" class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-terminal"></use></svg>
+            <h3 class="collapse-title">Sessions</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">›</span>
+        </summary>
+        <div class="collapse-body">
+        <ul id="sessionsList" class="card-list" aria-label="Running sessions"></ul>
+        <div id="sessionsEmpty" class="empty-state">
+          <svg class="icon empty-state-icon" aria-hidden="true" focusable="false"><use href="#i-terminal"></use></svg>
+          <p class="empty-state-message">No sessions launched from here yet.</p>
+          <button data-track="coding.empty-show-projects" type="button" id="sessionsEmptyAction" class="empty-state-action">Show projects</button>
+        </div>
+        </div>
+      </details>
+
+      <!-- Projects: launch from here. Git lives here since #1434: the
+           uncommitted count in the summary, branch and "uncommitted" on each
+           row, the refresh in the toolbar and when it last ran in the
+           footer. Collapsed by default (#383). -->
+      <details class="card card--collapsible action-list projects-card">
+        <summary data-track="coding.fold-projects" class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-folder"></use></svg>
+            <h3 class="collapse-title">Projects</h3>
+            <span id="projectsSummaryMeta" class="collapse-count projects-summary-meta" hidden></span>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">›</span>
+        </summary>
+        <div class="collapse-body">
+        <div class="card-toolbar projects-toolbar">
+          <!-- The shared launch toolbar (launch-toolbar.js): Detached and
+               Resume as vendored switches. It takes the git refresh below
+               as its trailing control. -->
+          <div id="codingLaunchToolbar" class="launch-toolbar-slot"></div>
+          <span id="gitToolbarActions" class="git-toolbar-actions">
+            <button id="gitSyncAllBtn" data-track="git-sync-all" type="button" class="icon-button git-refresh-btn"
+                    title="Sync all: fast-forward every clean project that is only behind its remote"
+                    aria-label="Download updates for all projects"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-download"></use></svg></button>
+            <button id="gitRefreshBtn" data-track="git-refresh" type="button" class="button-surface git-refresh-btn"
+                    title="Fetch each project's remote, then check its branch, changes and ahead/behind"
+                    aria-label="Refresh git status"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-refresh-cw"></use></svg> Refresh</button>
+          </span>
+        </div>
+        <label class="action-row-filter list-filter">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
+          <input id="claudeFilterInput" type="search" autocomplete="off" placeholder="Filter projects" aria-label="Filter projects">
+          <button id="favFilterBtn" data-track="fav-filter" type="button" class="icon-button fav-filter-btn"
+                  aria-pressed="false" aria-label="Filter favorites"
+                  title="Show only favorites"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg></button>
+        </label>
+        <ul id="claudeList" class="card-list action-rows" aria-label="Claude Code projects"></ul>
+        <div id="claudeFilterEmpty" class="empty-state" hidden>
+          <svg class="icon empty-state-icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
+          <p class="empty-state-message">No projects match the filter.</p>
+          <button data-track="coding.clear-filter" type="button" class="empty-state-action">Clear filter</button>
+        </div>
+        <div id="claudeEmpty" class="empty-state" hidden>
+          <svg class="icon empty-state-icon" aria-hidden="true" focusable="false"><use href="#i-folder"></use></svg>
+          <p class="empty-state-message">No projects found — point <strong>Projects folder</strong> in Settings at a folder that has project subdirectories.</p>
+          <button data-track="coding.empty-open-settings" type="button" id="claudeEmptyAction" class="empty-state-action">Open Settings</button>
+        </div>
+        <p id="gitCheckedFooter" class="group-footer git-checked-footer" hidden></p>
+        </div>
+      </details>
+    </section>

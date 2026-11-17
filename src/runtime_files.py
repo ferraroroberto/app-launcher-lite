@@ -1,23 +1,20 @@
 """Writers for runtime files whose path the runtime-write ratchet cannot resolve.
 
-The launcher's state lives where a parameter, a config value or a request says
-(``webapp/``, ``config/``, a project folder the user picked). The ratchet cannot
-follow such a path statically, so every write would need its own exempt marker.
-These writers take the path, refuse it at runtime when it resolves under one of
-the code folders the ratchet guards, and then write. The guarantee a marker only
-claimed is enforced here.
+The launcher's state lives where a parameter, a config value or an environment
+override says (``webapp/``, ``config/``, the machine runtime root, a project
+folder the request names). The ratchet cannot follow such a path statically, so
+every write would need its own exempt marker. These writers take the path,
+refuse it at runtime when it resolves under one of the code folders the ratchet
+guards, and then write. The guarantee a marker only claimed is enforced here.
 
-Gitignored live state inside the checkout (``webapp/``, ``config/``) is not a
-code folder, so the existing runtime paths keep working.
-
-Stdlib-only and import-free of the rest of the repo, so the detached
-session-host can load it too.
+Stdlib-only and import-free of the rest of the repo, so any module can use it.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import shutil
 import sqlite3
 from pathlib import Path
 from typing import IO, Any, Union
@@ -38,7 +35,7 @@ def checked(path: PathLike) -> Path:
         if resolved == folder or folder in resolved.parents:
             raise ValueError(
                 f"Refusing to write under the code folder {folder}: {resolved}. "
-                "Runtime output belongs in webapp/, config/ or a project folder."
+                "Runtime output belongs in webapp/, config/ or the runtime data root."
             )
     return resolved
 
@@ -58,9 +55,9 @@ def open_for_write(path: PathLike, mode: str = "w", **kwargs: Any) -> IO[Any]:
     return target.open(mode, **kwargs)
 
 
-def save_text(path: PathLike, text: str, encoding: str = "utf-8") -> None:
+def save_text(path: PathLike, text: str, encoding: str = "utf-8", **kwargs: Any) -> None:
     """Write ``text`` to ``path`` in one call; refuses a path under a code folder."""
-    with open_for_write(path, "w", encoding=encoding) as handle:
+    with open_for_write(path, "w", encoding=encoding, **kwargs) as handle:
         handle.write(text)
 
 
@@ -68,6 +65,21 @@ def save_bytes(path: PathLike, data: bytes) -> None:
     """Write ``data`` to ``path`` in one call; refuses a path under a code folder."""
     with open_for_write(path, "wb") as handle:
         handle.write(data)
+
+
+def move(src: PathLike, dst: PathLike) -> Path:
+    """Move ``src`` to ``dst``; refuses a destination under a code folder."""
+    target = checked(dst)
+    # runtime-write-exempt: caller-named destination; checked() above raises when it is under a code folder
+    shutil.move(str(src), str(target))
+    return target
+
+
+def replace(src: PathLike, dst: PathLike) -> Path:
+    """Atomically swap ``src`` over ``dst``; refuses a destination under a code folder."""
+    target = checked(dst)
+    os.replace(src, target)
+    return target
 
 
 def file_handler(path: PathLike, mode: str = "a", encoding: str = "utf-8") -> logging.FileHandler:
@@ -82,3 +94,4 @@ def connect_sqlite(path: PathLike, **kwargs: Any) -> sqlite3.Connection:
     target = checked(path)
     # runtime-write-exempt: caller-named database; checked() above raises when it is under a code folder
     return sqlite3.connect(target, **kwargs)
+

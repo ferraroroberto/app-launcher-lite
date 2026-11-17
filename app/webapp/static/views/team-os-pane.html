@@ -1,0 +1,76 @@
+    <section id="paneTeamOS" class="pane" role="tabpanel" aria-labelledby="tabTeamOS" hidden>
+      <!-- Page header: every pane opens with the vendored home-head —
+           the tab's name, one context line, the theme toggle and the gear. -->
+      <div class="card home-head page-head">
+        <span class="home-title">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-library-big"></use></svg>
+          Team OS
+        </span>
+        <span id="teamHeadStatus" class="status"></span>
+        <button data-track="cpu-load" type="button" class="cpu-reading hit-target" data-level="unknown"
+                title="CPU load" aria-label="CPU load unknown. Show details">–</button>
+        <button type="button" class="icon-button home-toggle hit-target theme-toggle-btn" data-track="theme-toggle"
+                title="Toggle theme" aria-label="Toggle dark mode">
+          <svg class="theme-toggle-icon theme-icon-moon hit-target" aria-hidden="true" focusable="false"><use href="#i-moon"></use></svg>
+          <svg class="theme-toggle-icon theme-icon-sun hit-target" aria-hidden="true" focusable="false"><use href="#i-sun"></use></svg>
+        </button>
+        <button type="button" class="icon-button home-toggle hit-target settings-open-btn" data-track="settings-open"
+                title="Settings" aria-label="Settings">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-settings"></use></svg>
+        </button>
+      </div>
+      <!-- Skills leads the tab: it exists to start team-os skills as Copilot
+           sessions. A row's tap launches the skill; its kebab also opens
+           Copilot's session picker and the read-only content browser. -->
+      <details class="card card--collapsible action-list teamos-list-card" open>
+        <summary data-track="team-os.fold-skills" class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-library-big"></use></svg>
+            <h3 class="collapse-title">Skills</h3>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">›</span>
+        </summary>
+        <div class="collapse-body">
+        <!-- The launch model (Default = Copilot picks, then the config's
+             Copilot models; team-os.js fills the menu), then the shared
+             launch toolbar's Detached and Resume switches (launch-toolbar.js),
+             the same ones Code › Projects mounts. -->
+        <div class="card-toolbar teamos-toolbar">
+          <span class="model-combo" id="teamOsModelCombo" data-value="">
+            <button type="button" id="teamOsModelBtn" class="model-combo-trigger"
+                    aria-haspopup="listbox" aria-expanded="false" aria-controls="teamOsModelMenu"
+                    title="Model for the launched team-os skill" data-track="team-os.model">Default</button>
+            <span id="teamOsModelMenu" class="model-combo-menu" role="listbox" aria-label="Skill launch model" hidden>
+              <button type="button" role="option" data-track="team-os.model-option" data-value="" aria-selected="true">Default</button>
+            </span>
+          </span>
+          <div id="teamOsLaunchToolbar" class="launch-toolbar-slot"></div>
+        </div>
+        <label class="action-row-filter list-filter">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
+          <input id="teamOsFilterInput" type="search" autocomplete="off" autocapitalize="none" spellcheck="false"
+                 placeholder="Filter skills" aria-label="Filter skills">
+        </label>
+        <div id="teamOsState" class="empty-state" role="status" hidden></div>
+        <ul id="teamOsList" class="card-list action-rows" aria-label="Team OS skills"></ul>
+        <div id="teamOsFilterEmpty" class="empty-state" hidden>
+          <svg class="icon empty-state-icon" aria-hidden="true" focusable="false"><use href="#i-search"></use></svg>
+          <p class="empty-state-message">No skills match the filter.</p>
+          <button data-track="team-os.clear-filter" type="button" class="empty-state-action">Clear filter</button>
+        </div>
+        <div id="teamOsEmpty" class="empty-state" hidden>
+          <svg class="icon empty-state-icon" aria-hidden="true" focusable="false"><use href="#i-sprout"></use></svg>
+          <p class="empty-state-message">No team-os skills found — point <strong>Team OS folder</strong> in Settings at a team-os checkout (skills live under <code>.claude/skills</code>).</p>
+          <button data-track="team-os.empty-open-settings" type="button" id="teamOsEmptyAction" class="empty-state-action">Open Settings</button>
+        </div>
+        </div>
+      </details>
+
+      <!-- The weekly recap as one glance row: how long since the last run, an
+           exception chip when it is due or a draft is ready, and ▶ to review
+           it with the Skills toolbar's model and Detached switch. Hidden
+           while team-os is unavailable. -->
+      <section id="teamOsRecap" class="card action-list teamos-recap-card" aria-label="Weekly recap" hidden>
+        <ul id="teamOsRecapList" class="card-list action-rows" aria-label="Weekly recap"></ul>
+      </section>
+    </section>

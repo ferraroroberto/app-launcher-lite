@@ -11,6 +11,7 @@ crying wolf across a normal week.
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -167,10 +168,16 @@ class TestStructuralCheck:
 class TestMissedFires:
     def test_elapsed_slot_with_no_run_is_missed(self, runs_root):
         job = _daily_job()
-        missed = cov.missed_fires(job, now=NOW)
-        # 3-day window ending 15 min before NOW → 2026-07-30/31 + 08-01 09:00.
+        # One covered slot, so the job's history is usable evidence at all
+        # (issue #737 — a job with *zero* records is `unknown`, not missed).
+        _seed_run(
+            runs_root, "demo", "20260730",
+            started_at="2026-07-30T09:00:05", status="success",
+        )
+        missed = cov.behavioural_coverage(job, now=NOW)[0]
+        # 3-day window ending 15 min before NOW → 2026-07-30/31 + 08-01 09:00,
+        # of which 07-30 fired.
         assert [m.isoformat(timespec="minutes") for m in missed] == [
-            "2026-07-30T09:00",
             "2026-07-31T09:00",
             "2026-08-01T09:00",
         ]
@@ -182,7 +189,7 @@ class TestMissedFires:
                 runs_root, "demo", f"r{month}{day}",
                 started_at=f"2026-0{month}-{day:02d}T09:12:00", status="success",
             )
-        assert cov.missed_fires(job, now=NOW) == []
+        assert cov.behavioural_coverage(job, now=NOW)[0] == []
 
     def test_skipped_run_counts_as_fired(self, runs_root):
         """A cooldown-skipped run *did* fire; it just declined to do work."""
@@ -192,32 +199,28 @@ class TestMissedFires:
                 runs_root, "demo", f"r{month}{day}",
                 started_at=f"2026-0{month}-{day:02d}T09:00:02", status="skipped",
             )
-        assert cov.missed_fires(job, now=NOW) == []
+        assert cov.behavioural_coverage(job, now=NOW)[0] == []
 
     def test_slot_inside_the_grace_window_is_not_yet_missed(self, runs_root):
         job = _daily_job(schedule=Schedule(type="daily", at="11:55"))
+        # Earlier slots covered, so the grace window — not a missing history
+        # (issue #737) — is what keeps today's 11:55 off the missed list.
+        for day in (30, 31):
+            _seed_run(
+                runs_root, "demo", f"202607{day}",
+                started_at=f"2026-07-{day}T11:55:03", status="success",
+            )
         # 11:55 is 5 min before NOW — inside the 15 min grace.
-        assert all(
-            m.isoformat(timespec="minutes") != "2026-08-01T11:55"
-            for m in cov.missed_fires(job, now=NOW)
-        )
+        assert cov.behavioural_coverage(job, now=NOW)[0] == []
 
     def test_frequent_schedules_are_not_enumerated(self, runs_root):
         job = _daily_job(schedule=Schedule(type="minutes", every=5))
-        assert cov.missed_fires(job, now=NOW) == []
+        assert cov.behavioural_coverage(job, now=NOW)[0] == []
 
     def test_window_clamped_by_added_at(self, runs_root):
         """A job added this morning has no missed slots from last week."""
         job = _daily_job(added_at="2026-08-01T11:00:00")
-        assert cov.missed_fires(job, now=NOW) == []
-
-    def test_window_clamped_by_schedule_change(self, runs_root):
-        """A job resumed (or rescheduled) this morning is not charged for the
-        days it ran under another schedule or none at all."""
-        job = _daily_job(schedule_changed_at="2026-08-01T11:00:00")
-        assert cov.missed_fires(job, now=NOW) == []
-        # Control: without the stamp the same job replays the past window.
-        assert cov.missed_fires(_daily_job(), now=NOW) != []
+        assert cov.behavioural_coverage(job, now=NOW)[0] == []
 
     def test_window_clamped_by_pruned_history(self, runs_root):
         """A full 20-run history proves nothing about older slots.
@@ -231,7 +234,7 @@ class TestMissedFires:
                 runs_root, "demo", f"keep{i:02d}",
                 started_at=f"2026-08-01T09:{i:02d}:00", status="success",
             )
-        assert cov.missed_fires(job, now=NOW) == []
+        assert cov.behavioural_coverage(job, now=NOW)[0] == []
 
     def test_paused_job_is_exempt(self, runs_root):
         job = _daily_job(
@@ -248,11 +251,104 @@ class TestMissedFires:
 
     def test_missed_fire_reported_even_when_task_is_registered(self, runs_root):
         job = _daily_job()
+        for day in (30, 31):
+            _seed_run(
+                runs_root, "demo", f"202607{day}",
+                started_at=f"2026-07-{day}T09:00:05", status="success",
+            )
         result = cov.coverage_for(job, _states("\\AppLauncherLite\\demo"), now=NOW)
         assert result["state"] == cov.STATE_PROBLEM
         assert result["problems"] == [cov.PROBLEM_MISSED_FIRE]
-        assert result["missed_count"] == 3
+        assert result["missed_count"] == 1
         assert result["missed_fires"][-1] == "2026-08-01T09:00"
+
+
+# ----------------------------------------------- unestablished history (#737)
+
+
+class TestUnestablishedHistory:
+    """Absence of evidence is not evidence of failure (issue #737).
+
+    The 2026-08-10 incident: a stray webapp booted out of the git worktree
+    ``app-launcher-wt-727`` resolved ``JOBS_RUNS_DIR`` to *its own* empty
+    ``webapp/jobs/`` (worktrees carry tracked files only) while holding a
+    full, real ``config/jobs.json``. Every scheduled slot in the 3-day window
+    looked missed, seven jobs went ``problem``, and three Telegram alerts
+    reached the phone — all false. The behavioural half could not tell "this
+    job never ran" from "there is no history here to read", exactly the
+    conflation the structural half already refuses for a failed ``schtasks``
+    query.
+    """
+
+    def test_empty_history_store_is_unknown_not_problem(self, runs_root):
+        """The incident, reduced: long-standing job, registered task, no runs."""
+        job = _daily_job()
+        result = cov.coverage_for(job, _states("\\AppLauncherLite\\demo"), now=NOW)
+        assert result["state"] == cov.STATE_UNKNOWN
+        assert result["problems"] == []
+        assert result["missed_count"] == 0
+        assert result["missed_fires"] == []
+
+    def test_behavioural_half_reports_its_own_reason(self, runs_root):
+        missed, unknown = cov.behavioural_coverage(_daily_job(), now=NOW)
+        assert missed == []
+        assert unknown and "history" in unknown
+
+    def test_missed_fires_stays_empty_without_evidence(self, runs_root):
+        """The list API must not carry slots it can't back with evidence."""
+        assert cov.behavioural_coverage(_daily_job(), now=NOW)[0] == []
+
+    def test_absent_store_and_absent_job_dir_read_differently(self, runs_root):
+        """Distinct conditions, distinct details.
+
+        "nothing in this checkout has ever run" (the worktree shape) is a
+        different diagnosis from "the store is live, this job isn't in it".
+        """
+        job = _daily_job()
+        states = _states("\\AppLauncherLite\\demo")
+        empty_store = cov.coverage_for(job, states, now=NOW)["detail"]
+        _seed_run(
+            runs_root, "other", "20260801",
+            started_at="2026-08-01T09:00:01", status="success",
+        )
+        live_store = cov.coverage_for(job, states, now=NOW)["detail"]
+        assert empty_store != live_store
+        assert str(runs_root) in empty_store
+
+    def test_partial_history_still_flags_a_real_missed_fire(self, runs_root):
+        """The point of #697 survives: some history + a skipped slot = problem."""
+        job = _daily_job()
+        for day in (30, 31):
+            _seed_run(
+                runs_root, "demo", f"202607{day}",
+                started_at=f"2026-07-{day}T09:00:05", status="success",
+            )
+        result = cov.coverage_for(job, _states("\\AppLauncherLite\\demo"), now=NOW)
+        assert result["state"] == cov.STATE_PROBLEM
+        assert result["problems"] == [cov.PROBLEM_MISSED_FIRE]
+        assert result["missed_fires"] == ["2026-08-01T09:00"]
+
+    def test_structural_problem_still_wins_over_unknown_history(self, runs_root):
+        """A missing Task Scheduler entry has its own evidence — still a problem.
+
+        Both original #697 incidents were this shape, and they must keep
+        firing whether or not any run history exists.
+        """
+        result = cov.coverage_for(_daily_job(), {}, now=NOW)
+        assert result["state"] == cov.STATE_PROBLEM
+        assert result["problems"] == [cov.PROBLEM_TASK_MISSING]
+
+    def test_brand_new_job_with_no_history_is_ok_not_unknown(self, runs_root):
+        """Nothing was expected yet, so there is nothing left unestablished."""
+        job = _daily_job(added_at="2026-08-01T11:00:00")
+        result = cov.coverage_for(job, _states("\\AppLauncherLite\\demo"), now=NOW)
+        assert result["state"] == cov.STATE_OK
+
+    def test_frequent_schedule_with_no_history_is_ok_not_unknown(self, runs_root):
+        """`minutes`/`hourly` skip the behavioural half entirely — no state."""
+        job = _daily_job(schedule=Schedule(type="minutes", every=5))
+        result = cov.coverage_for(job, _states("\\AppLauncherLite\\demo"), now=NOW)
+        assert result["state"] == cov.STATE_OK
 
 
 # ------------------------------------------------------------------ scan
@@ -284,7 +380,8 @@ class TestScanCoverage:
             _daily_job(id="c", name="C"),
         ]
         results = cov.scan_coverage(jobs, now=NOW)
-        assert len(calls) == 1
+        # One LIST query and one XML query for the whole scan, however many jobs.
+        assert [c[-1] for c in calls] == ["/V", "/XML"]
         assert set(results) == {"a", "b", "c"}
         assert cov.PROBLEM_TASK_MISSING in results["c"]["problems"]
         assert cov.PROBLEM_TASK_MISSING not in results["a"]["problems"]
@@ -313,36 +410,30 @@ class TestSchtasksStateParsing:
         assert jobs_schtasks_mod.registered_task_states() is None
         jobs_schtasks_mod.invalidate_next_run_cache()
 
-    def test_next_run_view_matches_cached_bulk_snapshot(self, monkeypatch):
-        jobs_schtasks_mod.invalidate_next_run_cache()
-        monkeypatch.setattr(
-            jobs_schtasks_mod,
-            "_run_schtasks",
-            lambda argv: SimpleNamespace(
-                returncode=0,
-                stdout=(
-                    "TaskName: \\AppLauncherLite\\a\n"
-                    "Next Run Time: 2026-08-02 09:00:00\n\n"
-                ),
-                stderr="",
-            ),
+    def test_next_run_projection_matches_expected_shape(self):
+        records = jobs_schtasks_mod._parse_bulk_records(
+            "TaskName: \\AppLauncherLite\\a\nNext Run Time: 2026-08-02 09:00:00\n\n"
         )
-        assert jobs_schtasks_mod._cached_bulk_next_runs() == {
-            "\\AppLauncherLite\\a": "2026-08-02 09:00:00"
-        }
-        jobs_schtasks_mod.invalidate_next_run_cache()
+        out = jobs_schtasks_mod._project(records, "next_run")
+        assert out == {"\\AppLauncherLite\\a": "2026-08-02 09:00:00"}
 
 
 # -------------------------------------------------------------- alerting
 
 
 class TestCheckAndAlert:
+    @pytest.fixture(autouse=True)
+    def _no_real_task_scheduler(self, monkeypatch):
+        """A coverage scan reads the principals too; never shell out to the real Task Scheduler."""
+        monkeypatch.setattr(cov, "registered_task_principals", lambda *a, **k: {})
+
     def _cfg(self, **kw):
         defaults = dict(
             pushover_api_token="",
             pushover_user_key="",
             notify_on_failure=False,
             notify_failure_streak=0,
+            notify_failure_summary=False,
             telegram_bot_token="tok",
             telegram_chat_id="chat",
         )
@@ -371,6 +462,23 @@ class TestCheckAndAlert:
         assert second == []
         assert telegram.notify.call_count == 1
 
+    def test_no_alert_for_a_job_with_no_run_history(self, runs_root, monkeypatch):
+        """End-to-end pin on the 2026-08-10 false alerts (issue #737).
+
+        Registered, enabled task + a long-standing schedule + an empty run
+        history is ``unknown``, and ``unknown`` never reaches the phone.
+        """
+        monkeypatch.setattr(
+            cov, "registered_task_states", lambda *a, **k: {"\\AppLauncherLite\\demo": True}
+        )
+        job = _daily_job(alert_on_failure=True)
+        telegram = MagicMock()
+        assert cov.check_and_alert(
+            self._cfg(notify_on_failure=True),
+            jobs=[job], now=NOW, telegram_notifier=telegram,
+        ) == []
+        telegram.notify.assert_not_called()
+
     def test_no_alert_when_job_flag_off(self, runs_root, monkeypatch):
         monkeypatch.setattr(
             cov, "registered_task_states", lambda *a, **k: {}
@@ -394,14 +502,14 @@ class TestCheckAndAlert:
         monkeypatch.setattr(
             cov, "registered_task_states", lambda *a, **k: registered["value"]
         )
-        real_missed_fires = cov.missed_fires
+        real_behavioural = cov.behavioural_coverage
         monkeypatch.setattr(
             cov,
-            "missed_fires",
+            "behavioural_coverage",
             lambda j, **k: (
-                missed["value"]
+                (missed["value"], None)
                 if missed["value"] is not None
-                else real_missed_fires(j, **k)
+                else real_behavioural(j, **k)
             ),
         )
 
@@ -457,6 +565,195 @@ class TestCheckAndAlert:
             notifier=push,
         )
         push.notify.assert_called_once()
+
+
+class TestAlertTitles:
+    """Each problem class is announced in its own words (issue #778).
+
+    All four classes used to share one hardcoded title — "scheduled run never
+    fired" — which is only true of ``missed_fire``. A ``session_less`` backup
+    that had fired on time for six straight days was announced daily as never
+    having fired, teaching the reader to dismiss the channel; the next *real*
+    missed fire would then land unread. These pin the vocabulary, the
+    severity, and the re-ping cadence per class.
+    """
+
+    def _cfg(self, **kw):
+        defaults = dict(
+            pushover_api_token="",
+            pushover_user_key="",
+            notify_on_failure=False,
+            notify_failure_streak=0,
+            notify_failure_summary=False,
+            telegram_bot_token="tok",
+            telegram_chat_id="chat",
+        )
+        defaults.update(kw)
+        return SimpleNamespace(**defaults)
+
+    def _alert(self, monkeypatch, job, *, states, principals=None):
+        """Drive one alert cycle and return the ``notify`` call args."""
+        monkeypatch.setattr(cov, "registered_task_states", lambda *a, **k: states)
+        monkeypatch.setattr(
+            cov, "registered_task_principals", lambda *a, **k: principals or {}
+        )
+        telegram = MagicMock()
+        cov.check_and_alert(
+            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+        )
+        telegram.notify.assert_called_once()
+        return telegram.notify.call_args
+
+    def _age_last_alert(self, job_id, seconds):
+        """Backdate a job's de-dup stamp by *seconds*, as if time had passed."""
+        path = cov.coverage_alerts_path()
+        state = json.loads(path.read_text(encoding="utf-8"))
+        state[job_id]["last_alert_epoch"] = time.time() - seconds
+        path.write_text(json.dumps(state), encoding="utf-8")
+
+    def _seed_healthy_history(self, runs_root):
+        """Three on-time daily runs covering every slot in the 3-day window."""
+        for stamp in ("20260730", "20260731", "20260801"):
+            _seed_run(
+                runs_root,
+                "demo",
+                stamp,
+                started_at=f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:]}T09:00:03",
+                status="success",
+            )
+
+    def test_missing_entry_title_names_the_missing_entry(
+        self, runs_root, monkeypatch
+    ):
+        job = _daily_job(alert_on_failure=True)
+        title = self._alert(monkeypatch, job, states={}).args[0]
+        assert "Task Scheduler entry missing" in title
+        assert "never fired" not in title
+
+    def test_disabled_entry_title_names_the_disabled_entry(
+        self, runs_root, monkeypatch
+    ):
+        job = _daily_job(alert_on_failure=True)
+        self._seed_healthy_history(runs_root)
+        title = self._alert(
+            monkeypatch,
+            job,
+            states=_states("\\AppLauncherLite\\demo", enabled=False),
+        ).args[0]
+        assert "Task Scheduler entry disabled" in title
+        assert "never fired" not in title
+
+    def test_interactive_principal_never_claims_a_missed_run(
+        self, runs_root, monkeypatch
+    ):
+        """The #778 repro: a job firing on time, announced as never firing.
+
+        Entry present, enabled, every slot in the window covered by a real
+        successful run — the *only* problem is that the entry is still
+        ``Interactive only``, a warning about a future logged-out box. The
+        title must not borrow the observed-failure vocabulary.
+        """
+        job = _daily_job(alert_on_failure=True, session_less=True)
+        self._seed_healthy_history(runs_root)
+        call = self._alert(
+            monkeypatch,
+            job,
+            states=_states("\\AppLauncherLite\\demo"),
+            principals={"\\AppLauncherLite\\demo": False},
+        )
+        title, body = call.args[:2]
+        assert "never fired" not in title
+        assert "logged out" in title
+        # The body was always right; the regression was the title alone.
+        assert "Interactive only" in body
+        # A conditional risk does not bypass quiet hours.
+        assert call.kwargs["severity"] == "warning"
+
+    def test_missed_fire_still_reads_as_a_missed_run(self, runs_root, monkeypatch):
+        """The one class the old title *was* true for keeps its wording."""
+        job = _daily_job(alert_on_failure=True)
+        for stamp in ("20260730", "20260731"):
+            _seed_run(
+                runs_root,
+                "demo",
+                stamp,
+                started_at=f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:]}T09:00:03",
+                status="success",
+            )
+        call = self._alert(
+            monkeypatch, job, states=_states("\\AppLauncherLite\\demo")
+        )
+        assert "never fired" in call.args[0]
+        assert call.kwargs["severity"] == "error"
+
+    def test_no_two_classes_share_a_title(self):
+        """The whole point: no class may borrow another's vocabulary."""
+        titles = [a.title for _, a in cov.PROBLEM_ANNOUNCEMENTS]
+        assert len(set(titles)) == len(titles)
+        assert {p for p, _ in cov.PROBLEM_ANNOUNCEMENTS} == {
+            cov.PROBLEM_TASK_MISSING,
+            cov.PROBLEM_TASK_DISABLED,
+            cov.PROBLEM_PRINCIPAL_INTERACTIVE,
+            cov.PROBLEM_OFFSET_PINNED_TRIGGER,
+            cov.PROBLEM_MISSED_FIRE,
+        }
+
+    def test_hard_failure_outranks_a_conditional_risk(self):
+        """Title and severity from the worst class; cadence from the shortest."""
+        both = cov.announcement_for(
+            [cov.PROBLEM_PRINCIPAL_INTERACTIVE, cov.PROBLEM_MISSED_FIRE]
+        )
+        assert "never fired" in both.title
+        assert both.severity == "error"
+        assert both.repeat_seconds == cov.COVERAGE_ALERT_REPEAT_SECONDS
+
+    def test_conditional_risk_repeats_weekly_not_daily(self):
+        alone = cov.announcement_for([cov.PROBLEM_PRINCIPAL_INTERACTIVE])
+        assert alone.severity == "warning"
+        assert alone.repeat_seconds == cov.COVERAGE_ALERT_REPEAT_SECONDS_LOW
+        assert alone.repeat_seconds > cov.COVERAGE_ALERT_REPEAT_SECONDS
+
+    def test_unknown_class_gets_a_vague_title_not_a_wrong_one(self):
+        """A problem always gets announced; a vague title beats a false one."""
+        fallback = cov.announcement_for(["something_new"])
+        assert fallback is cov.FALLBACK_ANNOUNCEMENT
+        assert "never fired" not in fallback.title
+        assert cov.announcement_for([]) is cov.FALLBACK_ANNOUNCEMENT
+
+    def test_conditional_risk_keeps_reporting_after_the_low_interval(
+        self, runs_root, monkeypatch
+    ):
+        """Quieter, never silent — the condition is true and still matters."""
+        job = _daily_job(alert_on_failure=True, session_less=True)
+        self._seed_healthy_history(runs_root)
+        monkeypatch.setattr(
+            cov, "registered_task_states", lambda *a, **k: _states("\\AppLauncherLite\\demo")
+        )
+        monkeypatch.setattr(
+            cov,
+            "registered_task_principals",
+            lambda *a, **k: {"\\AppLauncherLite\\demo": False},
+        )
+        telegram = MagicMock()
+        cov.check_and_alert(
+            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+        )
+        assert telegram.notify.call_count == 1
+        # Age the de-dup stamp rather than the clock — patching `time.time`
+        # here would land on the stdlib module itself, not a private alias.
+        self._age_last_alert("demo", 2 * 24 * 3600)
+        cov.check_and_alert(
+            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+        )
+        # Two days on: still standing, still suppressed by the weekly cadence
+        # (the old 24 h interval would have re-pinged here).
+        assert telegram.notify.call_count == 1
+        # Past a week it speaks up again — quieter, never silent.
+        self._age_last_alert("demo", 8 * 24 * 3600)
+        cov.check_and_alert(
+            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+        )
+        assert telegram.notify.call_count == 2
 
 
 class TestFacadeReExport:

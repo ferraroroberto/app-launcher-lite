@@ -21,14 +21,16 @@ see that package's docstring for the dispatch shape each kind produces.
 need arguments containing spaces should put the argument inside the
 script/wrapper itself rather than relying on shell quoting.
 
-Everything that supervises a *live* child lives in
-:mod:`src.run_supervision`: the ``visible``-job console tee,
-the resource sampler, and the last-resort
-:class:`~src.run_supervision.RunWatchdog` that kills a
-wedged tree and lets this module finalise the record ``failed`` no matter
-*why* it wedged. What stays here is the executor proper —
-invocation-building, admission control (cooldown, mutex), finalisation,
-chain dispatch, and the CLI entry point.
+Every spawned run is guarded by
+:class:`~app.cli.commands.run_job_supervision.RunWatchdog`, the
+last-resort backstop that kills a wedged tree and finalises the record
+``failed`` no matter *why* it wedged — because every safety net further
+downstream shares fate with the thing it is guarding.
+
+This module owns job-lifecycle *orchestration* (cooldown, the mutex queue,
+chain dispatch, finalisation) plus the CLI wiring. The OS-level process
+supervision a run depends on — the output tee, the resource sampler and that
+watchdog — lives next door in :mod:`app.cli.commands.run_job_supervision`.
 """
 
 from __future__ import annotations
@@ -46,52 +48,46 @@ from typing import Any, Dict, List, Optional, Tuple
 from src import jobs_kinds, runtime_files
 from src.jobs import (
     MAX_RUNS_PER_JOB,
-    base_run_meta,
-    consecutive_failed_runs,
+    admit_and_spawn,
     cooldown_check,
     delete_schtasks,
     dispatch_chain_run,
     drain_mutex_queue,
     invalidate_stats_cache,
-    mark_run_failed,
-    mutex_collision,
     new_run_dir,
     new_run_id,
     prune_runs,
-    queue_run,
-    read_output_tail,
-    read_run,
     runs_dir,
+    seed_run_meta,
     write_run_json,
 )
-from src.jobs.argv import compose_argv, decode_params_token
+from src.jobs.argv import compose_argv
 from src.jobs.config import Job, get_by_id, load_jobs
-from src.jobs.run_state import (
-    STATUS_FAILED,
-    STATUS_RUNNING,
-    STATUS_SKIPPED,
-    STATUS_SUCCESS,
-)
+from src.jobs.run_status import RunStatus, finished_status
 from src.jobs.secrets import resolve_env_overlay
 from src.jobs.trigger import TRIGGER_SYNTAX, is_valid_trigger
-from src.notifications import (
-    NoopNotifier,
-    Notifier,
-    build_notifier_from_config,
-    build_telegram_notifier_from_config,
-)
-from src.run_supervision import (
+from src.notifications import notify_failure
+from src.subprocess_flags import NO_WINDOW
+from src.webapp_config import load_webapp_config
+
+from .base import BaseCommand
+from .run_job_supervision import (
     ResourceSampler,
     RunWatchdog,
     resolve_watchdog_limits,
     tee_pipe_to_file_and_console,
 )
-from src.subprocess_flags import NO_WINDOW
-from src.webapp_config import WebappConfig, load_webapp_config
-
-from .base import BaseCommand
 
 logger = logging.getLogger(__name__)
+
+# What a launcher-hosted session's process is stamped with
+# (src.session_hosting.child_env.agent_child_env). Only that spawn path may
+# set them; a Job child never carries them.
+_SESSION_IDENTITY_VARS = ("APP_LAUNCHER_SESSION_ID", "APP_LAUNCHER_AGENT")
+# The run a Job child belongs to, so it can address that run's outbox
+# (POST /api/jobs/{job_id}/runs/{run_id}/outbox).
+JOB_ID_ENV = "APP_LAUNCHER_JOB_ID"
+JOB_RUN_ID_ENV = "APP_LAUNCHER_JOB_RUN_ID"
 
 
 def build_invocation(
@@ -130,69 +126,6 @@ def build_invocation(
     return kind_impl.build_argv(job, tail, param_env, run_dir)
 
 
-def _maybe_notify_failure(
-    cfg: WebappConfig,
-    job: Job,
-    run_dir: Path,
-    *,
-    status: str,
-    exit_code: int,
-    notifier: Optional[Notifier] = None,
-    telegram_notifier: Optional[Notifier] = None,
-) -> None:
-    """Push failure notifications for a ``failed`` finalisation.
-
-    Two independent channels, both no-op on success:
-
-    * Pushover (global) — gated by ``cfg.notify_on_failure``,
-      fires for every job.
-    * Telegram (per-job) — gated by ``job.alert_on_failure``,
-      fires only for jobs that opted in.
-
-    Either resolving to :class:`NoopNotifier` (no creds) is a silent
-    no-op for that channel. Any error inside this path is logged and
-    swallowed — finalisation must keep going.
-    """
-    try:
-        if status != STATUS_FAILED:
-            return
-
-        if cfg.notify_on_failure:
-            notifier = notifier or build_notifier_from_config(cfg)
-            if not isinstance(notifier, NoopNotifier):
-                tail = read_output_tail(run_dir, max_bytes=8 * 1024)
-                body_parts: List[str] = []
-                body_parts.append(tail[-500:] if tail else "(no output captured)")
-                body_parts.append(
-                    f"— job={job.id} run={run_dir.name} exit={exit_code}"
-                )
-                title = f"❌ {job.name}"
-                notifier.notify(title, "\n\n".join(body_parts), severity="error")
-
-                streak = cfg.notify_failure_streak
-                if streak and streak > 1:
-                    count = consecutive_failed_runs(job.id)
-                    if count == streak:
-                        notifier.notify(
-                            f"🔁 {job.name} — {count} consecutive failures",
-                            f"Failure streak reached {count} runs.\n"
-                            f"Most recent: {run_dir.name} (exit {exit_code}).",
-                            severity="error",
-                        )
-
-        if job.alert_on_failure:
-            telegram_notifier = telegram_notifier or build_telegram_notifier_from_config(cfg)
-            if not isinstance(telegram_notifier, NoopNotifier):
-                when = datetime.now().strftime("%Y-%m-%d %H:%M")
-                telegram_notifier.notify(
-                    f"❌ {job.name} failed",
-                    f"{when} — run={run_dir.name} exit={exit_code}",
-                    severity="error",
-                )
-    except Exception as exc:  # noqa: BLE001 — never block finalisation
-        logger.warning(f"⚠️  notification path raised: {exc}")
-
-
 def _parse_run_params(
     job: Job, params_raw: Optional[str]
 ) -> Tuple[Dict[str, Any], Optional[int]]:
@@ -223,15 +156,31 @@ def _finalize_cooldown_skip(job: Job, args: argparse.Namespace) -> Optional[int]
     Manual fires are already 429'd at the route — by the time we get here
     on the manual path either there was no overlap or the caller
     deliberately bypassed the gate, so those are let through (``None``).
-    A fire carrying ``--run-id`` was admitted already (a drained mutex-queue
-    entry, which replays ``trigger="scheduled"``): its pre-created run record
-    is the newest non-skipped run, so re-checking would anchor the cooldown on
-    the fire itself and skip it. Only Task Scheduler arrives without a run id.
     Returns ``0`` when the run was skipped and finalised; ``None`` when
     there's no cooldown to apply and the caller should proceed with a
     real invocation.
+
+    Unlike :func:`_finalize_mutex_queue`, this used to have no "already
+    drained" scoping — a fire that was itself mutex-queued and later
+    released by :func:`_drain_mutex_queue_for` re-enters here with
+    ``trigger="scheduled"`` and ``--run-id`` set, and can still land
+    inside its own cooldown window (e.g. a manual fire of the same job
+    landed while it sat queued). Finalising that as skipped without
+    draining again stranded any sibling still queued behind it until some
+    unrelated job in the group happened to finish.
+
+    Fixed by draining the job's own ``mutex_group`` here too — but only
+    for that replay case (``args.run_id`` set), mirroring
+    :func:`_finalize_mutex_queue`'s own "already admitted" scoping. A
+    *fresh* scheduled fire (no ``run_id``) was never popped from the
+    queue, so its group may currently be held by a live, still-running
+    sibling; draining unconditionally here would spawn the queue's head
+    concurrently with that holder instead of after it, defeating the
+    mutex entirely. Only a replay is guaranteed to mean the group's
+    previous holder already finished (that's the drain precondition that
+    let this fire be popped and spawned in the first place).
     """
-    if args.trigger != "scheduled" or args.run_id:
+    if args.trigger != "scheduled":
         return None
     cooldown_state = cooldown_check(job)
     if cooldown_state is None:
@@ -243,13 +192,18 @@ def _finalize_cooldown_skip(job: Job, args: argparse.Namespace) -> Optional[int]
     stamped = datetime.now().isoformat(timespec="seconds")
     write_run_json(
         skip_dir,
-        **base_run_meta(job, args.trigger, stamped, skip_dir.name),
-        finished_at=stamped,
-        status=STATUS_SKIPPED,
-        note="cooldown",
-        cooldown_seconds=cooldown_seconds,
-        cooldown_remaining_seconds=remaining,
-        cooldown_anchor_run_id=anchor_id or None,
+        **seed_run_meta(
+            job,
+            args.trigger,
+            stamped,
+            run_id=skip_dir.name,
+            finished_at=stamped,
+            status=RunStatus.SKIPPED,
+            note="cooldown",
+            cooldown_seconds=cooldown_seconds,
+            cooldown_remaining_seconds=remaining,
+            cooldown_anchor_run_id=anchor_id or None,
+        ),
     )
     prune_runs(job.id, keep=MAX_RUNS_PER_JOB)
     invalidate_stats_cache(job.id)
@@ -257,6 +211,10 @@ def _finalize_cooldown_skip(job: Job, args: argparse.Namespace) -> Optional[int]
         f"⏭ run-job {job.id} skipped (cooldown: {remaining}s "
         f"remaining of {cooldown_seconds}s; anchor={anchor_id!r})"
     )
+    # Only a replay of an already-popped queue entry (run_id set) is safe
+    # to drain here — see the scoping note in the docstring above.
+    if job.mutex_group and args.run_id:
+        _drain_mutex_queue_for(job)
     return 0
 
 
@@ -269,12 +227,14 @@ def _finalize_mutex_queue(
     """Queue a **scheduled** fire that collides with a live sibling in the
     same ``mutex_group`` instead of running it concurrently.
 
-    The webapp admission path (``app/webapp/routers/jobs_run.py::_admit_and_spawn``)
-    enforces ``mutex_group`` for UI fires, but a schtasks-fired run never
-    passes it — and that is where cross-job serialisation matters most (the
-    weekly fleet chain). This is the executor-side half of that gate; the
-    drain half lives here
-    (:func:`_drain_mutex_queue_for`).
+    The webapp admission path enforces ``mutex_group`` too, but a
+    schtasks-fired run never passes through it — and that is exactly
+    where cross-job serialisation matters most (the weekly fleet chain).
+    This is the executor-side half of that gate; the drain half already
+    lived here (:func:`_drain_mutex_queue_for`). The queueing itself is
+    :func:`~src.jobs.queue.admit_and_spawn` in its ``spawn_when_free=False``
+    mode, shared with the route and the chain dispatcher —
+    only the scoping below is executor-specific.
 
     Returns ``0`` when the fire was queued and finalised, ``None`` when
     there's nothing to queue and the caller should run normally.
@@ -298,24 +258,20 @@ def _finalize_mutex_queue(
         return None
     if getattr(args, "run_id", None):
         return None
-    holder = mutex_collision(jobs, job)
-    if holder is None:
-        return None
-    run_dir = new_run_dir(job.id, new_run_id())
-    meta = base_run_meta(
+    # Queue half only: this process is already the executor that would run
+    # the job inline, so spawn_when_free=False means "no collision → touch
+    # nothing, tell the caller to proceed". Shares the queued-record shape
+    # with the route and the chain dispatcher.
+    meta = admit_and_spawn(
+        jobs,
         job,
         args.trigger,
-        datetime.now().isoformat(timespec="seconds"),
-        run_dir.name,
+        params=values,
+        extra_meta={"trigger_source": "schtasks"},
+        spawn_when_free=False,
     )
-    meta["trigger_source"] = "schtasks"
-    if values:
-        meta["params"] = values
-    queue_run(run_dir, meta, job, holder, args.trigger, values)
-    logger.info(
-        f"🪢 run-job {job.id}/{run_dir.name} queued behind {holder.id} "
-        f"(mutex_group={job.mutex_group!r}, trigger=scheduled)"
-    )
+    if meta is None:
+        return None
     return 0
 
 
@@ -334,11 +290,18 @@ def _record_failed_run(
     thing that differs between callers.
     """
     stamped = datetime.now().isoformat(timespec="seconds")
-    mark_run_failed(
+    write_run_json(
         run_dir,
-        finished_at=stamped,
-        note=note,
-        **base_run_meta(job, args.trigger, stamped, run_dir.name),
+        **seed_run_meta(
+            job,
+            args.trigger,
+            stamped,
+            run_id=run_dir.name,
+            finished_at=stamped,
+            status=RunStatus.FAILED,
+            exit_code=-1,
+            note=note,
+        ),
     )
     prune_runs(job.id, keep=MAX_RUNS_PER_JOB)
     invalidate_stats_cache(job.id)
@@ -390,6 +353,19 @@ def _resolve_job_env_or_record_failure(
         return None
 
 
+def _own_create_time() -> Optional[float]:
+    """This process's OS ``create_time()``, the liveness hint ``is_pid_alive``
+    compares against. It must be the OS value, not ``time.time()`` at the
+    write: a process up longer than the check's tolerance would otherwise look
+    like a different process that reused the pid."""
+    import psutil  # local — keeps psutil out of cold start
+
+    try:
+        return psutil.Process(os.getpid()).create_time()
+    except (psutil.Error, OSError):
+        return None
+
+
 def _spawn_and_wait(
     job: Job,
     argv: List[str],
@@ -437,7 +413,17 @@ def _spawn_and_wait(
             # (src.jobs.reap) tell "still this process" apart from "a
             # since-recycled pid" — Windows reuses pids, so a bare
             # pid_exists() isn't enough.
-            write_run_json(run_dir, pid=proc.pid, pid_create_time=time.time())
+            # The child's pid dies the moment it exits, before this executor
+            # has written the exit code; recording our own (same write, so a
+            # reaper that sees the child's pid sees this too) lets it tell
+            # "still finalising" from "executor died".
+            write_run_json(
+                run_dir,
+                pid=proc.pid,
+                pid_create_time=time.time(),
+                executor_pid=os.getpid(),
+                executor_create_time=_own_create_time(),
+            )
             try:
                 sampler = ResourceSampler(proc.pid)
                 sampler.start()
@@ -458,11 +444,11 @@ def _spawn_and_wait(
             if job.visible and proc.stdout is not None:
                 tee_pipe_to_file_and_console(proc.stdout, fh)
             exit_code = proc.wait()
-        status = STATUS_SUCCESS if exit_code == 0 else STATUS_FAILED
+        status = finished_status(exit_code)
     except OSError as exc:
         logger.error(f"❌ run-job {job.id} spawn failed: {exc}")
         exit_code = -1
-        status = STATUS_FAILED
+        status = RunStatus.FAILED
         try:
             with runtime_files.open_for_write(output_log, "ab") as fh:
                 fh.write(f"[run-job spawn error] {exc}\n".encode("utf-8"))
@@ -476,7 +462,7 @@ def _spawn_and_wait(
     if watchdog is not None and watchdog.fired:
         # A watchdog kill is a failure whatever exit code the torn-down
         # tree happened to report on its way out.
-        status = STATUS_FAILED
+        status = RunStatus.FAILED
     return exit_code, status, sampler, watchdog
 
 
@@ -502,7 +488,9 @@ def _finalize_run(
     so it is never confused with a plain ``failed`` (the job's own bad
     exit code) or with ``killed: true`` (an operator tapped Kill). A run
     the watchdog never touched gains none of those keys, so the common
-    case's record shape is unchanged.
+    case's record shape is unchanged. The same ``note`` is forwarded to
+    :func:`~src.notifications.notify_failure` so the alert
+    names the watchdog instead of a bare, otherwise-unproducible exit code.
     """
     finished_at = datetime.now().isoformat(timespec="seconds")
     duration_seconds = round(time.monotonic() - spawn_started, 3)
@@ -531,7 +519,11 @@ def _finalize_run(
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"⚠️  notify: could not load webapp config: {exc}")
     else:
-        _maybe_notify_failure(cfg, job, run_dir, status=status, exit_code=exit_code)
+        watchdog_note = watchdog.note if watchdog is not None and watchdog.fired else None
+        notify_failure(
+            cfg, job, run_dir,
+            status=status, exit_code=exit_code, watchdog_note=watchdog_note,
+        )
 
 
 def _dispatch_chain(job: Job, status: str) -> None:
@@ -544,9 +536,9 @@ def _dispatch_chain(job: Job, status: str) -> None:
     restart.
     """
     downstream_ids: List[str] = []
-    if status == STATUS_SUCCESS:
+    if status == RunStatus.SUCCESS:
         downstream_ids = list(job.on_success or [])
-    elif status == STATUS_FAILED:
+    elif status == RunStatus.FAILED:
         downstream_ids = list(job.on_failure or [])
     if not downstream_ids:
         return
@@ -589,16 +581,22 @@ def _cleanup_once_schedule(job: Job, args: argparse.Namespace) -> None:
     try:
         delete_schtasks(job.id)
         # Mutate the registry so the row stops showing "once …"
-        # and surfaces as a plain manual job.
+        # and surfaces as a plain manual job. Under the shared
+        # jobs_file_lock so this unlocked-until-now
+        # load-mutate-save can't race the webapp's own PUT/POST
+        # /api/jobs/* mutators (which take the same lock) and silently
+        # clobber one writer's change with a stale os.replace.
         from src.jobs.config import (  # local import to avoid cycles
             Schedule,
+            jobs_file_lock,
             save_jobs,
         )
-        fresh_cfg = load_jobs()
-        fresh_job = next((j for j in fresh_cfg.jobs if j.id == job.id), None)
-        if fresh_job is not None and fresh_job.schedule.type == "once":
-            fresh_job.schedule = Schedule(type="none")
-            save_jobs(fresh_cfg)
+        with jobs_file_lock():
+            fresh_cfg = load_jobs()
+            fresh_job = next((j for j in fresh_cfg.jobs if j.id == job.id), None)
+            if fresh_job is not None and fresh_job.schedule.type == "once":
+                fresh_job.schedule = Schedule(type="none")
+                save_jobs(fresh_cfg)
     except Exception as exc:  # noqa: BLE001 — never block finalise
         logger.warning(f"⚠️  once cleanup for {job.id} raised: {exc}")
 
@@ -615,43 +613,6 @@ def _drain_mutex_queue_for(job: Job) -> None:
         drain_mutex_queue(job.mutex_group)
     except Exception as exc:  # noqa: BLE001 — never block finalisation
         logger.warning(f"⚠️  mutex drain {job.mutex_group!r} raised: {exc}")
-
-
-def _finish_run(
-    job: Job,
-    args: argparse.Namespace,
-    run_dir: Path,
-    exit_code: int,
-    status: str,
-    spawn_started: float,
-    sampler: Optional[ResourceSampler],
-    watchdog: Optional[RunWatchdog],
-) -> bool:
-    """Finalise a finished run and run its follow-ups; ``False`` if it was killed.
-
-    The kill route stamps ``killed`` on the record before it kills the child
-    and owns the mutex drain, so finalising again would fire the failure
-    notification and chain and pop a second mutex-queue entry.
-    """
-    if read_run(run_dir).get("killed"):
-        logger.info(
-            f"🛑 run-job {job.id} run {run_dir.name} was killed; "
-            "skipping finalisation"
-        )
-        return False
-    _finalize_run(
-        job,
-        run_dir,
-        exit_code=exit_code,
-        status=status,
-        spawn_started=spawn_started,
-        sampler=sampler,
-        watchdog=watchdog,
-    )
-    _dispatch_chain(job, status)
-    _cleanup_once_schedule(job, args)
-    _drain_mutex_queue_for(job)
-    return True
 
 
 def _trigger_arg(value: str) -> str:
@@ -671,75 +632,6 @@ def _trigger_arg(value: str) -> str:
             f"invalid trigger {value!r}: expected {TRIGGER_SYNTAX}"
         )
     return value
-
-
-def _resolve_run_params(
-    job: Job, args: argparse.Namespace
-) -> Tuple[Dict[str, Any], Optional[int]]:
-    """Decode and validate the run's typed parameters from the CLI args."""
-    # Older test scaffolding builds the args namespace by hand and may
-    # not set --params; getattr keeps that path working without forcing
-    # every caller to fake the new field.
-    params_raw = getattr(args, "params", None)
-    params_token = getattr(args, "params_b64", None)
-    if params_token:
-        try:
-            params_raw = decode_params_token(params_token)
-        except ValueError as exc:
-            logger.error(f"❌ run-job {job.id}: --params-b64 is invalid ({exc})")
-            return {}, 2
-    return _parse_run_params(job, params_raw)
-
-
-def _write_running_record(
-    job: Job,
-    args: argparse.Namespace,
-    run_dir: Path,
-    values: Dict[str, Any],
-    dry_run: bool,
-) -> None:
-    """Flip the run to "running" in run.json before the child spawns."""
-    started_at = datetime.now().isoformat(timespec="seconds")
-    run_meta: Dict[str, Any] = base_run_meta(
-        job, args.trigger, started_at, run_dir.name
-    )
-    run_meta["status"] = STATUS_RUNNING
-    # Persist the typed-parameter payload so the history
-    # row can replay it and the meta line can show the values back.
-    if values:
-        run_meta["params"] = values
-    # Provenance: a Task Scheduler fire reaches this
-    # executor directly, so it stamps its own source here; API fires
-    # carry trigger_source="api" (+ip/ua/token id) pre-written by the
-    # route into the run dir this executor merges into.
-    if args.trigger == "scheduled":
-        run_meta["trigger_source"] = "schtasks"
-    # Dry-run 'execute' mode: the child still spawns, but
-    # JOB_DRY_RUN=1 lets an opted-in script no-op its side effects.
-    # The flag is stamped so history shows the 🧪 chip.
-    if dry_run:
-        run_meta["dry_run"] = True
-    write_run_json(run_dir, **run_meta)
-    logger.info(f"🚀 run-job {job.id} → {run_dir.name} (trigger={args.trigger})")
-
-
-def _build_child_env(
-    job_env: Dict[str, str],
-    extra_env: Dict[str, str],
-    run_dir: Path,
-    dry_run: bool,
-) -> Dict[str, str]:
-    env = os.environ.copy()
-    # Job env overlay first, then the invocation's own extra_env (typed
-    # params + kind env) so a per-run param can override a static value.
-    env.update(job_env)
-    env.update(extra_env)
-    artifact_dir = run_dir / "artifacts"
-    runtime_files.make_dirs(artifact_dir)
-    env["JOB_ARTIFACT_DIR"] = str(artifact_dir.resolve())
-    if dry_run:
-        env["JOB_DRY_RUN"] = "1"
-    return env
 
 
 class RunJobCommand(BaseCommand):
@@ -780,15 +672,6 @@ class RunJobCommand(BaseCommand):
             ),
         )
         p.add_argument(
-            "--params-b64",
-            default=None,
-            help=(
-                "The same payload as --params, base64url-encoded — how the "
-                "webapp's detached spawn passes it (see "
-                "src.jobs.argv.encode_params_token)."
-            ),
-        )
-        p.add_argument(
             "--dry-run",
             action="store_true",
             help=(
@@ -805,7 +688,10 @@ class RunJobCommand(BaseCommand):
             logger.error(f"❌ unknown job id: {args.job_id!r}")
             return 2
 
-        values, params_error = _resolve_run_params(job, args)
+        # Older test scaffolding builds the args namespace by hand and may
+        # not set --params; getattr keeps that path working without forcing
+        # every caller to fake the new field.
+        values, params_error = _parse_run_params(job, getattr(args, "params", None))
         if params_error is not None:
             return params_error
 
@@ -846,16 +732,24 @@ class RunJobCommand(BaseCommand):
 
         dry_run = bool(getattr(args, "dry_run", False))
         _write_running_record(job, args, run_dir, values, dry_run)
-        env = _build_child_env(job_env, extra_env, run_dir, dry_run)
+        env = _child_env(job.id, job_env, extra_env, run_dir, dry_run)
         spawn_started = time.monotonic()
         exit_code, status, sampler, watchdog = _spawn_and_wait(
             job, argv, cwd, env, run_dir
         )
 
-        if not _finish_run(
-            job, args, run_dir, exit_code, status, spawn_started, sampler, watchdog
-        ):
-            return 1
+        _finalize_run(
+            job,
+            run_dir,
+            exit_code=exit_code,
+            status=status,
+            spawn_started=spawn_started,
+            sampler=sampler,
+            watchdog=watchdog,
+        )
+        _dispatch_chain(job, status)
+        _cleanup_once_schedule(job, args)
+        _drain_mutex_queue_for(job)
 
         watchdog_note = (
             f", {watchdog.note}" if watchdog is not None and watchdog.fired else ""
@@ -866,6 +760,60 @@ class RunJobCommand(BaseCommand):
         )
         # A watchdog kill is a failed run even in the pathological case
         # where the torn-down tree still reported a zero exit code.
-        if status == STATUS_FAILED:
+        if status == RunStatus.FAILED:
             return 1
         return 0 if exit_code == 0 else 1
+
+
+def _write_running_record(
+    job: Job, args: argparse.Namespace, run_dir: Path, values: Optional[Dict[str, Any]], dry_run: bool,
+) -> None:
+    """Flip the run to ``running`` on disk, with its params and provenance."""
+    started_at = datetime.now().isoformat(timespec="seconds")
+    run_meta: Dict[str, Any] = seed_run_meta(
+        job, args.trigger, started_at, run_id=run_dir.name, status=RunStatus.RUNNING
+    )
+    # Persist the typed-parameter payload so the history
+    # row can replay it and the meta line can show the values back.
+    if values:
+        run_meta["params"] = values
+    # Provenance: a Task Scheduler fire reaches this
+    # executor directly, so it stamps its own source here; API fires
+    # carry trigger_source="api" (+ip/ua/token id) pre-written by the
+    # route into the run dir this executor merges into.
+    if args.trigger == "scheduled":
+        run_meta["trigger_source"] = "schtasks"
+    # Dry-run 'execute' mode: the child still spawns, but
+    # JOB_DRY_RUN=1 lets an opted-in script no-op its side effects.
+    # The flag is stamped so history shows the 🧪 chip.
+    if dry_run:
+        run_meta["dry_run"] = True
+    write_run_json(run_dir, **run_meta)
+    logger.info(
+        f"🚀 run-job {job.id} → {run_dir.name} (trigger={args.trigger})"
+    )
+
+
+def _child_env(
+    job_id: str, job_env: Dict[str, str], extra_env: Dict[str, str], run_dir: Path, dry_run: bool,
+) -> Dict[str, str]:
+    """The child's environment: ours, the job overlay, then the invocation's,
+    with a hosted session's identity removed and the run's own stamped."""
+    env = os.environ.copy()
+    # Job env overlay first, then the invocation's own extra_env (typed
+    # params + kind env) so a per-run param can override a static value.
+    env.update(job_env)
+    env.update(extra_env)
+    # The webapp may itself have been started from inside a hosted session;
+    # a Job addressing that session's outbox would drop its files into an
+    # unrelated chat. A Job sends through its own run's outbox instead.
+    for key in _SESSION_IDENTITY_VARS:
+        env.pop(key, None)
+    env[JOB_ID_ENV] = job_id
+    env[JOB_RUN_ID_ENV] = run_dir.name
+    artifact_dir = run_dir / "artifacts"
+    runtime_files.make_dirs(artifact_dir)
+    env["JOB_ARTIFACT_DIR"] = str(artifact_dir.resolve())
+    if dry_run:
+        env["JOB_DRY_RUN"] = "1"
+    return env

@@ -5,8 +5,11 @@
  * passkey UI. Loopback callers bypass the gate entirely.
  */
 
-import { state, TT_KEY, TT_EXP_KEY } from './state.js';
-import { jsonApi } from './api.js';
+import { els, state, TT_KEY, TT_EXP_KEY } from './state.js';
+import { apiFailToast, authHeaders, jsonApi, toast } from './api.js';
+import { confirmDialog, promptDialog } from './confirm-dialog.js';
+import { icon } from './_vendored/icons/icons.js';
+import { renderSettingsValues } from './settings/settings-sheets.js';
 
 // ----------------------------------------------------------- b64url helpers
 function b64urlToBuf(s) {
@@ -25,10 +28,31 @@ function bufToB64url(buf) {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+function prepCreate(o) {
+  o.challenge = b64urlToBuf(o.challenge);
+  o.user.id = b64urlToBuf(o.user.id);
+  (o.excludeCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
+  return o;
+}
+
 function prepGet(o) {
   o.challenge = b64urlToBuf(o.challenge);
   (o.allowCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
   return o;
+}
+
+function serializeReg(c) {
+  return {
+    id: c.id,
+    rawId: bufToB64url(c.rawId),
+    type: c.type,
+    response: {
+      attestationObject: bufToB64url(c.response.attestationObject),
+      clientDataJSON: bufToB64url(c.response.clientDataJSON),
+    },
+    clientExtensionResults: c.getClientExtensionResults ? c.getClientExtensionResults() : {},
+    authenticatorAttachment: c.authenticatorAttachment || undefined,
+  };
 }
 
 function serializeAuth(c) {
@@ -69,16 +93,98 @@ export function clearTerminalToken() {
 }
 
 // ----------------------------------------------------------- webauthn flows
-// The Settings passkey section (status readout, device list, enroll
-// button) is not part of the Settings tab — the gate itself stays:
-// fetchWebauthnStatus still populates state.webauthn, which
-// ensureTerminalToken keys on. Enrollment now happens from the PC via the
-// tray's enrollment window (the /api/webauthn/enroll/* endpoints are
-// untouched); wire a UI back here if phone-side enrollment returns.
+// Settings passkey section: status readout, device list, enroll button.
+// Enrollment stays a two-step, two-device act by design — the tray opens a one-time window on the
+// PC (deliberate, loopback-only), then this button on the *other* device
+// (the phone being enrolled) completes the ceremony while the window is
+// open. The gate itself (ensureTerminalToken) never depended on this UI.
 export async function fetchWebauthnStatus() {
   try {
     state.webauthn = await jsonApi('/api/webauthn/status');
+    renderWebauthn();
+    renderSettingsValues();
   } catch (_) { /* best-effort */ }
+}
+
+function renderWebauthn() {
+  const w = state.webauthn || {};
+  if (!els.webauthnStatus) return;
+  if (!w.configured) {
+    els.webauthnStatus.textContent =
+      'Passkey gate not configured — the terminal is Tailscale-only.';
+    els.webauthnDevices.innerHTML = '';
+    els.enrollDeviceBtn.hidden = true;
+    return;
+  }
+  const n = (w.devices || []).length;
+  let msg = n ? n + ' device(s) enrolled.' : 'No device enrolled yet.';
+  if (w.enrollment_open) {
+    msg += ' Enrollment window open (' + w.enrollment_seconds_left + 's).';
+  }
+  els.webauthnStatus.textContent = msg;
+  els.webauthnDevices.innerHTML = '';
+  (w.devices || []).forEach(function (d) {
+    const li = document.createElement('li');
+    const label = document.createElement('span');
+    label.textContent = d.label + ' · ' +
+      (d.last_used ? 'last used ' + d.last_used : 'added ' + d.added_at);
+    li.appendChild(label);
+    const rm = document.createElement('button');
+    rm.dataset.track = 'passkeys.remove';
+    rm.type = 'button';
+    rm.className = 'icon-button danger';
+    rm.innerHTML = icon('trash-2');
+    rm.title = 'Remove passkey';
+    rm.setAttribute('aria-label', 'Remove passkey');
+    rm.addEventListener('click', function () { removeDevice(d); });
+    li.appendChild(rm);
+    els.webauthnDevices.appendChild(li);
+  });
+  els.enrollDeviceBtn.hidden = !w.enrollment_open;
+}
+
+async function removeDevice(d) {
+  if (!(await confirmDialog({ title: 'Remove passkey "' + d.label + '"?', action: 'Remove' }))) return;
+  try {
+    await jsonApi('/api/webauthn/devices/' + encodeURIComponent(d.id), {
+      method: 'DELETE',
+    });
+    toast('Removed ' + d.label, 'good');
+    fetchWebauthnStatus();
+  } catch (exc) {
+    apiFailToast('Remove failed', exc);
+  }
+}
+
+async function enrollDevice() {
+  if (!window.PublicKeyCredential) {
+    toast('This browser has no passkey support.', 'error');
+    return;
+  }
+  const label = await promptDialog({
+    title: 'Name this device', value: 'iPhone', label: 'Device name',
+    action: 'Continue', tone: 'primary',
+  });
+  if (!label) return;
+  try {
+    const opts = await jsonApi('/api/webauthn/enroll/begin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: label }),
+    });
+    const cred = await navigator.credentials.create({
+      publicKey: prepCreate(opts),
+    });
+    await jsonApi('/api/webauthn/enroll/finish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(serializeReg(cred)),
+    });
+    toast('Device enrolled.', 'good', { icon: 'circle-check' });
+    fetchWebauthnStatus();
+  } catch (exc) {
+    apiFailToast('Enrollment failed', exc);
+  }
 }
 
 async function unlockTerminal() {
@@ -107,4 +213,24 @@ export async function ensureTerminalToken() {
   const existing = readTerminalToken();
   if (existing) return existing;
   return await unlockTerminal();
+}
+
+// One terminal-grade JSON request: awaits the passkey token, sends it
+// with the bearer, and resolves jsonApi()'s parsed body or its thrown verdict.
+// `body`, when given, is JSON-encoded here; omit `method` for a GET.
+export async function terminalJsonApi(path, { method, body } = {}) {
+  const terminalToken = await ensureTerminalToken();
+  const opts = {
+    headers: authHeaders({
+      terminalToken,
+      contentType: body === undefined ? undefined : 'application/json',
+    }),
+  };
+  if (method) opts.method = method;
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  return jsonApi(path, opts);
+}
+
+export function wireWebauthn() {
+  els.enrollDeviceBtn.addEventListener('click', enrollDevice);
 }

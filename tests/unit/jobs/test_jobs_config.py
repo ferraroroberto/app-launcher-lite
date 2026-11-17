@@ -1,4 +1,4 @@
-"""Jobs tab plumbing — schedule validation, job CRUD and config persistence (issue #47)."""
+"""src.jobs.config: schedule, cooldown, mutex, chain and param validation, and job CRUD round-trips."""
 
 from __future__ import annotations
 
@@ -118,6 +118,25 @@ class TestJobFromDict:
             job_from_dict({"id": "x", "name": "X"})
         with pytest.raises(ValueError, match="name"):
             job_from_dict({"id": "x", "script_path": "C:\\x.py"})
+
+    def test_path_traversal_id_rejected(self):
+        """Regression for #832: a caller-supplied id with `../` used to flow
+        straight through to the run-directory path join and the Task
+        Scheduler `/TR` string with no shape check at all."""
+        with pytest.raises(ValueError, match="job id"):
+            job_from_dict(
+                {"id": "../../evil", "name": "X", "script_path": "C:\\x.py"}
+            )
+
+    def test_non_slug_shaped_id_rejected(self):
+        with pytest.raises(ValueError, match="job id"):
+            job_from_dict({"id": "Not A Slug!", "name": "X", "script_path": "C:\\x.py"})
+
+    def test_slug_shaped_id_with_hyphens_accepted(self):
+        job = job_from_dict(
+            {"id": "gh-push-deploy-2", "name": "X", "script_path": "C:\\x.py"}
+        )
+        assert job.id == "gh-push-deploy-2"
 
 
 class TestCooldownValidation:
@@ -252,46 +271,6 @@ class TestMutexQueueFile:
         assert "chrome" not in on_disk
         assert "db" in on_disk
 
-    def test_queue_run_stamps_the_record_and_enqueues_the_entry(
-        self, tmp_path, monkeypatch
-    ):
-        monkeypatch.setattr(jobs_history_mod, "JOBS_RUNS_DIR", tmp_path)
-        monkeypatch.setattr(
-            jobs_queue_mod, "JOBS_QUEUE_PATH", tmp_path / "_queue.json"
-        )
-        job = Job(id="b", name="B", script_path="C:\b.py", mutex_group="chrome")
-        holder = Job(id="a", name="A", script_path="C:\a.py", mutex_group="chrome")
-        run_dir = jobs_mod.new_run_dir(job.id, "run-1")
-        meta = {"job_id": job.id, "params": {"x": 1}}
-
-        jobs_mod.queue_run(run_dir, meta, job, holder, "manual", {"x": 1})
-
-        record = jobs_mod.read_run(run_dir)
-        assert record["status"] == "queued"
-        assert record["mutex_group"] == "chrome"
-        assert record["mutex_blocked_by"] == "a"
-        assert jobs_mod.peek_mutex_queue("chrome") == [
-            {
-                "job_id": "b",
-                "run_id": "run-1",
-                "trigger": "manual",
-                "params": {"x": 1},
-            }
-        ]
-
-    def test_queue_run_stores_empty_params_as_none(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(jobs_history_mod, "JOBS_RUNS_DIR", tmp_path)
-        monkeypatch.setattr(
-            jobs_queue_mod, "JOBS_QUEUE_PATH", tmp_path / "_queue.json"
-        )
-        job = Job(id="b", name="B", script_path="C:\b.py", mutex_group="chrome")
-        holder = Job(id="a", name="A", script_path="C:\a.py", mutex_group="chrome")
-        run_dir = jobs_mod.new_run_dir(job.id, "run-2")
-
-        jobs_mod.queue_run(run_dir, {"job_id": "b"}, job, holder, "scheduled", {})
-
-        assert jobs_mod.peek_mutex_queue("chrome")[0]["params"] is None
-
     def test_pop_empty_returns_none(self, tmp_path, monkeypatch):
         monkeypatch.setattr(jobs_history_mod, "JOBS_RUNS_DIR", tmp_path)
         monkeypatch.setattr(
@@ -379,30 +358,6 @@ class TestPauseResume:
         assert job.schedule.type == "weekly"
         assert job.schedule.day == "MON"
         assert job.schedule.at == "06:00"
-
-    def test_resume_and_schedule_edit_stamp_schedule_changed_at(
-        self, tmp_path, monkeypatch
-    ):
-        from src.jobs.config import update_job
-
-        cfg, pause, resume = self._seed(tmp_path, monkeypatch)
-        add_job(cfg, job_from_dict({
-            "id": "x", "name": "X", "script_path": "C:\\x.py",
-            "schedule": {"type": "daily", "at": "06:00"},
-        }))
-        assert cfg.jobs[0].schedule_changed_at == ""
-        pause(cfg, "x")
-        assert resume(cfg, "x").schedule_changed_at != ""
-
-        cfg.jobs[0].schedule_changed_at = ""
-        # Re-saving the same schedule is not a change; a new one is.
-        update_job(cfg, "x", schedule={"type": "daily", "at": "06:00"})
-        assert cfg.jobs[0].schedule_changed_at == ""
-        update_job(cfg, "x", schedule={"type": "daily", "at": "09:00"})
-        assert cfg.jobs[0].schedule_changed_at != ""
-        assert job_from_dict(cfg.jobs[0].to_dict()).schedule_changed_at == (
-            cfg.jobs[0].schedule_changed_at
-        )
 
     def test_cannot_pause_manual_only(self, tmp_path, monkeypatch):
         cfg, pause, resume = self._seed(tmp_path, monkeypatch)
@@ -663,8 +618,8 @@ class TestParamValidation:
 
 class TestMakeJobId:
     def test_slug_collision_suffix(self):
-        existing = ["demo", "demo-dup2"]
-        assert make_job_id("Demo", existing) == "demo-dup3"
+        existing = ["demo", "demo-2"]
+        assert make_job_id("Demo", existing) == "demo-3"
         assert make_job_id("Fresh", existing) == "fresh"
 
 
@@ -706,6 +661,34 @@ class TestJobsConfigPersistence:
         )
         cfg = load_jobs(path=path)
         assert [j.id for j in cfg.jobs] == ["ok"]
+
+    def test_a_malformed_row_warns_once_not_on_every_read(
+        self, tmp_path, caplog, monkeypatch
+    ):
+        """#1516: the registry is re-read on every Board and Jobs poll, so a
+        bad row used to log once per poll. A row that changes warns again."""
+        import src.jobs.config as jobs_config_mod
+
+        monkeypatch.setattr(jobs_config_mod, "_warned_malformed_rows", set())
+        path = tmp_path / "jobs.json"
+
+        def _write(script_path: str) -> None:
+            path.write_text(
+                json.dumps({"jobs": [{"id": "bad", "name": "Bad", "script_path": script_path}]}),
+                encoding="utf-8",
+            )
+
+        def _warnings() -> int:
+            return sum("Skipping malformed job row" in r.getMessage() for r in caplog.records)
+
+        _write("")
+        with caplog.at_level("WARNING", logger=jobs_config_mod.logger.name):
+            for _ in range(3):
+                assert load_jobs(path=path).jobs == []
+            assert _warnings() == 1
+            _write("C:\\bad.txt")
+            load_jobs(path=path)
+            assert _warnings() == 2
 
 
 class TestMutations:

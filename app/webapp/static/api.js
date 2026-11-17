@@ -8,11 +8,12 @@
 import { els, state, TOKEN_KEY } from './state.js';
 import { requestSignIn } from './_vendored/sign-in/sign-in.js';
 import { showToast as toast } from './_vendored/toast/toast.js';
+import { escapeHtml } from './dom-utils.js';
 
 // --------------------------------------------------------------- tokens
 // Read a `?<name>=<value>` deep-link param once, strip it from the visible
 // URL, and return its trimmed value (or null if absent/blank). Used for the
-// bearer ?token=, the PC-mirror ?terminal=<sid> deep link, and the Board
+// bearer ?token=, PC-mirror ?terminal=<sid>, shared ?session=<sid>, Board
 // ?board=<sid> deep link.
 export function consumeUrlParam(name) {
   const params = new URLSearchParams(window.location.search);
@@ -36,7 +37,7 @@ export function writeToken(t) { if (t) localStorage.setItem(TOKEN_KEY, t); }
 // ensureTerminalToken() when a fresh passkey ceremony may be needed), since
 // that plumbing lives in webauthn.js and this module never imports it.
 // `contentType`, when given, sets Content-Type (omit for multipart/FormData
-// bodies, where the browser must set its own boundary). Single source for
+// bodies, where the browser must set its own boundary). The single source of
 // the terminal-token header, always spelled `X-Terminal-Token`.
 export function authHeaders({ terminalToken, contentType } = {}) {
   const h = {};
@@ -50,9 +51,9 @@ export function authHeaders({ terminalToken, contentType } = {}) {
 // True when this browser is a desktop (a fine/mouse pointer), as opposed
 // to a phone (a coarse/touch pointer). A coding launch carries this so the
 // server opens a dedicated PC mirror window rather than rendering the
-// terminal inside the desktop browser's own tab (skipping the "obvious" redundant
-// in-page render would be wrong:
-// that redundancy is what lets Stop & Close tear down the controlling
+// terminal inside the desktop browser's own tab (the "obvious"
+// The optimization of skipping a redundant in-page render was reversed:
+// that redundancy was what let Stop & Close tear down the controlling
 // browser window). The flag is what distinguishes a desktop from a phone
 // regardless of loopback vs tunnel, since the server can't tell by IP alone.
 export function isDesktopClient() {
@@ -63,10 +64,31 @@ export function isDesktopClient() {
   }
 }
 
+// Settings > Sessions: a desktop browser opens a session's terminal in the
+// dedicated PC Edge window only when the owner turned that on (off by
+// default). The phone never does. Before the config lands this reads off,
+// so a boot-time tap renders in the page rather than spawning a window.
+export function opensInPcWindow() {
+  return isDesktopClient() &&
+    !!(state.config && state.config.open_sessions_in_window === true);
+}
+
+// Settings > Sessions: a session with no remembered view opens in Chat
+// (default on). Reads on before the config lands, matching the default.
+export function opensInChatFirst() {
+  return !state.config || state.config.open_sessions_in_chat !== false;
+}
+
 // A 401 means the sign-in sheet just went up — callers that merely want to
 // swallow "not logged in yet" (rather than toast it as a real failure) check
 // `exc instanceof AuthRequiredError`, not a string message that a future
 // reword would silently break.
+// The one place the `/api/claude-code/sessions/<sid>` prefix is built. `tail`
+// is appended verbatim and starts with `/` or `?`.
+export function sessionRoute(sid, tail) {
+  return '/api/claude-code/sessions/' + encodeURIComponent(sid) + (tail || '');
+}
+
 export class AuthRequiredError extends Error {
   constructor() {
     super('auth required');
@@ -96,8 +118,11 @@ export async function api(path, opts) {
   return res;
 }
 
-export async function jsonApi(path, opts) {
-  const res = await api(path, opts);
+// The parsed JSON body of `res` (null when there is none), or a thrown
+// `Error(detail || 'HTTP n')` carrying `.status` / `.body` on a non-2xx. The
+// one place a response becomes a verdict: jsonApi() and apiRawJson() both end
+// here.
+async function jsonVerdict(res) {
   let body = null;
   try { body = await res.json(); } catch (_) { body = null; }
   if (!res.ok) {
@@ -110,6 +135,10 @@ export async function jsonApi(path, opts) {
   return body;
 }
 
+export async function jsonApi(path, opts) {
+  return jsonVerdict(await api(path, opts));
+}
+
 // A raw-Response counterpart to jsonApi() for callers that need the Response
 // itself (FormData uploads, streamed audio bodies) instead of jsonApi()'s
 // parsed-JSON contract. Folds authHeaders() in so a caller
@@ -118,6 +147,8 @@ export async function jsonApi(path, opts) {
 // usual fetch options — then goes through the exact same 401 → showLogin() +
 // AuthRequiredError path as jsonApi(), via api(). Callers still own res.ok /
 // res.json() beyond that, same as they did calling fetch() directly before.
+// `opts.signal` rides through to fetch() untouched: the composer's upload and
+// dictation requests pass one so a second tap can abort them.
 export async function apiRaw(path, opts) {
   opts = opts || {};
   const headers = Object.assign(
@@ -126,6 +157,15 @@ export async function apiRaw(path, opts) {
     opts.headers || {}
   );
   return api(path, Object.assign({}, opts, { headers: headers }));
+}
+
+// apiRaw() + jsonApi()'s verdict: resolves the parsed JSON body (null
+// when there is none) and throws `Error(detail || 'HTTP n')` with `.status` /
+// `.body` on a non-2xx, so an upload / transcribe caller states neither the
+// `res.ok` check nor the error-body parse. A caller that must read the status
+// itself without throwing (a retried chunk upload) keeps apiRaw().
+export async function apiRawJson(path, opts) {
+  return jsonVerdict(await apiRaw(path, opts));
 }
 
 // --------------------------------------------------------------- sign-in
@@ -157,19 +197,15 @@ export function setSignInHandler(onLoginSuccess) {
 }
 
 // --------------------------------------------------------------- toast
-// Quotes are escaped too, so the output is safe inside an attribute value
-// as well as in text (team-os.js renders markdown links into href="…").
-export function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+// escapeHtml lives in dependency-free dom-utils.js so the markdown renderer
+// can import it without this module's DOM/localStorage-bound state;
+// re-exported here so existing `from './api.js'` importers are unchanged.
+export { escapeHtml };
 
-// The fleet's vendored toast: toast(msg, kind, { icon }) — only 'error' tints,
-// every other kind renders neutral.
+// The fleet's vendored toast: toast(msg, kind, { icon, host, ms, action }).
+// Only 'error' tints; every other kind renders neutral. opts.host is a
+// .sheet-toast inside an open modal <dialog>: the page's own toast sits under
+// a dialog's top layer, so a sheet that must confirm an action carries one.
 export { toast };
 
 // Toast a failed API call as "<prefix>: <message>" (error styling) — unless
@@ -177,15 +213,17 @@ export { toast };
 // up and a red toast on top of it would double-fire. `prefix` may be falsy
 // for the few sites that just toast the raw message.
 //
-// A plain Error carrying `.status === 401` gets the same treatment: a module kept free of api.js imports by design (receiving
-// credentials as parameters rather than reaching into this module's token
-// storage itself) can't throw AuthRequiredError from its own fetches — it
-// tags `.status` on its thrown Error instead, and this is the one place
+// A plain Error carrying `.status === 401` gets the same treatment: terminal-speech.js
+// (re-exported through terminal-readback.js)
+// is kept free of api.js imports by design (it receives credentials as
+// parameters rather than reaching into this module's token storage itself),
+// so its own fetches can't throw AuthRequiredError —
+// they tag `.status` on their thrown Error instead, and this is the one place
 // that turns that into the same showLogin() the rest of the app gets for
 // free through api()/jsonApi()/apiRaw().
-export function apiFailToast(prefix, exc) {
+export function apiFailToast(prefix, exc, opts) {
   if (exc instanceof AuthRequiredError) return;
   if (exc && exc.status === 401) { showLogin(); return; }
   const msg = (exc && exc.message) || exc;
-  toast(prefix ? prefix + ': ' + msg : String(msg), 'error');
+  toast(prefix ? prefix + ': ' + msg : String(msg), 'error', opts);
 }

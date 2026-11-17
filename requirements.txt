@@ -3,8 +3,8 @@
 #   python -m venv .venv
 #   .venv\Scripts\python.exe -m pip install -r requirements.txt
 #
-# Lite fork of ferraroroberto/app-launcher — same FastAPI + pystray stack,
-# so the auth, tunnel, and cert plumbing matches upstream.
+# Sister project to photo-ocr and voice-transcriber — same FastAPI + pystray
+# stack so the auth, tunnel, and cert plumbing is shared.
 
 # HTTP client (healthz polling) + YAML (cloudflared config)
 requests>=2.31
@@ -13,11 +13,14 @@ PyYAML>=6.0
 # Process introspection (port-owner lookup, smart kill)
 psutil>=5.9
 
-# Tray icon image loading (app/tray/tray.py), and the Screen view's frame
-# resize + JPEG encode (src/desktop_capture.py, #60). The PWA/tray icon assets
-# are committed — scripts/gen_icons.py is a stub in the lite fork (regeneration
-# needs project-scaffolding's brand_gen, see that file's docstring).
+# Pillow is a runtime import: the Screen view (src/desktop/capture.py, #1520)
+# resizes and JPEG-encodes each captured frame with it. It also assembles the
+# icon set: scripts/gen_icons.py calls project-scaffolding's shared
+# brand_gen.py, which rasterizes the vendored Lucide master SVGs with resvg-py
+# (prebuilt wheel, no system deps). resvg-py is dev-only; generated icons are
+# committed and the webapp never imports it.
 Pillow>=10.0
+resvg-py>=0.3.0
 
 # Webapp
 fastapi>=0.110
@@ -36,8 +39,7 @@ pyte>=0.8.2
 
 # Win32 window handle lookup + WM_CLOSE for the PC mirror window
 # (issue #20 — Stop & Close on the phone dismisses the Edge --app window
-# without a fresh --user-data-dir profile), and the Screen view's per-monitor
-# BitBlt capture (src/desktop_capture.py, #60).
+# without a fresh --user-data-dir profile).
 pywin32>=306; sys_platform == "win32"
 
 # WebAuthn passkey gate for the interactive terminal
@@ -52,22 +54,29 @@ pystray>=0.19
 # Windows toast notifications for tray lifecycle events
 winotify>=1.1; sys_platform == "win32"
 
+# Async HTTP client: the webapp relays a large-file upload to the
+# session-host as a stream (#1430). Also starlette.testclient's backend.
+httpx>=0.27
+
 # Pytest API tests (tests/) — in-process FastAPI TestClient.
-# httpx is starlette.testclient's HTTP backend.
 pytest>=8.0
 pytest-asyncio>=0.23
-httpx>=0.27
 # Per-test wall-clock cap so a hung test (e.g. a wedged PTY/WS e2e op on a slow
 # CI runner) aborts with a traceback dump instead of stalling the suite (#184).
 pytest-timeout>=2.3
+# Runs the pre-ship gate's dual-projection browser suite on parallel workers
+# (#1231, #1220); the count is E2E_WORKERS, see scripts/e2e-gate-route.ps1.
+pytest-xdist>=3.6
 
 # Unused-import / unused-variable pass of the gate's static ratchet
-# (scripts/static_ratchet.py selects F401,F841 itself).
-ruff>=0.17.1
+# (scripts/static_ratchet.py); the script selects F401,F841 itself.
+ruff>=0.15.21
 
 # End-to-end browser smoke tests (tests/e2e). After install:
-#   .venv\Scripts\python.exe -m playwright install chromium
-# This app is Android-only (issue #6), so the suite drives Chromium
-# exclusively — including a Pixel 8 Pro device-emulated phone projection
-# (conftest.py's phone_projection fixture), no separate browser engine.
+#   .venv\Scripts\python.exe -m playwright install chromium webkit
+# Chromium catches markup/JS regressions; WebKit projects the suite onto an
+# iPhone 15 Pro Max viewport so iOS-engine bugs get caught on Windows (#31).
 pytest-playwright>=0.5
+# 1.60 and older ship WebKit build 2287, whose network process sticks mid-exit
+# when a test closes its context and cannot be killed until reboot (#1671).
+playwright>=1.61

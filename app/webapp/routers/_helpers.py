@@ -5,46 +5,72 @@ lives here instead.
 from __future__ import annotations
 
 import asyncio
+import logging
+import os
+import re
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
 from fastapi import HTTPException, Request, WebSocket
 
-from src.app_config import resolve_webapp_port
-from src.launch_flags import build_copilot_flags
-from src.session_client import SessionHostError
-from src.tls.certs import cert_paths, tailscale_hostname_from_cert
+from src import audit, instance_role
+from src import jobs as jobs_mod
+from src.auth.webauthn_gate import WebAuthnGate
+from src.clients.session import SessionHostError
+from src.jobs.config import get_by_id, load_jobs
+from src.launching.presets import efforts_for
 from src.webapp_config import (
-    VALID_COPILOT_CONTEXTS,
-    VALID_COPILOT_EFFORTS,
     WebappConfig,
     append_auth_token,
 )
-from src.webauthn_gate import WebAuthnGate
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
-def copilot_flags_payload(cfg: WebappConfig) -> Dict[str, Any]:
-    """The Copilot flags subtree shared by ``/api/config``'s embedded
-    ``"copilot"`` section and ``/api/coding/flags``'s own response.
+def requested_launch_effort(
+    body: Dict[str, Any], agent: str, model_value: str
+) -> Optional[str]:
+    """The body's per-launch ``effort`` (a launch preset's), ``None`` when absent.
+
+    400 when it is not a string, when no per-launch model was sent for it to
+    apply to, or when that model does not offer it; the message names the
+    allowed values.
     """
-    return {
-        "skip_permissions": cfg.copilot_skip_permissions,
-        "model": cfg.copilot_model,
-        # Config-driven (lite Phase 3): the offered ids come from the
-        # `copilot_models` list in webapp_config.json — read-only from
-        # the UI (GET only; not in the POST allow-list).
-        "models_available": list(cfg.copilot_models),
-        "autopilot": cfg.copilot_autopilot,
-        "context": cfg.copilot_context,
-        "contexts_available": list(VALID_COPILOT_CONTEXTS),
-        "effort": cfg.copilot_effort,
-        "efforts_available": list(VALID_COPILOT_EFFORTS),
-        "computed_flags": build_copilot_flags(cfg),
-    }
+    effort = body.get("effort")
+    if effort is None or effort == "":
+        return None
+    if not isinstance(effort, str):
+        raise HTTPException(status_code=400, detail="effort must be a string")
+    effort = effort.strip().lower()
+    offered = efforts_for(agent, model_value)
+    if not model_value or effort not in offered:
+        allowed = ", ".join(offered) if offered else "none"
+        target = f"{agent}:{model_value}" if model_value else f"{agent} (no model sent)"
+        raise HTTPException(
+            status_code=400,
+            detail=f"effort {effort!r} is not offered by {target}; allowed: {allowed}",
+        )
+    return effort
+
+
+def known_run_dir(job_id: str, run_id: str) -> Optional[Path]:
+    """A registered job's existing run dir, else ``None``.
+
+    Shared by every Jobs route that resolves ``{job_id}/{run_id}`` into a
+    directory before doing anything else — the kill, dismiss and get-one-run
+    routes in ``jobs.py`` and the pin/artifact/live-output routes in
+    ``jobs_run_store_routes.py`` all need this job-exists → join
+    run dir → ``is_dir`` sequence, so it lives here instead of inline per
+    route.
+    """
+    if get_by_id(load_jobs(), job_id) is None:
+        return None
+    run_dir = jobs_mod.runs_dir(job_id) / run_id
+    return run_dir if run_dir.is_dir() else None
 
 
 async def audit_off_loop(
@@ -58,11 +84,13 @@ async def audit_off_loop(
     webapp runs a **single** uvicorn worker (``app/webapp/event_loop.py``), so
     a slow write — disk contention, an AV scanner walking that directory —
     freezes every other live session's in-flight WS output: the "terminal
-    opens blank and never paints" class. The session-host's own
-    handler avoids it the same way.
+    opens blank and never paints" class this guards against, same as the
+    session-host's own handler.
 
-    Every router's audit calls (the WS proxy's writes and the HTTP handlers)
-    share this one helper rather than a copy per router.
+    Every audit call site across every router goes through this one hop off
+    the loop, rather than each router threading its own call — a helper
+    copied per router would silently drift back toward the on-loop write
+    this exists to prevent.
 
     Deliberately no try/except: ``audit.session_log``/``session_input``
     already swallow their own ``OSError``, and ``audit_event`` going bang is a
@@ -82,8 +110,33 @@ async def maybe_json(request: Request) -> Dict[str, Any]:
     return {}
 
 
+def safe_int(body: Dict[str, Any], key: str, default: int) -> int:
+    """Read an ``int``-ish field out of a decoded request body, falling
+    back to ``default`` on anything that doesn't coerce.
+
+    Five call sites (``board.py`` x2, ``board_chief.py``, ``apps.py``,
+    ``life_os.py`` — all the PTY-launch routes' ``rows``/``cols`` phone
+    terminal-size fields) used to do a bare ``int(body.get(key) or
+    default)``: a malformed body (e.g. ``{"rows": "abc"}``) raised an
+    uncaught ``ValueError`` that FastAPI turned into a bare 500 instead of
+    the 400 this is, from any authenticated caller. Mirrors the already-
+    guarded shape ``life_os.py``'s own ``_search_limit`` used for its
+    ``limit`` query param.
+    """
+    raw = body.get(key)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
 def cert_present() -> bool:
-    return cert_paths(PROJECT_ROOT) is not None
+    return (
+        (PROJECT_ROOT / "webapp" / "certificates" / "cert.pem").exists()
+        and (PROJECT_ROOT / "webapp" / "certificates" / "key.pem").exists()
+    )
 
 
 # (mtime, hostname-or-None) of the last classified cert.pem — the cert only
@@ -95,10 +148,9 @@ def tsnet_host_from_cert(cert_path: Optional[Path] = None) -> Optional[str]:
     """The .ts.net hostname the active cert is issued for, or None.
 
     Returns a hostname only for a genuine ``tailscale cert`` leaf — keyed on
-    the ISSUER (Let's Encrypt), because a legacy self-signed leaf (the
-    retired gen_ssl_cert.py) also carried the ts.net name in its SAN and
-    must keep routing mirrors over loopback (the discriminator is shared with
-    scripts/gen_tailscale_cert.py via ``src.tls.certs``).
+    the ISSUER (Let's Encrypt), because a self-signed leaf also carries the
+    ts.net name in its SAN and must keep routing mirrors over loopback
+    (same discriminator as scripts/gen_tailscale_cert.py).
     """
     global _TSNET_CACHE
     path = cert_path or (PROJECT_ROOT / "webapp" / "certificates" / "cert.pem")
@@ -108,7 +160,24 @@ def tsnet_host_from_cert(cert_path: Optional[Path] = None) -> Optional[str]:
         return None
     if cert_path is None and _TSNET_CACHE is not None and _TSNET_CACHE[0] == mtime:
         return _TSNET_CACHE[1]
-    host = tailscale_hostname_from_cert(path)
+    host: Optional[str] = None
+    try:
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+
+        cert = x509.load_pem_x509_certificate(path.read_bytes())
+        issuer_orgs = [
+            attr.value
+            for attr in cert.issuer.get_attributes_for_oid(NameOID.ORGANIZATION_NAME)
+        ]
+        if any("let's encrypt" in str(org).lower() for org in issuer_orgs):
+            san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+            for name in san.value.get_values_for_type(x509.DNSName):
+                if ".ts.net" in name:
+                    host = name
+                    break
+    except Exception:
+        host = None
     if cert_path is None:
         _TSNET_CACHE = (mtime, host)
     return host
@@ -130,9 +199,9 @@ def mirror_url(request: Request, cfg: WebappConfig, sid: str) -> str:
     ts_host = tsnet_host_from_cert()
     if ts_host is None:
         scheme = "https" if cert_present() else "http"
-        return f"{scheme}://127.0.0.1:{resolve_webapp_port()}/?terminal={sid}"
+        return f"{scheme}://127.0.0.1:{cfg.port}/?terminal={sid}"
     url = append_auth_token(
-        f"https://{ts_host}:{resolve_webapp_port()}/?terminal={sid}", cfg.auth_token
+        f"https://{ts_host}:{cfg.port}/?terminal={sid}", cfg.auth_token
     )
     gate = getattr(request.app.state, "webauthn_gate", None)
     if gate is not None and WebAuthnGate.configured(cfg):
@@ -140,8 +209,135 @@ def mirror_url(request: Request, cfg: WebappConfig, sid: str) -> str:
     return url
 
 
+# ------------------------------------------------- provider session links
+#
+# Claude Code's remote-control card prints an ``https://claude.ai/code/session_…``
+# URL into the PTY. That link is authenticated by the Anthropic account and
+# opens from any browser on any network, unlike this launcher's own
+# ``?session=`` deep link, which is tailnet-gated by design. Both the Coding
+# tab (``/api/claude-code/sessions``) and the Board (``/api/board``) hand it
+# to the client as ``web_url``, so the resolution lives here rather than in
+# either router (the Coding tab captured it first, the Board shares the field).
+
+_CLAUDE_WEB_URL_RE = re.compile(
+    r"https://claude\.ai/code/session_"
+    r"\s*([A-Za-z0-9](?:\s*[A-Za-z0-9]){23})(?![A-Za-z0-9])"
+)
+_ANSI_CSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+_SESSION_LINK_SCAN_BYTES = 512 * 1024
+
+# A captured URL never changes for a session id, so memoize the hit: the
+# Coding-tab poll and the Board poll both run on a 5s cadence and overlap
+# while the Board tab is up (main.js — fetchSessions is not tab-gated), which
+# without this would re-scan up to 1 MiB of every live transcript twice every
+# five seconds. An empty result means the card has not been printed *yet*, so
+# a miss is cached only against the transcript it was read from: its
+# size and mtime, from one stat. An unchanged transcript is not reopened on
+# the next poll (a long-lived session whose card scrolled out of both windows
+# re-read 1 MiB every tick, and each open is another chance at the
+# multi-second stall once measured); one that has grown is scanned again.
+_PROVIDER_URL_CACHE: Dict[str, str] = {}
+_PROVIDER_URL_MISSES: Dict[str, Tuple[int, int]] = {}
+_PROVIDER_URL_CACHE_MAX = 512
+
+
+def provider_web_url(agent: str, transcript: Path) -> str:
+    """Return the provider-native web URL captured from a PTY transcript.
+
+    Claude's remote-control card often wraps between ``session_`` and its
+    24-character identifier, with cursor-control sequences around the second
+    line. Read bounded head and tail windows, strip CSI, and join only the
+    whitespace inside that known URL shape. Codex local sessions deliberately
+    return no URL: its remote-control surface is not available on the web.
+    """
+    if agent != "claude":
+        return ""
+    try:
+        with transcript.open("rb") as stream:
+            head = stream.read(_SESSION_LINK_SCAN_BYTES)
+            stream.seek(0, os.SEEK_END)
+            size = stream.tell()
+            tail = b""
+            if size > _SESSION_LINK_SCAN_BYTES:
+                stream.seek(max(0, size - _SESSION_LINK_SCAN_BYTES))
+                tail = stream.read(_SESSION_LINK_SCAN_BYTES)
+    except OSError as exc:
+        logger.debug(f"provider link transcript read failed: {exc}")
+        return ""
+
+    text = _ANSI_CSI_RE.sub("", (head + b"\n" + tail).decode("utf-8", errors="replace"))
+    match = _CLAUDE_WEB_URL_RE.search(text)
+    if not match:
+        return ""
+    session_token = re.sub(r"\s+", "", match.group(1))
+    return f"https://claude.ai/code/session_{session_token}"
+
+
+def attach_provider_web_urls(sessions: List[Dict[str, Any]]) -> None:
+    """Enrich live full-control rows without requiring a session-host restart.
+
+    Every row gets a ``web_url`` key so the client never has to distinguish
+    "no link" from "field absent"; only ``kind == "pty"`` rows are scanned.
+    Blocking file IO — callers wrap it in ``asyncio.to_thread``.
+    """
+    for session in sessions:
+        session["web_url"] = ""
+        if session.get("kind") != "pty":
+            continue
+        sid = str(session.get("session_id") or "")
+        cached = _PROVIDER_URL_CACHE.get(sid)
+        if cached:
+            session["web_url"] = cached
+            continue
+        agent = str(session.get("agent") or "")
+        transcript = audit.transcript_path(sid)
+        identity = _transcript_identity(transcript) if agent == "claude" and sid else None
+        if identity is not None and _PROVIDER_URL_MISSES.get(sid) == identity:
+            continue
+        url = provider_web_url(agent, transcript)
+        session["web_url"] = url
+        if url and sid:
+            _remember(_PROVIDER_URL_CACHE, sid, url)
+            _PROVIDER_URL_MISSES.pop(sid, None)
+        elif identity is not None:
+            _remember(_PROVIDER_URL_MISSES, sid, identity)
+
+
+def _transcript_identity(transcript: Path) -> Optional[Tuple[int, int]]:
+    """``(size, mtime_ns)`` of a PTY transcript; ``None`` when it can't be
+    stat'ed, which caches nothing, so the next poll tries again."""
+    try:
+        st = transcript.stat()
+    except OSError:
+        return None
+    return st.st_size, st.st_mtime_ns
+
+
+def _remember(cache: Dict[str, Any], sid: str, value: Any) -> None:
+    if len(cache) >= _PROVIDER_URL_CACHE_MAX:
+        # Dead session ids accumulate over a long-lived tray. Drop the lot
+        # rather than track recency: the cost of rebuilding is one extra scan
+        # per live session, once.
+        cache.clear()
+    cache[sid] = value
+
+
 def client_ip(request: Request) -> str:
     return request.client.host if request.client else "?"
+
+
+def launch_mirror_enabled(cfg: WebappConfig) -> bool:
+    """Whether a *launch* may open a PC mirror window at all.
+
+    One source of truth for every launch path: window mirroring must be
+    available (``claude_show_local_window``) and the owner must have asked for
+    windows (Settings' "Open sessions in a new window",
+    ``open_sessions_in_window``). Off, a session renders in the page whoever
+    started it and from whatever surface. The row menu's explicit "Open in new
+    window" does not come through here: it posts to ``/mirror``, which needs
+    only ``claude_show_local_window``.
+    """
+    return bool(cfg.claude_show_local_window and cfg.open_sessions_in_window)
 
 
 def should_mirror_to_pc(
@@ -154,32 +350,43 @@ def should_mirror_to_pc(
 
     * **Phone** — non-loopback and no ``desktop`` flag: the PC has no window
       of its own, so mirror to one.
-    * **Desktop browser** — ``desktop: true`` in the launch body:
-      mirror to a dedicated, independently-closable Edge window rather
-      than rendering the terminal inside the user's own browser. Skipping
-      the mirror for the PTY case is wrong — the "redundant" in-page render was the very
-      thing that let Stop & Close tear down the controlling Chrome window, so the dedicated
-      window is the fix, not the redundancy. The flag (set client-side by
-      ``isDesktopClient``) is what distinguishes a desktop from a phone
-      regardless of loopback vs tunnel.
+    * **Desktop browser** — ``desktop: true`` in the launch body: mirror to
+      a dedicated, independently-closable Edge window rather
+      than rendering the terminal inside the user's own browser. Rendering
+      the terminal in-page here too would look redundant but is not: that
+      in-page render is the very thing that lets Stop & Close tear down the
+      controlling Chrome window, so the dedicated mirror window is required.
+      The flag (set client-side by ``isDesktopClient``) is what distinguishes
+      a desktop from a phone regardless of loopback vs tunnel.
     * **Genuine in-page loopback browser** — ``in_page: true`` in the launch
       body: the SPA itself sets this whenever it's about to
-      render the session in-page (``applyLaunchSizePayload``'s non-desktop
+      render the session in-page (``launch-size.js``'s ``applyLaunchSizePayload`` non-desktop
       branch — a phone always takes this branch too, but the non-loopback
       check above already mirrors it before this is ever consulted). An
       *explicit* signal, not an inference from "loopback and no desktop
-      flag" — that inference used to double as "skip", which silently
-      starved every non-browser loopback API caller (a script, an
-      orchestrator dispatching over ``127.0.0.1``) of a window at all:
-      there was no page for them to render into, so "skip" meant "renders
-      nowhere". Any other loopback caller — including one that sends neither
-      flag — now mirrors by default.
+      flag" — that inference alone cannot tell a genuine in-page browser
+      apart from every other non-browser loopback API caller (a script, the
+      fleet chief orchestrator dispatching over ``127.0.0.1``), which has no
+      page to render into and so must still get a window. Any other
+      loopback caller — including one that sends neither
+      flag — mirrors by default.
+
+    A disposable e2e / verify-before-ship instance (``LAUNCHER_SESSION_HOST_PORT``
+    set, which only autoboot does) never mirrors, whatever the caller sends —
+    the rule ``/api/claude-code/sessions/<sid>/mirror`` and the orphan-mirror
+    sweep both follow. Without it, every gate run's real-agent
+    launch would leave a real Edge window on the user's desktop: the
+    window loads the throwaway instance, can't authenticate, never reaches
+    ``announceMirrorWindow`` to set its ``app-launcher-lite-mirror-<sid>`` title
+    marker, and so is invisible to both the Stop & Close and orphan sweeps.
     """
     # Imported here to avoid a module-load cycle (middleware imports nothing
     # from the routers package, but keep the dependency edge one-directional).
-    from app.webapp.middleware import LOOPBACK_HOSTS
+    from src.middleware.trust import LOOPBACK_HOSTS
 
     if not show_local_window:
+        return False
+    if instance_role.is_disposable():
         return False
     if bool(body.get("desktop")):
         return True
@@ -191,13 +398,13 @@ def should_mirror_to_pc(
 async def spawn_session_or_400(
     spawn_fn: Callable[..., Dict[str, Any]], /, *args: Any, **kwargs: Any
 ) -> Dict[str, Any]:
-    """Run ``spawn_agent_session`` off the event loop, mapping its two
+    """Run ``spawn_claude_session`` off the event loop, mapping its two
     failure modes onto HTTP responses.
 
     The shared *head* of every session-launch route, the counterpart to
-    :func:`audit_session_start_and_maybe_mirror`'s tail: call sites
+    :func:`audit_session_start_and_maybe_mirror`'s tail: six call sites
     across three routers — ``apps.py``'s Coding-tab remote + PTY launches,
-    ``board.py``'s issue-start, ``team_os.py``'s
+    ``board.py``'s issue-start, dispatch and chief-ensure, ``life_os.py``'s
     skill launch — repeated this identical two-arm mapping verbatim, with
     only the spawn arguments differing.
 
@@ -207,7 +414,7 @@ async def spawn_session_or_400(
     bad request by the time it reaches here.
 
     ``spawn_fn`` is passed in rather than imported here so
-    ``tests/conftest.py``'s per-router ``spawn_agent_session``
+    ``tests/conftest.py``'s per-router ``spawn_claude_session``
     monkeypatches still bite when the spawn runs on the caller's behalf —
     same contract as ``audit_mod`` / ``mirror_fn`` below.
     """
@@ -219,9 +426,69 @@ async def spawn_session_or_400(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+async def spawn_launcher_session(
+    spawn_fn: Callable[..., Dict[str, Any]],
+    cfg: WebappConfig,
+    *,
+    project_dir: Path,
+    name: str,
+    flags: str,
+    agent: str,
+    rows: int,
+    cols: int,
+    kind: str = "pty",
+    label: str = "",
+) -> Tuple[Dict[str, Any], str]:
+    """Spawn one launcher-owned session and return ``(session, sid)``.
+
+    Owns the two ``cfg``-derived arguments every launch route needs
+    — ``cfg.session_host_port`` and ``history_lines=cfg.terminal_history_lines``
+    — plus the ``sid = str(session.get("session_id") or "")`` line that
+    follows each one, so the five call sites across four routers —
+    ``apps.py``'s Coding-tab PTY launch, ``board.py``'s
+    issue-start and dispatch, ``board_chief.py``'s chief-ensure and
+    ``life_os_spawn.py``'s skill launch — build the call through here,
+    not by hand. Threading one more spawn argument
+    (as ``history_lines`` itself once was) means editing this one function.
+
+    This is deliberately **not** a ``spawn_and_audit`` that also runs
+    :func:`audit_session_start_and_maybe_mirror`: only ``apps.py`` runs the
+    two back to back. The other
+    sites do mandatory, order-dependent work in between — ``_mark_chief_managed``,
+    ``_type_into_session``, and in ``board_chief`` a ready-wait, a rename and
+    the ``/chief`` send whose ordering is load-bearing (rename FIRST, then
+    /chief). Collapsing the two halves would force that into callbacks.
+
+    ``apps.py``'s **remote** branch is not a caller: it passes no
+    ``rows``/``cols``/``history_lines`` at all, and widening it to send them
+    would change the request it makes for no gain (the session-host's
+    ``create_remote`` takes none of the three).
+
+    ``spawn_fn`` is passed in rather than imported here for the same reason
+    as :func:`spawn_session_or_400` — so ``tests/conftest.py``'s per-router
+    ``spawn_claude_session`` monkeypatches still bite.
+    """
+    extra: Dict[str, Any] = {"history_lines": cfg.terminal_history_lines}
+    if label:
+        extra["label"] = label
+    session = await spawn_session_or_400(
+        spawn_fn,
+        project_dir,
+        name,
+        flags,
+        cfg.session_host_port,
+        kind,
+        agent,
+        rows,
+        cols,
+        **extra,
+    )
+    return session, str(session.get("session_id") or "")
+
+
 async def audit_session_start_and_maybe_mirror(
     cfg: WebappConfig,
-    request: Request,
+    request: Optional[Request],
     body: Dict[str, Any],
     *,
     sid: str,
@@ -232,21 +499,28 @@ async def audit_session_start_and_maybe_mirror(
     mirror_fn: Callable[[str, str], Any],
     resume: Optional[bool] = None,
     skill: Optional[str] = None,
-    event: str = "session_start",
+    kind: str = "pty",
+    resume_sid: Optional[str] = None,
+    brief_chars: Optional[int] = None,
     mirror: bool = True,
 ) -> None:
-    """Audit a freshly spawned session, then mirror it to a PC terminal
-    window if appropriate — the shared tail every launch call site (Coding
-    tab ``apps.py``, Board issue-start ``board.py``, Team OS skill launch
-    ``team_os.py``) needs right after ``spawn_agent_session``.
+    """Audit a freshly spawned PTY session, then mirror it to a PC terminal
+    window if appropriate — the shared tail every PTY-launch
+    call site (Coding tab ``apps.py``, Board issue-start/dispatch
+    ``board.py``) needs right after ``spawn_claude_session``.
 
-    Both audit writes go through :func:`audit_off_loop`: the webapp runs a
-    single uvicorn loop, so a synchronous write here would stall every live
-    session's WS output.
+    Life OS (``routers/life_os_spawn.py``) routes through here too, rather
+    than carrying its own parallel copy of this tail, passing its two
+    differences — the ``remote`` kind and its own ``resume_sid`` field — as
+    ``kind`` / ``resume_sid``. One audit+mirror workflow, not two copies
+    that would otherwise need to be kept in step by hand on every change.
 
-    ``event`` is the cross-session audit event name (``remote_launch`` for a
-    Team OS remote-control session); ``mirror=False`` skips the PC window for
-    sessions that have no PTY to mirror.
+    The three parameters that carry the difference all default to the PTY
+    behaviour the other call sites already had: ``kind="pty"`` (the mirror
+    is PTY-only — a detached session has no window to mirror),
+    ``resume_sid=None`` (dropped by ``_fmt_fields``, so an audit line that
+    never carried the field still doesn't) and the ``session_start`` event
+    name, which a remote launch overrides with ``remote_launch``.
 
     ``audit_mod`` / ``mirror_fn`` must be the *caller's own* module-level
     ``audit`` / ``open_local_terminal_window`` references (not this module's)
@@ -255,16 +529,29 @@ async def audit_session_start_and_maybe_mirror(
     real windows or writing real audit logs — still take effect when this
     helper runs on the caller's behalf.
     """
+    # Both writes go off the event loop (the call site the earlier
+    # event-loop sweep missed): this is the shared tail every PTY spawn
+    # runs — Coding tab, Board issue-start/dispatch, and the fleet chief — so
+    # a slow audit write here freezes the single-worker loop on every launch.
     await audit_off_loop(
         audit_mod.audit_event,
-        event,
+        "remote_launch" if kind == "remote" else "session_start",
         session=sid,
         agent=agent,
         skill=skill,
         name=name,
         project=project,
         resume=resume,
-        client=client_ip(request),
+        # Which conversation was reattached — "" for a fresh launch
+        # or the native picker, where no id was chosen up front. None for a
+        # caller that has no such concept, and dropped from the line.
+        resume_sid=resume_sid,
+        # A Board issue-start dispatch brief: its size only, never
+        # its content. None (no brief) is dropped from the line.
+        brief_chars=brief_chars,
+        # No request: the Telegram boot-time autostart, which no
+        # client asked for.
+        client=client_ip(request) if request is not None else "startup",
     )
     await audit_off_loop(
         audit_mod.session_log,
@@ -272,10 +559,14 @@ async def audit_session_start_and_maybe_mirror(
     )
     # Mirror the session into a dedicated interactive terminal window on the
     # PC — the default for every caller; only
-    # an explicit in-page loopback browser skips it (see should_mirror_to_pc).
+    # an explicit in-page loopback browser skips it (see should_mirror_to_pc),
+    # and a caller passing ``mirror=False`` — the fleet chief's own Board
+    # dispatch, which runs unwatched until Roberto opens it.
     # mirror_url picks loopback (auth-bypass) or the ts.net URL with explicit
     # credentials, keyed on the active cert.
-    if mirror and should_mirror_to_pc(cfg.show_local_window, request, body):
+    if mirror and request is not None and kind == "pty" and should_mirror_to_pc(
+        launch_mirror_enabled(cfg), request, body
+    ):
         # Pass sid so launcher tracks the mirror window's HWND for Stop &
         # Close to dismiss it later.
         asyncio.create_task(

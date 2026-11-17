@@ -9,6 +9,8 @@ full per-family surface.  Top-level families:
                  GET  /api/version              → git_sha + asset_hash
                  GET  /api/agents               → registered coding agents
                  GET  /api/system/load          → header CPU reading (cached)
+                 GET  /api/system/health        → hub's PC health verdict (cached)
+                 POST /api/system/restart/{id}  → restart one allowlisted process
 
     auth         POST /api/login                → swap password for token
 
@@ -25,14 +27,20 @@ full per-family surface.  Top-level families:
                  DELETE /api/apps/{id}          → remove
                  POST /api/apps/{id}/launch     → spawn bat or coding-agent session
 
-    sessions     GET  /api/coding/sessions           → running sessions
-                 POST /api/coding/sessions/{sid}/stop
-                 POST /api/coding/sessions/{sid}/image
-                 WS   /api/coding/sessions/{sid}/ws
+    sessions     GET  /api/claude-code/sessions           → running sessions
+                 POST /api/claude-code/sessions/{sid}/stop
+                 POST /api/claude-code/sessions/{sid}/image
+                 POST /api/claude-code/sessions/{sid}/large-file → streamed, not read
+                 WS   /api/claude-code/sessions/{sid}/ws
 
-    coding       GET  /api/coding/flags              → persisted Copilot flags
-                 GET  /api/coding/git-status         → per-project branch+dirty
-                 POST /api/coding/favorites          → star/unstar a project
+    claude_code  GET  /api/claude-code/git-status         → per-project branch+dirty+ahead/behind
+                 POST /api/claude-code/git-fetch          → fetch every repo's origin
+                 POST /api/claude-code/pull/{id}          → fast-forward one repo
+                 POST /api/claude-code/sync-all           → fast-forward every safe repo
+                 POST /api/claude-code/vscode/{id}        → open in VS Code
+                 GET  /api/claude-code/changes/{id}       → working-tree file list
+                 GET  /api/claude-code/changes/{id}/diff  → one file's unified diff
+                 POST /api/claude-code/folder/{id}        → open in Explorer
 
     jobs         /api/jobs/*                   → Jobs tab (~30 routes)
 
@@ -49,47 +57,62 @@ import mimetypes
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional, Tuple
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope
 
-from app.webapp.middleware import BearerTokenMiddleware
+from app.webapp import chief_doorbell
 from app.webapp.observability import (
     SlowRequestLogMiddleware,
+    ensure_autostart_log_handler,
+    ensure_doorbell_log_handler,
     ensure_slow_log_handler,
+    ensure_warning_log_handler,
 )
 from app.webapp.routers import (
     apps,
     auth,
     board,
-    coding,
+    claude_code,
     config,
     desktop_screen,
+    documents,
     jobs,
     misc,
+    session_screen,
+    session_transcript,
     sessions,
     team_os,
     tokens,
     webauthn,
 )
 from app.webapp.routers._helpers import STATIC_DIR
-from src import launcher, session_client, system_load
+from app.webapp.static_trim import trim_js
+from src import app_runtime, instance_role, system_load
 from src.app_config import load_app_config
-from src.login_lockout import LoginLockout
+from src.auth.webauthn_gate import WebAuthnGate
+from src.clients import session as session_client
+from src.compression import StreamSafeGZipMiddleware
+from src.jobs import snapshot as jobs_snapshot
+from src.launching import launcher
+from src.middleware import BearerTokenMiddleware
 from src.runtime_data import runtime_db_path
 from src.static_versioning import (
     compute_asset_hashes,
     fleet_hash_of,
     rewrite_js_imports,
 )
+from src.stylesheet_bundle import BUNDLE_RELPATH, build_bundle
 from src.usage_log import usage_router
-from src.webapp_config import SESSION_HOST_PORT_ENV, load_webapp_config
-from src.webauthn_gate import WebAuthnGate
+from src.webapp_config import load_webapp_config
 
 _log = logging.getLogger(__name__)
+# The lifespan's instance-role lines: a child so the file handler
+# takes these and not every other INFO this module logs.
+_autostart_log = logging.getLogger(f"{__name__}.autostart")
 
 _LONG_CACHE = "public, max-age=31536000, immutable"
 _DAY_CACHE = "public, max-age=86400"
@@ -100,8 +123,10 @@ _HASHED_SUFFIXES = {".js", ".css"}
 # icons surviving for a year if we ever do swap them. .svg (the brand
 # icons) is also ?v=-stamped client-side, so the day cap
 # only bounds an unstamped fetch; without it Safari's heuristic cache
-# held stale icons past the deploy.
+# held the previous icons past the deploy.
 _DAY_CACHE_SUFFIXES = {".webmanifest", ".png", ".ico", ".svg"}
+# Third-party bundles under static/: served as they are on disk.
+_VENDOR_DIRS = ("vendor",)
 
 
 class _VersionedStatic(StaticFiles):
@@ -117,6 +142,27 @@ class _VersionedStatic(StaticFiles):
         super().__init__(directory=directory)
         self._asset_hashes = asset_hashes
         self._static_dir = Path(directory)
+        self._js_cache: Dict[str, Tuple[Tuple[int, int], str]] = {}
+
+    def _served_js(self, path: Path, stat_result: os.stat_result) -> str:
+        """The module as sent: comments stripped (vendored bundles are already
+        minified and keep their licence text), imports stamped. Kept per file
+        until it changes on disk, so a repeat request does no scan."""
+        signature = (stat_result.st_mtime_ns, stat_result.st_size)
+        cached = self._js_cache.get(str(path))
+        if cached is not None and cached[0] == signature:
+            return cached[1]
+        body = path.read_text(encoding="utf-8")
+        try:
+            rel_parent = path.resolve().relative_to(self._static_dir.resolve()).parent
+        except ValueError:
+            rel_parent = Path(".")
+        if rel_parent.parts[:1] != _VENDOR_DIRS:
+            body = trim_js(body)
+        from_dir = "" if rel_parent == Path(".") else rel_parent.as_posix()
+        served = rewrite_js_imports(body, self._asset_hashes, from_dir)
+        self._js_cache[str(path)] = (signature, served)
+        return served
 
     def file_response(
         self,
@@ -130,18 +176,12 @@ class _VersionedStatic(StaticFiles):
 
         if suffix == ".js":
             try:
-                body = path.read_text(encoding="utf-8")
+                body = self._served_js(path, stat_result)
             except OSError:
                 return super().file_response(full_path, stat_result, scope, status_code)
-            try:
-                rel_parent = path.resolve().relative_to(self._static_dir.resolve()).parent
-            except ValueError:
-                rel_parent = Path(".")
-            from_dir = "" if rel_parent == Path(".") else rel_parent.as_posix()
-            rewritten = rewrite_js_imports(body, self._asset_hashes, from_dir)
             media_type, _ = mimetypes.guess_type(str(path))
             return Response(
-                content=rewritten,
+                content=body,
                 status_code=status_code,
                 media_type=media_type or "text/javascript",
                 headers={"Cache-Control": _LONG_CACHE},
@@ -155,10 +195,37 @@ class _VersionedStatic(StaticFiles):
         return response
 
 
+def _load_stylesheet_bundle(app: FastAPI, asset_hashes: Dict[str, str]) -> Optional[str]:
+    """Build the one-response stylesheet and register its route, or ``None``.
+
+    The route is added ahead of the ``/static`` mount, which would otherwise
+    answer ``/static/bundle.css`` with a 404. The bundle takes the fleet hash
+    like every other asset so the index stamps its URL. On ``None`` the index
+    keeps its separate links, so a failed build costs speed, not styling.
+    """
+    if not asset_hashes:
+        return None
+    try:
+        bundle = build_bundle(STATIC_DIR)
+    except OSError:
+        _log.exception("❌ could not build the stylesheet bundle; serving separate sheets")
+        return None
+    if bundle is None:
+        return None
+    asset_hashes[BUNDLE_RELPATH] = app.state.asset_fleet_hash
+
+    def _serve_bundle() -> Response:
+        return Response(bundle, media_type="text/css", headers={"Cache-Control": _LONG_CACHE})
+
+    app.add_api_route(f"/static/{BUNDLE_RELPATH}", _serve_bundle, include_in_schema=False)
+    _log.info("ℹ️ Stylesheets bundled into /static/%s (%d bytes)", BUNDLE_RELPATH, len(bundle))
+    return bundle
+
+
 async def _reconcile_orphan_mirror_windows(app: FastAPI) -> None:
     """On boot, close Edge mirror windows no live session backs.
 
-    The in-memory HWND registry (``src.launcher._mirror_hwnds``) is dropped
+    The in-memory HWND registry (``src.launching.launcher._mirror_hwnds``) is dropped
     on every webapp restart, so mirrors opened before the restart can no
     longer be closed by sid and pile up on the desktop. Reconcile them
     against the session-host's live list — but only when that list is
@@ -168,20 +235,18 @@ async def _reconcile_orphan_mirror_windows(app: FastAPI) -> None:
     The sweep is machine-global (``EnumWindows`` over the whole desktop), so a
     *disposable* webapp — the e2e / verify-before-ship gate's autoboot instance,
     pointed at an empty disposable session-host — would see an empty live list
-    and ``WM_CLOSE`` every real ``app-launcher-mirror-*`` window on the desktop,
+    and ``WM_CLOSE`` every real ``app-launcher-lite-mirror-*`` window on the desktop,
     killing the user's live session mirrors while the sessions survive headless
-    on the real ``:8466``. Isolating the session-host alone
-    would leave this window sweep machine-wide. Only the canonical instance owns the
-    desktop, so a disposable instance — identified by the
-    ``LAUNCHER_SESSION_HOST_PORT`` override, which is set *only* by autoboot and
-    never in production — skips the sweep entirely.
+    on the real ``:8466``. The disposable instance isolates the session-host but
+    not this window sweep, which is machine-wide. Only the canonical instance owns the
+    desktop, so a disposable instance (``instance_role.is_disposable``) skips
+    the sweep entirely.
     """
-    if os.environ.get(SESSION_HOST_PORT_ENV, "").strip():
+    if instance_role.is_disposable():
         _log.debug(
             "ℹ️ orphan mirror reconcile skipped — disposable instance "
-            "(%s set, e.g. e2e/verify autoboot); the machine-global sweep must "
-            "not close the canonical instance's desktop windows (#278)",
-            SESSION_HOST_PORT_ENV,
+            "(e2e/verify autoboot); the machine-global sweep must "
+            "not close the canonical instance's desktop windows (#278)"
         )
         return
     cfg = getattr(app.state, "webapp_config", None)
@@ -211,11 +276,12 @@ async def _reconcile_orphan_mirror_windows(app: FastAPI) -> None:
         _log.info("🧹 reconciled %d orphaned mirror window(s) on startup", closed)
 
 
-# --- Jobs missed-fire coverage tick -------------------------
+# --- Jobs stranded-run reap + missed-fire coverage tick -----
 # First scan is delayed so it never competes with boot; then one scan per
 # interval. The whole point of this tick is that it does NOT depend on the
-# Jobs tab being open — the two real incidents (`config-map` / `sota-watch`
-# registered no task at all) went unnoticed for weeks precisely because
+# Jobs tab being open — the two real missed-fire incidents (`config-map` /
+# `sota-watch` registered no task at all) went unnoticed for weeks, and a
+# stranded run went unreaped for over two months, precisely because
 # nothing looked when nobody was looking.
 _COVERAGE_FIRST_DELAY_SECONDS = 120.0
 
@@ -233,58 +299,168 @@ def _coverage_interval_minutes(cfg: object) -> float:
         return 0.0
 
 
-async def _coverage_tick(app: FastAPI) -> None:
-    """Periodically scan every job's schedule coverage and alert on breaks.
+def _publish_script_missing(cfg: object) -> None:
+    """Tell the chief about any job whose script moved (once per job per day)."""
+    from src.chief import script_missing
+    from src.jobs.config import load_jobs
 
-    Skipped entirely on a *disposable* instance (the e2e / verify-before-ship
-    autoboot webapp, identified by ``LAUNCHER_SESSION_HOST_PORT`` exactly as
-    the mirror-window sweep above is): a throwaway instance pointed at a
-    scratch config must never push a real alert to the user's phone.
+    script_missing.observe(cfg, load_jobs().jobs)
 
-    Every scan is wrapped by :func:`src.jobs.coverage.check_and_alert`, which
-    never raises — a wedged Task Scheduler or an unreachable Telegram must
-    not take the webapp's lifespan down.
+
+async def _coverage_cycle(cfg: object) -> None:
+    """One sweep: stranded-run reap then missed-fire coverage.
+
+    Reap runs first — :func:`src.jobs.reap.reap_stranded_runs_all` is
+    otherwise lazy-on-read (only ``GET /api/jobs`` or the Board trigger it),
+    so a stranded record from a checkout nobody polls can sit un-finalised,
+    and its failure alert un-sent, indefinitely (a June spawn failure went
+    unreaped, and unnotified, for over two months until this tick started
+    catching it). Reaping first also means coverage's behavioural half sees
+    a freshly-terminal record rather than a stale "running" one.
+
+    Both halves never raise — a wedged Task Scheduler, a bad job's history,
+    or an unreachable Telegram must not take the webapp's lifespan down.
     """
     from src.jobs import coverage as jobs_coverage
+    from src.jobs.reap import reap_stranded_runs_all
 
+    reaped = await asyncio.to_thread(reap_stranded_runs_all)
+    if reaped:
+        _log.warning(
+            "🧟 swept %d stranded run(s) across %d job(s): %s",
+            sum(len(v) for v in reaped.values()),
+            len(reaped),
+            ", ".join(reaped),
+        )
+    await asyncio.to_thread(_publish_script_missing, cfg)
+    alerted = await asyncio.to_thread(jobs_coverage.check_and_alert, cfg)
+    if alerted:
+        _log.warning(
+            "🕳️ coverage alerts pushed for %d job(s): %s",
+            len(alerted),
+            ", ".join(alerted),
+        )
+
+
+async def _coverage_tick(app: FastAPI) -> None:
+    """Periodically reap stranded runs and scan schedule coverage.
+
+    Started only on the **canonical** instance
+    (:func:`src.instance_role.canonical_instance`): a non-canonical checkout
+    carries the real config and real credentials but derives coverage (and
+    reaps) from its own empty ``webapp/jobs/``, so it must never push a real
+    alert to the user's phone. That covers the e2e / verify-before-ship
+    autoboot webapp — the ``LAUNCHER_SESSION_HOST_PORT`` case
+    and the same marker the mirror-window sweep above uses —
+    *and* the git worktree that actually pushed three false alerts.
+    """
     cfg = getattr(app.state, "webapp_config", None)
     if cfg is None:
         return
     interval = max(60.0, _coverage_interval_minutes(cfg) * 60.0)
     await asyncio.sleep(_COVERAGE_FIRST_DELAY_SECONDS)
     while True:
-        alerted = await asyncio.to_thread(jobs_coverage.check_and_alert, cfg)
-        if alerted:
-            _log.warning(
-                "🕳️ coverage alerts pushed for %d job(s): %s",
-                len(alerted),
-                ", ".join(alerted),
-            )
+        await _coverage_cycle(cfg)
         await asyncio.sleep(interval)
+
+
+# --- webapp/sessions retention sweep ------------------------
+# Once a day, off the event loop. The first sweep waits well past boot so it
+# never competes with the restart it follows.
+_RETENTION_FIRST_DELAY_SECONDS = 600.0
+_RETENTION_INTERVAL_SECONDS = 24 * 3600.0
+
+
+def _session_retention_days(cfg: object) -> int:
+    """The configured window in days; ``0`` (keep forever) when unset.
+
+    Unlike the coverage interval, a config object *without* the key reads as
+    off, not as the schema default: this tick deletes, so an absent setting
+    must never arm it. A real :class:`~src.webapp_config.WebappConfig` always
+    carries the field, so this only matters for stubs and garbage.
+    """
+    try:
+        return max(0, int(getattr(cfg, "session_retention_days", 0) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+async def _session_retention_tick(app: FastAPI) -> None:
+    """Sweep expired ``webapp/sessions`` files once a day.
+
+    Canonical-instance only, like the coverage tick: a disposable gate webapp
+    shares this checkout's ``webapp/sessions`` but talks to its own empty
+    session-host, so its "live" list would protect none of the real sessions.
+    The config is re-read each cycle so a Settings save that swaps
+    ``app.state.webapp_config`` is honoured without a restart.
+    """
+    from src import session_retention
+
+    await asyncio.sleep(_RETENTION_FIRST_DELAY_SECONDS)
+    while True:
+        cfg = getattr(app.state, "webapp_config", None)
+        days = _session_retention_days(cfg)
+        if cfg is not None and days > 0:
+            try:
+                await asyncio.to_thread(
+                    session_retention.run_scheduled_sweep,
+                    cfg.session_host_port,
+                    days,
+                )
+            except Exception:  # noqa: BLE001 — never take the lifespan down
+                _log.exception("❌ session retention sweep failed")
+        await asyncio.sleep(_RETENTION_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     await _reconcile_orphan_mirror_windows(app)
-    # The header's CPU reading: one shared sampler, awake only while a
-    # page polls /api/system/load, so every instance runs it.
-    load_task = asyncio.create_task(system_load.tick_forever())
-    coverage_task = None
+    # Launched apps outlive a launcher restart; take the previous launcher's
+    # records back now so the line naming any that died lands at boot.
+    await asyncio.to_thread(app_runtime.adopt_previous)
+    # The jobs runtime snapshot behind /api/jobs and /api/board. It
+    # only walks while those polls are asking, so every instance runs it:
+    # the reads it serves happen on every instance too.
+    tasks = [asyncio.create_task(jobs_snapshot.tick_forever())]
+    # The header's CPU reading: one shared sampler, awake only while
+    # a page polls /api/system/load.
+    tasks.append(asyncio.create_task(system_load.tick_forever()))
+    # The snapshot behind /api/version, rebuilt only while that route is polled.
+    tasks.append(asyncio.create_task(misc.version_cache(app).tick_forever()))
     cfg = getattr(app.state, "webapp_config", None)
-    disposable = bool(os.environ.get(SESSION_HOST_PORT_ENV, "").strip())
-    if cfg is not None and not disposable and _coverage_interval_minutes(cfg) > 0:
-        coverage_task = asyncio.create_task(_coverage_tick(app))
-    elif disposable:
-        _log.debug(
-            "ℹ️ jobs coverage tick skipped — disposable instance (%s set)",
-            SESSION_HOST_PORT_ENV,
+    canonical, role_reason = instance_role.canonical_instance()
+    if cfg is not None and canonical:
+        if _coverage_interval_minutes(cfg) > 0:
+            tasks.append(asyncio.create_task(_coverage_tick(app)))
+        if _session_retention_days(cfg) > 0:
+            tasks.append(asyncio.create_task(_session_retention_tick(app)))
+        # Always started: it re-reads the chief_doorbell toggle every tick and
+        # does nothing while it is off, so a Settings save arms it live.
+        tasks.append(asyncio.create_task(chief_doorbell.tick_forever(app)))
+        # The Projects tiles' ahead/behind: a slow fetch round while a page
+        # polls git status. Canonical only, so a gate webapp stays offline.
+        tasks.append(asyncio.create_task(claude_code.fetch_tick_forever(app)))
+    elif not canonical:
+        # The autoboot case is expected on every gate run, so it stays quiet;
+        # any *other* non-canonical instance is a surprise worth finding in
+        # the log after the phone buzzes.
+        emit, mark = (
+            (_autostart_log.debug, "ℹ️")
+            if role_reason == instance_role.REASON_DISPOSABLE
+            else (_autostart_log.warning, "⚠️")
+        )
+        emit(
+            "%s jobs coverage + session retention ticks and the chief doorbell "
+            "skipped — non-canonical instance (%s, root=%s); only the canonical "
+            "checkout may alert, reap or ring",
+            mark,
+            role_reason,
+            instance_role.PROJECT_ROOT,
         )
     try:
         yield
     finally:
-        for task in (coverage_task, load_task):
-            if task is None:
-                continue
+        for task in tasks:
             task.cancel()
             try:
                 await task
@@ -298,9 +474,12 @@ def create_app() -> FastAPI:
 
     auth.ensure_log_handler()
     ensure_slow_log_handler()
+    ensure_autostart_log_handler(_autostart_log)
+    ensure_doorbell_log_handler(chief_doorbell.logger)
+    ensure_warning_log_handler()
 
     app = FastAPI(
-        title="App Launcher Lite",
+        title="Launcher",
         version="0.1.0",
         lifespan=_lifespan,
     )
@@ -309,16 +488,17 @@ def create_app() -> FastAPI:
         BearerTokenMiddleware,
         get_config=lambda: app.state.webapp_config,
     )
-    # Added last → outermost, so the timing covers the whole stack including
-    # the auth middleware.
+    # Outside the auth middleware, so the timing covers it.
     app.add_middleware(SlowRequestLogMiddleware)
+    # Added last → outermost, so an auth failure or a bodyless 304 passes
+    # through it unchanged. No bypass path: the SSE stream is
+    # `text/event-stream`, skipped by content type.
+    app.add_middleware(StreamSafeGZipMiddleware, bypass_paths=())
 
     app.state.app_config = app_config
     app.state.webapp_config = webapp_cfg
     app.state.webauthn_gate = WebAuthnGate()
-    app.state.login_lockout = LoginLockout(
-        on_alert=auth.make_login_alert(lambda: app.state.webapp_config)
-    )
+    app.state.login_lockout = auth.build_login_lockout(lambda: app.state.webapp_config)
 
     asset_hashes = compute_asset_hashes(STATIC_DIR)
     app.state.asset_hashes = asset_hashes
@@ -330,6 +510,8 @@ def create_app() -> FastAPI:
             len(asset_hashes),
         )
 
+    app.state.stylesheet_bundle = _load_stylesheet_bundle(app, asset_hashes)
+
     if STATIC_DIR.exists():
         app.mount(
             "/static",
@@ -340,17 +522,21 @@ def create_app() -> FastAPI:
     app.include_router(misc.router)
     app.include_router(auth.router)
     app.include_router(config.router)
+    app.include_router(documents.router)
     app.include_router(tokens.router)
     app.include_router(apps.router)
     app.include_router(jobs.router)
     app.include_router(sessions.router)
+    app.include_router(claude_code.router)
+    app.include_router(session_transcript.router)
+    app.include_router(session_screen.router)
     app.include_router(desktop_screen.router)
-    app.include_router(coding.router)
-    app.include_router(team_os.router)
     app.include_router(board.router)
+    app.include_router(team_os.router)
     app.include_router(webauthn.router)
-    # Local-only view/tap log. Behind the bearer-token middleware like every /api route;
-    # static/usage.js hands the vendored client the bearer header.
+    # Local-only view/tap log. Behind the bearer-token middleware like
+    # every /api route; static/usage.js hands the vendored client the bearer
+    # header through its `headers` option.
     app.include_router(usage_router(
         runtime_db_path("app-launcher-lite", "usage.sqlite3", create=True),
     ))

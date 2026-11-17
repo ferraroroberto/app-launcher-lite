@@ -1,0 +1,172 @@
+/* Settings > Documents: the fleet's sources of truth, read on the phone.
+ *
+ * GET /api/documents lists the configured documents (title, repo, last
+ * changed); a tap opens the reading sheet, which fetches
+ * GET /api/documents/{id} behind the passkey gate and renders it with the
+ * shared Markdown renderer in the same `.tr-md` box the Changed files Preview
+ * uses, then draws its Mermaid blocks. The browser only ever sends an id from
+ * the list, never a path.
+ *
+ * A "Copy Markdown" button copies the open document's raw file text, and a
+ * row elsewhere in Settings (`data-open-document="<id>"`, e.g. the Chief
+ * sheet's Grok Bot directive) opens the same sheet over its own sheet.
+ *
+ * The group is hidden when nothing is configured. A list that could not be
+ * read is a muted row with Retry, never an empty group.
+ */
+
+import { els } from '../state.js';
+import { apiFailToast, jsonApi, toast } from '../api.js';
+import { terminalJsonApi } from '../webauthn.js';
+import { renderMarkdown } from '../markdown.js';
+import { renderMermaidIn } from '../shared/mermaid-render.js';
+import { agoText } from '../shared/format.js';
+import { showPath } from './settings-sheets.js';
+
+let documents = [];
+let listed = false;
+// The open document's request number: a slower answer for an earlier tap, or
+// for a sheet since closed, is ignored.
+let openSeq = 0;
+let openId = null;
+// The open document's page on github.com, or null when its repo has no GitHub
+// remote (the button is then hidden). Only https://github.com links are kept.
+let githubUrl = null;
+// The open document's raw text, or null until it has been read; the copy
+// button is hidden while it is null.
+let rawText = null;
+
+function changedText(iso) {
+  const ago = agoText(iso);
+  return ago ? 'Updated ' + ago : 'Unavailable';
+}
+
+function rowFor(doc) {
+  const row = els.documentRowTemplate.content.firstElementChild.cloneNode(true);
+  row.dataset.docId = doc.id;
+  row.querySelector('.settings-row-label').textContent = doc.title;
+  row.querySelector('.settings-row-sub').textContent = doc.repo + ' · ' + changedText(doc.updated);
+  return row;
+}
+
+function renderList() {
+  els.documentsGroup.replaceChildren(...documents.map(rowFor));
+  els.documentsSection.hidden = !documents.length;
+}
+
+async function fetchList(quiet) {
+  try {
+    const body = await jsonApi('/api/documents');
+    documents = (body && body.documents) || [];
+    listed = true;
+    els.documentsError.hidden = true;
+    renderList();
+  } catch (exc) {
+    // Rows already on screen stay; a list never read shows the Retry row.
+    if (!listed) {
+      els.documentsGroup.replaceChildren();
+      els.documentsSection.hidden = false;
+      els.documentsError.hidden = false;
+    }
+    if (!quiet) apiFailToast('Documents', exc);
+  }
+}
+
+function setGithub(url) {
+  githubUrl = typeof url === 'string' && url.startsWith('https://github.com/') ? url : null;
+  els.documentGithub.hidden = !githubUrl;
+}
+
+function setRaw(text) {
+  rawText = typeof text === 'string' ? text : null;
+  els.documentCopy.hidden = rawText === null;
+}
+
+// iOS allows a clipboard write only inside the tap: writeText is called
+// synchronously from the click, never after an await.
+function copyRaw() {
+  if (rawText === null) return;
+  try {
+    navigator.clipboard.writeText(rawText).then(
+      function () { toast('Markdown copied', 'good', { icon: 'clipboard' }); },
+      function (exc) { apiFailToast('Couldn’t copy the Markdown', exc); }
+    );
+  } catch (exc) {
+    apiFailToast('Couldn’t copy the Markdown', exc);
+  }
+}
+
+function showState(message, withRetry) {
+  els.documentBody.replaceChildren();
+  els.documentState.hidden = false;
+  els.documentStateMessage.textContent = message;
+  els.documentRetry.hidden = !withRetry;
+}
+
+async function loadDocument(id) {
+  const mine = (openSeq += 1);
+  openId = id;
+  const doc = documents.find(function (d) { return d.id === id; });
+  els.documentSheetTitle.textContent = doc ? doc.title : 'Document';
+  els.documentUpdated.textContent = '';
+  setGithub(null);
+  setRaw(null);
+  showState('Loading…', false);
+  let body;
+  try {
+    body = await terminalJsonApi('/api/documents/' + encodeURIComponent(id));
+  } catch (exc) {
+    if (mine !== openSeq) return;
+    showState("Couldn't read this document: " + (exc.message || exc), true);
+    return;
+  }
+  if (mine !== openSeq) return;
+  els.documentState.hidden = true;
+  els.documentSheetTitle.textContent = body.title || els.documentSheetTitle.textContent;
+  els.documentUpdated.textContent = changedText(body.updated) + ' · ' + body.repo;
+  setGithub(body.github_url);
+  setRaw(body.content || '');
+  els.documentBody.innerHTML = renderMarkdown(body.content || '', { hideComments: true });
+  els.documentBody.scrollTop = 0;
+  await renderMermaidIn(els.documentBody);
+}
+
+function closeDocument() {
+  openSeq += 1;
+  openId = null;
+  setGithub(null);
+  setRaw(null);
+  els.documentBody.replaceChildren();
+}
+
+export function wireDocuments() {
+  if (!els.documentsGroup || !els.documentSheet) return;
+  els.documentsGroup.addEventListener('click', function (ev) {
+    const row = ev.target.closest('[data-doc-id]');
+    if (!row) return;
+    showPath(['documentSheet']);
+    loadDocument(row.dataset.docId);
+  });
+  // A row outside the list (the Chief sheet's) opens a document by its id,
+  // stacked on its own sheet so Back returns there.
+  document.addEventListener('click', function (ev) {
+    const opener = ev.target.closest('[data-open-document]');
+    if (!opener) return;
+    const sheetId = opener.closest('dialog.settings-sheet').id;
+    showPath([sheetId, 'documentSheet']);
+    loadDocument(opener.dataset.openDocument);
+  });
+  els.documentCopy.addEventListener('click', copyRaw);
+  els.documentRetry.addEventListener('click', function () {
+    if (openId) loadDocument(openId);
+  });
+  els.documentGithub.addEventListener('click', function () {
+    if (githubUrl) window.open(githubUrl, '_blank', 'noopener,noreferrer');
+  });
+  els.documentsRetry.addEventListener('click', function () { fetchList(false); });
+  els.documentSheet.addEventListener('close', closeDocument);
+  // Read on each visit to Settings, so a row's time is never older than the file.
+  document.addEventListener('launcher:tab', function (e) {
+    if (e.detail && e.detail.tab === 'settings') fetchList(true);
+  });
+}
