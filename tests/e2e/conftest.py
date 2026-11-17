@@ -53,12 +53,22 @@ import pytest
 import requests
 import urllib3
 from playwright.sync_api import Browser, BrowserContext, Page
-from playwright.sync_api import Error as PlaywrightError
 
+from src._loopback_http import pooled_request
 from src.app_config import resolve_webapp_port
 from src.runtime_data import app_dir_env_var
 from src.scanner import dir_ignored
 from tests.e2e._flow import run_scenarios
+
+# A scenario's context outlives it (`_shared_context`), and a failure that is the
+# host's drained loopback port pool says so (`_port_pool`) instead of reading as a page defect.
+from tests.e2e._port_pool import (
+    pytest_runtest_makereport,  # noqa: F401  (pytest hook)
+    retry_goto_on_no_buffer_space,
+)
+from tests.e2e._port_pool import write_summary as port_pool_summary
+from tests.e2e._shared_context import SharedContexts, install_taint_guard
+from tests.e2e._shared_context import write_summary as shared_context_summary
 from tests.e2e._shot import CHROMIUM_CAPTURE_ARGS
 
 logger = logging.getLogger(__name__)
@@ -127,6 +137,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Boot a disposable webapp + session-host instead of requiring a "
         "live tray. Equivalent to LAUNCHER_E2E_AUTOBOOT=1.",
     )
+
+
+def pytest_terminal_summary(terminalreporter) -> None:
+    shared_context_summary(terminalreporter)
+    port_pool_summary(terminalreporter)
 
 
 def pin_scan_to_checkout(cfg: dict, checkout: Path, keep: tuple = ()) -> dict:
@@ -268,7 +283,7 @@ def _wait_healthz(base: str, timeout: float) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            res = requests.get(f"{base}/healthz", timeout=2, verify=False)
+            res = pooled_request("GET", f"{base}/healthz", timeout=2, verify=False)
             if res.status_code == 200:
                 return True
         except requests.RequestException:
@@ -599,7 +614,7 @@ def _require_live_tray(request: pytest.FixtureRequest, base_url: str) -> None:
             returncode=2,
         )
     try:
-        res = requests.get(f"{base_url}/healthz", timeout=2, verify=False)
+        res = pooled_request("GET", f"{base_url}/healthz", timeout=2, verify=False)
         res.raise_for_status()
     except Exception as exc:
         pytest.skip(
@@ -682,50 +697,6 @@ def _seed_token_init_script(token: str) -> str:
     return f"window.localStorage.setItem({safe_key}, {safe});"
 
 
-def _tcp_state_counts() -> str:
-    """One-line TCP state histogram (``TIME_WAIT=412 ESTABLISHED=38 …``)."""
-    try:
-        out = subprocess.run(
-            ["netstat", "-an", "-p", "tcp"], capture_output=True, text=True,
-            timeout=10, creationflags=subprocess.CREATE_NO_WINDOW,
-            encoding="oem", errors="replace",
-        ).stdout
-    except (OSError, subprocess.SubprocessError) as exc:
-        return f"netstat unavailable ({exc.__class__.__name__})"
-    counts: dict = {}
-    for line in out.splitlines():
-        fields = line.split()
-        if len(fields) == 4 and fields[0] == "TCP":
-            counts[fields[3]] = counts.get(fields[3], 0) + 1
-    return " ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "no sockets"
-
-
-def _retry_goto_on_no_buffer_space(page: Page) -> None:
-    """Retry a navigation once when Windows runs out of socket buffers.
-
-    ``net::ERR_NO_BUFFER_SPACE`` (WSAENOBUFS) is the hosted runner's TCP stack
-    failing a loopback connect, not anything the page did: it reddened
-    ``Page.goto`` in two CI runs (#58). Only that exact error is retried, once,
-    after a short pause; the socket-state histogram is logged so a recurrence
-    is diagnosable from the run log. Every other navigation error, and a
-    second ``ERR_NO_BUFFER_SPACE``, still fails the test.
-    """
-    original = page.goto
-
-    def goto(*args, **kwargs):
-        try:
-            return original(*args, **kwargs)
-        except PlaywrightError as exc:
-            if "ERR_NO_BUFFER_SPACE" not in str(exc):
-                raise
-            logger.warning("⚠️  goto hit ERR_NO_BUFFER_SPACE (%s); retrying once",
-                           _tcp_state_counts())
-            time.sleep(2)
-            return original(*args, **kwargs)
-
-    page.goto = goto
-
-
 _QUIET_SYSTEM_LOAD = json.dumps({
     "level": "normal", "reason": None, "cpu_percent": 12.0,
     "memory": {"used_bytes": 8 * 1024**3, "total_bytes": 32 * 1024**3, "percent": 25.0},
@@ -733,10 +704,8 @@ _QUIET_SYSTEM_LOAD = json.dumps({
 })
 
 
-def _new_authed_page(context: BrowserContext, auth_token: str) -> Page:
-    """A page in ``context`` that boots signed in, with a quiet header load reading."""
-    if auth_token:
-        context.add_init_script(_seed_token_init_script(auth_token))
+def _new_authed_page(context: BrowserContext) -> Page:
+    """A page in ``context`` with a quiet header load reading; the context holds the token seed."""
     # The header load reading otherwise tracks the gate's own CPU; a test's
     # page.route() takes precedence over this context route.
     context.route(
@@ -746,7 +715,7 @@ def _new_authed_page(context: BrowserContext, auth_token: str) -> Page:
         ),
     )
     page = context.new_page()
-    _retry_goto_on_no_buffer_space(page)
+    retry_goto_on_no_buffer_space(page)
     return page
 
 
@@ -754,7 +723,9 @@ def _new_authed_page(context: BrowserContext, auth_token: str) -> Page:
 def authed_page(
     context: BrowserContext, base_url: str, auth_token: str
 ) -> Iterator[Page]:
-    page = _new_authed_page(context, auth_token)
+    if auth_token:
+        context.add_init_script(_seed_token_init_script(auth_token))
+    page = _new_authed_page(context)
     try:
         yield page
     finally:
@@ -788,7 +759,8 @@ def _stop_session(base_url: str, headers: dict, sid: str) -> None:
     which waits for the agent to process its quit command). Best-effort — a
     swallowed exception here must not mask the actual test failure."""
     try:
-        requests.post(
+        pooled_request(
+            "POST",
             f"{base_url}/api/coding/sessions/{sid}/stop",
             json={"mode": "kill"},
             headers=headers,
@@ -820,7 +792,8 @@ def _launch_copilot_via_webapp(base_url: str, auth_token: str) -> str:
 
     headers = _auth_headers(auth_token)
     try:
-        res = requests.post(
+        res = pooled_request(
+            "POST",
             f"{base_url}/api/apps/{_LAUNCH_TARGET_ID}/launch",
             json={"mode": "pty"},
             headers=headers,
@@ -871,7 +844,8 @@ def _pty_session(
         # through the webapp's launch endpoint (flags come from config
         # there). The session still surfaces through the webapp normally —
         # its session list proxies this same host.
-        res = requests.post(
+        res = pooled_request(
+            "POST",
             f"http://127.0.0.1:{sh_port}/sessions",
             json={
                 "project_dir": str(_REPO_ROOT),
@@ -951,10 +925,17 @@ def wait_for_session_log() -> Callable[..., bool]:
     return _wait
 
 
+@pytest.fixture(scope="session")
+def _shared_contexts(browser: Browser) -> SharedContexts:
+    # Rebuilt per projection with `browser`; the contexts close with the browser.
+    install_taint_guard()
+    return SharedContexts(browser)
+
+
 @pytest.fixture
 def run_flow(
     request: pytest.FixtureRequest,
-    browser: Browser,
+    _shared_contexts: SharedContexts,
     browser_context_args: dict,
     base_url: str,
     auth_token: str,
@@ -978,18 +959,22 @@ def run_flow(
                     _pty_session(request.config, base_url, auth_token)
                 )
             elif name in ("authed_page", "unauthed_page"):
+                authed = name == "authed_page"
+                seed = _seed_token_init_script(auth_token) if authed and auth_token else None
                 context = stack.enter_context(
-                    contextlib.closing(browser.new_context(**browser_context_args))
+                    _shared_contexts.lease(browser_context_args, seed, base_url)
                 )
                 context.set_default_timeout(_DEFAULT_TIMEOUT_MS)
                 context.set_default_navigation_timeout(_DEFAULT_TIMEOUT_MS)
-                cache[name] = (
-                    _new_authed_page(context, auth_token)
-                    if name == "authed_page"
-                    else context.new_page()
-                )
+                cache[name] = _new_authed_page(context) if authed else context.new_page()
             else:
                 raise LookupError(f"flow scenario asks for unknown fixture {name!r}")
         return cache[name]
 
-    return lambda *scenarios: run_scenarios(scenarios, provide)
+    def run(*scenarios: Callable[..., object]) -> None:
+        try:
+            run_scenarios(scenarios, provide)
+        finally:
+            request.node.user_properties.extend(_shared_contexts.drain_events())
+
+    return run
