@@ -59,10 +59,13 @@ from src.app_config import resolve_webapp_port
 from src.runtime_data import app_dir_env_var
 from src.scanner import dir_ignored
 from tests.e2e._flow import run_scenarios
+
 # A scenario's context outlives it (`_shared_context`), and a failure that is the
 # host's drained loopback port pool says so (`_port_pool`) instead of reading as a page defect.
-from tests.e2e._port_pool import pytest_runtest_makereport  # noqa: F401  (pytest hook)
-from tests.e2e._port_pool import retry_goto_on_no_buffer_space
+from tests.e2e._port_pool import (
+    pytest_runtest_makereport,  # noqa: F401  (pytest hook)
+    retry_goto_on_no_buffer_space,
+)
 from tests.e2e._port_pool import write_summary as port_pool_summary
 from tests.e2e._shared_context import SharedContexts, install_taint_guard
 from tests.e2e._shared_context import write_summary as shared_context_summary
