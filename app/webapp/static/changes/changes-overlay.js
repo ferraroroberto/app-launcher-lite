@@ -470,7 +470,7 @@ function sessionFileBody(file, body) {
     { track: 'changes.download' }));
   const kebab = toolButton('chg-kebab', 'ellipsis-vertical', 'More actions', null, { track: 'changes.file-menu' });
   acts.appendChild(kebab);
-  fileMenu.attach(requestPath(file), kebab, [
+  const menuEl = fileMenu.attach(requestPath(file), kebab, [
     {
       dataset: { item: 'chg-copy-content' }, glyph: 'clipboard', label: 'Copy content',
       hidden: function () { return active !== 'file' || !fileText; },
@@ -495,6 +495,7 @@ function sessionFileBody(file, body) {
       onTap: function () { openOnPc(file); },
     },
   ]);
+  if (menuEl) menuEl.dataset.surface = 'code.changes-file-menu';
   tools.appendChild(acts);
   body.appendChild(tools);
   if (full) body.appendChild(fullPathLine(full));

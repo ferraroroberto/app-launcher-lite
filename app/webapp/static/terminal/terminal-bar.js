@@ -114,7 +114,7 @@ const HIDE_AUTOMATIC_ITEM = {
 let latestPill = null;
 
 export function wireTerminalMenu() {
-  terminalMenu.attach('terminal', els.terminalMenu, [
+  const menuEl = terminalMenu.attach('terminal', els.terminalMenu, [
     {
       glyph: 'pencil', label: 'Rename', ariaLabel: 'Rename session',
       onTap: renameCurrentSession,
@@ -173,6 +173,7 @@ export function wireTerminalMenu() {
       },
     },
   ]);
+  if (menuEl) menuEl.dataset.surface = 'terminal.session-menu';
 
   latestPill = createLatestPill(els.terminalLatest, {
     isAway: function () {

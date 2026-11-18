@@ -198,7 +198,7 @@ export function buildDrawer(card) {
   ));
   const kebab = drawerKebab();
   actions.appendChild(kebab);
-  drawerMenu.attach(card.session_id, kebab, [
+  const menuEl = drawerMenu.attach(card.session_id, kebab, [
     {
       // Rename: the launcher-native override (no PTY needed). The drawer
       // stays open across a rename (unlike Chat/Terminal, which navigate
@@ -237,6 +237,7 @@ export function buildDrawer(card) {
       },
     },
   ]);
+  if (menuEl) menuEl.dataset.surface = 'board.drawer-menu';
   drawer.appendChild(actions);
   return drawer;
 }

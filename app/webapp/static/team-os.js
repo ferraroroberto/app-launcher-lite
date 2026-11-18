@@ -148,7 +148,8 @@ export function renderSkills() {
       kebabClass: 'teamos-menu-anchor',
       kebabLabel: 'Skill actions',
     });
-    skillMenu.attach(s.id, row.kebab, skillMenuItems(s));
+    const menuEl = skillMenu.attach(s.id, row.kebab, skillMenuItems(s));
+    if (menuEl) menuEl.dataset.surface = 'team.skill-menu';
     host.appendChild(row.li);
   });
   // An open menu whose row is gone drops its state; a reopened one keeps it.

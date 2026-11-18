@@ -1,4 +1,4 @@
-    <section id="paneTeamOS" class="pane" role="tabpanel" aria-labelledby="tabTeamOS" hidden>
+    <section id="paneTeamOS" data-surface="team.tab" class="pane" role="tabpanel" aria-labelledby="tabTeamOS" hidden>
       <!-- Page header: every pane opens with the vendored home-head —
            the tab's name, one context line, the theme toggle and the gear. -->
       <div class="card home-head page-head">
@@ -22,7 +22,7 @@
       <!-- Skills leads the tab: it exists to start team-os skills as Copilot
            sessions. A row's tap launches the skill; its kebab also opens
            Copilot's session picker and the read-only content browser. -->
-      <details class="card card--collapsible action-list teamos-list-card" open>
+      <details data-surface="team.skills" class="card card--collapsible action-list teamos-list-card" open>
         <summary data-track="team-os.fold-skills" class="collapse-summary">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-library-big"></use></svg>
@@ -40,7 +40,7 @@
             <button type="button" id="teamOsModelBtn" class="model-combo-trigger"
                     aria-haspopup="listbox" aria-expanded="false" aria-controls="teamOsModelMenu"
                     title="Model for the launched team-os skill" data-track="team-os.model">Default</button>
-            <span id="teamOsModelMenu" class="model-combo-menu" role="listbox" aria-label="Skill launch model" hidden>
+            <span id="teamOsModelMenu" data-surface="team.model-menu" class="model-combo-menu" role="listbox" aria-label="Skill launch model" hidden>
               <button type="button" role="option" data-track="team-os.model-option" data-value="" aria-selected="true">Default</button>
             </span>
           </span>
@@ -70,7 +70,7 @@
            exception chip when it is due or a draft is ready, and ▶ to review
            it with the Skills toolbar's model and Detached switch. Hidden
            while team-os is unavailable. -->
-      <section id="teamOsRecap" class="card action-list teamos-recap-card" aria-label="Weekly recap" hidden>
+      <section id="teamOsRecap" data-surface="team.recap" class="card action-list teamos-recap-card" aria-label="Weekly recap" hidden>
         <ul id="teamOsRecapList" class="card-list action-rows" aria-label="Weekly recap"></ul>
       </section>
     </section>

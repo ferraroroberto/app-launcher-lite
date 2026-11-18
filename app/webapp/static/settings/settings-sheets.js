@@ -232,7 +232,7 @@ function renderOutboxRoots(roots) {
     kebab.title = 'Folder actions';
     kebab.setAttribute('aria-label', 'Folder actions');
     kebab.innerHTML = icon('ellipsis-vertical');
-    outboxMenu.attach(root, kebab, [{
+    const menuEl = outboxMenu.attach(root, kebab, [{
       dataset: { item: 'outbox-remove-item' }, glyph: 'trash-2', danger: true,
       label: 'Remove', ariaLabel: 'Remove ' + root,
       disabled: roots.length < 2,
@@ -241,6 +241,7 @@ function renderOutboxRoots(roots) {
         saveOutboxRoots(roots.filter(function (r) { return r !== root; }), 'Chat file folder removed.');
       },
     }]);
+    if (menuEl) menuEl.dataset.surface = 'settings.outbox-menu';
     li.append(path, kebab);
     list.appendChild(li);
   });

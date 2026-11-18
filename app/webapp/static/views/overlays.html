@@ -4,7 +4,7 @@
        cards (#chatPane). The bar is shared: ‹ Back · title · context ring ·
        Terminal⇄Chat · ⋮. Mode routing lives in session-overlay.js; the terminal pane in
        terminal.js, the chat pane in session-transcript.js. -->
-  <div id="terminalOverlay" class="terminal-overlay" hidden>
+  <div id="terminalOverlay" data-surface="terminal.overlay" class="terminal-overlay" hidden>
     <div class="terminal-bar">
       <button data-track="session.back" id="terminalBack" type="button" class="icon-button term-btn" title="Back to sessions" aria-label="Back to sessions"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
       <span id="terminalTitle" class="terminal-title">session</span>
@@ -38,7 +38,7 @@
          composer docks at the bottom for every session kind (#983).
          Visible only while data-mode="chat" (CSS).
          Driven by session-transcript.js. -->
-    <div id="chatPane" class="chat-pane">
+    <div id="chatPane" data-surface="chat.overlay" class="chat-pane">
       <!-- The frame anchors the shared ↓ Latest pill (#1140, latest-pill.js)
            to the scroller's visible bottom edge, above the note and the
            composer, so it can never cover their buttons. -->
@@ -70,7 +70,7 @@
       </div>
       <div id="chatComposeBar" class="composer"></div>
     </div>
-    <div id="terminalHost" class="terminal-host">
+    <div id="terminalHost" data-surface="terminal.host" class="terminal-host">
       <!-- Floating "Latest" pill (#981): shown only while scrolled more than a
            screen above the tail (terminal-bar.js). Lucide arrow-down (#1127). -->
       <button data-track="session.terminal-latest" id="terminalLatest" type="button" class="latest-pill" title="Jump to latest output" aria-label="Jump to latest output" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-down"></use></svg> Latest</button>
@@ -107,7 +107,7 @@
        diff (GitHub "Files changed" shape, phone-first). Opened from the
        row's ⋯ project menu or by tapping a red / yellow tile name. Same
        overlay chrome as the transcript. Driven by changes-overlay.js. -->
-  <div id="changesOverlay" class="terminal-overlay changes-overlay" hidden>
+  <div id="changesOverlay" data-surface="code.changes-overlay" class="terminal-overlay changes-overlay" hidden>
     <div class="terminal-bar">
       <span id="changesTitle" class="terminal-title">changes</span>
       <div class="terminal-bar-actions">
@@ -125,6 +125,7 @@
   <!-- Read-aloud summary modal (issue #210): shows the hub summary text while
        it's read aloud; auto-closes when the read finishes, or tap to dismiss. -->
   <div id="summaryModal" class="summary-modal" hidden>
+    <!-- unmarked-surface-exempt: nothing in the app opens #summaryModal (markup left behind by the read-aloud feature this app does not carry), so no map entry can describe it -->
     <div class="summary-card" role="dialog" aria-label="Reply summary">
       <div class="summary-head">
         <span class="summary-title"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-file-text"></use></svg> Summary</span>
@@ -137,7 +138,7 @@
 
   <!-- Image lightbox (#173, reused for #1265): a transcript thumbnail
        opens full-screen for pan/zoom; tap anywhere (or ✕) to dismiss. -->
-  <div id="imageLightbox" class="image-lightbox" hidden>
+  <div id="imageLightbox" data-surface="chat.lightbox" class="image-lightbox" hidden>
     <button data-track="lightbox.close" id="imageLightboxClose" type="button" class="image-lightbox-close" title="Close"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
     <img id="imageLightboxImage" class="image-lightbox-img" alt="">
   </div>
@@ -147,7 +148,7 @@
        contract). lightbox.js puts a fresh frame in the body on each open (an
        empty sandbox: an opaque origin, no script) and owns Esc, the backdrop
        and the back gesture. -->
-  <dialog id="htmlViewer" class="detail-dialog html-viewer" data-track-view="sheet.html-viewer" aria-labelledby="htmlViewerTitle">
+  <dialog id="htmlViewer" data-surface="chat.html-viewer" class="detail-dialog html-viewer" data-track-view="sheet.html-viewer" aria-labelledby="htmlViewerTitle">
     <div class="detail-card">
       <div class="detail-header">
         <h2 id="htmlViewerTitle"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-code-xml"></use></svg> <span id="htmlViewerName" class="html-viewer-name"></span></h2>

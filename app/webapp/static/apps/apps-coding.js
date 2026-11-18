@@ -103,7 +103,8 @@ export function renderCodingList(host, items) {
     // and the chip say it).
     if (git.flag) row.li.dataset.git = git.flag;
 
-    projectMenu.attach(a.id, row.kebab, projectMenuItems(a, gs));
+    const menuEl = projectMenu.attach(a.id, row.kebab, projectMenuItems(a, gs));
+    if (menuEl) menuEl.dataset.surface = 'code.project-menu';
     host.appendChild(row.li);
   });
   // An open menu whose row is gone drops its state; a reopened one keeps it.

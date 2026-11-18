@@ -1,7 +1,7 @@
     <!-- The Screen view (#1520): the PC's desktop, live, full screen. Opened
          from the PC load sheet's Screen row; on a desktop browser the same
          view runs in its own pop-out window. screen-view.js drives it. -->
-    <dialog id="screenView" class="screen-view" data-track-view="sheet.screen" aria-labelledby="screenViewTitle">
+    <dialog id="screenView" data-surface="screen.view" class="screen-view" data-track-view="sheet.screen" aria-labelledby="screenViewTitle">
       <!-- The bar and the tools row, as one block (#1601): in the flow as ever,
            except on a phone held sideways, where the handle below brings them
            up as an overlay (screen-view.js, styles/apps.css). -->
@@ -120,7 +120,7 @@
     <!-- Paste to PC by hand (#1719): shown only when the phone refuses to let
          the page read its clipboard. Header ✕ plus one full-width action (modal
          contract, #545). Whatever is pasted here goes to the PC the same way. -->
-    <dialog id="screenPasteSheet" class="detail-dialog" data-track-view="sheet.screen-paste" aria-labelledby="screenPasteTitle">
+    <dialog id="screenPasteSheet" data-surface="screen.paste-sheet" class="detail-dialog" data-track-view="sheet.screen-paste" aria-labelledby="screenPasteTitle">
       <form id="screenPasteForm" class="detail-card">
         <div class="detail-header">
           <h2 id="screenPasteTitle"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clipboard"></use></svg> Paste to PC</h2>
@@ -139,7 +139,7 @@
     <!-- Quality and readout (#1721): three presets, remembered per device (a
          pick reconnects), and the readout switch. Header close plus one
          full-width Done (modal contract, #545). screen-view.js drives it. -->
-    <dialog id="screenQualitySheet" class="detail-dialog" data-track-view="sheet.screen-quality" aria-labelledby="screenQualityTitle">
+    <dialog id="screenQualitySheet" data-surface="screen.quality-sheet" class="detail-dialog" data-track-view="sheet.screen-quality" aria-labelledby="screenQualityTitle">
       <div class="detail-card">
         <div class="detail-header">
           <h2 id="screenQualityTitle"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-sliders-horizontal"></use></svg> Quality</h2>
@@ -164,7 +164,7 @@
          mentioned, grouped, newest first. A row opens in a new tab; its button
          copies. Read-only, so its one action is Done. Driven by
          links/links-sheet.js. -->
-    <dialog id="linksSheet" class="detail-dialog links-sheet" data-track-view="sheet.links" aria-labelledby="linksTitle">
+    <dialog id="linksSheet" data-surface="terminal.links-sheet" class="detail-dialog links-sheet" data-track-view="sheet.links" aria-labelledby="linksTitle">
       <div class="detail-card">
         <div class="detail-header">
           <h2 id="linksTitle" tabindex="-1" autofocus><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-link"></use></svg> Links</h2>
@@ -194,7 +194,7 @@
     <!-- Sync all's report (Projects toolbar): one line per repo, pulled with
          its commit count, up to date, or skipped with the reason. Read-only,
          so its one action is Done. Driven by apps/git-sync.js. -->
-    <dialog id="gitSyncSheet" class="detail-dialog" data-track-view="sheet.git-sync" aria-labelledby="gitSyncTitle">
+    <dialog id="gitSyncSheet" data-surface="code.git-sync-sheet" class="detail-dialog" data-track-view="sheet.git-sync" aria-labelledby="gitSyncTitle">
       <div class="detail-card">
         <div class="detail-header">
           <h2 id="gitSyncTitle" tabindex="-1" autofocus><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-download"></use></svg> Sync all</h2>
@@ -210,7 +210,7 @@
       </div>
     </dialog>
 
-    <dialog id="sessionRenameDialog" class="detail-dialog" data-track-view="sheet.session-rename">
+    <dialog id="sessionRenameDialog" data-surface="terminal.rename-dialog" class="detail-dialog" data-track-view="sheet.session-rename">
       <form id="sessionRenameForm" class="detail-card">
         <div class="detail-header">
           <h2><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pencil"></use></svg> Rename session</h2>
@@ -229,7 +229,7 @@
     <!-- The CPU sheet (#1522), behind every page header's CPU reading: total
          CPU, memory and the busiest processes (names only). system-load.js
          fills it on open and on each poll while it is open. -->
-    <dialog id="cpuSheet" class="detail-dialog" data-track-view="sheet.cpu" aria-labelledby="cpuSheetTitle">
+    <dialog id="cpuSheet" data-surface="chrome.cpu-sheet" class="detail-dialog" data-track-view="sheet.cpu" aria-labelledby="cpuSheetTitle">
       <div class="detail-card">
         <div class="detail-header">
           <h2 id="cpuSheetTitle"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-monitor"></use></svg> PC load</h2>

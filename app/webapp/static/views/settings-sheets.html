@@ -5,7 +5,7 @@
          claude-options.js fills the pickers from GET /api/config's `copilot`
          block and saves each change through POST /api/config; the flags
          line is the server's own, read-only. -->
-    <dialog id="copilotSheet" class="detail-dialog settings-sheet" data-track-view="sheet.copilot" aria-labelledby="copilotSheetTitle">
+    <dialog id="copilotSheet" data-surface="settings.copilot" class="detail-dialog settings-sheet" data-track-view="sheet.copilot" aria-labelledby="copilotSheetTitle">
       <div class="detail-card">
         <div class="detail-header settings-sheet-head">
           <button data-track="copilot.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
@@ -53,7 +53,7 @@
 
     <!-- GitLab: where the Board's issues and merge requests come from, read
          through glab. Both save as they change. -->
-    <dialog id="gitlabSheet" class="detail-dialog settings-sheet" data-track-view="sheet.gitlab" aria-labelledby="gitlabSheetTitle">
+    <dialog id="gitlabSheet" data-surface="settings.gitlab" class="detail-dialog settings-sheet" data-track-view="sheet.gitlab" aria-labelledby="gitlabSheetTitle">
       <div class="detail-card">
         <div class="detail-header settings-sheet-head">
           <button data-track="gitlab.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
@@ -84,7 +84,7 @@
          dialog (PUT /api/board/chief/settings, passkey-gated), the
          auto-compact threshold (#1298) and the doorbell switch
          (fleet-config#1457, #1645's chief_doorbell), both POST /api/config. -->
-    <dialog id="chiefSheet" class="detail-dialog settings-sheet" data-track-view="sheet.chief" aria-labelledby="chiefSheetTitle">
+    <dialog id="chiefSheet" data-surface="settings.chief" class="detail-dialog settings-sheet" data-track-view="sheet.chief" aria-labelledby="chiefSheetTitle">
       <div class="detail-card">
         <div class="detail-header settings-sheet-head">
           <button data-track="chief.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
@@ -99,7 +99,7 @@
             <span id="chiefModelSelect" class="model-combo model-combo--settings" data-value="">
             <button data-track="chief.model" type="button" class="model-combo-trigger" aria-label="Chief model"
                     aria-haspopup="listbox" aria-expanded="false" aria-controls="chiefModelMenu">Default</button>
-            <span id="chiefModelMenu" class="model-combo-menu" role="listbox"
+            <span id="chiefModelMenu" data-surface="settings.chief-model-menu" class="model-combo-menu" role="listbox"
                   aria-label="Chief model" hidden>
               <button data-track="chief.model-option" type="button" role="option" data-value="" aria-selected="true">Default</button>
             </span>
@@ -162,7 +162,7 @@
          fills the title and body from GET /api/documents/{id}; the body is the
          same `.tr-md` box the Changed files Preview renders into, and
          shared/mermaid-render.js draws its diagrams. -->
-    <dialog id="documentSheet" class="detail-dialog settings-sheet document-sheet" data-track-view="sheet.document" aria-labelledby="documentSheetTitle">
+    <dialog id="documentSheet" data-surface="settings.document" class="detail-dialog settings-sheet document-sheet" data-track-view="sheet.document" aria-labelledby="documentSheetTitle">
       <div class="detail-card">
         <div class="detail-header settings-sheet-head">
           <button data-track="document.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
@@ -190,7 +190,7 @@
       </div>
     </dialog>
 
-    <dialog id="tokensSheet" class="detail-dialog settings-sheet" data-track-view="sheet.tokens" aria-labelledby="tokensSheetTitle">
+    <dialog id="tokensSheet" data-surface="settings.tokens" class="detail-dialog settings-sheet" data-track-view="sheet.tokens" aria-labelledby="tokensSheetTitle">
       <div class="detail-card">
         <div class="detail-header settings-sheet-head">
           <button data-track="tokens.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
@@ -249,7 +249,7 @@
       </div>
     </dialog>
 
-    <dialog id="foldersSheet" class="detail-dialog settings-sheet" data-track-view="sheet.folders" aria-labelledby="foldersSheetTitle">
+    <dialog id="foldersSheet" data-surface="settings.folders" class="detail-dialog settings-sheet" data-track-view="sheet.folders" aria-labelledby="foldersSheetTitle">
       <div class="detail-card">
         <div class="detail-header settings-sheet-head">
           <button data-track="folders.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
@@ -301,7 +301,7 @@
       </div>
     </dialog>
 
-    <dialog id="passkeysSheet" class="detail-dialog settings-sheet" data-track-view="sheet.passkeys" aria-labelledby="passkeysSheetTitle">
+    <dialog id="passkeysSheet" data-surface="settings.passkeys" class="detail-dialog settings-sheet" data-track-view="sheet.passkeys" aria-labelledby="passkeysSheetTitle">
       <div class="detail-card">
         <div class="detail-header settings-sheet-head">
           <button data-track="passkeys.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
@@ -328,7 +328,7 @@
       </div>
     </dialog>
 
-    <dialog id="terminalSheet" class="detail-dialog settings-sheet" data-track-view="sheet.terminal" aria-labelledby="terminalSheetTitle">
+    <dialog id="terminalSheet" data-surface="settings.terminal" class="detail-dialog settings-sheet" data-track-view="sheet.terminal" aria-labelledby="terminalSheetTitle">
       <div class="detail-card">
         <div class="detail-header settings-sheet-head">
           <button data-track="terminal.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>

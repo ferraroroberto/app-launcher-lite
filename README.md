@@ -195,6 +195,7 @@ app-launcher keeps growing. This repo tracks it through the `[upstream]` waterma
 | [docs/job-run-state.md](docs/job-run-state.md) | The job run-state model. |
 | [docs/ci-github-actions.md](docs/ci-github-actions.md) | What the CI workflow runs and why it stays advisory. |
 | [docs/e2e-conventions.md](docs/e2e-conventions.md) | Browser-test conventions. |
+| [docs/ux-surface-map.md](docs/ux-surface-map.md) | Every screen, menu, sheet, dialog, Settings row, gesture and key the app has, with how each is reached; generated from `docs/ux-surfaces.yaml`. |
 | [docs/layout.md](docs/layout.md) | Where code goes: folders, subpackages and the declared root exceptions. |
 | [docs/verification.md](docs/verification.md) | The pre-ship gate and the dev-loop commands. |
 | [docs/architecture.mmd](docs/architecture.mmd) | Hand-authored Mermaid diagram of the internal structure. |

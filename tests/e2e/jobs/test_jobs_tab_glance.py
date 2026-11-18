@@ -221,7 +221,7 @@ def test_avatars_and_the_kebab_runs_and_removes_with_no_edit_mode(
     confirm = page.locator("#confirmDialog")
     expect(confirm).to_be_visible()
     expect(page.locator("#confirmDialogTitle")).to_have_text("Run Guarded export?")
-    surface(page, "jobs.confirm-run")
+    surface(page, "chrome.confirm-dialog")
     page.locator("#confirmDialogOk").click()
     wait_until(page, lambda: len(seen["fired"]) == 2, "the confirmed run POST")
     assert "confirmed=1" in seen["fired"][1]

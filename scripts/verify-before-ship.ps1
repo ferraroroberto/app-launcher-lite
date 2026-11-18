@@ -178,6 +178,10 @@ $ratchetStages = @(
     @{ Name = "usage track"; Argv = @("scripts/usage_track_ratchet.py")
        NotConfirmed = "a web file could not be read or its JS never closed, so it was not checked"
        Failed = "a rule's hits rose above .usage-track-ratchet-baseline.json, or the usage log is not wired; see the named control above." }
+    # The UX surface map and the code name the same surfaces: a surface root with no data-surface id, an id with no entry, an entry no element carries or a stale generated page fails the ship.
+    @{ Name = "ux surface"; Argv = @("scripts/ux_surface_ratchet.py")
+       NotConfirmed = "git was unusable, or a web file or the map could not be read, so the surfaces were not checked"
+       Failed = "a rule's hits rose above .ux-surface-ratchet-baseline.json, or docs/ux-surface-map.md is not what scripts/ux_surface_map.py generates from docs/ux-surfaces.yaml; see the named surface above." }
 )
 # ratchet-stages:end
 

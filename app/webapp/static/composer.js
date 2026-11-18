@@ -571,7 +571,7 @@ function mountImageMenu(c) {
       side: 'above', offset: 6, inset: 10, minWidth: 260,
     },
   });
-  c.imageMenu.attach('image', el.image, [
+  const menuEl = c.imageMenu.attach('image', el.image, [
     {
       glyph: 'image', label: _LABEL_PHOTO,
       dataset: { item: 'composer-menu-photo' },
@@ -594,6 +594,7 @@ function mountImageMenu(c) {
       onTap: function () { el.largeInput.click(); },
     },
   ]);
+  if (menuEl) menuEl.dataset.surface = 'terminal.attach-menu';
   labelImage(c, _TITLE_ATTACH);
 }
 
