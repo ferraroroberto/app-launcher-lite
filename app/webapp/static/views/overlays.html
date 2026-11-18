@@ -122,20 +122,6 @@
     </div>
   </div>
 
-  <!-- Read-aloud summary modal (issue #210): shows the hub summary text while
-       it's read aloud; auto-closes when the read finishes, or tap to dismiss. -->
-  <div id="summaryModal" class="summary-modal" hidden>
-    <!-- unmarked-surface-exempt: nothing in the app opens #summaryModal (markup left behind by the read-aloud feature this app does not carry), so no map entry can describe it -->
-    <div class="summary-card" role="dialog" aria-label="Reply summary">
-      <div class="summary-head">
-        <span class="summary-title"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-file-text"></use></svg> Summary</span>
-        <button data-track="summary.close" id="summaryModalClose" type="button" class="icon-button summary-close" title="Close" aria-label="Close"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
-      </div>
-      <p id="summaryModalText" class="summary-text"></p>
-      <div class="summary-foot muted small"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-volume-2"></use></svg> Reading aloud… tap anywhere to dismiss</div>
-    </div>
-  </div>
-
   <!-- Image lightbox (#173, reused for #1265): a transcript thumbnail
        opens full-screen for pan/zoom; tap anywhere (or ✕) to dismiss. -->
   <div id="imageLightbox" data-surface="chat.lightbox" class="image-lightbox" hidden>

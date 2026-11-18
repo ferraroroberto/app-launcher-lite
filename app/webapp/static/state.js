@@ -472,8 +472,6 @@ export const els = {
   terminalLatest: document.getElementById('terminalLatest'),
   terminalComposeBar: document.getElementById('terminalComposeBar'),
   terminalMenu: document.getElementById('terminalMenu'),
-  summaryModal: document.getElementById('summaryModal'),
-  summaryModalText: document.getElementById('summaryModalText'),
 
   webauthnStatus: document.getElementById('webauthnStatus'),
   webauthnDevices: document.getElementById('webauthnDevices'),
