@@ -199,7 +199,7 @@ function renderList(host, items, running) {
         },
       }), row.main);
     }
-    appMenu.attach(a.id, row.kebab, [
+    const menuEl = appMenu.attach(a.id, row.kebab, [
       {
         // The same bat in a console window you can watch (⚡); the
         // row tap is the hidden launch.
@@ -245,6 +245,7 @@ function renderList(host, items, running) {
         onTap: function () { removeApp(a); },
       },
     ], { header: kindLabel(a.kind) });
+    if (menuEl) menuEl.dataset.surface = 'apps.app-menu';
     host.appendChild(row.li);
   });
 }
@@ -536,7 +537,7 @@ export function renderRunningApps() {
     });
     row.li.dataset.pid = r.pid;
     row.main.classList.add('action-open');
-    runningMenu.attach(r.app_id + ':' + r.pid, row.kebab, [
+    const menuEl = runningMenu.attach(r.app_id + ':' + r.pid, row.kebab, [
       {
         dataset: { item: 'running-app-copy-btn' }, glyph: 'copy',
         label: 'Copy URL', ariaLabel: 'Copy ' + r.name + ' URL',
@@ -550,6 +551,7 @@ export function renderRunningApps() {
         onTap: function () { stopAppInstance(r); },
       },
     ], { header: 'pid ' + r.pid });
+    if (menuEl) menuEl.dataset.surface = 'apps.running-menu';
     host.appendChild(row.li);
   });
   runningMenu.endRender();

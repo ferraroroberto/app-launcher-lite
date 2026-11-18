@@ -1,4 +1,4 @@
-    <section id="paneBoard" class="pane" role="tabpanel" aria-labelledby="tabBoard" hidden>
+    <section id="paneBoard" data-surface="board.tab" class="pane" role="tabpanel" aria-labelledby="tabBoard" hidden>
       <!-- Page header (#1131): every pane opens with the vendored home-head —
            the tab's name, one context line, the theme toggle and the gear. -->
       <div class="card home-head page-head">
@@ -33,7 +33,7 @@
           <button type="button" id="boardDispatchRepoClear" data-track="board.dispatch-repo-clear"
                   class="icon-button board-repo-clear" title="Clear" aria-label="Clear project filter" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
           <input type="hidden" id="boardDispatchRepo">
-          <ul id="boardDispatchRepoList" class="board-repo-list" role="listbox" hidden></ul>
+          <ul id="boardDispatchRepoList" data-surface="board.repo-menu" class="board-repo-list" role="listbox" hidden></ul>
         </div>
         <button id="boardRefresh" data-track="board-refresh" type="button" class="button-surface board-refresh"
                 title="Refresh GitLab issues / MRs / done-today (runs glab)"
@@ -61,7 +61,7 @@
            folded lane's exception, are text, not controls, so they may sit
            in the summary. -->
       <div id="boardColumns" class="board-columns">
-        <details id="boardColBacklog" class="card card--collapsible board-col" data-col="backlog">
+        <details id="boardColBacklog" data-surface="board.backlog" class="card card--collapsible board-col" data-col="backlog">
           <summary data-track="board.fold-backlog" class="collapse-summary">
             <span class="collapse-main">
               <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-git-branch"></use></svg>
@@ -82,7 +82,7 @@
                 <button data-track="board.start-model" type="button" class="model-combo-trigger" aria-label="Start with model"
                         aria-haspopup="listbox" aria-expanded="false" aria-controls="boardDispatchModelMenu"
                         title="Model for the Backlog rows' Start and YOLO (the chief's own model is in its settings)">Default</button>
-                <span id="boardDispatchModelMenu" class="model-combo-menu" role="listbox"
+                <span id="boardDispatchModelMenu" data-surface="board.model-menu" class="model-combo-menu" role="listbox"
                       aria-label="Start with model" hidden>
                   <button data-track="board.start-model-option" type="button" role="option" data-value=""
                           aria-selected="true">Default</button>
@@ -101,7 +101,7 @@
           <!-- Since you last looked (board/chief-journal.js): what the chief's
                journal recorded after your last Board message or answer.
                Hidden until the chief has written a journal. -->
-          <details id="boardJournal" class="card card--collapsible board-journal" open hidden>
+          <details id="boardJournal" data-surface="board.journal" class="card card--collapsible board-journal" open hidden>
             <summary data-track="board.fold-journal" class="collapse-summary">
               <span class="collapse-main">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clock"></use></svg>
@@ -114,7 +114,7 @@
               <div class="board-journal-body"></div>
             </div>
           </details>
-          <details id="boardChiefPlan" class="card card--collapsible board-chief-plan" open>
+          <details id="boardChiefPlan" data-surface="board.chief-plan" class="card card--collapsible board-chief-plan" open>
             <summary data-track="board.fold-chief-plan" class="collapse-summary">
               <span class="collapse-main">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-crown"></use></svg>
@@ -127,7 +127,7 @@
               <div class="board-plan-body"></div>
             </div>
           </details>
-          <details id="boardColClaude" class="card card--collapsible board-col" data-col="claude_turn" open>
+          <details id="boardColClaude" data-surface="board.bots-turn" class="card card--collapsible board-col" data-col="claude_turn" open>
             <summary data-track="board.fold-claude-turn" class="collapse-summary">
               <span class="collapse-main">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-hourglass"></use></svg>
@@ -142,7 +142,7 @@
             </div>
           </details>
         </div>
-        <details id="boardColYours" class="card card--collapsible board-col" data-col="your_turn" open>
+        <details id="boardColYours" data-surface="board.your-turn" class="card card--collapsible board-col" data-col="your_turn" open>
           <summary data-track="board.fold-your-turn" class="collapse-summary">
             <span class="collapse-main">
               <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-bell"></use></svg>
@@ -159,7 +159,7 @@
             <div class="board-owner"></div>
           </div>
         </details>
-        <details id="boardColOther" class="card card--collapsible board-col" data-col="other">
+        <details id="boardColOther" data-surface="board.mrs-jobs" class="card card--collapsible board-col" data-col="other">
           <summary data-track="board.fold-prs-jobs" class="collapse-summary">
             <span class="collapse-main">
               <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-git-pull-request"></use></svg>
@@ -174,7 +174,7 @@
             <div class="board-empty" data-col="other" hidden></div>
           </div>
         </details>
-        <details id="boardColDone" class="card card--collapsible board-col" data-col="done">
+        <details id="boardColDone" data-surface="board.done" class="card card--collapsible board-col" data-col="done">
           <summary data-track="board.fold-done-today" class="collapse-summary">
             <span class="collapse-main">
               <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-circle-check"></use></svg>

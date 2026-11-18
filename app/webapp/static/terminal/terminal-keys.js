@@ -41,6 +41,7 @@ export function mountKeysPopover(anchor, container, opts) {
   const pop = document.createElement('div');
   pop.className = 'keys-popover';
   pop.setAttribute('role', 'group');
+  pop.dataset.surface = 'terminal.keys-popover';
   pop.setAttribute('aria-label', 'Keyboard keys');
   pop.hidden = true;
   pop.innerHTML = _KEYS_MARKUP;

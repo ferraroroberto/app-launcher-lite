@@ -198,7 +198,7 @@ function buildListenerRow(l, isChild, hasChildren) {
     row.li.insertBefore(chev, row.kebab);
   }
 
-  listenerMenu.attach('port:' + l.port, row.kebab, [
+  const menuEl = listenerMenu.attach('port:' + l.port, row.kebab, [
     {
       dataset: { item: 'listener-open-btn' }, glyph: 'globe',
       label: 'Open',
@@ -222,6 +222,7 @@ function buildListenerRow(l, isChild, hasChildren) {
       onTap: function () { killListener(l, label); },
     },
   ]);
+  if (menuEl) menuEl.dataset.surface = 'apps.listener-menu';
   return row.li;
 }
 

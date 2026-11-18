@@ -239,7 +239,7 @@ export function renderJobRow(job, handlers) {
   const hasSchedule = job.paused ||
     (job.schedule && job.schedule.type && job.schedule.type !== 'none');
   const canPause = hasSchedule && job.schedule_controls_allowed !== false;
-  jobMenu.attach(job.id, row.kebab, [
+  const menuEl = jobMenu.attach(job.id, row.kebab, [
     {
       dataset: { item: 'job-run-item' }, glyph: 'play',
       label: 'Run now', ariaLabel: 'Run ' + job.name + ' now',
@@ -271,6 +271,7 @@ export function renderJobRow(job, handlers) {
       onTap: function () { handlers.onRemove(job); },
     },
   ]);
+  if (menuEl) menuEl.dataset.surface = 'jobs.job-menu';
   return row.li;
 }
 

@@ -102,7 +102,7 @@ _SHEET_DATA_CONTROL = {"passkeysSheet": "#webauthnDevices .icon-button"}
 # Every settings sheet the markup declares, for the header-fit leg.
 _SHEETS_HTML = Path(__file__).resolve().parents[3] / "app/webapp/static/views/settings-sheets.html"
 _SHEET_IDS = re.findall(
-    r'<dialog id="(\w+)" class="detail-dialog settings-sheet"',
+    r'<dialog id="(\w+)"[^>]*? class="detail-dialog settings-sheet"',
     _SHEETS_HTML.read_text(encoding="utf-8"),
 )
 

@@ -367,7 +367,7 @@ function renderIssueCard(card) {
   const inProgressTitle = 'Issue #' + card.number + ' is already in progress' +
     (claimUnverified ? ' (owner unverified)' : '');
   const kebab = row.kebab;
-  issueMenu.attach(card.repo + '#' + card.number, kebab, [
+  const menuEl = issueMenu.attach(card.repo + '#' + card.number, kebab, [
     {
       dataset: { item: 'board-issue-yolo' }, glyph: 'zap',
       label: 'YOLO (start and ship)', ariaLabel: 'YOLO issue #' + card.number + ' (start and ship)',
@@ -389,6 +389,7 @@ function renderIssueCard(card) {
       onTap: function () { copyLink(card.url); },
     },
   ]);
+  if (menuEl) menuEl.dataset.surface = 'board.issue-menu';
   return row.li;
 }
 

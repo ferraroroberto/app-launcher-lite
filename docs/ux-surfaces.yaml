@@ -1,0 +1,1532 @@
+# UX surface map: the single source for docs/ux-surface-map.md.
+#
+# Every screen, drill-in, menu, sheet, dialog, popover, Settings row, state,
+# gesture and key a person can reach in this app, one entry per surface. The
+# convention is project-scaffolding's docs/ux-surface-map.md. Edit this file,
+# never the generated page; then run `python scripts/ux_surface_map.py`.
+#
+# A change that adds, removes, renames or reshapes a user-visible surface
+# updates its entry here in the same change, adds or removes the matching
+# `data-surface` attribute in the code, and regenerates the page.
+
+app: App Launcher Lite
+
+notes: >
+  One single-page app: five tabs (Board, Code, Team, Apps, Jobs) in the vendored nav, Settings behind the gear in every tab's header.
+  Phone first; at 1100px and wider with a fine pointer the nav is a left rail and the Code tab is a list beside the session view.
+  Every sheet is a native dialog with a header close and one full-width primary action. The coding agent is GitHub Copilot CLI and the forge is GitLab, so the Board lists GitLab issues and merge requests and the Code tab launches Copilot.
+  Features that need a folder or a registry (Team OS skills, mini apps, the chief) show their empty state until Settings points at one.
+  Ids are `<area>.<surface>`; the e2e capture hook takes the same ids.
+
+walk:
+  date: 2026-11-18
+  build: 52a7d40
+  widths: [390, 1280]
+  themes: [light, dark]
+
+areas:
+  - id: chrome
+    title: Chrome
+    notes: What every tab shares - the nav, each tab's header, the toast and the dialogs any tab can raise.
+  - id: code
+    title: Code
+    notes: The default tab. The session list and the project list; a session opens in the terminal overlay.
+  - id: terminal
+    title: Terminal
+    notes: The session overlay in its terminal mode - the live PTY, the composer under it, the menus on the bar.
+  - id: chat
+    title: Chat
+    notes: The session overlay in its chat mode - the same session read from the agent's own history.
+  - id: screen
+    title: Screen
+    notes: The PC's desktop, live, behind the terminal's passkey gate.
+  - id: apps
+    title: Apps
+  - id: jobs
+    title: Jobs
+  - id: team
+    title: Team OS
+  - id: board
+    title: Board
+  - id: settings
+    title: Settings
+    notes: A group list in a pane; every row that holds more than a switch opens a sheet with a back arrow to the pane.
+  - id: keys
+    title: Keys and gestures
+    notes: Inputs that are not elements.
+
+surfaces:
+  # ------------------------------------------------------------------ chrome
+  - id: chrome.nav
+    area: chrome
+    title: Primary navigation
+    root: data-surface
+    reach:
+      - always on screen
+    holds:
+      - five tabs in order Board, Code, Team, Apps, Jobs, each an icon and a label
+      - a count badge on the Board tab while something waits on the owner
+    does:
+      - switches the pane and keeps the choice in the page state
+      - a tab switch leaves Settings and, in the wide layout, closes the docked session view when Code is left
+    why: the fleet navigation contract; Settings is no tab, the header gear opens it
+    phone: a floating pill at the bottom edge
+    desktop: a left rail 80px wide
+    links:
+      - to: board.tab
+        via: Board
+      - to: code.tab
+        via: Code
+      - to: team.tab
+        via: Team
+      - to: apps.tab
+        via: Apps
+      - to: jobs.tab
+        via: Jobs
+
+  - id: chrome.home-head
+    area: chrome
+    title: Tab header
+    root:
+      none: the same vendored home-head markup sits at the top of all six panes, so no single id can name it.
+    reach:
+      - the top of every tab and of Settings
+    holds:
+      - the tab's icon and title
+      - one status line that names only exceptions, worst first, and falls back to a plain count
+      - the CPU reading button, a muted percentage that takes a tone at 70 and 90 percent and shows a dash when the server could not read it
+      - the theme toggle
+      - the Settings gear
+    does:
+      - the CPU reading opens the PC load sheet
+      - the theme toggle flips light and dark and keeps the choice
+      - the gear opens Settings
+    states:
+      - the gear is the only way into Settings; Settings itself shows no gear
+    links:
+      - to: chrome.cpu-sheet
+        via: CPU reading
+      - to: settings.pane
+        via: gear
+
+  - id: chrome.cpu-sheet
+    area: chrome
+    title: PC load sheet
+    root: data-surface
+    reach:
+      - the CPU reading in any tab header
+    holds:
+      - the load reading and what is using it
+      - a Screen row with a View live action
+      - Done
+    does:
+      - View live opens the Screen view
+    links:
+      - to: screen.view
+        via: Screen View live
+
+  - id: chrome.toast
+    area: chrome
+    title: Toast
+    root: data-surface
+    reach:
+      - shown by an action's result, a copy, a long-press hint or a context ring tap
+    holds:
+      - one status line that dismisses itself
+    states:
+      - lives on the body, outside the app wrapper, so the nav cannot clip it
+
+  - id: app.update-banner
+    area: chrome
+    title: New version banner
+    root: data-surface
+    reach:
+      - appears by itself when the server reports a build other than the one the page booted on
+    holds:
+      - the text New version available
+      - Reload
+      - a dismiss button
+    does:
+      - Reload reloads the page; it is only ever the user's tap
+      - dismiss keeps it down until the server moves to yet another build
+    states:
+      - a server back on the boot build hides it
+    why: the vendored build-watch component stamps this id itself, and every fleet app lists it
+
+  - id: shared.login
+    area: chrome
+    title: Sign-in sheet
+    root:
+      none: the vendored sign-in component builds the sheet itself and this copy does not stamp an id.
+    reach:
+      - raised by any request the server answers with 401
+    holds:
+      - a password field and the sign-in action
+    does:
+      - a successful sign-in stores the token and boots the page again
+    states:
+      - only one sheet is open however many requests fail at once
+
+  - id: chrome.confirm-dialog
+    area: chrome
+    title: Confirm dialog
+    root: data-surface
+    reach:
+      - stopping a session or a running app, removing a job, running a job that asks for confirmation, and other destructive or costly actions
+    holds:
+      - a title and a message
+      - an optional typed-confirmation field
+      - the Confirm action
+    does:
+      - Confirm resolves the action; the header close or Escape cancels it
+    why: one themed dialog stands in for the browser's confirm so a phone shows the same sheet everywhere
+
+  - id: chrome.detail-empty
+    area: chrome
+    title: No session open
+    root: data-surface
+    reach:
+      - the Code tab in the wide layout while no session is open
+    holds:
+      - No session open and the line A session opens here, beside the list
+    states:
+      - hidden below 1100px and on a coarse pointer
+    desktop: the detail pane's resting state
+
+  - id: chrome.build-readout
+    area: chrome
+    title: Build readout
+    root: data-surface
+    reach:
+      - the foot of every pane
+    holds:
+      - the build identity of the running server
+    why: the vendored page-foot, so a phone shows which build it is looking at
+
+  # -------------------------------------------------------------------- code
+  - id: code.tab
+    area: code
+    title: Code tab
+    root: data-surface
+    reach:
+      - the Code tab
+      - the page's default tab
+    holds:
+      - the tab header
+      - the Sessions card
+      - the Projects card
+    desktop: the list sits left of the docked session view
+    links:
+      - to: code.sessions
+        via: Sessions
+      - to: code.projects
+        via: Projects
+      - to: chrome.home-head
+        via: header
+
+  - id: code.sessions
+    area: code
+    title: Sessions
+    root: data-surface
+    reach:
+      - the first card on the Code tab, open by default
+    holds:
+      - the chief's row first, running or stopped
+      - one row per session this launcher started, with an avatar, a one-line title and a status line
+      - a kebab on every row
+    does:
+      - a row's tap opens the session in the terminal overlay, or in Chat when Open in Chat is on
+      - a stopped chief row offers Start and Resume
+    states:
+      - empty - No sessions launched from here yet, with a Show projects action that opens the Projects card
+    links:
+      - to: terminal.overlay
+        via: row tap
+      - to: code.session-menu
+        via: row kebab
+      - to: code.chief-menu
+        via: stopped chief kebab
+
+  - id: code.session-menu
+    area: code
+    title: Session menu
+    root: data-surface
+    reach:
+      - a session row's kebab
+    holds:
+      - Terminal and Chat
+      - Links
+      - Open in new window
+      - Copy path
+      - Rename
+      - Stop, in the danger tone
+      - for the running chief, Restart and Chief settings
+    does:
+      - Terminal and Chat open the overlay in that mode
+      - Stop asks for confirmation, then kills the session
+    links:
+      - to: terminal.links-sheet
+        via: Links
+      - to: terminal.rename-dialog
+        via: Rename
+      - to: chrome.confirm-dialog
+        via: Stop
+      - to: settings.chief
+        via: Chief settings
+
+  - id: code.chief-menu
+    area: code
+    title: Stopped chief menu
+    root: data-surface
+    reach:
+      - the kebab on the chief's row while no chief runs
+    holds:
+      - Chief settings; Restart is hidden while nothing runs
+    links:
+      - to: settings.chief
+        via: Chief settings
+
+  - id: code.projects
+    area: code
+    title: Projects
+    root: data-surface
+    reach:
+      - the second card on the Code tab, closed by default
+    holds:
+      - the launch toolbar
+      - Sync all and Refresh for the git check
+      - a filter box with a favorites toggle
+      - one row per project folder, with its git flag
+      - the time of the last git check
+    does:
+      - a project row launches the coding agent in that folder
+      - Refresh fetches every remote and re-reads branch, changes and ahead or behind
+      - Sync all fast-forwards every clean project that is only behind
+    states:
+      - empty - No projects found, with an Open Settings action that opens the Folders sheet
+      - filtered to nothing - No projects match the filter, with Clear filter
+      - the favorites toggle narrows the list to starred projects
+    links:
+      - to: code.project-menu
+        via: row kebab
+      - to: code.git-sync-sheet
+        via: Sync all
+      - to: settings.folders
+        via: Open Settings
+      - to: terminal.overlay
+        via: row tap
+
+  - id: code.project-menu
+    area: code
+    title: Project menu
+    root: data-surface
+    reach:
+      - a project row's kebab
+    holds:
+      - the issues link, Open in VS Code, Show changes, Pull and Open folder
+    does:
+      - items the project cannot do are greyed with a hint
+      - Show changes opens the working-tree overlay
+    links:
+      - to: code.changes-overlay
+        via: Show changes
+
+  - id: code.git-sync-sheet
+    area: code
+    title: Sync all sheet
+    root: data-surface
+    reach:
+      - Sync all in the Projects card
+    holds:
+      - the result of the run, project by project
+      - Done
+    does:
+      - Done closes the sheet
+
+  - id: code.changes-overlay
+    area: code
+    title: Changes overlay
+    root: data-surface
+    reach:
+      - Show changes in the project menu
+      - Changed files in a session menu
+      - a file chip or the Edited N files card in Chat
+    holds:
+      - a title, a refresh button and a close
+      - one collapsible row per file with a status badge, the path and plus or minus counts
+      - a diff that loads the first time its row opens
+    does:
+      - a project shows git's unified diff, tinted per line; a session shows each of its own edits in order, folded from the transcript
+      - nothing here stages, commits or discards
+    states:
+      - empty - nothing changed
+      - loading and error lines in a status strip
+    links:
+      - to: code.changes-file-menu
+        via: file kebab
+
+  - id: code.changes-file-menu
+    area: code
+    title: Changed file menu
+    root: data-surface
+    reach:
+      - a file row's kebab in the changes overlay
+    holds:
+      - Copy content, Copy diff, Copy path, Open on PC
+
+  # ---------------------------------------------------------------- terminal
+  - id: terminal.overlay
+    area: terminal
+    title: Session overlay
+    root: data-surface
+    reach:
+      - a session row, a project launch, the Board drawer's Terminal or Chat, a ?session= link
+    holds:
+      - a bar with Back, the session title, the model chip, the context ring, the Terminal and Chat toggle and the session menu
+      - the terminal host and its composer
+      - a status strip
+    does:
+      - Back closes the overlay
+      - the toggle swaps Terminal and Chat without reconnecting
+    states:
+      - a session with no transcript reader offers no Chat
+      - the model chip hides when the model is not known
+    phone: covers the page
+    desktop: docks beside the session list in the wide layout
+    links:
+      - to: terminal.host
+        via: Terminal mode
+      - to: chat.overlay
+        via: Chat mode
+      - to: terminal.session-menu
+        via: bar kebab
+
+  - id: terminal.host
+    area: terminal
+    title: Terminal
+    root: data-surface
+    reach:
+      - the Terminal side of the overlay toggle
+    holds:
+      - the xterm screen
+      - a Jump to latest button once scrolled back
+      - the composer bar
+      - a status strip and an activity line
+    does:
+      - the page connects the PTY lazily and a reconnect redraws from the kept history
+    links:
+      - to: terminal.keys-popover
+        via: keys button
+      - to: terminal.attach-menu
+        via: attach button
+
+  - id: terminal.session-menu
+    area: terminal
+    title: Overlay session menu
+    root: data-surface
+    reach:
+      - the kebab on the overlay bar
+    holds:
+      - Rename, Copy link, Changed files, Links
+      - in Chat mode Show or Hide steps, Show or Hide automatic, Load new and Reload
+      - Stop and kill
+    links:
+      - to: terminal.rename-dialog
+        via: Rename
+      - to: terminal.links-sheet
+        via: Links
+      - to: code.changes-overlay
+        via: Changed files
+      - to: chrome.confirm-dialog
+        via: Stop and kill
+
+  - id: terminal.rename-dialog
+    area: terminal
+    title: Rename session
+    root: data-surface
+    reach:
+      - Rename in either session menu
+    holds:
+      - a field whose blank value means the automatic title
+      - Save
+
+  - id: terminal.links-sheet
+    area: terminal
+    title: Links sheet
+    root: data-surface
+    reach:
+      - Links in either session menu
+    holds:
+      - the artifacts and URLs the transcript mentioned, in groups Artifacts, GitHub, Servers and previews, Other
+      - each group folded to its name and count, newest row first
+      - a note on how far back the read reached with Read more
+      - Done
+    does:
+      - a row opens the link in a new tab and its copy button copies the URL
+      - credential-looking query strings were already removed by the server
+
+  - id: terminal.keys-popover
+    area: terminal
+    title: On-screen keys
+    root: data-surface
+    reach:
+      - the keys button in the composer
+    holds:
+      - arrow keys, Esc, Tab and Enter
+      - sticky Shift and Ctrl, only one engaged at a time
+    does:
+      - each key writes its escape sequence down the PTY input channel
+      - the popover stays open across arrow and Tab taps
+    why: phone keyboards that lack these keys still need an agent's prompts to be navigable
+
+  - id: terminal.attach-menu
+    area: terminal
+    title: Attach menu
+    root: data-surface
+    reach:
+      - the attach button on a composer
+    holds:
+      - Photo, Extract text (OCR), Attach file (to context) and Attach large file (not read)
+    does:
+      - an upload stores the file on the PC and puts its path in the message
+      - several picks queue behind each other and show N of M
+    why: the composer is shared by the terminal, Chat, the Board drawer and the answer sheet
+
+  # -------------------------------------------------------------------- chat
+  - id: chat.overlay
+    area: chat
+    title: Chat pane
+    root: data-surface
+    reach:
+      - the Chat side of the overlay toggle
+      - Open in Chat
+    holds:
+      - the transcript, newest page first, with Load older
+      - a Latest button once scrolled up
+      - the queued-messages chip
+      - the composer
+    does:
+      - the agent's replies and the user's prompts show expanded and everything else folds into one step line per run
+    states:
+      - empty, loading and error lines in the transcript state strip
+      - a detached session has no terminal, so a note says delivery is typed into the PC console and not confirmed
+    links:
+      - to: chat.queued-sheet
+        via: queued chip
+      - to: chat.lightbox
+        via: image thumbnail
+      - to: chat.html-viewer
+        via: HTML document card
+      - to: chat.decision-cards
+        via: the agent asks
+      - to: chat.turn-cards
+        via: a finished turn
+
+  - id: chat.decision-cards
+    area: chat
+    title: Question and plan cards
+    root:
+      none: drawn inside the transcript list, which carries no id of its own for a card.
+    reach:
+      - while the agent asks a question or waits on a plan
+    holds:
+      - the question card with numbered options, an Other field and Done
+      - the plan card, answered from the terminal's own screen
+      - the resume card, a searchable list of the project's conversations, shown while the terminal's picker is open
+    does:
+      - an option sends its answer into the session
+
+  - id: chat.turn-cards
+    area: chat
+    title: Turn cards and step lines
+    root:
+      none: rows in the transcript list, drawn by the transcript renderer without a root of their own.
+    reach:
+      - every finished turn
+    holds:
+      - the Edited N files card with a total and one row per file, showing the first few and Show N more
+      - file chips in a reply
+      - one step line per run of tool calls, opening item by item
+      - a divider row that folds turns nobody typed
+    does:
+      - a file row or the card header opens the changes overlay
+    links:
+      - to: code.changes-overlay
+        via: file row
+
+  - id: chat.queued-sheet
+    area: chat
+    title: Queued messages
+    root: data-surface
+    reach:
+      - the queued chip in the Chat pane
+    holds:
+      - the messages the session holds that the agent has not taken yet
+      - a Discard on each
+      - Done
+    states:
+      - empty - The agent has taken everything
+
+  - id: chat.lightbox
+    area: chat
+    title: Image lightbox
+    root: data-surface
+    reach:
+      - a transcript thumbnail
+    holds:
+      - the full-size image and a close button
+    does:
+      - a tap anywhere dismisses it
+
+  - id: chat.html-viewer
+    area: chat
+    title: HTML viewer
+    root: data-surface
+    reach:
+      - a sent HTML document's card
+    holds:
+      - the file name, a close button, the document and a Download link
+    does:
+      - the document shows without scripts, in a frame with an empty sandbox
+    why: an HTML document never renders same-origin or scriptable
+
+  # ------------------------------------------------------------------ screen
+  - id: screen.view
+    area: screen
+    title: Screen view
+    root: data-surface
+    reach:
+      - View live in the PC load sheet
+    holds:
+      - the live frame of the PC's desktop
+      - modes View, Control, Touch and Trackpad
+      - a keyboard button, a quality button and a handle that shows or hides the controls
+      - a keys bar with Esc, Tab, Ctrl, Alt, Win, Del, the F keys, Task Mgr, Paste to PC and Paste plus Ctrl+V
+    does:
+      - the server sends a frame only when the screen changes, so a still picture is a quiet socket
+      - capture runs only while a viewer is connected
+    states:
+      - reconnecting and unavailable states
+    phone: opens full screen
+    desktop: pops out into its own window, /?screen=1
+    links:
+      - to: screen.quality-sheet
+        via: Quality
+      - to: screen.paste-sheet
+        via: Paste to PC
+      - to: screen.readout
+        via: readout switch
+
+  - id: screen.paste-sheet
+    area: screen
+    title: Paste to PC sheet
+    root: data-surface
+    reach:
+      - Paste to PC when the phone does not let the page read its clipboard
+    holds:
+      - a text box and Send to PC
+
+  - id: screen.quality-sheet
+    area: screen
+    title: Quality sheet
+    root: data-surface
+    reach:
+      - the Quality button in the Screen view
+    holds:
+      - the quality choices
+      - the Readout switch
+      - Done
+
+  - id: screen.readout
+    area: screen
+    title: Readout
+    root:
+      none: a line drawn inside the Screen view while the Readout switch is on.
+    reach:
+      - the Readout switch in the quality sheet
+    holds:
+      - frames a second, data a second, the average frame size and the time from confirming to the picture
+
+  # -------------------------------------------------------------------- apps
+  - id: apps.tab
+    area: apps
+    title: Apps tab
+    root: data-surface
+    reach:
+      - the Apps tab
+    holds:
+      - the tab header
+      - Running, Other ports, Apps, Trays and Mini apps cards
+    links:
+      - to: apps.running
+        via: Running
+      - to: apps.other-ports-card
+        via: Other ports
+      - to: apps.apps
+        via: Apps
+      - to: apps.trays
+        via: Trays
+      - to: apps.mini-apps
+        via: Mini apps
+
+  - id: apps.running
+    area: apps
+    title: Running
+    root: data-surface
+    reach:
+      - the first card on the Apps tab
+    holds:
+      - one row per app launched from here, with a kebab
+      - an Other ports row that opens the sheet
+      - an idle line and the note Only apps launched from here appear
+    states:
+      - empty - Nothing launched from here is running, with Show apps
+      - an error line in a status strip
+    links:
+      - to: apps.running-menu
+        via: row kebab
+      - to: apps.other-ports-sheet
+        via: Other ports
+
+  - id: apps.running-menu
+    area: apps
+    title: Running app menu
+    root: data-surface
+    reach:
+      - a running app's kebab
+    holds:
+      - a header line with the process id
+      - Copy URL and Stop
+    links:
+      - to: chrome.confirm-dialog
+        via: Stop
+
+  - id: apps.other-ports-card
+    area: apps
+    title: Other ports card
+    root: data-surface
+    reach:
+      - the Apps tab in the wide layout
+    holds:
+      - the listeners on common app ports that this launcher did not start
+    desktop: a card beside the lists
+    phone: the Other ports row in Running opens the same list as a sheet
+    links:
+      - to: apps.listener-menu
+        via: row kebab
+
+  - id: apps.other-ports-sheet
+    area: apps
+    title: Other ports sheet
+    root: data-surface
+    reach:
+      - the Other ports row in the Running card
+    holds:
+      - the listeners
+      - Check again
+    states:
+      - empty - Nothing running on common app ports; the launcher itself is not listed
+    links:
+      - to: apps.listener-menu
+        via: row kebab
+
+  - id: apps.listener-menu
+    area: apps
+    title: Listener menu
+    root: data-surface
+    reach:
+      - a listener row's kebab
+    holds:
+      - Open, Copy URL and Stop process in the danger tone
+    links:
+      - to: chrome.confirm-dialog
+        via: Stop process
+
+  - id: apps.apps
+    area: apps
+    title: Apps list
+    root: data-surface
+    reach:
+      - the Apps card
+    holds:
+      - a filter box
+      - one row per registered app, each with a kind and a kebab
+      - the Scan for new apps row
+    states:
+      - empty - No apps registered yet, with Scan for apps
+      - filtered to nothing - No apps match the filter, with Clear filter
+      - an error line in a status strip
+    links:
+      - to: apps.app-menu
+        via: row kebab
+      - to: apps.scan-sheet
+        via: Scan for new apps
+
+  - id: apps.app-menu
+    area: apps
+    title: App menu
+    root: data-surface
+    reach:
+      - an app row's kebab
+    holds:
+      - Launch visible, Open link, Copy URL, Rename, Copy path
+    links:
+      - to: apps.rename-dialog
+        via: Rename
+
+  - id: apps.rename-dialog
+    area: apps
+    title: Rename
+    root: data-surface
+    reach:
+      - Rename in the app menu
+    holds:
+      - a field and Save
+    why: one dialog serves every rename on the Apps tab
+
+  - id: apps.scan-sheet
+    area: apps
+    title: New entries sheet
+    root: data-surface
+    reach:
+      - Scan for new apps, or the empty state's action
+    holds:
+      - the entries the scan found, grouped, each selectable
+      - Add selected
+    does:
+      - Add selected writes the chosen rows to the registry
+
+  - id: apps.trays
+    area: apps
+    title: Trays
+    root: data-surface
+    reach:
+      - the Trays card, closed by default
+    holds:
+      - one row per sister tray found, with a switch for starting with the launcher
+      - the note that switched trays start with App Launcher Lite
+    states:
+      - empty - No sister trays found yet, with Scan for trays
+
+  - id: apps.mini-apps
+    area: apps
+    title: Mini apps
+    root: data-surface
+    reach:
+      - the Mini apps card
+    holds:
+      - one row per mini app with a start-on-launch switch
+    states:
+      - hidden until the server reports a mini-apps folder
+      - empty - No mini apps found yet, with Scan for mini apps
+
+  # -------------------------------------------------------------------- jobs
+  - id: jobs.tab
+    area: jobs
+    title: Jobs tab
+    root: data-surface
+    reach:
+      - the Jobs tab
+    holds:
+      - the tab header
+      - the Next up card
+      - the Jobs card
+    desktop: the detail pane's resting state is the This week schedule
+    links:
+      - to: jobs.next-up
+        via: Next up
+      - to: jobs.list
+        via: Jobs
+      - to: jobs.week
+        via: wide layout
+
+  - id: jobs.next-up
+    area: jobs
+    title: Next up
+    root: data-surface
+    reach:
+      - the top card on the Jobs tab
+    holds:
+      - the next scheduled runs
+      - a button on its title that opens the schedule
+    states:
+      - loading, empty and error lines
+    links:
+      - to: jobs.agenda-sheet
+        via: Next up title
+
+  - id: jobs.agenda-sheet
+    area: jobs
+    title: Schedule sheet
+    root: data-surface
+    reach:
+      - the Next up title
+    holds:
+      - the schedule over the coming days
+      - Done
+
+  - id: jobs.week
+    area: jobs
+    title: This week
+    root: data-surface
+    reach:
+      - the Jobs tab in the wide layout with no job open
+    holds:
+      - the week's runs
+
+  - id: jobs.list
+    area: jobs
+    title: Jobs list
+    root: data-surface
+    reach:
+      - the Jobs card
+    holds:
+      - a search box over jobs and run output, a filters button and an add button
+      - one row per job with its last status, a spark of recent runs and a kebab
+    states:
+      - loading - Loading jobs
+      - empty - No jobs registered yet, with Add job
+      - no match - No jobs or run output match the search, with Clear search
+    links:
+      - to: jobs.sort-sheet
+        via: filters
+      - to: jobs.job-dialog
+        via: Add job
+      - to: jobs.job-sheet
+        via: row tap
+      - to: jobs.job-menu
+        via: row kebab
+
+  - id: jobs.sort-sheet
+    area: jobs
+    title: Sort and filter
+    root: data-surface
+    reach:
+      - the filters button in the jobs search
+    holds:
+      - Sort by Next run or A to Z
+      - Clear and Done
+
+  - id: jobs.job-menu
+    area: jobs
+    title: Job menu
+    root: data-surface
+    reach:
+      - a job row's kebab
+    holds:
+      - Run now, Pause or Resume, Dry-run check, Edit, Remove in the danger tone
+    links:
+      - to: jobs.run-dialog
+        via: Run now
+      - to: jobs.job-dialog
+        via: Edit
+      - to: chrome.confirm-dialog
+        via: Remove
+
+  - id: jobs.job-sheet
+    area: jobs
+    title: Job sheet
+    root: data-surface
+    reach:
+      - a job row's tap
+    holds:
+      - the job's name, schedule and latest runs with their output
+      - Run now
+    links:
+      - to: jobs.run-dialog
+        via: Run now
+
+  - id: jobs.run-dialog
+    area: jobs
+    title: Run job
+    root: data-surface
+    reach:
+      - Run now from the menu or the sheet
+    holds:
+      - a field for each declared parameter
+      - a Dry run switch
+      - Run
+    does:
+      - a dry run asks scripts that support it to skip their side effects
+
+  - id: jobs.job-dialog
+    area: jobs
+    title: Add or edit job
+    root: data-surface
+    reach:
+      - the add button, Add job in the empty state, Edit in the job menu
+    holds:
+      - name, kind, the script file or inline body or HTTP check fields, arguments
+      - a schedule with its type fields, cooldown and exclusive group
+      - switches for Alert to Telegram if failed and Require confirmation
+      - the run-on-success and run-on-failure chains, parameters and a webhook
+      - Save anyway and Add and verify
+    does:
+      - the fields shown follow the kind and the schedule type
+      - Add and verify checks the script before saving; Save anyway skips that check
+    states:
+      - a verification failure keeps the dialog open with the reason
+
+  # -------------------------------------------------------------------- team
+  - id: team.tab
+    area: team
+    title: Team OS tab
+    root: data-surface
+    reach:
+      - the Team tab
+    holds:
+      - the tab header
+      - the Skills card
+      - the Weekly recap card
+    links:
+      - to: team.skills
+        via: Skills
+      - to: team.recap
+        via: Weekly recap
+
+  - id: team.skills
+    area: team
+    title: Skills
+    root: data-surface
+    reach:
+      - the Skills card
+    holds:
+      - a model picker for the launched skill
+      - the launch toolbar
+      - a filter box
+      - one row per skill found under the Team OS folder, each with a kebab
+    states:
+      - empty - No team-os skills found, with an Open Settings action that opens the Folders sheet
+      - filtered to nothing - No skills match the filter, with Clear filter
+      - an error line in a status strip
+    links:
+      - to: team.model-menu
+        via: model picker
+      - to: team.skill-menu
+        via: row kebab
+      - to: settings.folders
+        via: Open Settings
+
+  - id: team.model-menu
+    area: team
+    title: Skill model menu
+    root: data-surface
+    reach:
+      - the model picker above the skills
+    holds:
+      - Default and every model Settings offers
+
+  - id: team.skill-menu
+    area: team
+    title: Skill menu
+    root: data-surface
+    reach:
+      - a skill row's kebab
+    holds:
+      - Start new session, Pick a session, Read
+    links:
+      - to: team.skill-sheet
+        via: Read
+
+  - id: team.skill-sheet
+    area: team
+    title: Skill sheet
+    root: data-surface
+    reach:
+      - Read in the skill menu
+    holds:
+      - the skill's files
+      - Done
+    links:
+      - to: team.doc-sheet
+        via: a file
+
+  - id: team.doc-sheet
+    area: team
+    title: Skill file
+    root: data-surface
+    reach:
+      - a file in the skill sheet
+    holds:
+      - the file's text
+      - Rename log and Delete log for a log file
+      - Done
+    links:
+      - to: chrome.confirm-dialog
+        via: Delete log
+
+  - id: team.recap
+    area: team
+    title: Weekly recap
+    root: data-surface
+    reach:
+      - under the Skills card
+    holds:
+      - the weekly recap rows
+    states:
+      - hidden until there is a recap
+
+  # ------------------------------------------------------------------- board
+  - id: board.tab
+    area: board
+    title: Board tab
+    root: data-surface
+    reach:
+      - the Board tab
+      - a ?board= deep link
+    holds:
+      - the tab header
+      - a project combo, Refresh and Collapse all
+      - the lanes Backlog, Since you last looked, Chief's plan, Bot's turn, Your turn, MRs and jobs and Done today
+    does:
+      - Refresh runs glab for GitLab issues, merge requests and what finished today
+      - the project combo narrows every lane to one repository
+    states:
+      - a status strip and a fetch-state strip, each hidden until there is something to say
+    desktop: the Board spans the whole width right of the rail
+    links:
+      - to: board.repo-menu
+        via: project combo
+      - to: board.backlog
+        via: Backlog
+      - to: board.journal
+        via: Since you last looked
+      - to: board.chief-plan
+        via: Chief's plan
+      - to: board.bots-turn
+        via: Bot's turn
+      - to: board.your-turn
+        via: Your turn
+      - to: board.mrs-jobs
+        via: MRs and jobs
+      - to: board.done
+        via: Done today
+
+  - id: board.repo-menu
+    area: board
+    title: Project combo list
+    root: data-surface
+    reach:
+      - typing in or focusing the project box
+    holds:
+      - the repositories that match, and a clear button on the box
+    states:
+      - the box reads All projects when nothing is chosen
+
+  - id: board.backlog
+    area: board
+    title: Backlog
+    root: data-surface
+    reach:
+      - the Backlog lane
+    holds:
+      - a count and a Start with model picker
+      - issue rows grouped in buckets, each with a kebab
+    does:
+      - Start and YOLO on a row use the picked model
+    states:
+      - empty and error lines
+    links:
+      - to: board.model-menu
+        via: Start with
+      - to: board.issue-menu
+        via: row kebab
+
+  - id: board.model-menu
+    area: board
+    title: Start with menu
+    root: data-surface
+    reach:
+      - the Start with picker in the Backlog
+    holds:
+      - Default and every model Settings offers
+
+  - id: board.issue-menu
+    area: board
+    title: Issue menu
+    root: data-surface
+    reach:
+      - a Backlog row's kebab
+    holds:
+      - YOLO (start and ship), Open on GitLab, Copy link
+
+  - id: board.journal
+    area: board
+    title: Since you last looked
+    root: data-surface
+    reach:
+      - a card above Chief's plan
+    holds:
+      - the chief's journal entries, new ones first
+      - Clear
+    does:
+      - Clear stamps the last look on the server, so every device agrees
+    states:
+      - hidden when there is no journal file
+      - a journal that cannot be read is one muted line, never a toast
+      - with no new entry the card shows one line and no button
+
+  - id: board.chief-plan
+    area: board
+    title: Chief's plan
+    root: data-surface
+    reach:
+      - the card under Backlog
+    holds:
+      - the chief's lanes, its queue and what waits on the owner
+      - Clear merged
+      - a row's note, when it has one
+    links:
+      - to: board.plan-note-sheet
+        via: a row's note
+      - to: board.answer-sheet
+        via: questions
+
+  - id: board.plan-note-sheet
+    area: board
+    title: Plan note
+    root: data-surface
+    reach:
+      - a plan row that carries a note
+    holds:
+      - the row's title, repo and number, model and status
+      - the note in full
+      - Open on GitLab when the row links to an issue
+    why: a phone has no hover, so the note is read in a sheet
+
+  - id: board.bots-turn
+    area: board
+    title: Bot's turn
+    root: data-surface
+    reach:
+      - the lane under Chief's plan
+    holds:
+      - live sessions that are working, one row each
+    does:
+      - a row opens the drawer
+    states:
+      - empty line
+    links:
+      - to: board.drawer
+        via: row tap
+
+  - id: board.your-turn
+    area: board
+    title: Your turn
+    root: data-surface
+    reach:
+      - the lane under Bot's turn
+    holds:
+      - live sessions waiting on the owner
+      - the owner-check groups Before you start, Validate to close and Try what shipped, one fold each
+    does:
+      - a row unfolds its detail in place
+      - a group's Answer opens the answer sheet
+    links:
+      - to: board.drawer
+        via: session row
+      - to: board.answer-sheet
+        via: Answer
+
+  - id: board.drawer
+    area: board
+    title: Session drawer
+    root:
+      none: the drawer is the open row's own list item, kept across the poll re-render, so it has no element of its own.
+    reach:
+      - a live session row in Bot's turn or Your turn
+    holds:
+      - the last exchange between the user and the agent
+      - the shared composer
+      - Chat and Terminal
+      - a kebab with Rename and Stop
+    does:
+      - the chief's exchange poll and a live mic stop when the drawer closes
+    links:
+      - to: board.drawer-menu
+        via: kebab
+      - to: terminal.overlay
+        via: Terminal
+      - to: chat.overlay
+        via: Chat
+
+  - id: board.drawer-menu
+    area: board
+    title: Drawer menu
+    root: data-surface
+    reach:
+      - the drawer's kebab
+    holds:
+      - Rename and Stop in the danger tone
+    links:
+      - to: chrome.confirm-dialog
+        via: Stop
+
+  - id: board.answer-sheet
+    area: board
+    title: Answer the chief
+    root: data-surface
+    reach:
+      - Answer in an owner-check group or a chief question
+    holds:
+      - one block per waiting item with its options, the recommended one already picked
+      - an Other field on every item
+      - an Anything else box
+      - Done
+    does:
+      - Done sends every answer at once
+    why: one sheet answers everything that waits, instead of one dialog per question
+
+  - id: board.mrs-jobs
+    area: board
+    title: MRs and jobs
+    root: data-surface
+    reach:
+      - the lane under Your turn, closed by default
+    holds:
+      - merge requests and pipeline jobs, one row each
+    states:
+      - empty line
+
+  - id: board.done
+    area: board
+    title: Done today
+    root: data-surface
+    reach:
+      - the last lane, closed by default
+    holds:
+      - what finished today
+      - Show earlier, which adds one more day per tap up to a week
+    states:
+      - empty line
+
+  # ---------------------------------------------------------------- settings
+  - id: settings.pane
+    area: settings
+    title: Settings
+    root: data-surface
+    reach:
+      - the gear in any tab header
+    holds:
+      - Documents, Appearance, Agents, Sessions, Board, Connections and This PC groups
+    does:
+      - a tab switch leaves it
+    states:
+      - the Documents group is hidden until the server lists documents; an unreadable list shows Couldn't read the documents list with Retry
+    links:
+      - to: settings.groups
+        via: the groups
+      - to: settings.document
+        via: a document row
+      - to: settings.copilot
+        via: Coding agent
+      - to: settings.chief
+        via: Chief
+      - to: settings.gitlab
+        via: GitLab
+      - to: settings.tokens
+        via: API tokens
+      - to: settings.folders
+        via: Folders
+      - to: settings.passkeys
+        via: Passkeys
+      - to: settings.terminal
+        via: Terminal
+
+  - id: settings.groups
+    area: settings
+    title: Settings rows
+    root:
+      none: rows inside the Settings pane, which has one root for all of them.
+    reach:
+      - the Settings pane
+    holds:
+      - Appearance - a Text size choice of Small, Default and Large
+      - Sessions - the switches Open in a new window and Open in Chat, with a help line that explains both
+      - This PC - the switches Start at log on and Awake with lid closed, each with a help line
+    does:
+      - a switch saves when tapped and shows ON or OFF
+    states:
+      - Awake with lid closed is hidden on a machine that cannot set it, and shows its own status line
+
+  - id: settings.document
+    area: settings
+    title: Document sheet
+    root: data-surface
+    reach:
+      - a row in the Documents group
+    holds:
+      - the document's text
+      - Copy Markdown and Open on GitHub
+      - Retry when the read failed
+      - Done
+
+  - id: settings.copilot
+    area: settings
+    title: GitHub Copilot sheet
+    root: data-surface
+    reach:
+      - Coding agent in Agents
+    holds:
+      - Model, Effort and Context choices
+      - switches for Autopilot and Skip permission prompts
+      - the sign-in instruction
+      - Models offered, one id per line
+      - Done
+    does:
+      - Effort applies only with a model picked here
+    why: Copilot takes its model at launch from here and has no in-session switch the launcher drives
+
+  - id: settings.chief
+    area: settings
+    title: Chief sheet
+    root: data-surface
+    reach:
+      - Chief in Agents
+      - Chief settings in a chief menu
+    holds:
+      - the chief's model and a worker cap
+      - a switch for counting only chief-dispatched sessions
+      - Automations - Doorbell, Auto-drain queue, Auto-compact with its threshold, Job failures, Job self-heal and Weekly proposals
+      - Done
+    does:
+      - each switch saves when tapped and no restart is needed
+    links:
+      - to: settings.chief-model-menu
+        via: model
+
+  - id: settings.chief-model-menu
+    area: settings
+    title: Chief model menu
+    root: data-surface
+    reach:
+      - the Model picker in the Chief sheet
+    holds:
+      - Default and every model Settings offers
+
+  - id: settings.gitlab
+    area: settings
+    title: GitLab sheet
+    root: data-surface
+    reach:
+      - GitLab in Board
+    holds:
+      - the GitLab group and the GitLab host, blank meaning gitlab.com
+      - Done
+    does:
+      - glab must be signed in to the host on this PC
+
+  - id: settings.tokens
+    area: settings
+    title: API tokens sheet
+    root: data-surface
+    reach:
+      - API tokens in Connections
+    holds:
+      - the tokens that each run one job from a link
+      - a label, a job and Create token, with the value shown once beside Copy
+      - the Delegate token for an outside agent, with Turn on, Turn off and Copy
+      - Done
+    states:
+      - empty - No tokens yet, with Create a token
+
+  - id: settings.folders
+    area: settings
+    title: Folders sheet
+    root: data-surface
+    reach:
+      - Folders in This PC
+      - an empty state's Open Settings
+    holds:
+      - Projects folder, Hidden projects, Apps folder, Team OS folder and fleet-config-lite folder
+      - Chat file folders with an Add action and one row per folder
+      - Done
+    links:
+      - to: settings.outbox-menu
+        via: a folder's kebab
+
+  - id: settings.outbox-menu
+    area: settings
+    title: Chat folder menu
+    root: data-surface
+    reach:
+      - a Chat file folder's kebab
+    holds:
+      - Remove
+
+  - id: settings.passkeys
+    area: settings
+    title: Passkeys sheet
+    root: data-surface
+    reach:
+      - Passkeys in This PC
+    holds:
+      - the enrollment status
+      - Enroll this device
+      - Done
+    states:
+      - enrolling is only offered while the tray's enrollment window is open
+
+  - id: settings.terminal
+    area: settings
+    title: Terminal sheet
+    root: data-surface
+    reach:
+      - Terminal in This PC
+    holds:
+      - Terminal history in lines and the Large file limit in MB
+      - Done
+
+  # -------------------------------------------------------------------- keys
+  - id: keys.swipe-row
+    area: keys
+    title: Swipe a row
+    root:
+      none: a touch gesture on a list row, with no element of its own.
+    reach:
+      - a horizontal drag on a row that declares swipe actions, on touch or a pen
+    does:
+      - a partial swipe rests open on the action and a tap commits it; a full swipe or a fast flick commits as released
+      - a mouse never swipes, so the row's kebab is the route on a desktop
+      - a drag that starts in the leftmost 24px is left to the system back gesture
+    why: the kebab is the single-pointer alternative a path gesture needs
+
+  - id: keys.long-press-hint
+    area: keys
+    title: Long-press hint
+    root:
+      none: a hold on an icon-only control, which toasts its title.
+    reach:
+      - holding the context ring, the Terminal and Chat toggle or the keys button for half a second
+    does:
+      - the toast says what the control does, since a touch screen has no hover
+      - the hold never triggers the control
+
+  - id: keys.screen
+    area: keys
+    title: Screen view keys
+    root:
+      none: key and pointer paths into the Screen view, with no element of their own.
+    reach:
+      - a hardware keyboard, the phone keyboard raised by the keyboard button, a three-finger tap
+    does:
+      - a hardware key goes to the PC, combined with the keys bar's sticky modifiers
+      - the keyboard button and a three-finger tap raise and lower the phone keyboard
+      - the keys bar follows the visual viewport while the phone keyboard is up
+    links:
+      - to: screen.view
+        via: Screen view
+
+  - id: keys.composer
+    area: keys
+    title: Composer keys
+    root:
+      none: key paths in the shared composer, with no element of their own.
+    reach:
+      - the composer in the terminal, Chat, the Board drawer and the answer sheet
+    does:
+      - Send forwards the text over the PTY socket, then a submitting Enter as a separate frame
+      - a paste of an image or files queues an upload
+    links:
+      - to: terminal.keys-popover
+        via: keys button

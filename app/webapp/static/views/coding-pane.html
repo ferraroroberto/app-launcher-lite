@@ -1,4 +1,4 @@
-    <section id="paneClaude" class="pane" role="tabpanel" aria-labelledby="tabClaude">
+    <section id="paneClaude" data-surface="code.tab" class="pane" role="tabpanel" aria-labelledby="tabClaude">
       <!-- Vendored home-head summary card (#496): one-line dashboard row —
            app title + live stats (sessions / running apps / git aggregate)
            + the theme toggle pinned right (home-head.css contract). The
@@ -26,7 +26,7 @@
       <!-- Sessions (#1434): "what is running?". The chief's row first, then
            then the shared session rows (#1433). Card controls never sit in the
            <summary> (#1132). -->
-      <details class="card card--collapsible sessions-card" open>
+      <details data-surface="code.sessions" class="card card--collapsible sessions-card" open>
         <summary data-track="coding.fold-sessions" class="collapse-summary">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-terminal"></use></svg>
@@ -48,7 +48,7 @@
            uncommitted count in the summary, branch and "uncommitted" on each
            row, the refresh in the toolbar and when it last ran in the
            footer. Collapsed by default (#383). -->
-      <details class="card card--collapsible action-list projects-card">
+      <details data-surface="code.projects" class="card card--collapsible action-list projects-card">
         <summary data-track="coding.fold-projects" class="collapse-summary">
           <span class="collapse-main">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-folder"></use></svg>
