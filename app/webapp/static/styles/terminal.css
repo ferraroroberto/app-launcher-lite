@@ -141,44 +141,6 @@ and ⋮, which always fit beside a shrinking title. Only the Life OS
    target every other bar button uses, at the bar's uniform 6px gap,
    so the whole row fits on-screen at once. */
 #terminalBack { text-align: center; }
-/* Read-aloud summary modal: the hub summary shown on screen while
-   it's read aloud (and readable on its own), auto-closing when the read ends or
-   on a tap. Sits above the terminal overlay (300), below the toast (400). */
-.summary-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 350;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.55);
-}
-.summary-card {
-  width: min(560px, 100%);
-  max-height: 80vh;
-  overflow-y: auto;
-  background: var(--card-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 18px 20px;
-  box-shadow: var(--shadow);
-}
-.summary-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.summary-title { font-weight: 700; font-size: var(--font-body); }
-.summary-close { --icon-btn-box: var(--control-h); }
-.summary-text {
-  margin: 0 0 12px;
-  font-size: var(--font-body);
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-.summary-foot { text-align: center; }
 /* On-screen keys popover: D-pad floating ABOVE the composer
    (it used to hang under the terminal bar), right-aligned over the
    ⌨ button in the composer grid so the thumb reaches it. It is a

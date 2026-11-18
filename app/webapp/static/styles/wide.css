@@ -55,8 +55,8 @@
   /* The Changed files / Show changes panel is body-level and a
      full-window layer, not a docked pane: at the shared 300 it sat under the
      310 column above and the Coding tab's cards painted over its file list
-. One step over that column, still under the lightbox / summary
-     modal (350) and the toast (400). */
+. One step over that column, still under the lightbox
+     (350) and the toast (400). */
   #changesOverlay { z-index: 320; }
   body:has(nav.tabs[data-active-tab="claude"]) #terminalOverlay,
   body:has(nav.tabs[data-active-tab="claude"]):not(.terminal-open) .session-detail-empty {
