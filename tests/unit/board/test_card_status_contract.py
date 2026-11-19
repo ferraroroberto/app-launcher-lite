@@ -11,7 +11,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from src.board import card_status
+from src.board import sessions as board_sessions
+from tests.unit.board._support import NOW
 
 _GLANCE = Path(__file__).resolve().parents[3] / "app" / "webapp" / "static" / "glance.js"
 
@@ -61,3 +65,33 @@ def test_declared_groupings_are_the_ones_consumers_routed_by():
     assert {s.lane for s in card_status.CARD_STATUSES.values()} == {
         card_status.LANE_YOUR_TURN, card_status.LANE_CLAUDE_TURN,
     }
+
+
+def test_enum_is_the_declared_card_status_set():
+    assert {member.value for member in card_status.CardValue} == set(card_status.CARD_STATUSES)
+
+
+@pytest.mark.parametrize("raw", ["bogus", "needs_you", "Working", "", None, 7])
+def test_card_derivation_refuses_a_stamp_the_hook_writer_never_emits(raw):
+    """A raw stamp outside the hook vocabulary renders ``unknown``, never a guessed card value.
+
+    state-machine-proof: board-card-status
+    """
+    row = {"status": raw, "project": "proof", "transcript_path": None}
+    status, _anchor = board_sessions.derive_card_status(
+        row, None, now=NOW, project="proof", active_repos=frozenset(),
+    )
+    assert status == card_status.UNKNOWN
+
+
+def test_card_derivation_never_emits_the_raw_needs_you_stamp():
+    """The ``needs-you`` stamp is split into a card value; it is not itself a card status.
+
+    state-machine-proof: board-card-status
+    """
+    row = {"status": card_status.NEEDS_YOU_STAMP, "project": "proof", "transcript_path": None}
+    status, _anchor = board_sessions.derive_card_status(
+        row, None, now=NOW, project="proof", active_repos=frozenset(),
+    )
+    assert status in card_status.CARD_STATUSES
+    assert status != card_status.NEEDS_YOU_STAMP
