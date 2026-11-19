@@ -50,7 +50,7 @@ flowchart TB
       R_SESS["sessions.py — /api/claude-code/sessions, WS"]
       R_CC["claude_code.py — favorites, git-status, VS Code open"]
       R_TRANSCRIPT["session_transcript.py — a session's transcript page\n+ session_outbox_routes.py (agent-sent files)"]
-      R_SCREEN["session_screen.py — reads the PTY screen, types keys"]
+      R_SCREEN["session_screen.py — reads the PTY screen, types keys\n+ session_folder_trust.py (answers Copilot's folder-trust prompt)"]
       R_DESKTOP["desktop_screen.py — /api/screen/*, the PC desktop, passkey-gated"]
       R_JOBS["jobs.py + jobs_run_store_routes.py\n+ jobs_webhook_routes.py + jobs_outbox_routes.py\n/api/jobs/* (Jobs tab)"]
       R_TEAMOS["team_os.py — /api/team-os/* (Team OS tab)\nskills from team_os_dir launched as Copilot sessions"]

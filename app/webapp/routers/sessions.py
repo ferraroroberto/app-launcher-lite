@@ -611,6 +611,7 @@ async def _input_refused(
         reason=(
             "stale_host" if status == 501
             else "not_ready" if getattr(exc, "not_ready", False)
+            else "needs_folder_trust" if getattr(exc, "needs_folder_trust", False)
             else "error"
         ),
         detail=detail[:200],

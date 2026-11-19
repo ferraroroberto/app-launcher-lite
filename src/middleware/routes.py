@@ -86,6 +86,12 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         "write power as /input.",
     ),
     (
+        lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/folder-trust"),
+        "passkey",
+        "Board folder-trust tap: types the digit that answers Copilot's trust "
+        "dialog into a live PTY, the same write power as /input.",
+    ),
+    (
         lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/resume-sessions"),
         "passkey",
         "Chat resume card (#1300): lists the project's conversations by title "

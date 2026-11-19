@@ -110,10 +110,16 @@ def read_capture_tail(path: Path, n_bytes: int = CAPTURE_TAIL_BYTES) -> Optional
     return text
 
 
+# Copilot's TUI asks ``CSI ? Ps n`` (private-mode device status); pyte's
+# ``report_device_status`` takes no ``private`` argument and raises, and a
+# replay has no terminal to answer, so the query is dropped before feeding.
+_PRIVATE_DSR = re.compile(r"\x1b\[\?[0-9;]*n")
+
+
 def screen_lines(text: str, rows: int, cols: int) -> List[str]:
     """``text`` rendered on a ``cols`` x ``rows`` screen, one string a row."""
     screen = pyte.Screen(max(20, int(cols)), max(5, int(rows)))
-    pyte.Stream(screen).feed(text)
+    pyte.Stream(screen).feed(_PRIVATE_DSR.sub("", text))
     return [line.rstrip() for line in screen.display]
 
 

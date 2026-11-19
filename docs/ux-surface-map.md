@@ -1189,9 +1189,11 @@ flowchart LR
 - **Reach:** the lane under Bot's turn
 - **Holds:**
   - live sessions waiting on the owner
+  - a needs folder trust chip on a session sitting on Copilot's trust prompt
   - the owner-check groups Before you start, Validate to close and Try what shipped, one fold each
 - **Does:**
   - a row unfolds its detail in place
+  - Trust this folder on a needs-folder-trust row answers Copilot's prompt with remember this folder
   - a group's Answer opens the answer sheet
 - **Leads to:**
   - [Session drawer](#boarddrawer-session-drawer) (session row)
