@@ -121,11 +121,11 @@ class TestLaunchSkill:
             json={"mode": "pty"},
         )
         assert resp.status_code == 200, resp.text
-        # cwd is the team-os root; bare /skill is the positional prompt;
+        # cwd is the team-os root; bare /skill is the -i first prompt;
         # agent is always copilot now.
         assert captured["agent"] == "copilot"
         assert captured["kind"] == "pty"
-        assert captured["flags"].endswith(" /journal-daily")
+        assert captured["flags"].endswith(' -i "/journal-daily"')
         # Default launch model "" → Copilot auto: no --model AND no --effort
         # (the auto model rejects --effort). The persisted autopilot/context
         # defaults still ride along.
@@ -563,7 +563,7 @@ class TestLaunchRecap:
         assert captured["kind"] == "pty"
         # bare /weekly-recap (review) on the Default (auto) model — no
         # --model / --effort — and crucially NOT the draft mode.
-        assert captured["flags"].endswith(" /weekly-recap")
+        assert captured["flags"].endswith(' -i "/weekly-recap"')
         assert "--model" not in captured["flags"]
         assert "--effort" not in captured["flags"]
         assert "draft" not in captured["flags"]

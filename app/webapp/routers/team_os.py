@@ -16,7 +16,7 @@ reads ``.claude/skills`` and supports ``/skill`` invocation); only three
 things differ: the cwd is always ``team_os_dir`` (so the project skills
 resolve), the model comes from the tab's model combo (config-driven, from
 ``copilot_models``), and a bare ``/<skill>`` slash-command is passed as
-the positional prompt. **No** free text is ever interpolated into the
+the first prompt (``-i``). **No** free text is ever interpolated into the
 launch — the user types their input into the live terminal once the skill
 reports ready.
 
@@ -47,7 +47,11 @@ from app.webapp.routers._helpers import (
     spawn_session_or_400,
 )
 from src import audit
-from src.launching.flags import build_copilot_flags, build_resume_flags
+from src.launching.flags import (
+    build_copilot_flags,
+    build_resume_flags,
+    copilot_prompt_flag,
+)
 from src.launching.launcher import open_local_terminal_window, spawn_claude_session
 from src.scanner import Skill, scan_skills, skills_dir_for
 from src.webapp_config import WebappConfig
@@ -333,7 +337,7 @@ async def launch_recap(request: Request) -> Dict[str, Any]:
     (``model`` ∈ "" (Default) + ``copilot_models``). The drafting half runs
     headless on a schedule (the recap-draft Job), so this tile is review-only:
     no ``/weekly-recap draft`` and no resume. cwd is fixed to ``team_os_dir``;
-    the positional prompt is a bare ``/weekly-recap``.
+    the first prompt (``-i``) is a bare ``/weekly-recap``.
     """
     cfg: WebappConfig = request.app.state.webapp_config
     team_os_dir = Path(cfg.team_os_dir)
@@ -352,7 +356,7 @@ async def launch_recap(request: Request) -> Dict[str, Any]:
     flags = " ".join(
         p for p in (
             build_copilot_flags(cfg, model_override=model),
-            f"/{_RECAP_COMMAND}",
+            copilot_prompt_flag(f"/{_RECAP_COMMAND}"),
         ) if p
     )
     kind = "remote" if mode == "remote" else "pty"
@@ -370,7 +374,7 @@ async def launch_skill(skill_id: str, request: Request) -> Dict[str, Any]:
 
     Body: ``{"mode": "pty"|"remote", "model": str, "resume": bool}`` (``model``
     ∈ "" (Default) + ``copilot_models``). The cwd is fixed to ``team_os_dir``;
-    the model comes from the tab's combo; the positional prompt is a bare
+    the model comes from the tab's combo; the first prompt (``-i``) is a bare
     ``/<skill>`` (no free text — Copilot supports ``/skill`` invocation).
     Mirrors the Coding tab's coding launch (PTY streamed to the phone
     vs. detached console window, + PC mirror window + audit).
@@ -399,8 +403,8 @@ async def launch_skill(skill_id: str, request: Request) -> Dict[str, Any]:
 
     # Model override is per-launch (the tab's model combo); the rest of the
     # flags (autopilot / context / effort / allow-all) come from the shared
-    # Coding options. The bare /<skill> is appended as copilot's positional
-    # prompt — skill.command is a validated slug, so no shell-quoting is
+    # Coding options. The bare /<skill> is appended as copilot's ``-i``
+    # first prompt — skill.command is a validated slug, so no shell-quoting is
     # needed. On Resume we drop the /<skill> prompt and launch through the
     # agent's native resume path instead: `copilot --resume` with no session
     # id opens Copilot's own session picker over the PTY.
@@ -410,7 +414,7 @@ async def launch_skill(skill_id: str, request: Request) -> Dict[str, Any]:
         flags = " ".join(
             p for p in (
                 build_copilot_flags(cfg, model_override=model),
-                f"/{skill.command}",
+                copilot_prompt_flag(f"/{skill.command}"),
             ) if p
         )
     name = skill.name

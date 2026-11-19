@@ -38,7 +38,7 @@ class TestIssueStart:
             json={"repo": "MyRepo", "number": 42, "mode": "start"},
         )
         assert resp.status_code == 200
-        assert _spawn["flags"].endswith(' "/issue-start 42"')
+        assert _spawn["flags"].endswith(' -i "/issue-start 42"')
         assert Path(_spawn["project_dir"]).name == "myrepo"
         assert _spawn["kind"] == "pty" and _spawn["agent"] == "copilot"
         assert resp.json()["session"]["session_id"] == "spawned-1"
@@ -79,7 +79,7 @@ class TestIssueStart:
                   "model": model},
         )
         assert f"--model {model.split(':')[-1]}" in _spawn["flags"]
-        assert _spawn["flags"].endswith(' "/issue-start 9"')
+        assert _spawn["flags"].endswith(' -i "/issue-start 9"')
         assert _spawn["agent"] == "copilot"
 
     def test_absent_model_keeps_persisted_coding_model(
@@ -212,7 +212,7 @@ class TestIssueStartEffort:
         from src.launching.flags import build_copilot_flags
         client, app, overrides = webapp_client
         resp = self._start(client, overrides)
-        assert _spawn["flags"] == build_copilot_flags(app.state.webapp_config) + ' "/issue-start 9"'
+        assert _spawn["flags"] == build_copilot_flags(app.state.webapp_config) + ' -i "/issue-start 9"'
         assert "effort" not in resp.json()
 
     def test_effort_applies_to_the_persisted_model_when_none_is_sent(
