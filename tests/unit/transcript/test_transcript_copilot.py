@@ -260,3 +260,38 @@ def test_copilot_huge_plumbing_line_does_not_break_paging(tmp_path: Path, monkey
     page = st.transcript_page(path, flavor="copilot")
     assert _kinds(page["entries"]) == ["user", "assistant"]
     assert page["entries"][1]["text"] == "answer"
+
+
+def test_copilot_task_complete_summary_is_the_assistant_reply(tmp_path: Path):
+    """Autopilot ends a turn with a ``task_complete`` call whose ``summary`` is
+    the reply, often the turn's only text. It reads as an assistant message at
+    the call's offset, its bookkeeping result is dropped, and every other
+    tool still pairs with its result.
+    """
+    path = _write_jsonl(tmp_path / "cop.jsonl", [
+        _cop("tool.execution_start", {"toolCallId": "a", "toolName": "powershell",
+                                      "arguments": {"command": "ls"}}),
+        _cop("tool.execution_complete", {"toolCallId": "a", "success": True,
+                                         "result": {"content": "listing"}}),
+        _cop("tool.execution_start", {"toolCallId": "t", "toolName": "task_complete",
+                                      "arguments": {"summary": "Two sessions are running."}}),
+        _cop("tool.execution_complete", {"toolCallId": "t", "success": True,
+                                         "result": {"content": "Task marked complete."}}),
+    ])
+    entries = _parse_whole(path, st.copilot_entries)
+    assert _kinds(entries) == ["tool_call", "assistant"]
+    assert entries[0]["name"] == "powershell" and entries[0]["result"] == "listing"
+    assert entries[1]["text"] == "Two sessions are running."
+
+
+def test_copilot_task_complete_without_a_summary_stays_a_tool_row(tmp_path: Path):
+    """No reply text to promote: the call keeps its tool row and result."""
+    path = _write_jsonl(tmp_path / "cop.jsonl", [
+        _cop("tool.execution_start", {"toolCallId": "t", "toolName": "task_complete",
+                                      "arguments": {}}),
+        _cop("tool.execution_complete", {"toolCallId": "t", "success": True,
+                                         "result": {"content": "done"}}),
+    ])
+    entries = _parse_whole(path, st.copilot_entries)
+    assert _kinds(entries) == ["tool_call"]
+    assert entries[0]["name"] == "task_complete" and entries[0]["result"] == "done"
