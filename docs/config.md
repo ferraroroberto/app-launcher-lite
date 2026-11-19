@@ -45,7 +45,7 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 | `apps_scan_root` | parent of this repo | Root the Apps-tab scan walks for launcher bats. Empty scans nothing; set it empty when another launcher install shares the PC. |
 | `mini_apps_root` | `""` | Optional folder of small helper bats; a scan lists each `.bat` directly inside it in the Apps tab's **Mini apps** group, autostart off. Empty hides the group. Read on the next webapp start. |
 | `team_os_dir` | sibling `../team-os` | Team OS checkout root (skills at `.claude/skills`). When that directory is missing the tab shows disabled. |
-| `fleet_config_dir` | sibling `../fleet-config-lite` | Root of the fleet-config-lite checkout the Board, sessions and the (planned) chief read. |
+| `fleet_config_dir` | sibling `../fleet-config-lite` | Root of the fleet-config-lite checkout the Board, sessions and the chief read. |
 
 ### Board and GitLab
 
@@ -69,7 +69,7 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 | `copilot_context` | `long_context` | `--context` for `default` or `long_context`; `""` omits it. |
 | `copilot_autopilot` | `true` | Adds `--autopilot`. |
 | `copilot_skip_permissions` | `false` | Opt-in `--allow-all` (every tool permission). |
-| `chief_model` | `gpt-6-luna` | The chief's Copilot model; the chief is not active yet ([README](../README.md#status)). A value outside `copilot_models` shows as not offered in Settings > Chief, and a start uses Copilot's own pick and returns a `warning`. |
+| `chief_model` | `gpt-6-luna` | The chief's Copilot model; the chief needs fleet-config-lite's helpers ([README](../README.md#status)). A value outside `copilot_models` shows as not offered in Settings > Chief, and a start uses Copilot's own pick and returns a `warning`. |
 | `chief_context` | `""` | The chief's `--context` (`""`, `default`, `long_context`). `""` follows `copilot_context`, so an install that never sets it launches the chief as before. |
 | `chief_effort` | `""` | The chief's `--effort` (`""`, `none` … `max`), with the same only-beside-an-explicit-model rule as `copilot_effort`. `""` follows `copilot_effort`. |
 | `launch_presets` | `[]` | Named Copilot launches: `{id, name, agent: "copilot", model, effort, context?}` rows (at most 12, unique names), written through `POST /api/config` (an `id` is assigned when absent). The Projects launch toolbar offers a dropdown with Default and one row per preset whose model is in `copilot_models`; a launch from a preset sends `--model`, `--effort` and, when the preset has a `context` (`default` or `long_context`), `--context`; without one the saved `copilot_context` applies. `effort` must be one the model offers: `mai-code-2-flash` takes `low`, `medium` and `high` (probed), any other model takes any level the CLI accepts and the CLI decides. The launch route refuses a model outside `copilot_models`. |

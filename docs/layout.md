@@ -53,7 +53,7 @@ app-launcher-lite/
 │   ├── clients/                # loopback HTTP clients (shared base, session-host) and the GitLab client (gitlab.py, via glab)
 │   ├── launching/              # agent launch: Copilot flags (flags.py), spawn helpers (launcher.py), the tray-restart check
 │   ├── board/                  # Board backend: column assembly, session-state join, drawer exchange, proof reports, owner checks
-│   ├── chief/                  # the chief's plan, journal, answers and dispatch briefs (inactive until the chief ships)
+│   ├── chief/                  # the chief's plan, journal, answers and dispatch briefs
 │   ├── session_view/           # a live session's views: transcript pages, changed files, the Chat outbox, plan and resume pickers
 │   ├── transcript_flavors/     # transcript-line grammars (copilot.py is the one in use)
 │   ├── desktop/                # the Screen view's PC side: capture, input, cursor, clipboard

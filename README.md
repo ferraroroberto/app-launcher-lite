@@ -14,30 +14,27 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 
 **Verified on Copilot CLI 1.0.105:** interactive and `-p` sessions both fire the four hooks (`sessionStart`, `userPromptSubmitted`, `agentStop`, `sessionEnd`); `events.jsonl` carries `session.usage_record` with `inputTokens` and `maxPromptTokens`; `--max-ai-credits` exists; `-p` plus `--session-id` resumes with context kept; the ask tool is `ask_user`.
 
+**Verified on Copilot CLI 1.0.112:** `sessionStart` `additionalContext` reaches the model, `agentStop` `decision: block` forces another turn, and `preToolUse` `permissionDecision: deny` stops the tool call (fleet-config-lite's probe).
+
+**Verified on Copilot CLI 1.0.114 (the installed version), end to end through the launcher:** the chief answers in the Board chat, raises a Board question that shows on the plan card and clears when answered, dispatches a lane with its brief on the command line, and opens a plain session in a project with no issue. A Copilot session in a folder it does not trust yet shows the trust prompt on the Board, where one tap answers it.
+
 **Unknown (not yet verified live):**
 
 - GitLab, in part: group issue reads, issue create and note, and the two-remote mirror are verified live on gitlab.com; the merge-request rows, pipelines, labels, merge and a self-hosted host are `unknown`. See [docs/gitlab.md](docs/gitlab.md).
-- On Copilot CLI 1.0.105: composer keys for the chief's doorbell, a queued `/compact` running at turn end, `/remote on` typed from the launcher, `sessionStart` `additionalContext` being honoured, `agentStop` blocking to force another turn, a background shell finishing waking the agent, and `ask_user` blocking under autopilot.
+- On Copilot CLI (last probed on 1.0.105; the installed CLI is 1.0.114): composer keys for the chief's doorbell, a queued `/compact` running at turn end, `/remote on` typed from the launcher, a background shell finishing waking the agent, and `ask_user` blocking under autopilot.
 - Android device behaviour (install, safe areas, gesture bar, keyboard) — see [docs/android.md](docs/android.md).
 
-**Not active until fleet-config-lite ships the chief (planned):** the chief features ported from app-launcher — plan, journal, mailbox, doorbell, compaction and dispatch — are present in the launcher code but need fleet-config-lite's chief helpers, which do not exist yet. Until then the Board shows no chief plan and nothing dispatches work.
+**The chief works** once [fleet-config-lite](https://github.com/ferraroroberto/fleet-config-lite) is installed beside this checkout: its chief helpers (`chief_ops.py`, the chief skill, the plan, journal and mailbox files, the guard hooks) are the requirement. The chief is one long-lived Copilot session that reads the Board, writes its plan and journal, dispatches lanes, opens plain sessions, stops them and raises questions for the owner; the Board shows its card, plan and answer sheet. With the doorbell off, only the owner's own messages wake it. A lane builds in a worktree and needs `git` to reach GitLab without a prompt, which the installer does not check (it checks `glab` only), so run one lane end to end on a new computer before relying on it. See [docs/board.md](docs/board.md#the-chief).
 
-**Planned port steps** (each independently shippable; none is done):
+**Port steps done** (in fleet-config-lite): the probe script; plan and journal; the mailbox; `chief_ops` and the chief settings; the chief skill; the guard hooks; compaction verbs; the merge verb (`glab mr merge --auto-merge`, unit-tested and `unknown` live); worktrees, claims and sweep; drain and owner checks.
 
-1. A probe script for the unknowns above.
-2. Copilot transcript flavor and context percentage.
-3. Plan and journal.
-4. Mailbox.
-5. `chief_ops` lite and chief settings.
-6. A lite chief skill in fleet-config-lite.
-7. Doorbell and compaction.
-8. Guard hooks.
-9. The merge path via `glab mr merge --when-pipeline-succeeds`.
-10. Worktrees, claims and sweep.
-11. Drain and owner checks.
-12. Jobs feeding the chief.
-13. `ui_proof`, the remote-control toggle and the Chat view.
-14. A fresh-machine install checklist.
+**Port steps still open** (each independently shippable):
+
+1. Copilot transcript flavor and context percentage.
+2. The doorbell and a queued `/compact` on Copilot's composer (the keys are `unknown`).
+3. Jobs feeding the chief.
+4. `ui_proof`, the remote-control toggle and the Chat view.
+5. A fresh-machine install checklist.
 
 **Dropped from the full app** (not documented, not planned): Telegram, Life OS, inspiration, voice/OCR/TTS, usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board, screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
 
