@@ -147,6 +147,13 @@ export function renderClaudeOptions() {
   setSwitch(els.copilotAutopilot, !!c.autopilot);
   setSwitch(els.copilotSkipPerms, !!c.skip_permissions);
   setFieldValue(els.copilotModels, (c.models_available || []).join('\n'));
+  // A saved list replaces the code default, so a model added to the default
+  // later is offered here instead of needing a JSON edit.
+  const missing = c.models_missing_defaults || [];
+  if (els.copilotModelsNew) els.copilotModelsNew.hidden = !missing.length;
+  if (els.copilotModelsNewText) {
+    els.copilotModelsNewText.textContent = 'New default models not in your list: ' + missing.join(', ') + '.';
+  }
   if (els.copilotFlagsPreview) {
     els.copilotFlagsPreview.textContent = 'copilot' + (c.computed_flags ? ' ' + c.computed_flags : '');
   }
@@ -216,10 +223,24 @@ function wireModelList() {
   });
 }
 
+// Appends the default ids the saved list lacks, keeping the saved order and
+// any custom ids.
+function wireAddDefaultModels() {
+  const btn = els.copilotAddDefaultModels;
+  if (!btn) return;
+  btn.addEventListener('click', async function () {
+    const c = state.config && state.config.copilot;
+    if (!c) return;
+    const models = (c.models_available || []).concat(c.models_missing_defaults || []);
+    if (await patchConfig({ copilot_models: models })) toast('Default models added.', 'good');
+  });
+}
+
 export function wireClaudeOptions() {
   wireConfigSwitch(els.openSessionsInWindowToggle, 'open_sessions_in_window');
   wireConfigSwitch(els.openSessionsInChatToggle, 'open_sessions_in_chat');
   wireConfigSwitch(els.copilotAutopilot, 'copilot_autopilot', { label: 'Autopilot' });
   wireConfigSwitch(els.copilotSkipPerms, 'copilot_skip_permissions', { label: 'Skip permission prompts' });
   wireModelList();
+  wireAddDefaultModels();
 }

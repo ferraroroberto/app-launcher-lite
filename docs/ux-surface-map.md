@@ -1323,8 +1323,11 @@ flowchart LR
   - switches for Autopilot and Skip permission prompts
   - the sign-in instruction
   - Models offered, one id per line
+  - a line with an Add button when the saved list lacks a default model
   - Done
-- **Does:** Effort applies only with a model picked here
+- **Does:**
+  - Effort applies only with a model picked here
+  - Add appends the missing default models to the saved list
 - **Why:** Copilot takes its model at launch from here and has no in-session switch the launcher drives
 
 ### `settings.chief` Chief sheet

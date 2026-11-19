@@ -35,7 +35,7 @@ from fastapi import HTTPException
 
 from src import agents
 from src.clients import session as session_client
-from src.launching.flags import build_copilot_flags
+from src.launching.flags import build_copilot_flags, unknown_model_detail
 from src.registry import AppEntry, live_claude_code_entries
 from src.webapp_config import VALID_COPILOT_EFFORTS, WebappConfig
 
@@ -136,7 +136,7 @@ def _agent_and_flags(
     """
     model_id = model.split(":", 1)[1] if model.startswith("copilot:") else model
     if model_id and model_id not in ("default", *cfg.copilot_models):
-        raise HTTPException(status_code=400, detail=f"unknown model: {model}")
+        raise HTTPException(status_code=400, detail=unknown_model_detail(model))
     _require_installed("copilot")
     return "copilot", build_copilot_flags(
         cfg, model_override=model_id or None, effort_override=effort,

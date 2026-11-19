@@ -395,6 +395,22 @@ class TestPatchConfig:
             assert client.post("/api/config", json={"copilot_models": bad}).status_code == 400, bad
         assert app.state.webapp_config.copilot_models == ["gpt-a", "gpt-b"]
 
+    def test_settings_offers_default_models_a_saved_list_lacks(self, webapp_client):
+        """A saved list replaces the default, so a newer default id is offered, not lost."""
+        client, app, _ = webapp_client
+        saved = ["gpt-5.6-luna", "custom-x"]
+        assert client.post("/api/config", json={"copilot_models": saved}).status_code == 200
+        copilot = client.get("/api/config").json()["copilot"]
+        assert "gpt-6-luna" in copilot["models_missing_defaults"]
+        assert "gpt-5.6-luna" not in copilot["models_missing_defaults"]
+        # What the Settings Add button sends: the saved list plus the missing ids.
+        added = copilot["models_available"] + copilot["models_missing_defaults"]
+        assert client.post("/api/config", json={"copilot_models": added}).status_code == 200
+        after = client.get("/api/config").json()["copilot"]
+        assert after["models_available"][:2] == saved
+        assert "gpt-6-luna" in after["models_available"]
+        assert after["models_missing_defaults"] == []
+
     @pytest.mark.parametrize("key", ["copilot_skip_permissions", "copilot_autopilot"])
     @pytest.mark.parametrize("junk", ["true", "false", 0, 1, None])
     def test_copilot_switches_reject_non_booleans(self, webapp_client, key, junk):

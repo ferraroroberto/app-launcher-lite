@@ -93,7 +93,11 @@ from src.chief import plan as chief_plan
 from src.clients import gitlab as forge
 from src.clients import session as session_client
 from src.jobs import snapshot as jobs_snapshot
-from src.launching.flags import build_copilot_flags, copilot_prompt_flag
+from src.launching.flags import (
+    build_copilot_flags,
+    copilot_prompt_flag,
+    unknown_model_detail,
+)
 from src.launching.launcher import open_local_terminal_window, spawn_claude_session
 from src.session_view.outbox import HTML_CSP, HTML_MEDIA
 from src.webapp_config import WebappConfig
@@ -725,7 +729,7 @@ def _launch_flags(
     """
     model_id = model.split(":", 1)[1] if model.startswith("copilot:") else model
     if model_id and model_id not in ("default", *cfg.copilot_models):
-        raise HTTPException(status_code=400, detail=f"unknown model: {model}")
+        raise HTTPException(status_code=400, detail=unknown_model_detail(model))
     effort = dispatch_effort(_requested_effort(body))
     flags = build_copilot_flags(
         cfg, model_override=model_id or None, effort_override=effort)

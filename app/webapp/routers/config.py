@@ -21,7 +21,7 @@ from src import boot_autostart, password
 from src.agents import AGENTS, DEFAULT_AGENT
 from src.chief.launch_settings import chief_model_problem
 from src.desktop import lid_keep_awake
-from src.launching.flags import build_copilot_flags
+from src.launching.flags import build_copilot_flags, missing_default_copilot_models
 from src.launching.presets import checked_launch_presets
 from src.middleware import terminal_reachability
 from src.session_view import outbox as session_outbox
@@ -113,6 +113,7 @@ def copilot_payload(cfg: WebappConfig) -> Dict[str, Any]:
     return {
         "skip_permissions": cfg.copilot_skip_permissions,
         "models_available": list(cfg.copilot_models),
+        "models_missing_defaults": missing_default_copilot_models(cfg),
         "model": cfg.copilot_model,
         "autopilot": cfg.copilot_autopilot,
         "context": cfg.copilot_context,

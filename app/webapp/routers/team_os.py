@@ -51,6 +51,7 @@ from src.launching.flags import (
     build_copilot_flags,
     build_resume_flags,
     copilot_prompt_flag,
+    unknown_model_detail,
 )
 from src.launching.launcher import open_local_terminal_window, spawn_claude_session
 from src.scanner import Skill, scan_skills, skills_dir_for
@@ -99,11 +100,7 @@ def _resolve_launch_model(cfg: WebappConfig, body: Dict[str, Any]) -> str:
     if model.lower() in ("", "default"):
         return ""
     if model not in cfg.copilot_models:
-        allowed = ["", *cfg.copilot_models]
-        raise HTTPException(
-            status_code=400,
-            detail=f"model must be one of {allowed}; got {model!r}",
-        )
+        raise HTTPException(status_code=400, detail=unknown_model_detail(model))
     return model
 
 

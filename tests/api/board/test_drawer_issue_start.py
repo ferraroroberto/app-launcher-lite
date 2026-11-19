@@ -105,6 +105,7 @@ class TestIssueStart:
         )
         assert resp.status_code == 400
         assert "unknown model" in resp.json()["detail"]
+        assert "Settings" in resp.json()["detail"]
         assert not _spawn
 
     def test_unknown_repo_is_404(self, webapp_client, _bypass_gate, _spawn):
