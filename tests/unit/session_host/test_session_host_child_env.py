@@ -78,12 +78,12 @@ def test_pty_terminal_type_overrides_ambient_dumb_terminal(monkeypatch):
     assert env["TERM"] == "xterm-256color"
 
 
-def test_user_scope_settings_survive(monkeypatch):
+def test_user_scope_settings_survive(monkeypatch, tmp_path):
     """settings.json vars are meant for every agent run — don't scrub them."""
     monkeypatch.setenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "70")
     monkeypatch.setenv("CLAUDE_CODE_ENABLE_TELEMETRY", "1")
     monkeypatch.setenv("GIT_TERMINAL_PROMPT", "0")
-    monkeypatch.setenv("PATH", "C:\\Windows\\System32")
+    monkeypatch.setenv("PATH", str(tmp_path))
 
     env = agent_child_env("abc123", "claude")
 
@@ -94,4 +94,4 @@ def test_user_scope_settings_survive(monkeypatch):
     # (issue #668): the child gets the effective path — inherited plus the
     # registry values — so a CLI installed after this host started still
     # resolves. The inherited entry keeps its precedence at the front.
-    assert env["PATH"].split(os.pathsep)[0] == "C:\\Windows\\System32"
+    assert env["PATH"].split(os.pathsep)[0] == str(tmp_path)

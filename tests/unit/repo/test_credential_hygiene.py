@@ -206,6 +206,7 @@ def _run_inner_pytest(test_dir: Path, *extra: str) -> str:
     return proc.stdout + proc.stderr
 
 
+@pytest.mark.windows_only
 def test_failed_authenticated_request_leaves_no_credential_in_output(tmp_path: Path) -> None:
     """The #907 leak, end to end: a test making an authenticated request fails,
     and pytest's output must not carry the credential — neither from

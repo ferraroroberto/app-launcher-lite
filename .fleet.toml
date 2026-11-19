@@ -140,15 +140,19 @@ ready_selector = "#homeHeadStatus"
 
 # ---------------------------------------------------------------------------
 # [ci.nightly] -- the Mac Mini nightly's settings for this repo (project-
-# scaffolding docs/mac-runner.md, "The [ci.nightly] table"). This repo opts out:
-# like the launcher it is built from, it is a Windows desktop product (ConPTY
-# session-host, pywin32 desktop control, the tray, PowerShell and .bat recipes),
-# and its suite pins Windows drive paths and those APIs throughout, so a Mac run
-# would be red for reasons no change here causes. No Mac was available to sort
-# the tests into portable and `windows_only`, so none is marked. The local gate
-# stays the contract and the hosted workflow stays the clean-machine check.
+# scaffolding docs/mac-runner.md, "The [ci.nightly] table"). The app is used from
+# Windows and from an iPhone, so the web UI, the webapp API and the iPhone
+# browser suite run on the Mac. Only a test that needs Windows (ConPTY PTY
+# sessions, pywin32 desktop control, the tray, .bat/PowerShell recipes, drive
+# paths) carries `@pytest.mark.windows_only`; the unit leg deselects it, the e2e
+# conftest deselects it off Windows, and the local gate still runs it. No
+# `views`: the simulator smoke needs a `[design.review.synthetic] command`.
 [ci.nightly]
-skip_reason = "Windows-only launcher: ConPTY session-host, pywin32 desktop control, tray, PowerShell and bat recipes; tests pin Windows paths. Local gate and hosted workflow cover it."
+python       = "3.14"
+requirements = ["requirements.txt"]
+samples      = "config"
+unit         = ["tests", "--ignore=tests/e2e"]
+e2e          = ["tests/e2e", "--e2e-autoboot"]
 
 # ---------------------------------------------------------------------------
 # [comment_ratchet] -- the scaffold's no-history-comments ratchet (#1751,

@@ -59,6 +59,7 @@
 ## CI expectations
 - Workflow `.github/workflows/e2e.yml`, job `verify-before-ship`, on every PR and push to `main`. **Advisory, not required** — the local gate is the contract.
 - **CI is the clean-machine half only (#1041): byte-compile plus the non-e2e pytest suite, no browser suite** (`e2e-gate-route.ps1` routes CI to tier `skip`, pinned by `tests/unit/repo/test_verify_gate_route.py`). It covers what a local run cannot: a fresh `.venv` from `requirements.txt` against committed files only. A browser-visible change is proven only by the local gate on this box. The job self-caps at 10 min.
+- **The Mac Mini nightly also runs this repo** (`.fleet.toml` `[ci.nightly]`): the unit leg without `windows_only` tests and the iPhone-projection browser leg. Mark a test that needs Windows `@pytest.mark.windows_only`; make one that pins a Windows path by accident portable. Detail: [`docs/verification.md`](docs/verification.md).
 
 ## E2E browser suite — local gate only
 Reasoning and examples: [`docs/e2e-conventions.md`](docs/e2e-conventions.md).

@@ -17,6 +17,7 @@ import pytest
 
 from app.webapp.manager import WebappManagerConfig, load_config
 from src.app_config import DEFAULT_WEBAPP_PORT, resolve_webapp_port, webapp_port
+from src.subprocess_flags import NO_WINDOW
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -69,7 +70,7 @@ class TestBatchLaunchersReadTheHelper:
         out = subprocess.run(
             [sys.executable, "-m", "scripts.webapp_port"],
             cwd=_REPO_ROOT, capture_output=True, text=True, check=True,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=NO_WINDOW,
         )
         assert out.stdout.strip() == str(resolve_webapp_port())
 

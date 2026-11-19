@@ -117,6 +117,7 @@ async def _hops_beside_hogs() -> float:
     return elapsed
 
 
+@pytest.mark.windows_only
 def test_request_hops_stay_fast_beside_cpu_bound_threads(default_switch_interval):
     """Pins the bound: the loop factory is what keeps a request's thread hops
     under ``_HOP_BUDGET_S`` while three CPU-bound threads hold the GIL. Fails
