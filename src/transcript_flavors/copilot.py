@@ -126,6 +126,9 @@ def copilot_entries(lines: List[Line], *, uncapped: bool = False) -> List[Entry]
       ``tool.execution_start`` and ``tool.execution_complete`` — so unlike
       Antigravity there is no positional guessing. A result whose
       call fell off the page stands alone, as in every other flavour.
+    * A ``task_complete`` call's ``arguments.summary`` is the agent's reply
+      to the user (autopilot's turn-end), so it is an ``assistant`` entry at
+      the call's offset and neither the call nor its result gets a tool row.
     * ``data.reasoningText`` is readable thinking and folds as ``thinking``
       (14 of 68 assistant messages here). Its neighbours
       ``reasoningOpaque``, ``encryptedContent`` and ``reasoningBlocks``
@@ -202,6 +205,18 @@ def _copilot_event(
 
     if kind == "tool.execution_start":
         call_id = str(data.get("toolCallId") or "")
+        args = data.get("arguments")
+        reply = str(args.get("summary") or "") if isinstance(args, dict) else ""
+        if data.get("toolName") == "task_complete" and reply.strip():
+            # Autopilot ends a turn with this call and its `summary` is the
+            # reply, often the turn's only text, so it reads as a message.
+            # Its own result is harness bookkeeping: a throwaway entry takes
+            # the pairing so the completion emits nothing.
+            entries.append(_text_entry(
+                "assistant", offset, ts, reply, assistant_cap, sidechain=False))
+            if call_id:
+                open_calls[call_id] = {}
+            return
         entry = _with_action(_entry(
             "tool_call", offset, ts,
             name=str(data.get("toolName") or "tool"),
