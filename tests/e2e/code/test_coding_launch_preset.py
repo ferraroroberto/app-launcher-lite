@@ -3,6 +3,8 @@
 A saved preset whose model is on the Copilot list gets a dropdown first on the
 Projects launch toolbar (nothing is drawn without one). Picking a preset makes
 the next launch carry its model, effort and context; Default sends none of them.
+A preset whose model is off the list is not offered, so with only that one saved
+no dropdown is drawn.
 """
 
 from __future__ import annotations
@@ -87,10 +89,10 @@ def test_a_picked_preset_sets_the_launch_model_effort_and_context(
     sent = _launch_alpha(authed_page, launches)
     assert not {"model", "effort", "context"} & set(sent)
 
-
-def test_no_dropdown_is_drawn_without_an_offered_preset(authed_page: Page, base_url: str) -> None:
+    # Only a preset whose model is off the list is saved: nothing is drawn. The
+    # routes installed last answer first.
     _install_routes(authed_page, [_PRESETS[2]], [])
-    authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
+    authed_page.reload(wait_until="domcontentloaded")
     authed_page.locator("details.projects-card").evaluate("el => { el.open = true; }")
     expect(authed_page.locator("#claudeList .coding-item")).to_have_count(1)
     expect(authed_page.locator("#codingPresetCombo")).to_have_count(0)

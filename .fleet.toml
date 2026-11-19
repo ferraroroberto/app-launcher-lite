@@ -421,8 +421,11 @@ time_budget_s         = 1200
 # tests/unit/repo/test_e2e_test_budget.py fails the build on either side (a
 # regrown suite, or a trim that left the number stale). Lite collects Chromium
 # only by default, so the count is the Chromium projection's. Lower it with
-# every trim; raise it only with a node-for-node reason beside it.
-test_budget = 297
+# every trim; raise it only with a node-for-node reason beside it. 298: the
+# Coding launch-preset dropdown is a new control on the Projects toolbar, and its
+# one test shares no setup with an existing node (it mocks the config's presets
+# and the launch request).
+test_budget = 298
 
 # --- static assets under the webapp's static dir -> Chromium smoke ----------
 [[e2e.rule]]
