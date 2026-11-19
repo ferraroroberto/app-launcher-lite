@@ -1,6 +1,6 @@
 """The Board session card's status set, declared once.
 
-A card's ``status`` is exactly one of the nine values below. Every grouping a
+A card's ``status`` is exactly one of the nine :class:`CardValue` members. Every grouping a
 consumer needs (the Your-turn lane, the chief's resting label, the doorbell's
 safe-to-type set, the plan-picker screen check) is derived from the
 properties declared here, so a status is added or regrouped in one place.
@@ -15,17 +15,34 @@ The hook writer stamps a smaller raw vocabulary (:data:`HOOK_STAMPS`). Its
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Dict, FrozenSet
 
-WORKING = "working"
-UNKNOWN = "unknown"
-IDLE = "idle"
-WAITING_ON_TASK = "waiting-on-task"
-STALLED = "stalled"
-AWAITING_DECISION = "awaiting-decision"
-TOOL_PENDING = "tool-pending"
-IDLE_FINISHED = "idle-finished"
-AWAITING_INPUT = "awaiting-input"
+
+class CardValue(StrEnum):
+    """The closed set of values a Board card's ``status`` may hold."""
+
+    WORKING = "working"
+    UNKNOWN = "unknown"
+    IDLE = "idle"
+    WAITING_ON_TASK = "waiting-on-task"
+    STALLED = "stalled"
+    AWAITING_DECISION = "awaiting-decision"
+    TOOL_PENDING = "tool-pending"
+    IDLE_FINISHED = "idle-finished"
+    AWAITING_INPUT = "awaiting-input"
+
+
+# Plain strings, so a card dict, a JSON payload and a set lookup see the same value as before.
+WORKING = CardValue.WORKING.value
+UNKNOWN = CardValue.UNKNOWN.value
+IDLE = CardValue.IDLE.value
+WAITING_ON_TASK = CardValue.WAITING_ON_TASK.value
+STALLED = CardValue.STALLED.value
+AWAITING_DECISION = CardValue.AWAITING_DECISION.value
+TOOL_PENDING = CardValue.TOOL_PENDING.value
+IDLE_FINISHED = CardValue.IDLE_FINISHED.value
+AWAITING_INPUT = CardValue.AWAITING_INPUT.value
 
 #: The raw hook stamp that the needs-you split turns into a card value.
 NEEDS_YOU_STAMP = "needs-you"
