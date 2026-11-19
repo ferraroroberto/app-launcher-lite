@@ -22,6 +22,7 @@ from app.webapp.routers._helpers import (
     audit_session_start_and_maybe_mirror,
     client_ip,
     maybe_json,
+    requested_launch_context,
     requested_launch_effort,
     safe_int,
     spawn_launcher_session,
@@ -39,6 +40,7 @@ from src.launching import app_refresh
 from src.launching.flags import (
     build_copilot_flags,
     build_resume_flags,
+    unknown_model_detail,
 )
 from src.launching.launcher import (
     TRAY_RESTART_TIMEOUT_SECONDS,
@@ -47,6 +49,7 @@ from src.launching.launcher import (
     spawn_bat,
     spawn_claude_session,
 )
+from src.launching.presets import OPEN_MODEL_AGENTS
 from src.registry import (
     AppEntry,
     decorate_for_api,
@@ -67,8 +70,10 @@ from src.webapp_config import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Launch-flag dispatch for the agents that take NO per-launch model: Copilot,
-# whose Coding launch carries the saved Copilot settings. Module level so the
+# Launch-flag dispatch for the agents without a catalog model: Copilot, whose
+# per-launch model, effort and context come from a launch preset (every one
+# optional: none keeps the saved Copilot settings). Builders take the keywords
+# `model_override`, `effort_override`, `context_override`. Module level so the
 # coverage contract is a fact a test can check:
 # `tests/unit/launching/test_apps_launch_dispatch.py` fails when a registered
 # agent has no builder, which is otherwise a KeyError on the first launch.
@@ -336,9 +341,10 @@ async def _launch_coding(entry: AppEntry, cfg: WebappConfig, request: Request) -
             detail=f"{agents.AGENTS[agent].label} is not installed",
         )
     await _refuse_if_behind(entry, body)
-    model_value = _validated_launch_model(agent, requested_model)
+    model_value = _validated_launch_model(agent, requested_model, cfg)
     effort = requested_launch_effort(body, agent, model_value)
-    flags = _coding_flags(cfg, agent, resume, model_value, effort)
+    context = requested_launch_context(body, agent)
+    flags = _coding_flags(cfg, agent, resume, model_value, effort, context)
 
     if mode == "remote":
         session = await spawn_session_or_400(
@@ -391,10 +397,11 @@ async def _launch_coding(entry: AppEntry, cfg: WebappConfig, request: Request) -
     }
 
 
-def _validated_launch_model(agent: str, requested_model: str) -> str:
+def _validated_launch_model(agent: str, requested_model: str, cfg: WebappConfig) -> str:
     """The model value of a Coding launch's ``provider:value`` pick, ``""``
     for none; 400 when it names another agent, an agent that takes no
-    per-launch model, or a value outside the agent's catalog."""
+    per-launch model, or a value outside the agent's catalog (for Copilot,
+    the install's ``copilot_models``)."""
     if not requested_model:
         return ""
     provider, separator, model_value = requested_model.partition(":")
@@ -403,6 +410,12 @@ def _validated_launch_model(agent: str, requested_model: str) -> str:
             status_code=400,
             detail=f"model {requested_model!r} does not belong to {agent}",
         )
+    # Copilot's model is per install: a launch preset sends an id from the
+    # `copilot_models` list the pickers offer, never one from a catalog here.
+    if agent in OPEN_MODEL_AGENTS:
+        if model_value not in cfg.copilot_models:
+            raise HTTPException(status_code=400, detail=unknown_model_detail(model_value))
+        return model_value
     # The prefix match is not enough on its own, in two ways.
     #
     # First: four of the six agents take no per-launch model at all.
@@ -448,19 +461,24 @@ def _validated_launch_model(agent: str, requested_model: str) -> str:
 
 def _coding_flags(
     cfg: WebappConfig, agent: str, resume: bool, model_value: str,
-    effort: Optional[str] = None,
+    effort: Optional[str] = None, context: Optional[str] = None,
 ) -> List[str]:
     """The agent's CLI flags for a Coding launch, or its resume invocation.
 
-    ``effort`` is a launch preset's, already checked against the model."""
+    ``effort`` and ``context`` are a launch preset's, already checked; an empty
+    ``model_value`` keeps the saved model."""
     if resume:
         # Swap the normal flags for the agent's resume invocation; the
         # requested `mode` decides where its picker renders — a detached
         # console (mode="remote") or a streamed PTY.
         return build_resume_flags(
-            cfg, agent, model_override=model_value or None, effort_override=effort
+            cfg, agent, model_override=model_value or None, effort_override=effort,
+            context_override=context,
         )
-    return _NO_MODEL_FLAG_BUILDERS[agent](cfg, effort_override=effort)
+    return _NO_MODEL_FLAG_BUILDERS[agent](
+        cfg, model_override=model_value or None, effort_override=effort,
+        context_override=context,
+    )
 
 
 @router.get("/api/apps/running")

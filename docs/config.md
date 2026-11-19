@@ -63,7 +63,7 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `copilot_models` | `["gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]` | Model ids the pickers offer. Edited here or in Settings > Agents > GitHub Copilot. A saved list replaces this default, so Settings offers an Add button for any default id the saved list lacks. **Explicit ids are tenant-gated**: which ids an account may use depends on its plan, so edit the list per install; Copilot falls back to its own pick and prints one line when an id is unavailable. |
+| `copilot_models` | `["gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "mai-code-2-flash"]` | Model ids the pickers offer. Edited here or in Settings > Agents > GitHub Copilot. A saved list replaces this default, so Settings offers an Add button for any default id the saved list lacks. **Explicit ids are tenant-gated**: which ids an account may use depends on its plan, so edit the list per install; Copilot falls back to its own pick and prints one line when an id is unavailable. |
 | `copilot_model` | `gpt-6-luna` | Saved `--model`. `""` or `"default"` means let Copilot pick (auto) and omits the flag. |
 | `copilot_effort` | `xhigh` | `--effort` (`""`, `none` … `max`; `""` omits it). Emitted **only alongside an explicit model**: the auto model rejects it, so an empty or default model drops both flags. |
 | `copilot_context` | `long_context` | `--context` for `default` or `long_context`; `""` omits it. |
@@ -72,6 +72,7 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 | `chief_model` | `gpt-6-luna` | The chief's Copilot model; the chief is not active yet ([README](../README.md#status)). A value outside `copilot_models` shows as not offered in Settings > Chief, and a start uses Copilot's own pick and returns a `warning`. |
 | `chief_context` | `""` | The chief's `--context` (`""`, `default`, `long_context`). `""` follows `copilot_context`, so an install that never sets it launches the chief as before. |
 | `chief_effort` | `""` | The chief's `--effort` (`""`, `none` … `max`), with the same only-beside-an-explicit-model rule as `copilot_effort`. `""` follows `copilot_effort`. |
+| `launch_presets` | `[]` | Named Copilot launches: `{id, name, agent: "copilot", model, effort, context?}` rows (at most 12, unique names), written through `POST /api/config` (an `id` is assigned when absent). The Projects launch toolbar offers a dropdown with Default and one row per preset whose model is in `copilot_models`; a launch from a preset sends `--model`, `--effort` and, when the preset has a `context` (`default` or `long_context`), `--context`; without one the saved `copilot_context` applies. `effort` must be one the model offers: `mai-code-2-flash` takes `low`, `medium` and `high` (probed), any other model takes any level the CLI accepts and the CLI decides. The launch route refuses a model outside `copilot_models`. |
 
 The `.sample` file carries a `copilot_models` default list; a per-launch model (Team OS, Board) follows the same rules, and an empty or `default` override means no `--model` and no `--effort`.
 

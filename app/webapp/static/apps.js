@@ -316,8 +316,15 @@ export async function launchApp(a, agentId, stealth) {
     if (mode) payload.mode = mode;
     if (resume) payload.resume = true;
     if (a.kind === 'claude-code') {
-      // Copilot takes no per-launch model; its model is set in Settings.
+      // The saved Copilot settings apply unless a launch preset is picked:
+      // that sends its model, effort and (when set) context for this launch.
       payload.agent = agentId || 'copilot';
+      const preset = coding ? codingLaunch.preset() : null;
+      if (preset) {
+        payload.model = 'copilot:' + preset.model;
+        payload.effort = preset.effort;
+        if (preset.context) payload.context = preset.context;
+      }
     }
     else if (stealth) payload.stealth = true;
     // Streamed (pty) coding launches need a starting PTY size. Detached

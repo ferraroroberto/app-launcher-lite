@@ -26,11 +26,12 @@ import { canPull, fetchAll, pullProject, syncAll, wireGitSync } from './git-sync
 const ISSUES_LABEL = 'GitLab issues';
 const VSCODE_BUTTON_LABEL = 'Visual Studio Code';
 
-// The Projects card's launch toolbar: Detached and Resume. Mounted at load so
+// The Projects card's launch toolbar: a launch preset, Detached and Resume. Mounted at load so
 // launchApp (apps.js) reads the switches through it. The ids are the hooks
 // the launch and e2e code use.
 export const codingLaunch = mountLaunchToolbar(document.getElementById('codingLaunchToolbar'), {
   ids: { detached: 'claudeDetached', resume: 'claudeResume' },
+  presetKey: 'coding',
   detachedTitle: 'Launch detached: a console window on the PC, listed and killable here but no phone terminal',
   resumeTitle: 'Resume: reopen the agent\u2019s own session picker, in a phone terminal, or in the detached console when Detached is also on',
   // Sync all and the git refresh ride the switch row, pinned right.

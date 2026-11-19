@@ -121,12 +121,18 @@ GROK_DISPATCH_MODEL_SPECS: Dict[str, Dict[str, Any]] = {
     "grok-4.7": {"label": "4.7", "available": True},
 }
 
-# GitHub Copilot has no entry here on purpose. Its model
-# list was removed rather than refreshed: `copilot help config` reports
-# what the CLI accepts, while what a *launch* gets is decided by the
-# account's entitlement, so a catalogue here could only ever produce a
-# claim the launcher cannot keep. Copilot's `/model` picker is the live,
-# accurate list; the launcher sends no `--model` for it.
+# GitHub Copilot. Which model ids a launch may use is the account's call, so the
+# offered list is the per-install ``copilot_models`` setting, not this table. A
+# row here records only what a live probe of the CLI showed about one model: the
+# efforts it took (``copilot --model <id> --effort <level>``, probed 2026-11-19).
+# A model with no row is claimed to accept nothing in particular, so a preset on
+# it may carry any level the CLI itself takes (``VALID_COPILOT_EFFORTS``).
+COPILOT_MODEL_SPECS: Dict[str, Dict[str, Any]] = {
+    "mai-code-2-flash": {
+        "label": "MAI Code 2 Flash", "efforts": ("low", "medium", "high"),
+        "available": True,
+    },
+}
 
 
 def available_values(specs: Dict[str, Dict[str, Any]]) -> Tuple[str, ...]:

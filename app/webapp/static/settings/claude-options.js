@@ -14,6 +14,7 @@
 import { els, state } from '../state.js';
 import { apiFailToast, jsonApi, toast } from '../api.js';
 import { setTeamOsModelOptions } from '../team-os.js';
+import { syncLaunchPresets } from '../shared/launch-presets.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
 import { renderSettingsValues } from './settings-sheets.js';
 import { renderLidKeepAwake } from './lid-keep-awake.js';
@@ -127,6 +128,7 @@ export function choice(value) {
 // The Coding agent sheet, from the config's `copilot` block.
 export function renderClaudeOptions() {
   setTeamOsModelOptions();
+  syncLaunchPresets(state.config);
   const c = state.config && state.config.copilot;
   if (!c) return;
   fillSelect(
