@@ -535,6 +535,11 @@ def scan_app_bats(scan_root: Path) -> List[Tuple[Path, str]]:
     ``node_modules`` / ``__pycache__`` are never descended into, which is
     the whole reason this scan is fast on a tree of sibling repos.
     """
+    # An unset ``apps_scan_root`` arrives as ``Path("")``, which is ``.``: the
+    # process's cwd. Scanning that would list this repo's own launchers, so an
+    # empty setting means "scan nothing".
+    if str(scan_root) == ".":
+        return []
     if not scan_root.is_dir():
         logger.warning(f"⚠️ Apps scan root does not exist: {scan_root}")
         return []

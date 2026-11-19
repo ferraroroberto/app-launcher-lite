@@ -42,7 +42,7 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 | `projects_ignore` | `[]` | Case-insensitive folder-name globs (`*`, `?`) hidden from the Coding tab; VCS and build directories are always skipped. |
 | `coding_favorites` | `[]` | Starred project ids, managed by the per-tile ★. |
 | `coding_hidden_agents` | `[]` | Launch buttons hidden from project rows: agent ids (only `copilot` here) plus the pseudo-ids `vscode` (the whole project ⋮ menu) and `github`. A *hidden* list, so anything new appears by default. |
-| `apps_scan_root` | parent of this repo | Root the Apps-tab scan walks for launcher bats. |
+| `apps_scan_root` | parent of this repo | Root the Apps-tab scan walks for launcher bats. Empty scans nothing; set it empty when another launcher install shares the PC. |
 | `mini_apps_root` | `""` | Optional folder of small helper bats; a scan lists each `.bat` directly inside it in the Apps tab's **Mini apps** group, autostart off. Empty hides the group. Read on the next webapp start. |
 | `team_os_dir` | sibling `../team-os` | Team OS checkout root (skills at `.claude/skills`). When that directory is missing the tab shows disabled. |
 | `fleet_config_dir` | sibling `../fleet-config-lite` | Root of the fleet-config-lite checkout the Board, sessions and the (planned) chief read. |

@@ -72,11 +72,11 @@ A small **CPU reading** in the Coding header answers "is the PC loaded?": muted 
 
 ### Apps
 
-The registry in `config/apps.json` (gitignored; sample committed): one row per launcher `.bat`, each with a `kind` of `streamlit`, `webapp`, `tunnel` or `tray`. One tap spawns the bat detached; the Running panel lists live instances with their listening ports and per-instance stop. `kind: tray` rows are also auto-started at tray boot. **Scan for new apps** (Settings) walks `apps_scan_root` for candidate bats.
+The registry in `config/apps.json` (gitignored; sample committed): one row per launcher `.bat`, each with a `kind` of `streamlit`, `webapp`, `tunnel` or `tray`. One tap spawns the bat detached; the Running panel lists live instances with their listening ports and per-instance stop. `kind: tray` rows are also auto-started at tray boot. **Scan for new apps** (Settings) walks `apps_scan_root` for candidate bats; leave it empty to scan nothing. Next to another launcher install on the same PC, keep it empty or point it at a folder holding only this install's apps, or the scan lists the other install's trays. A pre-change `apps.json` is kept as `config/apps.json.bak-<date>` (gitignored via `config/*.bak-*`).
 
 ### Jobs
 
-Remote-fireable scripts backed by `config/jobs.json` (empty by default; sample committed). A job is defined once (script path, typed params, optional schedule) and every trigger (phone tap, scoped-token URL, Task Scheduler slot, webhook, chain) funnels through one executor that writes a uniform run record. Schedules materialise under `\AppLauncherLite\` in Windows Task Scheduler. Full reference: [docs/jobs-tab.md](docs/jobs-tab.md).
+Remote-fireable scripts backed by `config/jobs.json` (empty by default; sample committed; never a copy of another install's `jobs.json`, whose scheduled rows would run the same scripts twice). A job is defined once (script path, typed params, optional schedule) and every trigger (phone tap, scoped-token URL, Task Scheduler slot, webhook, chain) funnels through one executor that writes a uniform run record. Schedules materialise under `\AppLauncherLite\` in Windows Task Scheduler. Full reference: [docs/jobs-tab.md](docs/jobs-tab.md).
 
 ### Team OS
 
