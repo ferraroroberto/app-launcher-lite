@@ -50,7 +50,6 @@ sha  = "c2d678b9ad1f0e7be72e5fee66012ce47c8fcce0"
 extra_junctions = ["webapp/certificates"]
 
 [vendored]
-color-scheme = { src = "app/webapp/static/_vendored/color-scheme", sha = "90ac7687bf9bc756d73a3b0f4e64cd692d88617e", dest = "app/webapp/static/_vendored/color-scheme" }
 icons = { src = "app/webapp/static/_vendored/icons", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/icons" }
 switch = { src = "app/webapp/static/_vendored/switch", sha = "8f15c49560adbc076d24a8a63dd671868ffa7a4e", dest = "app/webapp/static/_vendored/switch" }
 button = { src = "app/webapp/static/_vendored/button", sha = "f2464e89c902bd302291bb7af7b44c3ffa594323", dest = "app/webapp/static/_vendored/button" }
