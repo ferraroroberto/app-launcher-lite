@@ -242,6 +242,19 @@ def build_copilot_flags(
     return " ".join(parts)
 
 
+def copilot_prompt_flag(prompt: str) -> str:
+    """Return the ``-i "<prompt>"`` fragment that starts Copilot on ``prompt``.
+
+    Copilot parses a bare positional as a subcommand and exits 1
+    (``unrecognized subcommand``), so a prompted launch must go through
+    ``-i``/``--interactive``, which keeps the session interactive and runs
+    the prompt as the first turn. The prompt is wrapped in ``"`` because the
+    caller splices it into the launch line; it must be a server-built
+    command (a slug, an issue number, a launcher-owned path), never free text.
+    """
+    return f'-i "{prompt}"'
+
+
 def build_pi_flags(cfg: WebappConfig) -> str:
     """Compose the `pi` CLI flags from the persisted Pi knobs.
 

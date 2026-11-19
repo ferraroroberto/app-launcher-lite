@@ -43,7 +43,7 @@ drill-down exchange and issue-start routes are terminal-grade and get
 the passkey gate in ``middleware._terminal_guard_level``; the reply proxy
 lives beside its session siblings in ``routers/sessions.py``.
 
-Issue-start is injection-safe by construction: the positional prompt is built
+Issue-start is injection-safe by construction: the first prompt (``-i``) is built
 **server-side** as ``/issue-<mode> <N>`` with ``mode`` allowlisted and ``N``
 int-validated, so the string that reaches the session-host's unquoted
 ``cmd /c`` line can never contain a metacharacter. An optional dispatch brief
@@ -93,7 +93,7 @@ from src.chief import plan as chief_plan
 from src.clients import gitlab as forge
 from src.clients import session as session_client
 from src.jobs import snapshot as jobs_snapshot
-from src.launching.flags import build_copilot_flags
+from src.launching.flags import build_copilot_flags, copilot_prompt_flag
 from src.launching.launcher import open_local_terminal_window, spawn_claude_session
 from src.session_view.outbox import HTML_CSP, HTML_MEDIA
 from src.webapp_config import WebappConfig
@@ -666,7 +666,9 @@ async def start_issue(request: Request) -> Dict[str, Any]:
         prompt = f"{prompt} --brief {brief_path.as_posix()}"
     native_name_flags = agents.native_session_name_flags_for(agent, title)
     flags = " ".join(
-        part for part in (base_flags, native_name_flags, f'"{prompt}"') if part
+        part
+        for part in (base_flags, native_name_flags, copilot_prompt_flag(prompt))
+        if part
     )
     try:
         session, sid = await spawn_launcher_session(
