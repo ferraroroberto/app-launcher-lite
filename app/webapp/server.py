@@ -82,6 +82,7 @@ from app.webapp.routers import (
     documents,
     jobs,
     misc,
+    session_folder_trust,
     session_screen,
     session_transcript,
     sessions,
@@ -530,6 +531,7 @@ def create_app() -> FastAPI:
     app.include_router(claude_code.router)
     app.include_router(session_transcript.router)
     app.include_router(session_screen.router)
+    app.include_router(session_folder_trust.router)
     app.include_router(desktop_screen.router)
     app.include_router(board.router)
     app.include_router(team_os.router)

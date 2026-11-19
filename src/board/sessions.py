@@ -39,7 +39,7 @@ from src.board.transcript import (
     last_transcript_model,
 )
 from src.session_model import session_model_label
-from src.session_view import plan_picker
+from src.session_view import folder_trust, plan_picker
 
 logger = logging.getLogger(__name__)
 
@@ -579,6 +579,12 @@ def _live_card(
         last_output_at=sess.get("last_output_at"),
         picker_on_screen=lambda: _plan_picker_on_screen(sess),
     )
+    # Copilot's folder-trust dialog reads nothing until answered and fires no
+    # hook, so the card would sit as ``unknown``: a human has to look, so it is
+    # a decision, named by ``folder_trust`` (the folder's name, "" otherwise).
+    trust = folder_trust.pending_for_session(sess)
+    if trust is not None:
+        status = card_status.AWAITING_DECISION
     return {
         "session_id": sess.get("session_id"),
         "state_sid": sid,
@@ -597,6 +603,7 @@ def _live_card(
         "shared_name_source": (row or {}).get("name_source"),
         "project": project,
         "status": status,
+        "folder_trust": folder_trust.folder_name(trust.folder) if trust is not None else "",
         "age_seconds": age_seconds(anchor, now),
     }
 

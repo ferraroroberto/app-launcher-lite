@@ -75,6 +75,7 @@ import { openOwnerAnswersAt, renderChiefPlan } from './board/chief-plan.js';
 import { ownerNeedsCount, renderOwnerChecks } from './board/owner-checks.js';
 import { doneEarlierLoaded, renderDoneEarlier } from './board/done-earlier.js';
 import { doneActions, proofGapChips } from './board/proof-chip.js';
+import { folderTrustControls } from './board/folder-trust.js';
 import { isDismissible, isFailing } from './board/attention-state.js';
 import { ClaimState, claimState } from './board/claim-state.js';
 import { pollJournal, wireJournal } from './board/chief-journal.js';
@@ -182,6 +183,8 @@ function renderSessionCard(card, openItem) {
   const chips = [];
   if (stalled) chips.push(chip('stalled', 'danger', 'board-stalled-chip'));
   if (card.kind === 'remote') chips.push(chip('detached', 'neutral', 'session-detached'));
+  const trust = folderTrustControls(card, function () { fetchBoard().catch(function () {}); });
+  if (trust) chips.push(trust.chip);
   const parts = sessionStatusParts(card.status, card.age_seconds, { chief: chief, hideStatus: stalled });
   const bits = [card.project || '', parts.status].filter(Boolean);
   const known = state.agents.find(function (a) { return a.id === card.agent; });
@@ -210,6 +213,7 @@ function renderSessionCard(card, openItem) {
       if (!state.boardExpanded) fetchBoard().catch(function () {});
     },
     disabled: !card.session_id,
+    trailing: trust ? trust.button : null,
   });
   // `board-card*` stay as the hooks the poll's tests have always used.
   row.main.classList.add('board-card', 'board-card-session');

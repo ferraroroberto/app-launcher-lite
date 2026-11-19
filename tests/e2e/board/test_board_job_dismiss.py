@@ -1,4 +1,7 @@
-"""Board: dismiss a failed job alert once it has been dealt with.
+"""Board: row verbs that settle an alert or a prompt without leaving the board.
+
+Dismiss a failed job alert once it has been dealt with, and trust the folder a
+Copilot session is asking about (the second half of the one test below).
 
 A failed or unconfirmed run's card carries a dismiss verb; tapping it POSTs
 the run's dismissal and drops the card, the lane count and the header's
@@ -47,6 +50,9 @@ def test_dismissing_a_failed_job_card_drops_it_and_the_failing_count(
          "state": "unreadable", "run_id": None, "finished_at": None,
          "age_seconds": None, "error": "[WinError 5] Access is denied"},
     ]
+    payload["columns"]["your_turn"][0].update(
+        {"session_id": "s-trust", "status": "awaiting-decision", "folder_trust": "photo-ocr"}
+    )
     _mock_board(authed_page)
     current = {"body": payload}
     _route_board_from(authed_page, current)
@@ -65,6 +71,17 @@ def test_dismissing_a_failed_job_card_drops_it_and_the_failing_count(
         )
 
     authed_page.route(re.compile(r".*/api/jobs/[^/]+/runs/[^/]+/dismiss$"), _dismiss)
+
+    trusts: list[str] = []
+
+    def _trust(route) -> None:
+        trusts.append(f"{route.request.method} {route.request.url.split('/api/')[1]}")
+        route.fulfill(
+            status=200, content_type="application/json",
+            body=_json.dumps({"ok": True, "folder": "photo-ocr", "trusted": True}),
+        )
+
+    authed_page.route(re.compile(r".*/api/claude-code/sessions/s-trust/folder-trust$"), _trust)
     _open_board(authed_page, base_url)
 
     lane = authed_page.locator('.board-list[data-col="other"]')
@@ -88,3 +105,15 @@ def test_dismissing_a_failed_job_card_drops_it_and_the_failing_count(
     expect(unconfirmed).to_have_count(1)
     expect(authed_page.locator("#boardColOther .board-count")).to_have_text("3")
     expect(authed_page.locator("#boardHeadStatus")).to_contain_text("1 failing")
+
+    # The same mocked board, one row verb over: a session sitting on Copilot's
+    # folder-trust prompt names that state and carries Trust this folder, which
+    # POSTs its route; no other row carries the chip or the verb.
+    row = authed_page.locator('.board-list[data-col="your_turn"] li.board-item-session')
+    expect(row.locator(".board-folder-trust-chip")).to_have_text("needs folder trust")
+    expect(authed_page.locator(".board-folder-trust")).to_have_count(1)
+    row.locator(".board-folder-trust").click()
+    wait_until(authed_page, lambda: len(trusts) == 1, "the folder-trust POST")
+    flush_requests(authed_page)
+    assert trusts == ["POST claude-code/sessions/s-trust/folder-trust"]
+    expect(authed_page.locator(".toast")).to_contain_text("Folder trusted")

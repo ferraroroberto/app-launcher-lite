@@ -17,6 +17,7 @@ import httpx
 import requests
 
 from src.clients import _loopback_http
+from src.session_view import folder_trust
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,27 @@ class SessionNotReady(SessionHostError):
     """
 
     not_ready = True
+
+
+class FolderTrustPending(SessionHostError):
+    """The session is sitting on Copilot's folder-trust dialog: nothing was sent.
+
+    A 409 so a caller can tell "the owner must trust this folder" from "retry
+    shortly" and from a lost message; ``needs_folder_trust`` lets the route
+    audit it under its own reason without importing this class.
+    """
+
+    needs_folder_trust = True
+
+    def __init__(self, session_id: str, folder: str) -> None:
+        self.folder = folder
+        super().__init__(
+            f'session {session_id} needs folder trust: Copilot is asking whether to '
+            f'trust "{folder}" and cannot read a message until it is answered, so '
+            f'this was NOT delivered, nothing was sent. Trust the folder (Board: '
+            f'"Trust this folder"), then resend',
+            status=409,
+        )
 
 
 def _request(method: str, port: int, path: str, *, timeout: float = _TIMEOUT, **kwargs) -> Any:
@@ -192,30 +214,32 @@ def _boot_state(info: Dict[str, Any]) -> str:
     return _BOOT_DONE
 
 
-def _await_tui_ready(port: int, session_id: str) -> None:
+def _await_tui_ready(port: int, session_id: str) -> Optional[Dict[str, Any]]:
     """Hold a write until a just-spawned Copilot reads its input.
 
     Returns at once for any session that is not young, and when the session
     cannot be read (the write then reports the real state). After
     ``_READY_WAIT_S`` it raises :class:`SessionNotReady` if the TUI never came
     up, nothing having been written so the caller can resend, and lets the
-    write through if the TUI is up but still busy.
+    write through if the TUI is up but still busy. Returns the session as it
+    was last read, or ``None`` when it could not be.
     """
     deadline = time.monotonic() + _READY_WAIT_S
     waited = False
     while True:
         try:
-            state = _boot_state(get_session(port, session_id))
+            info = get_session(port, session_id)
         except SessionHostError:
-            return
+            return None
+        state = _boot_state(info)
         if state == _BOOT_DONE:
             if waited:
                 logger.info("✅ input: %s ready after waiting for its TUI", session_id[:8])
-            return
+            return info
         if time.monotonic() >= deadline:
             if state == _BOOT_PAINTING:
                 logger.info("ℹ️ input: %s still painting after %.0fs, sending", session_id[:8], _READY_WAIT_S)
-                return
+                return info
             logger.warning(
                 "⚠️ input: %s still has no TUI after %.0fs, nothing sent",
                 session_id[:8], _READY_WAIT_S,
@@ -231,12 +255,27 @@ def _await_tui_ready(port: int, session_id: str) -> None:
         time.sleep(_READY_POLL_S)
 
 
+def _refuse_if_awaiting_trust(session_id: str, info: Dict[str, Any]) -> None:
+    """Raise :class:`FolderTrustPending` while a Copilot session shows its
+    folder-trust dialog: it has its title and has stopped painting, so the
+    readiness wait calls it ready, yet text typed there is lost."""
+    prompt = folder_trust.pending_for_session(info)
+    if prompt is None:
+        return
+    logger.warning(
+        "⚠️ input: %s is waiting on the folder-trust prompt for %s, nothing sent",
+        session_id[:8], folder_trust.folder_name(prompt.folder),
+    )
+    raise FolderTrustPending(session_id, prompt.folder)
+
+
 def send_input(port: int, session_id: str, data: str, submit: bool = True) -> Dict[str, Any]:
     """Write ``data`` and, if ``submit``, submit it.
 
     A just-spawned Copilot session is waited for first (:func:`_await_tui_ready`):
     text written before it is ready is silently lost, and the host would
-    still report it as written.
+    still report it as written. One sitting on Copilot's folder-trust dialog
+    is refused (:class:`FolderTrustPending`) for the same reason.
 
     One call, not two — the session-host now owns the whole framing +
     settle-then-submit sequence internally (``PtySession.submit_input``), so
@@ -255,7 +294,9 @@ def send_input(port: int, session_id: str, data: str, submit: bool = True) -> Di
     lands on the session's ``last_input``, not on this response. The status
     code itself is not surfaced here; the ``reason`` field is the contract.
     """
-    _await_tui_ready(port, session_id)
+    info = _await_tui_ready(port, session_id)
+    if info is not None:
+        _refuse_if_awaiting_trust(session_id, info)
     return _request(
         "POST", port, f"/sessions/{session_id}/input",
         json={"data": data, "submit": submit}, timeout=_INPUT_TIMEOUT,
