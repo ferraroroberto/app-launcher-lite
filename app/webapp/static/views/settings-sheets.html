@@ -43,6 +43,10 @@
               <textarea id="copilotModels" class="input-native" rows="4" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="copilotModelsHelp"></textarea>
             </label>
             <p id="copilotModelsHelp" class="field-help">The models every picker offers beside Default. Which ids work depends on your Copilot plan, so list the ones your account may use. Saved when you leave the field; keep at least one.</p>
+            <div id="copilotModelsNew" class="opt-row" hidden>
+              <span id="copilotModelsNewText" class="field-help"></span>
+              <button data-track="copilot.add-default-models" type="button" id="copilotAddDefaultModels" class="button-surface">Add</button>
+            </div>
           </div>
         </div>
         <div class="detail-actions">

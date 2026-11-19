@@ -119,7 +119,8 @@ class TestBoardModelResolution:
         with pytest.raises(HTTPException) as excinfo:
             board_spawn._agent_and_flags(self._cfg(webapp_client), model)
         assert excinfo.value.status_code == 400
-        assert excinfo.value.detail == f"unknown model: {model}"
+        assert excinfo.value.detail.startswith(f"unknown model: {model}")
+        assert "Settings" in excinfo.value.detail and "Models offered" in excinfo.value.detail
 
     def test_copilot_not_installed_is_a_distinct_400(self, webapp_client, monkeypatch):
         monkeypatch.setattr(board_spawn.agents, "is_installed", lambda _: False)

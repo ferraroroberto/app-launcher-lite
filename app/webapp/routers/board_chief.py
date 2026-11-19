@@ -79,7 +79,7 @@ from src.chief import pointer as chief_pointer
 from src.chief.cap_raised import publish_cap_raised
 from src.chief.launch_settings import chief_launch_model, chief_model_problem
 from src.clients import session as session_client
-from src.launching.flags import build_resume_flags
+from src.launching.flags import build_resume_flags, unknown_model_detail
 from src.launching.launcher import open_local_terminal_window, spawn_claude_session
 from src.subprocess_flags import NO_WINDOW
 from src.webapp_config import (
@@ -562,7 +562,7 @@ async def put_chief_settings(request: Request) -> Dict[str, Any]:
         if model not in ("", "default", *cfg_now.copilot_models):
             raise HTTPException(
                 status_code=400,
-                detail=f"model must be one of copilot_models; got {model!r}",
+                detail=unknown_model_detail(model),
             )
         patch["chief_model"] = model
     for body_key, config_key, allowed in (

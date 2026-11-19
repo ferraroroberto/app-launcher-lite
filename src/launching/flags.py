@@ -38,6 +38,7 @@ from src.launching.model_catalog import (
 from src.webapp_config import (
     ALWAYS_ON_CLAUDE_FLAGS,
     DEFAULT_CLAUDE_EFFORT,
+    DEFAULT_COPILOT_MODELS,
     DEFAULT_PI_MODEL,
     VALID_CLAUDE_MODELS,
     VALID_CODEX_MODELS,
@@ -199,6 +200,25 @@ def build_codex_flags(
         effort = effort_override or effective_effort("codex", model, cfg)
         parts.extend(["-c", f"model_reasoning_effort={effort}"])
     return " ".join(parts)
+
+
+def missing_default_copilot_models(cfg: WebappConfig) -> list:
+    """Default model ids the saved ``copilot_models`` list does not carry.
+
+    A saved list replaces the code default outright, so a model added to the
+    default later never reaches an install that ever saved the list; Settings
+    offers these ids so they are one tap away without editing JSON.
+    """
+    saved = set(cfg.copilot_models)
+    return [m for m in DEFAULT_COPILOT_MODELS if m not in saved]
+
+
+def unknown_model_detail(model: str) -> str:
+    """The 400 detail for a model id outside ``copilot_models``, naming where to add it."""
+    return (
+        f"unknown model: {model} is not in the Copilot model list "
+        "(Settings > Agents > GitHub Copilot > Models offered); add it there"
+    )
 
 
 def build_copilot_flags(
