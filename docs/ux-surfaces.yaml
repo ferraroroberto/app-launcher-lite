@@ -293,13 +293,14 @@ surfaces:
     reach:
       - the second card on the Code tab, closed by default
     holds:
-      - the launch toolbar
+      - the launch toolbar, with a launch preset dropdown when a preset is saved
       - Sync all and Refresh for the git check
       - a filter box with a favorites toggle
       - one row per project folder, with its git flag
       - the time of the last git check
     does:
       - a project row launches the coding agent in that folder
+      - a preset picked in the toolbar launches it on that preset's model, effort and context
       - Refresh fetches every remote and re-reads branch, changes and ahead or behind
       - Sync all fast-forwards every clean project that is only behind
     states:
@@ -309,12 +310,26 @@ surfaces:
     links:
       - to: code.project-menu
         via: row kebab
+      - to: code.preset-menu
+        via: preset dropdown
       - to: code.git-sync-sheet
         via: Sync all
       - to: settings.folders
         via: Open Settings
       - to: terminal.overlay
         via: row tap
+
+  - id: code.preset-menu
+    area: code
+    title: Launch preset menu
+    root: data-surface
+    reach:
+      - the preset dropdown first on the Projects launch toolbar, drawn only once a preset is saved for a model on the Copilot list
+    holds:
+      - Default and one row per saved preset, each named with its effort and context tier
+    does:
+      - picking a row sets the model, effort and context the next launch sends, and is remembered on this device
+      - Default sends nothing extra, so the saved Copilot settings apply
 
   - id: code.project-menu
     area: code

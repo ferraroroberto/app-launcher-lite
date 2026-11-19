@@ -104,7 +104,7 @@ There is no `.env`. Committed samples live next to each gitignored real file in 
 | `webapp_config.json` | `gitlab_group` | `""` | GitLab group the Board reads (subgroups included). Empty keeps the panel dormant with a Settings hint. |
 | `webapp_config.json` | `gitlab_host` | `""` | Self-hosted GitLab (rides glab's `GITLAB_HOST`). Empty means glab's default context. |
 | `webapp_config.json` | `sessions_state_file` | `~/.copilot/hooks/state/sessions-state.json` | Session-status file written by fleet-config-lite's hook. |
-| `webapp_config.json` | `copilot_models` | `["gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]` | Model ids the pickers offer. Edited here, read-only in the UI. |
+| `webapp_config.json` | `copilot_models` | `["gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "mai-code-2-flash"]` | Model ids the pickers offer. Edited here, read-only in the UI. |
 | `webapp_config.json` | `auth_token` | `""` | Bearer token required from non-loopback callers; empty means the gate is off. |
 | `webapp_config.json` | `tailnet_allowlist` | `[]` | Extra IPs/CIDRs allowed on terminal routes beyond loopback and the Tailscale range. |
 | `webapp_config.json` | `webauthn_rp_id` / `webauthn_origin` | `""` | Passkey relying party; both empty turns the passkey gate off. |

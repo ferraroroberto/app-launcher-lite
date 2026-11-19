@@ -8,8 +8,9 @@
  *   Resume    reopen the agent's own session picker, orthogonal to
  *             Detached: both on renders the picker in the console.
  *
- * There is no model picker: Copilot takes no per-launch model, its model is
- * set in Settings. The two toggles are the vendored switch (accent when on,
+ * Copilot's model is set in Settings; the only per-launch choice is a launch
+ * preset (shared/launch-presets.js), a dropdown drawn first on the row when
+ * the caller passes `presetKey` and a preset is offered. The two toggles are the vendored switch (accent when on,
  * design.md), each with its word beside it. The word is the switch's
  * <label>, so a tap on either toggles it. They are client-side state read at
  * launch time, never saved: a launch mode that survives a reload would
@@ -19,6 +20,7 @@
 
 import { setSwitch, switchEl } from './_vendored/switch/switch.js';
 import { el } from './dom-utils.js';
+import { activeLaunchPreset, mountLaunchPresets } from './shared/launch-presets.js';
 
 // One labelled switch: the visible word and the vendored track in one
 // <label>, so the word is part of the tap target.
@@ -47,13 +49,20 @@ function labelledSwitch(spec) {
 //              own stable hooks
 //   detachedTitle / resumeTitle — each switch's hover hint
 //   trailing   optional element pinned right on the switches' row
-// Returns { root, isDetached(), isResume() }.
+//   presetKey  optional surface key: draws the launch-preset dropdown first on the row
+// Returns { root, isDetached(), isResume(), preset() }; preset() is the
+// launch preset in force, or null for Default.
 export function mountLaunchToolbar(host, opts) {
   if (!host) return null;
   const ids = opts.ids;
 
   const root = el('div', 'launch-toolbar');
   const switches = el('div', 'launch-toolbar-switches');
+  if (opts.presetKey) {
+    const slot = el('span', 'launch-preset-slot');
+    switches.appendChild(slot);
+    mountLaunchPresets(opts.presetKey, slot);
+  }
   const detached = labelledSwitch({
     id: ids.detached, text: 'Detached', label: 'Launch detached', title: opts.detachedTitle,
   });
@@ -74,5 +83,6 @@ export function mountLaunchToolbar(host, opts) {
     root: root,
     isDetached: function () { return on(detached.sw); },
     isResume: function () { return on(resume.sw); },
+    preset: function () { return opts.presetKey ? activeLaunchPreset(opts.presetKey) : null; },
   };
 }

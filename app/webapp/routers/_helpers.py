@@ -19,7 +19,7 @@ from src import jobs as jobs_mod
 from src.auth.webauthn_gate import WebAuthnGate
 from src.clients.session import SessionHostError
 from src.jobs.config import get_by_id, load_jobs
-from src.launching.presets import efforts_for
+from src.launching.presets import OPEN_MODEL_AGENTS, PRESET_CONTEXTS, efforts_for
 from src.webapp_config import (
     WebappConfig,
     append_auth_token,
@@ -55,6 +55,27 @@ def requested_launch_effort(
             detail=f"effort {effort!r} is not offered by {target}; allowed: {allowed}",
         )
     return effort
+
+
+def requested_launch_context(body: Dict[str, Any], agent: str) -> Optional[str]:
+    """The body's per-launch Copilot ``context`` tier (a launch preset's), ``None`` when absent.
+
+    400 when it is not a string, when the agent takes no context tier, or when
+    the tier is not one the CLI offers; the message names the allowed values.
+    """
+    context = body.get("context")
+    if context is None or context == "":
+        return None
+    if not isinstance(context, str):
+        raise HTTPException(status_code=400, detail="context must be a string")
+    context = context.strip().lower()
+    if agent not in OPEN_MODEL_AGENTS or context not in PRESET_CONTEXTS:
+        allowed = ", ".join(PRESET_CONTEXTS) if agent in OPEN_MODEL_AGENTS else "none"
+        raise HTTPException(
+            status_code=400,
+            detail=f"context {context!r} is not offered by {agent}; allowed: {allowed}",
+        )
+    return context
 
 
 def known_run_dir(job_id: str, run_id: str) -> Optional[Path]:

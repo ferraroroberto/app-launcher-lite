@@ -240,7 +240,9 @@ ALWAYS_ON_CLAUDE_FLAGS = ("--remote-control",)
 # Copilot CLI launch values. The model ids are a starting list for a fresh
 # install: which ids an account may use depends on its plan, so the list is
 # edited per install in Settings. "" (or "default") omits `--model`.
-DEFAULT_COPILOT_MODELS = ["gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+DEFAULT_COPILOT_MODELS = [
+    "gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "mai-code-2-flash",
+]
 DEFAULT_COPILOT_MODEL = "gpt-6-luna"
 # `--context` values the CLI accepts; "" omits the flag.
 VALID_COPILOT_CONTEXTS = ("", "default", "long_context")
