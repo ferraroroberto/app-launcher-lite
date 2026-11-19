@@ -179,6 +179,20 @@ def copilot_entries(lines: List[Line], *, uncapped: bool = False) -> List[Entry]
     return entries
 
 
+def _turn_last_assistant_text(entries: List[Entry]) -> Optional[str]:
+    """Text of the current turn's newest assistant entry, or ``None``.
+
+    The turn starts at the last user entry, so an identical reply to an earlier
+    prompt is never mistaken for a repeat.
+    """
+    for entry in reversed(entries):
+        if entry["kind"] == "user":
+            return None
+        if entry["kind"] == "assistant":
+            return entry["text"]
+    return None
+
+
 def _copilot_event(
     entries: List[Entry], open_calls: Dict[str, Entry], kind: Any, data: Dict[str, Any],
     offset: int, ts: Any, assistant_cap: int, user_cap: int,
@@ -211,9 +225,13 @@ def _copilot_event(
             # Autopilot ends a turn with this call and its `summary` is the
             # reply, often the turn's only text, so it reads as a message.
             # Its own result is harness bookkeeping: a throwaway entry takes
-            # the pairing so the completion emits nothing.
-            entries.append(_text_entry(
-                "assistant", offset, ts, reply, assistant_cap, sidechain=False))
+            # the pairing so the completion emits nothing. Copilot often writes
+            # the reply as an `assistant.message` and then repeats it as the
+            # summary; that repeat is skipped so the reply shows once.
+            summary = _text_entry(
+                "assistant", offset, ts, reply, assistant_cap, sidechain=False)
+            if summary["text"] != _turn_last_assistant_text(entries):
+                entries.append(summary)
             if call_id:
                 open_calls[call_id] = {}
             return

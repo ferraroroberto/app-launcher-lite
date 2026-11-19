@@ -295,3 +295,66 @@ def test_copilot_task_complete_without_a_summary_stays_a_tool_row(tmp_path: Path
     entries = _parse_whole(path, st.copilot_entries)
     assert _kinds(entries) == ["tool_call"]
     assert entries[0]["name"] == "task_complete" and entries[0]["result"] == "done"
+
+
+def _complete(summary: str, call_id: str = "t") -> List[Dict[str, Any]]:
+    return [
+        _cop("tool.execution_start", {"toolCallId": call_id, "toolName": "task_complete",
+                                      "arguments": {"summary": summary}}),
+        _cop("tool.execution_complete", {"toolCallId": call_id, "success": True,
+                                         "result": {"content": "Task marked complete."}}),
+    ]
+
+
+def test_copilot_task_complete_repeating_the_last_message_shows_once(tmp_path: Path):
+    """Copilot writes the reply as an ``assistant.message`` and then ends the
+    autopilot turn with a ``task_complete`` whose summary is the same text; the
+    chat shows that reply once."""
+    path = _write_jsonl(tmp_path / "cop.jsonl", [
+        _cop("user.message", {"content": "reply with the single word ready"}),
+        _cop("assistant.message", {"content": "ready"}),
+        *_complete(" ready\n"),
+    ])
+    entries = _parse_whole(path, st.copilot_entries)
+    assert _kinds(entries) == ["user", "assistant"]
+    assert entries[1]["text"] == "ready"
+
+
+def test_copilot_task_complete_repeat_is_matched_across_tool_calls(tmp_path: Path):
+    """A tool call between the message and the completion does not hide the
+    repeat: the comparison is against the turn's last assistant text."""
+    path = _write_jsonl(tmp_path / "cop.jsonl", [
+        _cop("user.message", {"content": "go"}),
+        _cop("assistant.message", {"content": "done"}),
+        _cop("tool.execution_start", {"toolCallId": "a", "toolName": "powershell",
+                                      "arguments": {"command": "ls"}}),
+        _cop("tool.execution_complete", {"toolCallId": "a", "success": True,
+                                         "result": {"content": "listing"}}),
+        *_complete("done"),
+    ])
+    entries = _parse_whole(path, st.copilot_entries)
+    assert _kinds(entries) == ["user", "assistant", "tool_call"]
+
+
+def test_copilot_task_complete_differing_from_the_last_message_still_shows(tmp_path: Path):
+    path = _write_jsonl(tmp_path / "cop.jsonl", [
+        _cop("user.message", {"content": "go"}),
+        _cop("assistant.message", {"content": "working on it"}),
+        *_complete("All done."),
+    ])
+    entries = _parse_whole(path, st.copilot_entries)
+    assert _kinds(entries) == ["user", "assistant", "assistant"]
+    assert entries[2]["text"] == "All done."
+
+
+def test_copilot_task_complete_does_not_match_a_previous_turns_reply(tmp_path: Path):
+    """The same word answering two turns is two replies: only the current
+    turn's own assistant text is compared."""
+    path = _write_jsonl(tmp_path / "cop.jsonl", [
+        _cop("user.message", {"content": "one"}),
+        _cop("assistant.message", {"content": "ready"}),
+        _cop("user.message", {"content": "two"}),
+        *_complete("ready"),
+    ])
+    entries = _parse_whole(path, st.copilot_entries)
+    assert _kinds(entries) == ["user", "assistant", "user", "assistant"]
