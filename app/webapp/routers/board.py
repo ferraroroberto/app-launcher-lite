@@ -508,7 +508,8 @@ async def file_issue(request: Request) -> Dict[str, Any]:
 async def session_exchange(sid: str, request: Request) -> Dict[str, Any]:
     """Last user↔assistant exchange for a live session (Tailscale + passkey).
 
-    Structured Claude/Codex history wins when it correlates safely. A Claude
+    Structured Claude/Codex/Copilot history wins when it correlates safely
+    (a Copilot session's ``events.jsonl`` reports ``native``). A Claude
     session whose state row names no transcript — the rowless window a
     ``/resume`` or ``/clear`` opens — has its conversation
     correlated from the filesystem instead, reported as ``native_scan``
