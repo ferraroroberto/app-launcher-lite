@@ -10,6 +10,7 @@ is handled separately in ``app/webapp/server.py``.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 import httpx
@@ -46,6 +47,22 @@ _STOP_TIMEOUT = 10.0
 # pins the two definitions equal so they cannot drift apart silently.
 INPUT_DEFERRED = "deferred"
 
+# A just-spawned Copilot discards text written before it is ready, and the
+# host still reports such a write as delivered. Probed live: the TUI takes over
+# the terminal 4-5 s after the spawn (bracketed-paste mode and the window title
+# arrive within ~0.1 s of each other), text sent at that instant is lost, and
+# text sent a second or so later lands. So a session younger than the window is
+# held until it has set its title (the TUI is up) and then stopped painting
+# its boot screen for ``_READY_QUIET_S``; the quiet rule adapts to a slow,
+# loaded boot where a fixed delay would not.
+_READY_WINDOW_S = 60.0
+_READY_QUIET_S = 1.0
+# How long a send waits for that before giving up: refused when the TUI never
+# came up (the text would be lost), sent anyway when it is up but still busy
+# (an agent already working takes type-ahead).
+_READY_WAIT_S = 15.0
+_READY_POLL_S = 0.2
+
 # A large-file upload streams for as long as the phone takes to send
 # it, so it has no overall deadline: each connect, write and read waits at
 # most this long, and the read covers the host's final flush to disk.
@@ -62,6 +79,17 @@ def ws_url(port: int, session_id: str, role: str = "phone") -> str:
 
 class SessionHostError(_loopback_http.LoopbackError):
     """Raised when the session-host is unreachable or returns an error."""
+
+
+class SessionNotReady(SessionHostError):
+    """A session's agent has not drawn its input box yet: nothing was sent.
+
+    A 409 so a caller can tell "retry shortly" from a lost message; the
+    ``not_ready`` marker lets the route audit it under its own reason without
+    importing this class.
+    """
+
+    not_ready = True
 
 
 def _request(method: str, port: int, path: str, *, timeout: float = _TIMEOUT, **kwargs) -> Any:
@@ -140,8 +168,75 @@ def get_session(port: int, session_id: str) -> Dict[str, Any]:
     return _request("GET", port, f"/sessions/{session_id}")
 
 
+_BOOT_DONE = "done"
+_BOOT_NO_TUI = "no_tui"
+_BOOT_PAINTING = "painting"
+
+
+def _boot_state(info: Dict[str, Any]) -> str:
+    """Where a session is in its start-up: ``done`` unless it is a live,
+    young Copilot whose TUI is not up (``no_tui``) or still painting its boot
+    screen (``painting``)."""
+    if info.get("kind", "pty") != "pty" or info.get("agent") != "copilot":
+        return _BOOT_DONE
+    started_at = info.get("started_at")
+    if not info.get("alive") or not isinstance(started_at, (int, float)):
+        return _BOOT_DONE
+    if time.time() - started_at >= _READY_WINDOW_S:
+        return _BOOT_DONE
+    if not info.get("live_title"):
+        return _BOOT_NO_TUI
+    last_output_at = info.get("last_output_at")
+    if isinstance(last_output_at, (int, float)) and time.time() - last_output_at < _READY_QUIET_S:
+        return _BOOT_PAINTING
+    return _BOOT_DONE
+
+
+def _await_tui_ready(port: int, session_id: str) -> None:
+    """Hold a write until a just-spawned Copilot reads its input.
+
+    Returns at once for any session that is not young, and when the session
+    cannot be read (the write then reports the real state). After
+    ``_READY_WAIT_S`` it raises :class:`SessionNotReady` if the TUI never came
+    up, nothing having been written so the caller can resend, and lets the
+    write through if the TUI is up but still busy.
+    """
+    deadline = time.monotonic() + _READY_WAIT_S
+    waited = False
+    while True:
+        try:
+            state = _boot_state(get_session(port, session_id))
+        except SessionHostError:
+            return
+        if state == _BOOT_DONE:
+            if waited:
+                logger.info("✅ input: %s ready after waiting for its TUI", session_id[:8])
+            return
+        if time.monotonic() >= deadline:
+            if state == _BOOT_PAINTING:
+                logger.info("ℹ️ input: %s still painting after %.0fs, sending", session_id[:8], _READY_WAIT_S)
+                return
+            logger.warning(
+                "⚠️ input: %s still has no TUI after %.0fs, nothing sent",
+                session_id[:8], _READY_WAIT_S,
+            )
+            raise SessionNotReady(
+                f"session {session_id} is still starting (its agent has not drawn "
+                f"its input box) — NOT delivered, nothing was sent; retry shortly",
+                status=409,
+            )
+        if not waited:
+            logger.info("ℹ️ input: %s is still starting (%s), holding the write", session_id[:8], state)
+            waited = True
+        time.sleep(_READY_POLL_S)
+
+
 def send_input(port: int, session_id: str, data: str, submit: bool = True) -> Dict[str, Any]:
     """Write ``data`` and, if ``submit``, submit it.
+
+    A just-spawned Copilot session is waited for first (:func:`_await_tui_ready`):
+    text written before it is ready is silently lost, and the host would
+    still report it as written.
 
     One call, not two — the session-host now owns the whole framing +
     settle-then-submit sequence internally (``PtySession.submit_input``), so
@@ -160,6 +255,7 @@ def send_input(port: int, session_id: str, data: str, submit: bool = True) -> Di
     lands on the session's ``last_input``, not on this response. The status
     code itself is not surfaced here; the ``reason`` field is the contract.
     """
+    _await_tui_ready(port, session_id)
     return _request(
         "POST", port, f"/sessions/{session_id}/input",
         json={"data": data, "submit": submit}, timeout=_INPUT_TIMEOUT,

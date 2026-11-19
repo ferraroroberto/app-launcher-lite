@@ -608,7 +608,12 @@ async def _input_refused(
     # event worth finding in the log afterwards.
     await audit_off_loop(
         audit.session_log, sid, "input", bytes=len(text), submit=submit,
-        reason="stale_host" if status == 501 else "error", detail=detail[:200],
+        reason=(
+            "stale_host" if status == 501
+            else "not_ready" if getattr(exc, "not_ready", False)
+            else "error"
+        ),
+        detail=detail[:200],
     )
     return HTTPException(status_code=status, detail=detail)
 
