@@ -102,7 +102,7 @@ function renderChiefAutoCompact(body) {
 // A stored value the list doesn't offer (a model dropped from the list since)
 // still shows, never a silent swap to the first option. onchange is assigned,
 // not added, because every config readback re-renders the same element.
-function fillSelect(select, options, current, onSelect) {
+export function fillSelect(select, options, current, onSelect) {
   if (!select) return;
   const items = options.slice();
   if (current && !items.some(function (o) { return o.value === current; })) {
@@ -120,7 +120,7 @@ function fillSelect(select, options, current, onSelect) {
 }
 
 // "" is the server's "omit the flag": Copilot's own default.
-function choice(value) {
+export function choice(value) {
   return { value: value, label: value ? value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, ' ') : 'Default' };
 }
 

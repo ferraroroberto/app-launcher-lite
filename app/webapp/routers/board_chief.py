@@ -77,11 +77,17 @@ from src.chief import identity as chief_identity
 from src.chief import journal as chief_journal
 from src.chief import pointer as chief_pointer
 from src.chief.cap_raised import publish_cap_raised
+from src.chief.launch_settings import chief_launch_model, chief_model_problem
 from src.clients import session as session_client
 from src.launching.flags import build_resume_flags
 from src.launching.launcher import open_local_terminal_window, spawn_claude_session
 from src.subprocess_flags import NO_WINDOW
-from src.webapp_config import WebappConfig, update_webapp_config
+from src.webapp_config import (
+    VALID_COPILOT_CONTEXTS,
+    VALID_COPILOT_EFFORTS,
+    WebappConfig,
+    update_webapp_config,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -482,6 +488,9 @@ def _refresh_chief_pointer_after_resume(
 def _chief_settings_payload(cfg: WebappConfig) -> Dict[str, Any]:
     return {
         "model": cfg.chief_model,
+        "model_problem": chief_model_problem(cfg),
+        "context": cfg.chief_context,
+        "effort": cfg.chief_effort,
         "worker_cap": cfg.chief_worker_cap,
         "worker_cap_scope": cfg.chief_worker_cap_scope,
         "auto_drain": cfg.chief_auto_drain,
@@ -556,6 +565,18 @@ async def put_chief_settings(request: Request) -> Dict[str, Any]:
                 detail=f"model must be one of copilot_models; got {model!r}",
             )
         patch["chief_model"] = model
+    for body_key, config_key, allowed in (
+        ("context", "chief_context", VALID_COPILOT_CONTEXTS),
+        ("effort", "chief_effort", VALID_COPILOT_EFFORTS),
+    ):
+        if body_key in body:
+            value = str(body.get(body_key) or "").strip()
+            if value not in allowed:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{body_key} must be one of {list(allowed)}; got {value!r}",
+                )
+            patch[config_key] = value
     if "worker_cap" in body:
         try:
             patch["chief_worker_cap"] = int(body.get("worker_cap"))
@@ -690,6 +711,7 @@ async def ensure_chief(request: Request) -> Dict[str, Any]:
             "session_id": sid,
             "spawned": True,
             "session": session,
+            "warning": chief_model_problem(cfg),
             "resumed": bool(resumed_session_id),
             "resume_fallback_reason": (
                 "no resumable chief conversation found in the last 24h"
@@ -737,14 +759,20 @@ async def _spawn_chief(
     """Spawn the chief, resumed into ``resumed_session_id`` or fresh with
     ``/chief`` typed in, name it and audit the start; ``(session, sid)``."""
     entry = _resolve_repo_entry(cfg, _CHIEF_REPO)
+    model, model_warning = chief_launch_model(cfg)
+    if model_warning:
+        logger.warning("⚠️ chief start: %s", model_warning)
+    # "" keeps the Coding-agent setting, so an unset chief value launches as before.
+    context = cfg.chief_context or None
+    effort = cfg.chief_effort or None
     if resumed_session_id:
         agent = "copilot"
         flags = build_resume_flags(
-            cfg, agent, model_override=cfg.chief_model,
-            session_id=resumed_session_id,
+            cfg, agent, model_override=model, session_id=resumed_session_id,
+            effort_override=effort, context_override=context,
         )
     else:
-        agent, flags = _agent_and_flags(cfg, cfg.chief_model)
+        agent, flags = _agent_and_flags(cfg, model, effort=effort, context=context)
     session, sid = await spawn_launcher_session(
         spawn_claude_session, cfg,
         project_dir=Path(entry.project_dir), name=_CHIEF_LABEL,

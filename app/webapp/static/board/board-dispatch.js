@@ -149,9 +149,12 @@ export async function runChiefAction({
         const text = resume
           ? (body.resumed ? 'Chief resumed' : 'No resumable conversation — started fresh')
           : (body.spawned ? 'Chief started' : 'Chief already running');
+        // A saved model the list no longer offers starts on Copilot's own pick;
+        // the server says so and the toast carries it.
+        const warned = body.warning ? text + '. ' + body.warning : text;
         // Resume/Restart's icon is unconditional (a chat is reachable either
         // way); Start's is gated on an actual spawn.
-        return { text: text, icon: resume || body.spawned ? 'crown' : undefined };
+        return { text: warned, icon: resume || body.spawned ? 'crown' : undefined };
       },
       failPrefix: 'Chief ' + label.toLowerCase() + ' failed',
       unconfirmed: 'Chief ' + label.toLowerCase() + ' not confirmed — check the session list before trying again.',

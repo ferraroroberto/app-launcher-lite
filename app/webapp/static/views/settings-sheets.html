@@ -105,6 +105,16 @@
             </span>
           </span>
           </div>
+          <p id="chiefModelProblem" class="field-error" role="alert" hidden></p>
+          <label class="row">
+            <span>Context</span>
+            <select data-track="chief.context" id="chiefContext" class="select-native" aria-label="Chief context window"></select>
+          </label>
+          <label class="row">
+            <span>Effort</span>
+            <select data-track="chief.effort" id="chiefEffort" class="select-native" aria-label="Chief reasoning effort" aria-describedby="chiefLaunchHelp"></select>
+          </label>
+          <p id="chiefLaunchHelp" class="field-help">Applied when the chief starts. Same as Coding agent uses the Coding agent sheet's value. Effort applies only with a model picked here: the default model refuses it.</p>
           <label class="row">
             <span>Worker cap</span>
             <input id="chiefWorkerCap" type="number" class="input-native" inputmode="numeric" step="1" aria-describedby="chiefWorkerCapHelp">

@@ -205,6 +205,7 @@ def build_copilot_flags(
     cfg: WebappConfig,
     model_override: Optional[str] = None,
     effort_override: Optional[str] = None,
+    context_override: Optional[str] = None,
 ) -> str:
     """Compose the `copilot` CLI flags from the persisted Copilot knobs.
 
@@ -220,8 +221,8 @@ def build_copilot_flags(
 
     ``model_override`` forces a per-launch model (Team OS, Board, chief) and
     follows the same rules: an empty/"default" override means no ``--model``
-    and no ``--effort``. ``effort_override`` replaces the saved effort for
-    one launch.
+    and no ``--effort``. ``effort_override`` and ``context_override`` replace
+    the saved effort and context for one launch (``None``/``""`` keep them).
     """
     parts: list[str] = []
     if cfg.copilot_skip_permissions:
@@ -232,8 +233,9 @@ def build_copilot_flags(
         parts.extend(["--model", model])
     if cfg.copilot_autopilot:
         parts.append("--autopilot")
-    if cfg.copilot_context in ("default", "long_context"):
-        parts.extend(["--context", cfg.copilot_context])
+    context = context_override or cfg.copilot_context
+    if context in ("default", "long_context"):
+        parts.extend(["--context", context])
     effort = effort_override or cfg.copilot_effort
     if model and effort:
         parts.extend(["--effort", effort])
@@ -316,6 +318,7 @@ def build_resume_flags(
     cfg: WebappConfig, agent_id: str, model_override: Optional[str] = None,
     session_id: Optional[str] = None, *, keep_model: bool = False,
     effort_model: Optional[str] = None, effort_override: Optional[str] = None,
+    context_override: Optional[str] = None,
 ) -> str:
     """Compose the full flags string for a *Resume* launch.
 
@@ -357,7 +360,8 @@ def build_resume_flags(
 
     ``effort_override`` is one launch's effort (a launch preset's), already
     checked against the model; Claude and Codex carry it, ``None`` keeps the
-    saved per-model effort.
+    saved per-model effort. ``context_override`` is the same for Copilot's
+    ``--context`` (other agents ignore it).
     """
     token = resume_command_for(agent_id)
     if session_id:
@@ -383,6 +387,7 @@ def build_resume_flags(
     elif agent_id == "copilot":
         base = build_copilot_flags(
             cfg, model_override=model_override, effort_override=effort_override,
+            context_override=context_override,
         )
     elif agent_id == "pi":  # keep the SDK provider/model on resume
         base = build_pi_flags(cfg)

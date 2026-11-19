@@ -1385,12 +1385,15 @@ surfaces:
       - Chief in Agents
       - Chief settings in a chief menu
     holds:
-      - the chief's model and a worker cap
+      - the chief's model, context and effort, and a worker cap
+      - a line naming a saved chief model the Copilot list no longer offers
       - a switch for counting only chief-dispatched sessions
       - Automations - Doorbell, Auto-drain queue, Auto-compact with its threshold, Job failures, Job self-heal and Weekly proposals
       - Done
     does:
       - each switch saves when tapped and no restart is needed
+      - model, context and effort apply when the chief next starts; Same as Coding agent follows that sheet
+      - a chief model outside the Copilot list starts on Copilot's own pick, with a warning
     links:
       - to: settings.chief-model-menu
         via: model

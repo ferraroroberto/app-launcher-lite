@@ -239,6 +239,12 @@ class WebappConfig:
     # mode). Editable from the Board's chief-settings dialog; the worker
     # cap is also read by the /chief skill over loopback.
     chief_model: str = DEFAULT_CHIEF_MODEL
+    # The chief's `--context` / `--effort`, from the same value sets as
+    # `copilot_context` / `copilot_effort`. "" follows that Coding-agent
+    # setting, so an install that never touches these launches the chief as it
+    # always did; a value here overrides it for the chief alone.
+    chief_context: str = ""
+    chief_effort: str = ""
     chief_worker_cap: int = DEFAULT_CHIEF_WORKER_CAP
     chief_worker_cap_scope: str = DEFAULT_CHIEF_WORKER_CAP_SCOPE
     # Auto-compact threshold in percent, 0 = off. Set in Settings'
@@ -820,6 +826,8 @@ _ENUM_VALIDATIONS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("pi_trust_mode", VALID_PI_TRUST_MODES),
     ("copilot_context", VALID_COPILOT_CONTEXTS),
     ("copilot_effort", VALID_COPILOT_EFFORTS),
+    ("chief_context", VALID_COPILOT_CONTEXTS),
+    ("chief_effort", VALID_COPILOT_EFFORTS),
     ("chief_worker_cap_scope", VALID_CHIEF_WORKER_CAP_SCOPES),
 )
 

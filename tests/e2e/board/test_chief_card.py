@@ -21,7 +21,8 @@ pytestmark = pytest.mark.smoke
 def _mock_chief_settings(authed_page: Page) -> tuple[dict, list[dict]]:
     """Patch GET /api/config's chief fields and the chief settings endpoint with a
     stored block; returns ``(stored, puts)`` where ``puts`` records each PUT body."""
-    stored = {"model": "demo-model-a", "worker_cap": 3, "worker_cap_scope": "chief"}
+    stored = {"model": "demo-model-a", "worker_cap": 3, "worker_cap_scope": "chief",
+              "context": "", "effort": ""}
     puts: list[dict] = []
 
     def _config(route):
@@ -33,6 +34,8 @@ def _mock_chief_settings(authed_page: Page) -> tuple[dict, list[dict]]:
         body.setdefault("copilot", {})["models_available"] = ["demo-model-a", "demo-model-b"]
         body.update(
             chief_model=stored["model"], chief_worker_cap=stored["worker_cap"],
+            chief_context=stored["context"], chief_effort=stored["effort"],
+            chief_model_problem="",
             chief_worker_cap_scope=stored["worker_cap_scope"],
             chief_worker_cap_min=1, chief_worker_cap_max=10,
         )
@@ -65,7 +68,8 @@ def test_chief_settings_sheet_roundtrip(
 ) -> None:
     """Gear -> Settings > Chief sheet filled from GET /api/config; picking a
     model PUTs ``{"model"}``; committing the worker cap (blur) PUTs
-    ``{"worker_cap"}``; an out-of-range cap sends nothing and says why.
+    ``{"worker_cap"}``; an out-of-range cap sends nothing and says why;
+    the context and effort selects each PUT only their own field.
 
     The Board's chief settings dialog became Settings > Chief in #1435: no
     Save button, each field saves on its own (#616 retired the daily-respawn
@@ -117,6 +121,21 @@ def test_chief_settings_sheet_roundtrip(
     expect(cap).to_have_attribute("aria-invalid", "true")
     flush_requests(authed_page)
     assert puts == [{"model": "demo-model-b"}, {"worker_cap": 5}], puts
+
+    # Context and effort sit beside the model on "Same as Coding agent" until
+    # set; each pick PUTs only its own field.
+    context, effort = authed_page.locator("#chiefContext"), authed_page.locator("#chiefEffort")
+    expect(context).to_have_value("")
+    expect(context.locator("option").first).to_have_text("Same as Coding agent")
+    expect(effort).to_have_value("")
+    expect(effort).to_be_enabled()  # the mocked chief model is an explicit one
+    context.select_option("default")
+    wait_until(authed_page, lambda: puts[-1] == {"context": "default"}, "the chief context PUT")
+    expect(context).to_have_value("default")
+    effort.select_option("high")
+    wait_until(authed_page, lambda: puts[-1] == {"effort": "high"}, "the chief effort PUT")
+    expect(effort).to_have_value("high")
+    assert len(puts) == 4, puts
 
 
 def test_chief_worker_cap_scope_switch(authed_page: Page, base_url: str) -> None:
