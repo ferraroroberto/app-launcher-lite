@@ -51,7 +51,7 @@ The owner-check feature (shipped work to validate, steps owed before a start) is
 
 ## Merging
 
-Merging through `glab mr merge --when-pipeline-succeeds` is a planned port step (see [Status](../README.md#status)); the Board merges nothing today.
+The Board merges nothing. The chief's merge verb in fleet-config-lite runs `glab mr merge --auto-merge`; its flags are unit-tested and `unknown` against a live GitLab (see [Status](../README.md#status)).
 
 ## Two remotes for this repo
 

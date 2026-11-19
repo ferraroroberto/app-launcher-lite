@@ -47,6 +47,6 @@ A kanban over four computed columns: **Backlog** (open GitLab issues across `git
 - **Appearance and startup** — a Small / Default / Large text size, the light/dark toggle in the header, and **Start App Launcher Lite at log on** (a Startup-folder wrapper, no admin).
 - **Documents** — the reading sheet renders listed Markdown files with Mermaid diagrams ([Documents](documents.md)).
 
-## Not active yet
+## The chief
 
-The chief (plan, journal, mailbox, doorbell, compaction, dispatch) is present in the launcher code but needs helpers that fleet-config-lite does not ship yet: not active until fleet-config-lite ships the chief (planned). See the README's Status section.
+The chief works: one long-lived Copilot session that answers in the Board chat, keeps a plan and a journal, raises questions for the owner, dispatches lanes, opens plain sessions and stops them. It needs fleet-config-lite's chief helpers beside this checkout. The Board shows its card, plan and answer sheet; [The chief](board.md#the-chief) describes each part. The doorbell and compaction keys on Copilot's composer are `unknown`, and a lane needs `git` to reach GitLab without a prompt. See the README's Status section.
