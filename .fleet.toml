@@ -955,12 +955,6 @@ type   = "AttentionState"
 derive = "attentionState"
 
 [[state_machines]]
-name   = "inspiration-login-state-ui"
-module = "app/webapp/static/settings/login-state.js"
-type   = "LoginState"
-derive = "loginState"
-
-[[state_machines]]
 name   = "background-task-state"
 module = "src/session_view/task_state.py"
 type   = "TaskPhase"
