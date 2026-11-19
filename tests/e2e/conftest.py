@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from typing import Iterator
 
 import pytest
@@ -204,6 +205,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         print(f"  ⚠️ {exc}")
 
 
+_PTY_SESSION_FIXTURES = frozenset({"launched_pty_session", "launched_claude_pty_session"})
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list) -> None:
     """Run the WebKit/iPhone projection only where engine or viewport matters.
 
@@ -228,7 +232,16 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list) -> None:
     for item in items:
         callspec = getattr(item, "callspec", None)
         on_webkit = callspec is not None and callspec.params.get("browser_name") == "webkit"
-        if on_webkit and item.get_closest_marker("iphone") is None:
+        # A test that opens a PTY session needs the session-host's ConPTY, so it
+        # is `windows_only` whether or not it says so. The Mac nightly's e2e leg
+        # passes no `-m`, so such a test is dropped here off Windows; the local
+        # gate runs on Windows and keeps it.
+        if _PTY_SESSION_FIXTURES.intersection(item.fixturenames):
+            item.add_marker(pytest.mark.windows_only)
+        needs_windows = (
+            sys.platform != "win32" and item.get_closest_marker("windows_only") is not None
+        )
+        if needs_windows or (on_webkit and item.get_closest_marker("iphone") is None):
             dropped.append(item)
         else:
             kept.append(item)

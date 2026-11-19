@@ -40,6 +40,17 @@ Byte loss at the PTY write boundary and concurrent first paint have non-browser 
 
 The reasoning behind the suite's conventions (mocking boot fetches, the fake clock, `stable_read`, the port-pool guard) is in [e2e-conventions.md](e2e-conventions.md).
 
+## Mac nightly
+
+The fleet's Mac Mini nightly (project-scaffolding `docs/mac-runner.md`) runs this repo from the `[ci.nightly]` table in `.fleet.toml`: the unit leg (`pytest tests --ignore=tests/e2e -m "not windows_only"`) and the e2e leg (`pytest tests/e2e --e2e-autoboot --browser webkit`, the iPhone projection). Both run the disposable webapp and the API tests on macOS; only what needs Windows carries `@pytest.mark.windows_only` (registered in `pytest.ini`):
+
+- ConPTY: the disposable session-host spawns PTYs through `pywinpty`, so every e2e test that takes `launched_pty_session` or `launched_claude_pty_session` is marked by `tests/e2e/conftest.py` itself, with no per-test decorator to forget.
+- `.bat` and tray recipes, the Apps tab's refresh route, OEM-codepage decoding, the effective-`PATH` registry merge, drive-letter and `%VAR%` path semantics, and the Win32 cursor reader.
+
+`-m "not windows_only"` is the unit leg's exclusion. The e2e leg passes no `-m`, so off Windows `tests/e2e/conftest.py` deselects the marked tests during collection; the local gate runs on Windows and keeps them. List what is marked with `pytest tests --ignore=tests/e2e -m windows_only --collect-only -q`; e2e is listed with `pytest tests/e2e --e2e-autoboot --browser chromium --browser webkit -m windows_only --collect-only -q` on Windows.
+
+A test that fails only off Windows because it pins a Windows path by accident is made portable instead of marked. The simulator smoke (`views`) is not enabled: it needs a `[design.review.synthetic] command` that boots without a PTY session.
+
 ## Design review on synthetic data
 
 

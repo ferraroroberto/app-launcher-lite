@@ -540,6 +540,12 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     """
     paths = _isolate_webapp_files(tmp_path, monkeypatch)
 
+    # A launch route refuses an agent CLI that is not on PATH. Whether the
+    # machine running the suite has Copilot installed must not decide the
+    # result, so the probe answers "installed" unless a test pins otherwise.
+    from src import agents as agents_mod
+    monkeypatch.setattr(agents_mod, "is_installed", lambda _agent_id: True)
+
     # Now import the server + routers. Important: import after monkeypatching
     # the config paths, but before patching session_client / audit (which are
     # module-level references inside each router that talks to them).

@@ -158,7 +158,12 @@ def prepare_isolation(tmp_path_factory: pytest.TempPathFactory, auth_token: str)
     # real wrapper bat (existence + bytes) so the isolation can be *asserted*
     # after the run, not just assumed — mirrors the webapp-config check below.
     startup_dir = tmp_path_factory.mktemp("startup-dir")
-    real_wrapper_bat = boot_autostart.wrapper_bat_path()
+    try:
+        real_wrapper_bat = boot_autostart.wrapper_bat_path()
+    except RuntimeError:
+        # No per-user Startup folder on this host (not Windows): nothing real
+        # exists to protect, so the breach check watches a path that never does.
+        real_wrapper_bat = startup_dir / "no-real-startup" / boot_autostart.STARTUP_BAT_NAME
     real_wrapper_bytes = real_wrapper_bat.read_bytes() if real_wrapper_bat.is_file() else None
 
     # Session-file isolation (issue #913): src/audit.py resolves its directory

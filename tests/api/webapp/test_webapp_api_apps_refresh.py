@@ -17,6 +17,8 @@ from src.launching import app_refresh
 from src.registry import AppEntry, Registry, save_registry
 from tests.api.webapp.test_webapp_api_apps_running import FakeProc, FakePsutil
 
+pytestmark = pytest.mark.windows_only
+
 
 def _seed(path, *entries: AppEntry) -> None:
     save_registry(Registry(scan_root="C:\\stub", apps=list(entries)), path=path)
