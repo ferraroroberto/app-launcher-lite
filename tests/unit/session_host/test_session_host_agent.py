@@ -190,7 +190,7 @@ def test_create_spawns_ssh_pty_with_caller_target(tmp_path, monkeypatch):
         str(tmp_path), "peer-machine", "user@somehost", "ssh", rows=30, cols=120,
     )
 
-    assert captured["command"] == "cmd /c ssh user@somehost"
+    assert captured["command"] == ["cmd", "/c", "ssh", "user@somehost"]
     assert session.agent == "ssh"
 
 
