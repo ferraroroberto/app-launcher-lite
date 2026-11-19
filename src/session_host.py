@@ -53,6 +53,7 @@ from src.session_hosting.kinds import (
     STOP_KILL,
     STOP_QUIT,
 )
+from src.session_hosting.launch_argv import pty_argv
 from src.session_hosting.pending_discard import PendingInputProtocol
 from src.session_hosting.pending_input import PendingInputs
 from src.session_hosting.remote import RemoteSession, launch_detached
@@ -847,18 +848,22 @@ class SessionManager:
         #
         # APP_LAUNCHER_SESSION_ID/AGENT ride the child's environment
         # (``env=``), NOT a `set "VAR=val" && ...` chain baked into the
-        # command string: PtyProcess.spawn() re-tokenizes a
-        # str argv via shlex.split() then rebuilds it with
-        # subprocess.list2cmdline(), which backslash-escapes the quotes
-        # around "VAR=val" — cmd.exe's own SET parser doesn't strip that
-        # escaping, so the vars silently never landed. create_remote()'s
+        # command string: a quoted token would be backslash-escaped by
+        # subprocess.list2cmdline(), which cmd.exe's own SET parser doesn't
+        # unescape, so the vars silently never landed. The argv is built by
+        # pty_argv() for the same reason: a quoted flag value (the prompt, the
+        # session name) must reach the agent without literal quotes.
+        # create_remote()'s
         # PowerShell Start-Process path goes through a real cmd.exe shell
         # (no pywinpty re-tokenizing) and is unaffected by this.
         exe = command_for(agent)
         command = f"cmd /c {exe} {flags}".strip()
         child_env = agent_child_env(session_id, agent)
         pty = PtyProcess.spawn(
-            command, cwd=str(directory), dimensions=(rows, cols), env=child_env
+            pty_argv(command),
+            cwd=str(directory),
+            dimensions=(rows, cols),
+            env=child_env,
         )
         vt: Optional[VtSnapshot] = None
         if is_fullscreen(agent):
