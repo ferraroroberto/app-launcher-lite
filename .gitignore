@@ -32,6 +32,7 @@ config/webapp_config.json
 config/app_password.json
 config/process_auto_restart.json
 config/apps.json
+config/*.bak-*
 config/jobs.json
 config/channel_profiles.json
 config/webauthn_devices.json

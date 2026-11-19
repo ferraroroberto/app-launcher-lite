@@ -132,3 +132,13 @@ class TestPrettyFolderName:
 
     def test_single_word_is_capitalised(self):
         assert pretty_folder_name(Path("pvgis")) == "Pvgis"
+
+
+class TestEmptyScanRoot:
+    def test_empty_root_scans_nothing_even_with_bats_in_cwd(
+        self, tmp_path: Path, monkeypatch
+    ):
+        """``Path("")`` is ``.``; an unset Apps folder must not walk the cwd."""
+        _write_bat(tmp_path / "webapp.bat", "uvicorn app.webapp.server:app")
+        monkeypatch.chdir(tmp_path)
+        assert scan_app_bats(Path("")) == []
