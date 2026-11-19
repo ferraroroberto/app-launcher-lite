@@ -31,7 +31,7 @@ Which model ids an account may use depends on its plan; edit `copilot_models` in
 The Board reads GitLab through the `glab` CLI, as a subprocess, on demand only. Install it with WinGet:
 
 ```powershell
-winget install -e --id GitLab.GLab
+winget install -e --id GLab.GLab
 ```
 
 Other channels (Scoop, Chocolatey, a release archive) are listed in the [glab repository](https://gitlab.com/gitlab-org/cli). Verify with `glab --version`.
@@ -44,4 +44,4 @@ glab auth login
 
 Pick your GitLab host (gitlab.com or a self-hosted instance) and follow the prompts. The token stays in glab's own credential store; nothing in this repo holds it, and none belongs in a config file, an issue or a commit.
 
-Then set `gitlab_group` (and `gitlab_host` for a self-hosted instance) in Settings. Everything the Board does with GitLab is **not yet verified live**; the details and the first check to run are in [gitlab.md](gitlab.md).
+Then set `gitlab_group` (and `gitlab_host` for a self-hosted instance) in Settings. What the Board does with GitLab is verified live except the merge-request shapes and a few items; [gitlab.md](gitlab.md) lists each as verified or `unknown`.

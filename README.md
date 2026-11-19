@@ -16,7 +16,7 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 
 **Unknown (not yet verified live):**
 
-- Every GitLab read and write (group issues, open and merged merge requests, pipelines, labels, issue notes, merge). `glab` is not installed on the build PC yet; the client is written against GitLab's documented REST API and its fixtures are that documentation, not a captured instance. See [docs/gitlab.md](docs/gitlab.md).
+- GitLab, in part: group issue reads, issue create and note, and the two-remote mirror are verified live on gitlab.com; the merge-request rows, pipelines, labels, merge and a self-hosted host are `unknown`. See [docs/gitlab.md](docs/gitlab.md).
 - On Copilot CLI 1.0.105: composer keys for the chief's doorbell, a queued `/compact` running at turn end, `/remote on` typed from the launcher, `sessionStart` `additionalContext` being honoured, `agentStop` blocking to force another turn, a background shell finishing waking the agent, and `ask_user` blocking under autopilot.
 - Android device behaviour (install, safe areas, gesture bar, keyboard) — see [docs/android.md](docs/android.md).
 
@@ -156,7 +156,7 @@ Either way, the public Cloudflare tunnel stays terminal-refused; the live termin
 
 ## Deploying to another computer
 
-The pair (this repo plus fleet-config-lite) installs on any Windows machine. Steps that touch GitLab are **not yet verified live**.
+The pair (this repo plus fleet-config-lite) installs on any Windows machine. The GitLab steps are verified on gitlab.com only.
 
 1. **Clone both repos.** Run `setup.bat` here (venv and deps), then fleet-config-lite's `install.ps1` (renders the Copilot hook config into `~/.copilot/hooks/` and junctions its skills into `~/.copilot/skills/`). Restart any open Copilot session afterwards; hook configs load at CLI startup only.
 2. **glab against your GitLab host.** `glab auth login`, set `gitlab_host` and `gitlab_group` in Settings, then validate one real response shape: `glab api "groups/<group>/issues?state=opened&per_page=1"`, comparing fields with the fixtures in `tests/unit/board/test_gitlab_client.py`. If the instance returns a different shape, fix the fixtures and `src/clients/gitlab.py` together. See [docs/gitlab.md](docs/gitlab.md).

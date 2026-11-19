@@ -4,9 +4,10 @@ Every subprocess call is mocked (``glab`` is not assumed installed). The canned
 rows follow GitLab's REST v4 shapes: ``iid`` rather than ``number``, plain
 string ``labels``, ``web_url``, ``references.full`` carrying the (possibly
 subgroup-nested) project path, ``draft`` on a merge request, ``merged_at``
-and ``description`` on a merged one. The open-issue shape was read live from
-gitlab.com; the merge-request and write shapes are the documented API and are
-not yet proven against a live instance.
+and ``description`` on a merged one. The issue shapes (open and closed) and
+the issue write, note and ``user`` responses were read live from gitlab.com;
+the merge-request shapes are the documented API and are not yet proven
+against a live instance (the live group had no merge request to read).
 """
 
 from __future__ import annotations
@@ -198,6 +199,21 @@ def test_part_of_does_not_pair_an_mr(monkeypatch):
     _install(monkeypatch, {"merge_requests?state=merged": [mr], "issues?state=closed": [closed]})
     [row] = forge.search_done_on("grp", day, timezone.utc)
     assert row["pr"] is None
+
+
+def test_an_issue_closed_through_the_api_lands_in_done(monkeypatch):
+    # Shape and millisecond-Z stamps as gitlab.com returned them for an issue
+    # filed through ``create_issue`` and then closed with ``state_event=close``.
+    live = {
+        "iid": 1, "state": "closed", "title": "Board live check",
+        "updated_at": "2026-11-19T07:10:55.623Z", "closed_at": "2026-11-19T07:10:55.623Z",
+        "web_url": "https://gitlab.com/grp/tool/-/work_items/1", "labels": [],
+        "assignees": [{"id": 42}], "references": {"short": "#1", "relative": "#1", "full": "grp/tool#1"},
+    }
+    _install(monkeypatch, {"issues?state=closed": [live], "merge_requests?state=merged": []})
+    [row] = forge.search_done_on("grp", date(2026, 11, 19), timezone.utc)
+    assert (row["repo"], row["number"], row["pr"], row["not_planned"]) == ("tool", 1, None, False)
+    assert row["closed_at"] == "2026-11-19T07:10:55.623Z"
 
 
 def test_a_failed_mr_read_leaves_done_without_pairing(monkeypatch):
