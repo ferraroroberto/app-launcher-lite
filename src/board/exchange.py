@@ -25,7 +25,7 @@ import logging
 import re
 import threading
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import pyte
 
@@ -34,6 +34,7 @@ from src.board.transcript_exchange import last_exchange
 from src.session_host_scan import _cook_input_line
 from src.session_view import plan_picker, transcript_locate
 from src.transcript_flavors.codex import codex_entries
+from src.transcript_flavors.copilot import copilot_entries
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +175,11 @@ def resolve_exchange(
         if codex.get("available"):
             return codex
 
+    if agent == "copilot":
+        copilot = _copilot_session_exchange(session, native_path)
+        if copilot.get("available"):
+            return copilot
+
     fallback = launcher_last_exchange(
         launcher_capture_path,
         launcher_input_path=launcher_input_path,
@@ -186,6 +192,20 @@ def resolve_exchange(
 
     reason = _unavailable_reason(fallback, native_path, launcher_capture_path)
     return _with_title_check(unavailable(reason), title_check)
+
+
+def _copilot_session_exchange(session: Dict[str, Any], native_path: Any) -> Dict[str, Any]:
+    """A Copilot session's exchange from its ``events.jsonl``.
+
+    The file is not Claude's JSONL shape, so the Claude parser reads nothing
+    from it. The hook-named path wins when a row carries one, else the
+    launch-window match finds the file.
+    """
+    path = (
+        Path(str(native_path)) if native_path
+        else transcript_locate.find_copilot_transcript(session)
+    )
+    return copilot_last_exchange(path)
 
 
 def _scanned_exchange(
@@ -243,12 +263,28 @@ def codex_last_exchange(path: Optional[Path]) -> Dict[str, Any]:
     prompt — harness plumbing such as ``<environment_context>`` is a ``system``
     entry there, never the "last prompt" shown here.
     """
+    return _flavor_last_exchange(path, codex_entries, "codex")
+
+
+def copilot_last_exchange(path: Optional[Path]) -> Dict[str, Any]:
+    """Read the newest Copilot user/assistant messages from ``events.jsonl``.
+
+    Goes through :func:`transcript_flavors.copilot.copilot_entries` so a turn
+    whose only text is autopilot's ``task_complete`` summary still has a reply.
+    The log is Copilot's own structured record, so the answer is ``native``.
+    """
+    return _flavor_last_exchange(path, copilot_entries, "native")
+
+
+def _flavor_last_exchange(
+    path: Optional[Path], entries_of: Callable[..., List[Dict[str, Any]]], source: str,
+) -> Dict[str, Any]:
     if path is None:
         return unavailable("native_unavailable")
     raw = _read_tail(path, _CODEX_TAIL_BYTES)
     if not raw:
         return unavailable("native_unavailable")
-    entries = codex_entries(list(enumerate(raw.splitlines())), uncapped=True)
+    entries = entries_of(list(enumerate(raw.splitlines())), uncapped=True)
     messages = [e for e in entries if e["kind"] in ("user", "assistant")]
     assistant_index = next(
         (index for index in range(len(messages) - 1, -1, -1)
@@ -265,7 +301,7 @@ def codex_last_exchange(path: Optional[Path]) -> Dict[str, Any]:
     assistant = messages[assistant_index]
     return {
         "available": True,
-        "source": "codex",
+        "source": source,
         "reason": None,
         "user": (
             {
