@@ -21,12 +21,14 @@ owns       = ["launcher webapp", "Copilot sessions", "job scheduling", "Board"]
 not_owns   = ["agent config and skills", "app code it launches", "the forge"]
 depends_on = ["app-launcher", "fleet-config-lite"]
 
-# [upstream] -- the outside repo this one is built from and the last commit of
-# it whose work is in this tree; /upstream-sync and /downstream-sync start from
-# here. The rebuild matched app-launcher's main at this commit.
+# [upstream] -- the outside repo this one is built from (`url`, `branch`) and the
+# last commit of it whose work is in this tree (`synced_sha`); /upstream-sync and
+# /downstream-sync read exactly these keys and treat a table missing one as
+# invalid. The rebuild matched app-launcher's main at this commit; a port moves it.
 [upstream]
-repo = "https://github.com/ferraroroberto/app-launcher"
-sha  = "c2d678b9ad1f0e7be72e5fee66012ce47c8fcce0"
+url        = "https://github.com/ferraroroberto/app-launcher"
+branch     = "main"
+synced_sha = "c2d678b9ad1f0e7be72e5fee66012ce47c8fcce0"
 
 # ---------------------------------------------------------------------------
 # [worktree] -- gitignored paths fleet-config junctions from this primary
