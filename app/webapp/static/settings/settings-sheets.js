@@ -23,7 +23,7 @@ import { els, state } from '../state.js';
 import { apiFailToast, jsonApi, toast } from '../api.js';
 import { revealInCard } from '../dom-utils.js';
 import { wireModelCombo } from '../shared/model-combo.js';
-import { fetchConfig, patchConfig, wireConfigSwitch } from './claude-options.js';
+import { choice, fetchConfig, fillSelect, patchConfig, wireConfigSwitch } from './claude-options.js';
 import { terminalJsonApi } from '../webauthn.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
 import { fetchApps } from '../apps.js';
@@ -347,12 +347,16 @@ function renderChiefFields(cfg) {
   if (chiefModelCombo) {
     const models = ((cfg.copilot || {}).models_available || []).slice();
     const current = cfg.chief_model || '';
-    if (current && models.indexOf(current) === -1) models.push(current);
+    const dropped = current && current !== 'default' && models.indexOf(current) === -1;
+    if (dropped) models.push(current);
     chiefModelCombo.setOptions([{ value: '', label: 'Default' }].concat(
-      models.map(function (m) { return { value: m, label: m }; })
+      models.map(function (m) {
+        return { value: m, label: m === current && dropped ? m + ' (not offered)' : m };
+      })
     ));
     chiefModelCombo.setValue(current);
   }
+  renderChiefLaunchFields(cfg);
   // On = the cap counts only the chief's own sessions; a missing value is that.
   if (els.chiefWorkerCapScopeToggle) {
     setSwitch(els.chiefWorkerCapScopeToggle, cfg.chief_worker_cap_scope !== 'all');
@@ -367,6 +371,34 @@ function renderChiefFields(cfg) {
   }
   if (cap !== document.activeElement && cfg.chief_worker_cap != null) {
     cap.value = String(cfg.chief_worker_cap);
+  }
+}
+
+// "" follows the Coding agent sheet, so the first option says that, not "Default".
+function chiefChoice(value) {
+  return value ? choice(value) : { value: '', label: 'Same as Coding agent' };
+}
+
+// Context and effort beside the model; a saved model the list no longer offers
+// is called out, since a start would fall back to Copilot's own pick.
+function renderChiefLaunchFields(cfg) {
+  const c = cfg.copilot || {};
+  if (els.chiefModelProblem) {
+    els.chiefModelProblem.textContent = cfg.chief_model_problem || '';
+    els.chiefModelProblem.hidden = !cfg.chief_model_problem;
+  }
+  fillSelect(els.chiefContext, (c.contexts_available || []).map(chiefChoice),
+    cfg.chief_context || '', function (v) {
+      putChiefSettings({ context: v }, 'Chief context: ' + chiefChoice(v).label + '.', els.chiefContext);
+    });
+  fillSelect(els.chiefEffort, (c.efforts_available || []).map(chiefChoice),
+    cfg.chief_effort || '', function (v) {
+      putChiefSettings({ effort: v }, 'Chief effort: ' + chiefChoice(v).label + '.', els.chiefEffort);
+    });
+  // Effort goes out only beside an explicit, offered model.
+  if (els.chiefEffort) {
+    els.chiefEffort.disabled = !cfg.chief_model || cfg.chief_model === 'default'
+      || !!cfg.chief_model_problem;
   }
 }
 

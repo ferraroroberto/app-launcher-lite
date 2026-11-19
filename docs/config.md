@@ -69,7 +69,9 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 | `copilot_context` | `long_context` | `--context` for `default` or `long_context`; `""` omits it. |
 | `copilot_autopilot` | `true` | Adds `--autopilot`. |
 | `copilot_skip_permissions` | `false` | Opt-in `--allow-all` (every tool permission). |
-| `chief_model` | `gpt-6-luna` | The chief's Copilot model; the chief is not active yet ([README](../README.md#status)). |
+| `chief_model` | `gpt-6-luna` | The chief's Copilot model; the chief is not active yet ([README](../README.md#status)). A value outside `copilot_models` shows as not offered in Settings > Chief, and a start uses Copilot's own pick and returns a `warning`. |
+| `chief_context` | `""` | The chief's `--context` (`""`, `default`, `long_context`). `""` follows `copilot_context`, so an install that never sets it launches the chief as before. |
+| `chief_effort` | `""` | The chief's `--effort` (`""`, `none` … `max`), with the same only-beside-an-explicit-model rule as `copilot_effort`. `""` follows `copilot_effort`. |
 
 The `.sample` file carries a `copilot_models` default list; a per-launch model (Team OS, Board) follows the same rules, and an empty or `default` override means no `--model` and no `--effort`.
 

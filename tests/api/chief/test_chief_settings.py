@@ -64,6 +64,9 @@ class TestChiefSettings:
         assert resp.status_code == 200
         assert resp.json()["settings"] == {
             "model": "gpt-6-luna",
+            "model_problem": "",
+            "context": "",
+            "effort": "",
             "worker_cap": 3,
             "worker_cap_scope": "chief",
             "auto_drain": True,
@@ -130,6 +133,44 @@ class TestChiefSettings:
         ).json()["settings"]["auto_drain"] is False
         resp = client.put("/api/board/chief/settings", json={"worker_cap": 4})
         assert resp.json()["settings"]["auto_drain"] is False
+
+    def test_context_and_effort_persist_and_read_back(self, webapp_client, _bypass_gate):
+        client, app, _ = webapp_client
+        resp = client.put(
+            "/api/board/chief/settings", json={"context": "default", "effort": "high"},
+        )
+        assert resp.status_code == 200
+        assert (resp.json()["settings"]["context"], resp.json()["settings"]["effort"]) == (
+            "default", "high",
+        )
+        assert (app.state.webapp_config.chief_context, app.state.webapp_config.chief_effort) == (
+            "default", "high",
+        )
+        # The read-only config block Settings renders from carries them too, and
+        # a PUT that names neither leaves them alone.
+        client.put("/api/board/chief/settings", json={"worker_cap": 4})
+        body = client.get("/api/config").json()
+        assert (body["chief_context"], body["chief_effort"]) == ("default", "high")
+        # An empty value clears the override (follow the Coding agent).
+        client.put("/api/board/chief/settings", json={"context": "", "effort": ""})
+        assert app.state.webapp_config.chief_context == ""
+        assert app.state.webapp_config.chief_effort == ""
+
+    @pytest.mark.parametrize("bad", [{"context": "huge"}, {"effort": "extreme"}])
+    def test_context_and_effort_reject_values_copilot_does_not_accept(
+        self, webapp_client, _bypass_gate, bad,
+    ):
+        client, app, _ = webapp_client
+        assert client.put("/api/board/chief/settings", json=bad).status_code == 400
+        assert (app.state.webapp_config.chief_context, app.state.webapp_config.chief_effort) == ("", "")
+
+    def test_a_chief_model_outside_the_list_is_reported_not_hidden(
+        self, webapp_client, _bypass_gate,
+    ):
+        client, app, _ = webapp_client
+        app.state.webapp_config.chief_model = "no-such-model"
+        assert "no-such-model" in client.get("/api/config").json()["chief_model_problem"]
+        assert client.get("/api/board/chief/settings").json()["settings"]["model_problem"]
 
     def test_put_ignores_unknown_keys(self, webapp_client, _bypass_gate):
         """#616: a stale client still sending the retired respawn keys must

@@ -1334,11 +1334,15 @@ flowchart LR
   - Chief in Agents
   - Chief settings in a chief menu
 - **Holds:**
-  - the chief's model and a worker cap
+  - the chief's model, context and effort, and a worker cap
+  - a line naming a saved chief model the Copilot list no longer offers
   - a switch for counting only chief-dispatched sessions
   - Automations - Doorbell, Auto-drain queue, Auto-compact with its threshold, Job failures, Job self-heal and Weekly proposals
   - Done
-- **Does:** each switch saves when tapped and no restart is needed
+- **Does:**
+  - each switch saves when tapped and no restart is needed
+  - model, context and effort apply when the chief next starts; Same as Coding agent follows that sheet
+  - a chief model outside the Copilot list starts on Copilot's own pick, with a warning
 - **Leads to:** [Chief model menu](#settingschief-model-menu-chief-model-menu) (model)
 
 ### `settings.chief-model-menu` Chief model menu

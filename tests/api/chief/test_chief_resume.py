@@ -386,6 +386,25 @@ class TestEnsureResume:
         client.post("/api/board/chief/ensure", json={"resume": True})
         assert "--model gpt-5.6-terra" in _spawn["flags"]
 
+    def test_resume_carries_the_chief_context_and_effort(
+        self, webapp_client, _bypass_gate, _fast_probe, _spawn,
+        _fleet_config_dir, _ready_session,
+    ):
+        client, app, overrides = webapp_client
+        cfg = app.state.webapp_config
+        cfg.chief_context, cfg.chief_effort = "default", "low"
+        Path(cfg.sessions_state_file).write_text(
+            json.dumps({
+                "hook-row-1": _chief_state_row(
+                    "old-chief-sess", "2026-07-27T07:14:05Z",
+                ),
+            }),
+            encoding="utf-8",
+        )
+        client.post("/api/board/chief/ensure", json={"resume": True})
+        assert "--context default" in _spawn["flags"]
+        assert "--effort low" in _spawn["flags"]
+
 
 class TestNoteChiefConversation:
     """#675's write half: the pointer is recorded while the chief is alive —

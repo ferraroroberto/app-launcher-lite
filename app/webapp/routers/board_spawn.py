@@ -122,7 +122,8 @@ PTY_QUIESCENT_POLL_S = 0.5
 
 
 def _agent_and_flags(
-    cfg: WebappConfig, model: str, effort: Optional[str] = None
+    cfg: WebappConfig, model: str, effort: Optional[str] = None,
+    context: Optional[str] = None,
 ) -> Tuple[str, str]:
     """Validated ``(agent, flags)`` for a Board per-launch ``model``.
 
@@ -130,14 +131,16 @@ def _agent_and_flags(
     ``""`` and ``default`` let Copilot pick. Anything else is a 400. The
     ``is_installed`` check is the same defence-in-depth 400 as ``apps.py``.
     ``effort`` (already checked by :func:`dispatch_effort`) replaces the
-    persisted effort for this one launch; ``None`` keeps it.
+    persisted effort for this one launch and ``context`` the persisted
+    context; ``None`` keeps either.
     """
     model_id = model.split(":", 1)[1] if model.startswith("copilot:") else model
     if model_id and model_id not in ("default", *cfg.copilot_models):
         raise HTTPException(status_code=400, detail=f"unknown model: {model}")
     _require_installed("copilot")
     return "copilot", build_copilot_flags(
-        cfg, model_override=model_id or None, effort_override=effort
+        cfg, model_override=model_id or None, effort_override=effort,
+        context_override=context,
     )
 
 

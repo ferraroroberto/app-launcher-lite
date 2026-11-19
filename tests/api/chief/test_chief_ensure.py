@@ -69,6 +69,55 @@ class TestEnsureSpawn:
         client.post("/api/board/chief/ensure", json={})
         assert "--model gpt-5.6-terra" in _spawn["flags"]
 
+    def test_unset_context_and_effort_launch_exactly_as_before(
+        self, webapp_client, _bypass_gate, _fast_probe, _spawn,
+        _fleet_config_dir, _ready_session,
+    ):
+        from src.launching.flags import build_copilot_flags
+
+        client, app, _ = webapp_client
+        cfg = app.state.webapp_config
+        assert (cfg.chief_context, cfg.chief_effort) == ("", "")
+        client.post("/api/board/chief/ensure", json={})
+        assert _spawn["flags"] == build_copilot_flags(cfg, model_override=cfg.chief_model)
+        assert f"--context {cfg.copilot_context}" in _spawn["flags"]
+        assert f"--effort {cfg.copilot_effort}" in _spawn["flags"]
+
+    def test_saved_context_and_effort_reach_the_launch_command(
+        self, webapp_client, _bypass_gate, _fast_probe, _spawn,
+        _fleet_config_dir, _ready_session,
+    ):
+        client, app, _ = webapp_client
+        cfg = app.state.webapp_config
+        cfg.copilot_context, cfg.copilot_effort = "long_context", "xhigh"
+        cfg.chief_context, cfg.chief_effort = "default", "medium"
+        client.post("/api/board/chief/ensure", json={})
+        flags = _spawn["flags"]
+        assert "--context default" in flags and "--context long_context" not in flags
+        assert "--effort medium" in flags and "--effort xhigh" not in flags
+
+    def test_a_chief_model_outside_the_list_starts_on_copilots_pick_with_a_warning(
+        self, webapp_client, _bypass_gate, _fast_probe, _spawn,
+        _fleet_config_dir, _ready_session,
+    ):
+        """The default model is not in an install's trimmed copilot_models: the
+        start must not be a bare 400 (unknown model), it falls back and says so."""
+        client, app, _ = webapp_client
+        app.state.webapp_config.chief_model = "no-such-model"
+        resp = client.post("/api/board/chief/ensure", json={})
+        assert resp.status_code == 200
+        assert "no-such-model" in resp.json()["warning"]
+        assert "--model" not in _spawn["flags"]
+        # Copilot's auto model refuses --effort, so none goes out either.
+        assert "--effort" not in _spawn["flags"]
+
+    def test_a_listed_chief_model_carries_no_warning(
+        self, webapp_client, _bypass_gate, _fast_probe, _spawn,
+        _fleet_config_dir, _ready_session,
+    ):
+        client, _, _ = webapp_client
+        assert client.post("/api/board/chief/ensure", json={}).json()["warning"] == ""
+
     def test_alive_chief_via_label_is_kept(
         self, webapp_client, _bypass_gate, _fast_probe, _spawn,
         _fleet_config_dir,

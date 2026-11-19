@@ -137,7 +137,7 @@ The chief is a conversational orchestrator: one long-lived Copilot session that 
 - **Doorbell and compaction.** The launcher types a short wake-up line into an idle chief's composer, and a threshold-based compaction asks the chief to run `/compact`. Both need the chief's composer keys; whether the doorbell keys, a queued `/compact` runs at turn end, `sessionStart` `additionalContext` is honoured and `agentStop` can force another turn are all **unknown** on Copilot CLI 1.0.105.
 - **Dispatch.** A dispatcher may add an optional `brief` to the issue-start route: the launcher writes it to `webapp/briefs/<uuid>.md` and appends only that path to the lane's prompt (`--brief <path>`), because free text must never reach an unquoted command line (`src/chief/dispatch_brief.py`).
 - **Answer sheet.** The Chief's plan card opens a sheet of the chief's open questions; answers go back to the chief through the same composer path as a drawer reply. Routes: `POST /api/board/chief/answered` and the other `/api/board/chief/*` routes, all Tailscale and passkey gated.
-- **Settings.** `chief_model` (the chief's Copilot model) is in the webapp config.
+- **Settings.** `chief_model`, `chief_context` and `chief_effort` (the chief's Copilot model, `--context` and `--effort`; the last two empty means the Coding agent's) are in the webapp config and set in Settings > Chief.
 
 ## The drill-down drawer and its PTY-write path
 

@@ -19,6 +19,7 @@ from app.webapp.routers._helpers import (
 )
 from src import boot_autostart, password
 from src.agents import AGENTS, DEFAULT_AGENT
+from src.chief.launch_settings import chief_model_problem
 from src.desktop import lid_keep_awake
 from src.launching.flags import build_copilot_flags
 from src.launching.presets import checked_launch_presets
@@ -84,10 +85,13 @@ async def get_config(request: Request) -> Dict[str, Any]:
         "chief_job_failures": cfg.chief_job_failures,
         "chief_job_self_heal": cfg.chief_job_self_heal,
         "chief_weekly_proposals": cfg.chief_weekly_proposals,
-        # The chief's model and worker cap, read-only here so the Settings >
-        # Chief row can show them without a passkey prompt. Writes stay on the
-        # passkey-gated PUT /api/board/chief/settings.
+        # The chief's model, context, effort and worker cap, read-only here so
+        # the Settings > Chief row can show them without a passkey prompt.
+        # Writes stay on the passkey-gated PUT /api/board/chief/settings.
         "chief_model": cfg.chief_model,
+        "chief_model_problem": chief_model_problem(cfg),
+        "chief_context": cfg.chief_context,
+        "chief_effort": cfg.chief_effort,
         "chief_worker_cap": cfg.chief_worker_cap,
         "chief_worker_cap_scope": cfg.chief_worker_cap_scope,
         "chief_worker_cap_min": MIN_CHIEF_WORKER_CAP,
