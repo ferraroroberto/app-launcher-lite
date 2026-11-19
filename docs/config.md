@@ -55,7 +55,7 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 | `gitlab_group` | `""` | GitLab group or user namespace (subgroups included) the Board's `glab` queries span. Empty keeps the panel dormant with a Settings hint. |
 | `gitlab_host` | `""` | Self-hosted GitLab instance, passed to `glab` as `GITLAB_HOST`. Empty means `glab`'s default (gitlab.com). |
 
-Both are **not yet verified live**; see [GitLab](gitlab.md).
+`gitlab_group` is verified live against gitlab.com; `gitlab_host` for a self-hosted instance is not. See [GitLab](gitlab.md).
 
 ### Copilot launch settings
 
