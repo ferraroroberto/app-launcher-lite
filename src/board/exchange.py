@@ -50,6 +50,10 @@ _CAPTURE_TAIL_BYTES = 512 * 1024
 # the window falls back to the session's prompt title.
 _INPUT_TAIL_BYTES = 256 * 1024
 _CAPTURE_HISTORY_LINES = 2500
+# Copilot's TUI asks ``CSI ? Ps n`` (private-mode device status); pyte's
+# ``report_device_status`` takes no ``private`` argument and raises, and a
+# replay has no terminal to answer, so the query is dropped before feeding.
+_PRIVATE_DSR = re.compile(r"\x1b\[\?[0-9;]*n")
 _CODEX_TAIL_BYTES = 4 * 1024 * 1024
 _ASSISTANT_TEXT_CAP = 6000
 _USER_TEXT_CAP = 1500
@@ -345,7 +349,14 @@ def launcher_last_exchange(
         raw = plan_picker.read_capture_tail(capture_path, _CAPTURE_TAIL_BYTES)
         if not raw:
             return unavailable("no_exchange")
-        parsed_rows = _terminal_rows(raw, rows=rows, cols=cols)
+        try:
+            parsed_rows = _terminal_rows(raw, rows=rows, cols=cols)
+        except Exception:
+            logger.warning(
+                "⚠️ exchange: capture %s did not parse; answering capture_unparseable",
+                capture_path, exc_info=True,
+            )
+            return unavailable("capture_unparseable")
         _store_rows(capture_path, fingerprint, parsed_rows)
     blocks = _reply_blocks(parsed_rows)
     prompt = _last_submitted_input(launcher_input_path) or prompt_fallback
@@ -404,7 +415,7 @@ def _store_rows(
 
 def _terminal_rows(raw: str, *, rows: int, cols: int) -> List[Tuple[str, str]]:
     screen = pyte.HistoryScreen(cols, rows, history=_CAPTURE_HISTORY_LINES)
-    pyte.Stream(screen).feed(raw)
+    pyte.Stream(screen).feed(_PRIVATE_DSR.sub("", raw))
     all_rows: Iterable[Any] = list(screen.history.top) + [
         screen.buffer[y] for y in range(screen.lines)
     ]

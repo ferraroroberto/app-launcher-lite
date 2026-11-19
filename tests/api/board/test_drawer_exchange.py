@@ -186,3 +186,42 @@ def test_rows_cache_is_bounded(tmp_path: Path, monkeypatch):
         capture.write_text("● A reply.\r\n", encoding="utf-8")
         board_exchange.launcher_last_exchange(capture, rows=20, cols=80)
     assert len(board_exchange._ROWS_CACHE) == 3
+
+
+# ------------------------------------------ unparseable capture (fails closed)
+
+
+def test_private_dsr_query_does_not_break_the_replay(tmp_path: Path):
+    """Copilot's ``CSI ? 6 n`` used to raise inside pyte and 500 the route."""
+    capture = tmp_path / "copilot.transcript"
+    capture.write_text("\x1b[?6n● A reply.\r\n", encoding="utf-8")
+    result = board_exchange.launcher_last_exchange(capture, rows=20, cols=80)
+    assert result["available"] is True
+    assert result["assistant"]["text"] == "A reply."
+
+
+def test_capture_with_only_a_private_dsr_query_names_a_reason(tmp_path: Path):
+    capture = tmp_path / "query-only.transcript"
+    capture.write_text("\x1b[?6n\r\n", encoding="utf-8")
+    result = board_exchange.launcher_last_exchange(capture, rows=20, cols=80)
+    assert result["available"] is False
+    assert result["reason"]
+
+
+def test_a_parse_failure_answers_unavailable_and_logs(
+    tmp_path: Path, monkeypatch, caplog,
+):
+    capture = tmp_path / "broken.transcript"
+    capture.write_text("● A reply.\r\n", encoding="utf-8")
+
+    def boom(raw, **kwargs):
+        raise TypeError("unexpected keyword argument 'private'")
+
+    monkeypatch.setattr(board_exchange, "_terminal_rows", boom)
+    with caplog.at_level("WARNING", logger=board_exchange.logger.name):
+        result = board_exchange.launcher_last_exchange(
+            capture, rows=20, cols=80
+        )
+    assert result["available"] is False
+    assert result["reason"] == "capture_unparseable"
+    assert "did not parse" in caplog.text
