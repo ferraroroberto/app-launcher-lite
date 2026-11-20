@@ -63,7 +63,7 @@ def test_non_default_values_survive_a_round_trip(tmp_path):
     differ from every default."""
     cfg = WebappConfig(
         gitlab_group="someone-else",
-        claude_verbose=False,
+        copilot_autopilot=False,
         chief_worker_cap=7,
         chief_worker_cap_scope="all",
         projects_ignore=["skip-me", "and-me"],
@@ -135,14 +135,14 @@ def test_non_boolean_bool_field_falls_back_instead_of_truthy_coercion(tmp_path):
     """
     target = _write(
         tmp_path,
-        # claude_debug defaults False; claude_verbose defaults True.
-        {"claude_debug": "false", "claude_verbose": "no"},
+        # copilot_skip_permissions defaults False; copilot_autopilot defaults True.
+        {"copilot_skip_permissions": "false", "copilot_autopilot": "no"},
     )
 
     cfg = load_webapp_config(target, apply_env_override=False)
 
-    assert cfg.claude_debug == WebappConfig().claude_debug
-    assert cfg.claude_verbose == WebappConfig().claude_verbose
+    assert cfg.copilot_skip_permissions == WebappConfig().copilot_skip_permissions
+    assert cfg.copilot_autopilot == WebappConfig().copilot_autopilot
 
 
 def test_legacy_webhook_secrets_key_still_loads(tmp_path):
@@ -167,30 +167,16 @@ def test_malformed_api_token_records_are_dropped(tmp_path):
     assert cfg.api_tokens == [{"id": "ok"}]
 
 
-def test_pre_model_codex_config_adopts_luna_extra_high(tmp_path):
-    target = _write(tmp_path, {"codex_effort": "high"})
+def test_retired_agent_keys_in_a_saved_file_are_dropped_on_load(tmp_path):
+    """A file written before the fork dropped the other agents still loads, and
+    the next save no longer carries their keys."""
+    target = _write(tmp_path, {"codex_model": "x", "pi_model": "y", "claude_effort": "low"})
 
     cfg = load_webapp_config(target, apply_env_override=False)
+    save_webapp_config(cfg, target)
 
-    assert cfg.codex_model == "gpt-6-luna"
-    assert cfg.codex_effort == "xhigh"
-    assert cfg.codex_model_efforts["gpt-6-luna"] == "xhigh"
-
-
-@pytest.mark.parametrize(
-    ("old_model", "new_model"),
-    [
-        ("claude-opus-4-8", "claude-opus-5"),
-        ("claude-sonnet-4-6", "claude-sonnet-5"),
-        ("gpt-5.5", "gpt-5.6-sol"),
-    ],
-)
-def test_stale_pi_model_ids_migrate(tmp_path, old_model, new_model):
-    target = _write(tmp_path, {"pi_model": old_model})
-
-    cfg = load_webapp_config(target, apply_env_override=False)
-
-    assert cfg.pi_model == new_model
+    written = json.loads(target.read_text(encoding="utf-8"))
+    assert not {"codex_model", "pi_model", "claude_effort"} & written.keys()
 
 
 @pytest.mark.parametrize("payload", ["[]", '"a string"', "42"])
