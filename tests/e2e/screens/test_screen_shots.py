@@ -199,7 +199,8 @@ def test_html_viewer_shots(browser: Browser, base_url: str) -> None:
 
 
 _COPILOT = {"skip_permissions": False, "models_available": ["model-alpha", "model-beta"],
-            "model": "model-alpha", "autopilot": False, "context": "long_context",
+            "model": "model-alpha", "autopilot": False, "remote_session": True,
+            "remote_cli_state": True, "context": "long_context",
             "contexts_available": ["", "default", "long_context"], "effort": "high",
             "efforts_available": ["", "low", "medium", "high"],
             "computed_flags": "--model model-alpha --effort high --context long_context"}
