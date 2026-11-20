@@ -559,6 +559,15 @@ class InputProtocol:
                 else self._submit_input_locked(data, submit),
                 submit_requested=submit,
             )
+            if clean_before and outcome.submitted and self._composer is not None:
+                # The tracker reads a lone slash command or an @/# token
+                # followed by Enter as a possible completion popup taking
+                # the key. Here the host wrote the whole payload into a
+                # composer it knew was empty and sent the CR itself, so
+                # nothing of a person's draft is in doubt: a fresh chief's
+                # ``/chief`` would otherwise leave the composer unknown
+                # until someone typed a line.
+                self._composer.mark_empty()
             defer_args = self._defer_args
             self._defer_args = None
             self._track_pending(data, outcome, mark, clean_before)
