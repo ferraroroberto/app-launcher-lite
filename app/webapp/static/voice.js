@@ -47,16 +47,17 @@ export function voiceDictationAvailable() {
 // instance while another records is refused, not silently hijacked.
 let _activeInstance = null;
 
-// First supported of the recorder MIME ladder — iOS Safari usually only
-// offers audio/mp4, everyone else audio/webm/opus. The voice-transcriber
-// sniffs the real container at transcode time, so a truthful label is all
-// that matters.
+// First supported of the recorder MIME ladder. mp4 comes first because the
+// local hub's parakeet and whisper backends cannot decode a browser's
+// webm/opus take (HTTP 400), while any OpenAI-shaped server reads mp4; iOS
+// Safari only offers mp4 and Chromium offers both. webm stays as the
+// fallback for a browser with no mp4 recorder.
 export function pickAudioMime() {
   const candidates = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
     'audio/mp4;codecs=mp4a.40.2',
     'audio/mp4',
+    'audio/webm;codecs=opus',
+    'audio/webm',
   ];
   const MR = window.MediaRecorder;
   if (!MR || !MR.isTypeSupported) return '';
