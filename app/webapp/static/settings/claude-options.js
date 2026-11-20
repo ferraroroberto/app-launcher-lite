@@ -126,6 +126,15 @@ export function choice(value) {
 }
 
 // The Coding agent sheet, from the config's `copilot` block.
+// What Copilot's own settings file says, which Lite rewrites at each launch.
+// A live session's state is only shown by `/remote show` inside it.
+function remoteStateText(c) {
+  const cli = c.remote_cli_state;
+  const now = cli === true ? 'on' : cli === false ? 'off' : 'not readable';
+  return 'Remote session shares each new Copilot session with Copilot\'s remote view and is applied at launch. '
+    + 'Copilot\'s settings are ' + now + ' now; type /remote show in a session to see its own state.';
+}
+
 export function renderClaudeOptions() {
   setTeamOsModelOptions();
   syncLaunchPresets(state.config);
@@ -148,6 +157,8 @@ export function renderClaudeOptions() {
     function (v) { patchConfig({ copilot_context: v }); });
   setSwitch(els.copilotAutopilot, !!c.autopilot);
   setSwitch(els.copilotSkipPerms, !!c.skip_permissions);
+  setSwitch(els.copilotRemote, !!c.remote_session);
+  if (els.copilotRemoteState) els.copilotRemoteState.textContent = remoteStateText(c);
   setFieldValue(els.copilotModels, (c.models_available || []).join('\n'));
   // A saved list replaces the code default, so a model added to the default
   // later is offered here instead of needing a JSON edit.
@@ -243,6 +254,7 @@ export function wireClaudeOptions() {
   wireConfigSwitch(els.openSessionsInChatToggle, 'open_sessions_in_chat');
   wireConfigSwitch(els.copilotAutopilot, 'copilot_autopilot', { label: 'Autopilot' });
   wireConfigSwitch(els.copilotSkipPerms, 'copilot_skip_permissions', { label: 'Skip permission prompts' });
+  wireConfigSwitch(els.copilotRemote, 'copilot_remote_session', { label: 'Remote session' });
   wireModelList();
   wireAddDefaultModels();
 }

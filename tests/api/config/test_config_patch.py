@@ -411,7 +411,9 @@ class TestPatchConfig:
         assert "gpt-6-luna" in after["models_available"]
         assert after["models_missing_defaults"] == []
 
-    @pytest.mark.parametrize("key", ["copilot_skip_permissions", "copilot_autopilot"])
+    @pytest.mark.parametrize(
+        "key", ["copilot_skip_permissions", "copilot_autopilot", "copilot_remote_session"]
+    )
     @pytest.mark.parametrize("junk", ["true", "false", 0, 1, None])
     def test_copilot_switches_reject_non_booleans(self, webapp_client, key, junk):
         client, app, _ = webapp_client

@@ -32,8 +32,10 @@
             <div class="toggles">
               <span class="switch-row"><span>Autopilot</span><button data-track="copilot.autopilot" type="button" id="copilotAutopilot" class="toggle" role="switch" aria-checked="false" aria-label="Copilot autopilot"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
               <span class="switch-row"><span>Skip permission prompts</span><button data-track="copilot.skip-permissions" type="button" id="copilotSkipPerms" class="toggle" role="switch" aria-checked="false" aria-label="Skip Copilot permission prompts"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+              <span class="switch-row"><span>Remote session</span><button data-track="copilot.remote-session" type="button" id="copilotRemote" class="toggle" role="switch" aria-checked="false" aria-label="Copilot remote session" aria-describedby="copilotRemoteState"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
             </div>
             <p class="opt-hint">Sign in with <code>/login</code> inside the session. Every new Coding, Team OS and Board launch uses these.</p>
+            <p id="copilotRemoteState" class="opt-hint"></p>
             <div id="copilotFlagsPreview" class="flags-preview" aria-label="Launch command">copilot</div>
           </div>
           <div class="opt-group">

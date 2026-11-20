@@ -341,6 +341,26 @@ def _isolated_jobs_registry(request, tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def copilot_remote_calls(tmp_path, monkeypatch):
+    """Never let a test write or read the real Copilot user settings.
+
+    A Copilot launch applies the Remote session switch through
+    ``copilot config``, which edits ``~/.copilot/settings.json``; the Settings
+    payload reads that file. Both are redirected to a temp file, and each
+    ``apply`` call is recorded (its ``enabled`` argument) for the test that
+    asserts what a launch asked for.
+    """
+    from src.launching import copilot_remote
+
+    calls: list = []
+    monkeypatch.setattr(copilot_remote, "settings_path", lambda: tmp_path / "copilot-settings.json")
+    monkeypatch.setattr(
+        copilot_remote, "apply", lambda enabled, **_kw: calls.append(enabled) or "applied"
+    )
+    return calls
+
+
+@pytest.fixture(autouse=True)
 def _isolated_chief_pointer(request, tmp_path, monkeypatch):
     """Never read or write the real chief pointer from a test (issue #675).
 

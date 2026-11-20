@@ -1335,7 +1335,7 @@ flowchart LR
 - **Reach:** Coding agent in Agents
 - **Holds:**
   - Model, Effort and Context choices
-  - switches for Autopilot and Skip permission prompts
+  - switches for Autopilot, Skip permission prompts and Remote session, with a line saying whether Copilot's own setting is on now
   - the sign-in instruction
   - Models offered, one id per line
   - a line with an Add button when the saved list lacks a default model
@@ -1343,6 +1343,7 @@ flowchart LR
 - **Does:**
   - Effort applies only with a model picked here
   - Add appends the missing default models to the saved list
+  - Remote session is applied at each Copilot launch from Coding, Team OS and the Board; off starts sessions unshared
 - **Why:** Copilot takes its model at launch from here and has no in-session switch the launcher drives
 
 ### `settings.chief` Chief sheet

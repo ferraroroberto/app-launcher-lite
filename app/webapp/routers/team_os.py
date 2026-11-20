@@ -43,6 +43,7 @@ from app.webapp.routers._helpers import (
     audit_off_loop,
     audit_session_start_and_maybe_mirror,
     client_ip,
+    ensure_copilot_remote,
     maybe_json,
     spawn_session_or_400,
 )
@@ -220,6 +221,7 @@ async def _spawn_skill_session(
     # Coding-tab launch route; ignored for kind="remote".
     rows = int(body.get("rows") or 40)
     cols = int(body.get("cols") or 120)
+    await ensure_copilot_remote(cfg, "copilot")
     session = await spawn_session_or_400(
         spawn_claude_session,
         team_os_dir,

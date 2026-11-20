@@ -52,7 +52,8 @@ class TestCopilotBlock:
         client, _, _ = webapp_client
         cp = client.get("/api/config").json()["copilot"]
         assert set(cp) == {
-            "skip_permissions", "models_available", "models_missing_defaults", "model", "autopilot", "context",
+            "skip_permissions", "models_available", "models_missing_defaults", "model", "autopilot",
+            "remote_session", "remote_cli_state", "context",
             "contexts_available", "effort", "efforts_available", "computed_flags",
         }
         assert isinstance(cp["skip_permissions"], bool)
