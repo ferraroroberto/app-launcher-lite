@@ -54,6 +54,7 @@ CREDENTIAL_KEYS: Tuple[str, ...] = (
     "webhook_secrets",
     "api_tokens",
     "delegate_token",
+    "speech_api_key",
 )
 
 # Bounded scrollback for full-screen (ratatui) agent sessions —

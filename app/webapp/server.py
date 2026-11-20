@@ -86,6 +86,7 @@ from app.webapp.routers import (
     session_screen,
     session_transcript,
     sessions,
+    speech,
     team_os,
     tokens,
     webauthn,
@@ -535,6 +536,7 @@ def create_app() -> FastAPI:
     app.include_router(desktop_screen.router)
     app.include_router(board.router)
     app.include_router(team_os.router)
+    app.include_router(speech.router)
     app.include_router(webauthn.router)
     # Local-only view/tap log. Behind the bearer-token middleware like
     # every /api route; static/usage.js hands the vendored client the bearer

@@ -20,6 +20,7 @@ import {
 import { openTerminal } from '../terminal.js';
 import { chatAvailable, modeReason, openSessionOverlay, terminalAvailable } from '../session-overlay.js';
 import { mountComposer } from '../composer.js';
+import { voiceDictationAvailable } from '../voice.js';
 import { uploadSessionFile } from '../terminal/terminal-compose.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { terminalJsonApi } from '../webauthn.js';
@@ -78,7 +79,7 @@ function overlaySession(card) {
 }
 
 function composerAvailability() {
-  return { dictate: false, ocr: false };
+  return { dictate: voiceDictationAvailable(), ocr: false };
 }
 
 function buildDrawerComposer(card) {

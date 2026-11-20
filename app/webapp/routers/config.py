@@ -76,6 +76,13 @@ async def get_config(request: Request) -> Dict[str, Any]:
         # instance, its host.
         "gitlab_group": cfg.gitlab_group,
         "gitlab_host": cfg.gitlab_host,
+        # Speech to text. The key is write-only: only whether one is set goes out.
+        "speech": {
+            "enabled": cfg.speech_enabled,
+            "base_url": cfg.speech_base_url,
+            "model": cfg.speech_model,
+            "api_key_set": bool(cfg.speech_api_key),
+        },
         "terminal_history_lines": cfg.terminal_history_lines,
         "terminal_history_lines_min": MIN_TERMINAL_HISTORY_LINES,
         "terminal_history_lines_max": MAX_TERMINAL_HISTORY_LINES,
@@ -185,6 +192,7 @@ _SWITCH_KEYS = (
     "copilot_skip_permissions",
     "copilot_autopilot",
     "copilot_remote_session",
+    "speech_enabled",
 )
 
 
@@ -203,6 +211,10 @@ _PATCH_KEYS = frozenset({
     "fleet_config_dir",
     "gitlab_group",
     "gitlab_host",
+    "speech_enabled",
+    "speech_base_url",
+    "speech_model",
+    "speech_api_key",
     "terminal_history_lines",
     "large_upload_max_mb",
     "chief_auto_compact_threshold",
@@ -265,7 +277,10 @@ async def patch_config(request: Request) -> Any:
             )
     if "copilot_models" in patch:
         patch["copilot_models"] = _checked_model_list(patch["copilot_models"])
-    for key in ("gitlab_group", "gitlab_host", "copilot_model", "copilot_context", "copilot_effort"):
+    for key in (
+        "gitlab_group", "gitlab_host", "copilot_model", "copilot_context", "copilot_effort",
+        "speech_base_url", "speech_model", "speech_api_key",
+    ):
         if key in patch:
             patch[key] = str(patch[key] or "").strip()
     _checked_whole_number(patch, "chief_auto_compact_threshold", "an integer percent")

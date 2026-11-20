@@ -129,7 +129,7 @@ import { trackFeature } from './settings/feature-track.js';
 const _COMPOSE_MAX_ROWS = 8;
 
 const _TITLE_MIC = 'Dictate (voice to text)';
-const _TITLE_MIC_OFF = 'Dictation unavailable — voice-transcriber not configured';
+const _TITLE_MIC_OFF = 'Dictation is off — turn it on in Settings > Speech to text';
 const _LABEL_MIC = 'Dictate';
 const _TITLE_KEYS = 'Keyboard keys';
 const _TITLE_KEYS_OFF = 'No terminal keys — this session has no PTY';

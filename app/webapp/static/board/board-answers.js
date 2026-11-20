@@ -50,7 +50,7 @@ import { apiFailToast, toast } from '../api.js';
 import { terminalJsonApi } from '../webauthn.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { el } from '../dom-utils.js';
-import { startWorkTimer } from '../voice.js';
+import { createDictation, startWorkTimer, voiceDictationAvailable } from '../voice.js';
 import { growTextarea, mountComposer } from '../composer.js';
 import { uploadSessionFile } from '../terminal/terminal-compose.js';
 import { chiefSessionId, sendToChief } from './board-dispatch.js';
@@ -77,6 +77,9 @@ const ANSWER_SEP = ' \u2192 ';
 // else's text while the sheet is closed (the composer drops its own on close).
 // The chief drafts stay in the sheet across an owner-mode open, so switching
 // between the two sheets never loses what was typed.
+// One dictation per Other field in the open sheet, disposed when the
+// sheet closes or is rebuilt so no mic outlives the fields it types into.
+let otherDictations = [];
 let sheet = null;
 // Anything else: the shared composer, mounted once.
 let also = null;
@@ -248,6 +251,29 @@ function itemFiles(draft, label) {
 
 // --------------------------------------------------------------- render
 
+// The Other field's dictation button; `onRender` runs on each transcript.
+function otherMic(input, onRender) {
+  const mic = el('button', 'icon-button compose-record tr-ask-mic');
+  mic.type = 'button';
+  mic.title = 'Dictate (voice to text)';
+  mic.setAttribute('aria-label', 'Dictate');
+  mic.setAttribute('aria-pressed', 'false');
+  mic.innerHTML = icon('mic');
+  const dictation = createDictation({
+    button: mic,
+    getTextarea: function () { return input; },
+    onRender: onRender,
+  });
+  mic.addEventListener('click', dictation.toggle);
+  otherDictations.push(dictation);
+  return mic;
+}
+
+function disposeOtherDictations() {
+  otherDictations.forEach(function (d) { d.dispose(); });
+  otherDictations = [];
+}
+
 function renderItem(item, index) {
   const draft = sheet.drafts[index];
   const block = el('section', 'tr-ask chief-answer');
@@ -277,6 +303,7 @@ function renderItem(item, index) {
     placeholder: options.length ? 'Other' : 'Your answer',
     ariaLabel: (options.length ? 'Other answer to: ' : 'Answer to: ') + (question || 'the question'),
     files: itemFiles(draft, 'question ' + (index + 1)),
+    mic: voiceDictationAvailable() ? otherMic : null,
     onInput: function (field) {
       draft.other = field.value;
       // Single-select: typing is the answer, so it drops a pick.
@@ -422,12 +449,13 @@ function openSheet(mode, plan, run, indices, owner, startKey, ownerKind) {
   const chief = mode === 'chief';
   also.textarea.value = sheet.also;
   growTextarea(also.textarea);
-  also.setAvailability({ dictate: false, ocr: false });
+  also.setAvailability({ dictate: voiceDictationAvailable(), ocr: false });
+  disposeOtherDictations();
   disposeAnswerFiles();
   const blocks = indices.map(function (i) { return renderItem(items[i], i); });
   owner.forEach(function (item) {
     const draft = ownerDraft(item);
-    blocks.push(ownerSheetBlock(item, draft, syncDone, null, itemFiles(draft, item.ref)));
+    blocks.push(ownerSheetBlock(item, draft, syncDone, voiceDictationAvailable() ? otherMic : null, itemFiles(draft, item.ref)));
   });
   els.chiefAnswersList.replaceChildren.apply(els.chiefAnswersList, blocks);
   // Pre-picked answers are a send, not a suggestion: say so whenever one shows.
@@ -484,6 +512,12 @@ function refList(refs) {
 
 async function submitAnswers() {
   if (!sheet || sending) return;
+  // A stopped dictation is still settling into the box: wait for it,
+  // as the composer's own Send does.
+  if (also.isBusy() || otherDictations.some(function (d) { return d.isBusy(); })) {
+    toast('Still transcribing — wait for the transcript, then tap Done', 'error', { icon: 'mic' });
+    return;
+  }
   if (filesUploading()) {
     toast('Still uploading — wait for the files, then tap Done', 'error', { icon: 'paperclip' });
     return;
@@ -563,6 +597,7 @@ export function wireChiefAnswers() {
   els.chiefAnswersDialog.addEventListener('close', function () {
     if (sheet) sheet.also = alsoText();
     also.reset();
+    disposeOtherDictations();
     disposeAnswerFiles();
   });
   els.chiefAnswersDone.addEventListener('click', submitAnswers);

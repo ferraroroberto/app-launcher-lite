@@ -394,11 +394,10 @@ function syncPaneChrome(session, isMirror) {
   // leave it stuck hidden.
   els.terminalComposeBar.hidden = isMirror;
 
-  // 🎤 dictation needs the voice-transcriber configured *and*
-  // MediaRecorder support; 📷 screenshot OCR needs photo-ocr
-  // configured. Re-synced per open because /api/status can land after the
-  // composer mounted at boot — the mic renders disabled, the OCR option
-  // hides inside the image menu (composer.js).
+  // 🎤 dictation needs Settings > Speech to text on *and* MediaRecorder
+  // support; 📷 screenshot OCR needs photo-ocr configured. Re-synced per open
+  // because the config can land after the composer mounted at boot, and so a
+  // switch flipped in Settings shows here (composer.js).
   terminalComposer.setAvailability({
     dictate: voiceDictationAvailable(),
     ocr: !!(state.status && state.status.screenshot_ocr),

@@ -179,6 +179,15 @@ class WebappConfig:
     # Self-hosted GitLab instance for those reads (glab's GITLAB_HOST). Empty
     # means glab's own default context.
     gitlab_host: str = ""
+    # Speech to text (Settings): audio from every record button goes to
+    # ``<speech_base_url>/audio/transcriptions`` in the OpenAI shape, so any
+    # such server works, local or remote. ``speech_model`` and
+    # ``speech_api_key`` are optional and sent only when set; the key is a
+    # secret, kept in this gitignored file and never returned by the API.
+    speech_enabled: bool = False
+    speech_base_url: str = ""
+    speech_model: str = ""
+    speech_api_key: str = ""
     # Persisted Claude Code launch flag defaults.
     claude_model: str = DEFAULT_CLAUDE_MODEL
     # Overrides only: ``{model: effort}`` for a model whose effort the
@@ -593,7 +602,7 @@ def _load_field(spec, raw: dict) -> Any:
       the default — an empty ``projects_dir`` means "you never set one", not
       "scan the filesystem root".
     - A literal-default field keeps a falsy value as authored, because that
-      is how features here are switched off: an empty ``voice_transcriber_url``
+      is how features here are switched off: ``speech_enabled: false``
       hides the 🎤 button, an empty ``auth_token`` disables the bearer gate.
 
     Collapsing the two would silently re-enable whatever the user turned off,
@@ -852,6 +861,13 @@ def _validate(cfg: WebappConfig) -> None:
             f"large_upload_max_mb must be between {MIN_LARGE_UPLOAD_MAX_MB} "
             f"and {MAX_LARGE_UPLOAD_MAX_MB}; got {cfg.large_upload_max_mb}"
         )
+    if cfg.speech_base_url:
+        parsed = urlparse(cfg.speech_base_url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise ValueError(
+                "speech_base_url must be an http(s) URL with a host, "
+                f"e.g. http://127.0.0.1:8000/v1; got {cfg.speech_base_url!r}"
+            )
     for field_name, allowed in _ENUM_VALIDATIONS:
         value = getattr(cfg, field_name)
         if value not in allowed:

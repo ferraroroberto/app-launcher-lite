@@ -36,7 +36,7 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 4. `ui_proof`, the remote-control toggle and the Chat view.
 5. A fresh-machine install checklist.
 
-**Dropped from the full app** (not documented, not planned): Telegram, Life OS, inspiration, voice/OCR/TTS, usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board, screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
+**Dropped from the full app** (not documented, not planned): Telegram, Life OS, inspiration, OCR/TTS, usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board, screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
 
 ## Quick start
 
@@ -85,7 +85,11 @@ A kanban over four computed columns: **Backlog** (open GitLab issues across `git
 
 ### Settings
 
-Directories (projects dir and ignore globs, apps scan root, team-os dir), GitLab group and host, Copilot launch defaults, terminal scrollback, **Start App Launcher Lite at log on** (Startup-folder wrapper, no admin needed), a **Text size** control (Small / Default / Large, persisted in the browser), Save and **Scan for new apps**, edit mode, a **Screen → View live** row (the PC's desktop, live; see [docs/screen-view.md](docs/screen-view.md)), and a machine status readout. A second card mints **job-scoped API tokens** (safe to bake into a Stream Deck button URL; each fires only its chosen job; the raw token is shown once). The light/dark toggle sits in the page header; passkey enrollment is deliberately started from the PC tray menu, not from the phone.
+Directories (projects dir and ignore globs, apps scan root, team-os dir), GitLab group and host, Copilot launch defaults, terminal scrollback, **Start App Launcher Lite at log on** (Startup-folder wrapper, no admin needed), **Speech to text**, a **Text size** control (Small / Default / Large, persisted in the browser), Save and **Scan for new apps**, edit mode, a **Screen → View live** row (the PC's desktop, live; see [docs/screen-view.md](docs/screen-view.md)), and a machine status readout. A second card mints **job-scoped API tokens** (safe to bake into a Stream Deck button URL; each fires only its chosen job; the raw token is shown once). The light/dark toggle sits in the page header; passkey enrollment is deliberately started from the PC tray menu, not from the phone.
+
+### Speech to text
+
+Settings > Speech to text turns on the record button in the Board chat and the session composer: tap it, speak, tap again, and the transcript lands in the box for review before you send it. Audio goes to `<base URL>/audio/transcriptions` in the OpenAI shape, so the endpoint is whatever you set: the local LLM hub (`http://127.0.0.1:8000/v1`), another machine's server, or any OpenAI-compatible host, with an optional model name and API key. **Test connection** reports `reachable`, `refused` or `unknown` for the saved endpoint; it proves a server answers, and only a real recording proves transcription. With the switch off no record button shows. The browser needs microphone access, which on a phone means the secure (Tailscale HTTPS) address.
 
 ## Configuration
 
@@ -99,6 +103,10 @@ There is no `.env`. Committed samples live next to each gitignored real file in 
 | `webapp_config.json` | `projects_dir` | repo's parent | Folder whose child dirs the Coding tab lists. |
 | `webapp_config.json` | `team_os_dir` | sibling `../team-os` | Team OS checkout root. |
 | `webapp_config.json` | `gitlab_group` | `""` | GitLab group the Board reads (subgroups included). Empty keeps the panel dormant with a Settings hint. |
+| `webapp_config.json` | `speech_enabled` | `false` | Shows the record button in every message box. Off, no record button shows anywhere. |
+| `webapp_config.json` | `speech_base_url` | `""` | Base URL of any OpenAI-shaped speech server, e.g. `http://127.0.0.1:8000/v1`; audio goes to `<base>/audio/transcriptions`. |
+| `webapp_config.json` | `speech_model` | `""` | Model name sent with each upload; omitted when empty. |
+| `webapp_config.json` | `speech_api_key` | `""` | Bearer key sent when set. A secret: kept in the gitignored file and never returned by the API. |
 | `webapp_config.json` | `gitlab_host` | `""` | Self-hosted GitLab (rides glab's `GITLAB_HOST`). Empty means glab's default context. |
 | `webapp_config.json` | `sessions_state_file` | `~/.copilot/hooks/state/sessions-state.json` | Session-status file written by fleet-config-lite's hook. |
 | `webapp_config.json` | `copilot_models` | `["gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "mai-code-2-flash"]` | Model ids the pickers offer. Edited here, read-only in the UI. |
