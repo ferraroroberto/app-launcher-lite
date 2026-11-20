@@ -53,8 +53,9 @@ from src.board.transcript import (
 )
 from src.clients import session as session_client
 from src.session_model import session_model_label
-from src.session_view import model_switch, plan_picker, resume_picker
+from src.session_view import copilot_session, model_switch, plan_picker, resume_picker
 from src.session_view.statusline_context import context_percent
+from src.session_view.vt_screen import read_vt_screen
 from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
@@ -631,7 +632,8 @@ def _resume_picker_showing(via: str, lines: List[str]) -> bool:
 # screen and the picked row taken with its session-only key; Claude then asks
 # "Switch model?" once a conversation has history, and that Yes is pressed
 # only while it names the model asked for. The switch counts only once the agent reports it: Claude's
-# transcript line, Codex's window title, the sources the chip already reads.
+# transcript line, Codex's window title, Copilot's event log, the sources the
+# chip already reads.
 
 # How long a switch waits for the agent to report the new model, and how often
 # it looks. Claude re-reading a long conversation takes a few seconds.
@@ -763,18 +765,58 @@ async def _switch_codex(
     return "unconfirmed", False, f"Codex didn't report the switch to {label}: check the terminal"
 
 
+async def _copilot_screen(cfg: WebappConfig, session: Dict[str, Any]) -> Optional[List[str]]:
+    """A Copilot session's current screen from the session-host's VT mirror:
+    its PTY capture's tail is a run of partial repaints, not a screen."""
+    return await read_vt_screen(
+        cfg.session_host_port, str(session.get("session_id")),
+        int(session.get("rows") or 40), int(session.get("cols") or 120),
+    )
+
+
+async def _switch_copilot(
+    cfg: WebappConfig, sid: str, keys: List[Tuple[str, bool]], model: str, session: Dict[str, Any]
+) -> Tuple[str, bool, Optional[str]]:
+    """``(outcome, False, detail)`` for a Copilot switch: it never asks, and
+    its event log records the model it moved to."""
+    log = await asyncio.to_thread(copilot_session.event_log, session, True)
+    if log is None:
+        # Copilot writes its log at the first prompt; the switch is confirmed there.
+        raise HTTPException(
+            status_code=409,
+            detail="Copilot keeps no event log until its first prompt, so a switch couldn't be "
+                   "confirmed: send a prompt first. Nothing was sent",
+        )
+    if await asyncio.to_thread(copilot_session.current_model, log) == model:
+        return "switched", False, None
+    lines = await _copilot_screen(cfg, session)
+    refusal = (copilot_session.switch_refusal(lines) if lines is not None
+               else "Chat can't see the terminal's screen, so nothing was sent")
+    if refusal:
+        raise HTTPException(status_code=409, detail=refusal)
+    await _type_switch(cfg, sid, keys, "copilot")
+    loop = asyncio.get_running_loop()
+    end = loop.time() + _MODEL_CONFIRM_S
+    while loop.time() < end:
+        if await asyncio.to_thread(copilot_session.current_model, log) == model:
+            return "switched", False, None
+        await asyncio.sleep(_MODEL_POLL_S)
+    return "unconfirmed", False, f"Copilot didn't report the switch to {model}: check the terminal"
+
+
 @router.post("/api/claude-code/sessions/{sid}/model")
 async def session_switch_model(sid: str, request: Request) -> Dict[str, Any]:
     """Switch a live session to another model (Tailscale + passkey).
 
     Body: ``{"model": str}``, a catalog value the session's agent offers
-    (``opus``, ``gpt-6-luna``). Refused before anything is typed: an agent
-    with no in-session switch or a detached session (409), a model the agent
-    does not offer (400), and for Claude a screen that can't be read or that
-    waits on something else (409).
+    (``opus``, ``gpt-6-luna``; for Copilot one of ``copilot_models``). Refused
+    before anything is typed: an agent with no in-session switch or a detached
+    session (409), a model the agent does not offer (400), and for Claude and
+    Copilot a screen that can't be read or that waits on something else (409).
 
     ``outcome`` is ``switched`` only once the agent reports the new model
-    (Claude's transcript, Codex's window title), including when it already
+    (Claude's transcript, Codex's window title, Copilot's event log),
+    including when it already
     ran it and nothing was typed; otherwise ``unconfirmed`` with ``detail``
     saying why. ``confirmed_dialog`` says whether Claude's "Switch model?"
     dialog was answered on the way.
@@ -785,7 +827,7 @@ async def session_switch_model(sid: str, request: Request) -> Dict[str, Any]:
     agent = str(session.get("agent") or "claude").lower()
     value = body.get("model")
     try:
-        keys, label = model_switch.switch_keys(agent, value)
+        keys, label = model_switch.switch_keys(agent, value, cfg.copilot_models)
     except model_switch.SwitchRefused as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
@@ -804,6 +846,8 @@ async def session_switch_model(sid: str, request: Request) -> Dict[str, Any]:
                 detail="Claude is working: switch the model once it is back at the prompt",
             )
         outcome, answered, detail = await _switch_claude(cfg, sid, keys, label)
+    elif agent == "copilot":
+        outcome, answered, detail = await _switch_copilot(cfg, sid, keys, label, session)
     else:
         outcome, answered, detail = await _switch_codex(cfg, sid, keys, label, session)
     await audit_off_loop(
@@ -821,8 +865,9 @@ async def session_context(sid: str, request: Request) -> Dict[str, Any]:
     statusline shows it now (Tailscale + passkey).
 
     ``{"available", "percent", "reason"}``. ``percent`` is an int only when
-    the bottom-most statusline on screen shows ``NN%c``; ``reason`` tells
-    apart a session that is gone, a non-Claude agent, a detached one (no
+    the bottom-most statusline on screen shows ``NN%c`` (Claude) or Copilot's
+    status line ends in ``(NN%)``; ``reason`` tells apart a session that is
+    gone, an agent with neither, a detached one (no
     screen to read), a capture that can't be read (``no_screen``), and a
     screen whose footer shows no context figure (``not_showing``: no
     statusline, or Claude Code's own null early on and right after
@@ -839,14 +884,20 @@ async def session_context(sid: str, request: Request) -> Dict[str, Any]:
 
 
 async def _build_context(cfg: WebappConfig, sid: str, steps: BuildSteps) -> Dict[str, Any]:
-    reason, _session, lines = await _read_screen(cfg, sid, steps)
+    reason, session, lines = await _read_screen(cfg, sid, steps)
+    copilot = reason == "unsupported_agent" and str((session or {}).get("agent")).lower() == "copilot"
+    if copilot and str(session.get("kind") or "pty") == "remote":
+        reason = "detached"
+    elif copilot:
+        lines = await _copilot_screen(cfg, session)
+        reason = None if lines is not None else "no_screen"
     if reason is not None:
         if reason == "session_not_found":
             _CONTEXT_SEEN.pop(sid, None)
         else:
             _log_screen(_CONTEXT_SEEN, "context", sid, reason)
         return {"available": False, "percent": None, "reason": reason}
-    percent = context_percent(lines)
+    percent = copilot_session.context_percent(lines) if copilot else context_percent(lines)
     if percent is None:
         _log_screen(_CONTEXT_SEEN, "context", sid, "not showing")
         return {"available": True, "percent": None, "reason": "not_showing"}

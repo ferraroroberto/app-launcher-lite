@@ -1,9 +1,9 @@
 """The model a live session runs, as a short display name.
 
 Derived on the webapp side from fields the session-host already reports --
-the spawn ``flags`` and, for Codex, its OSC ``live_title`` -- plus, for Claude,
-the ``transcript_model`` the webapp reads from the session's transcript
-(:func:`src.board.sessions.attach_transcript_model`). Never from a new
+the spawn ``flags`` and, for Codex, its OSC ``live_title`` -- plus, for Claude
+and Copilot, the ``transcript_model`` the webapp reads from the session's
+transcript (:func:`src.board.sessions.attach_transcript_model`). Never from a new
 session-host field: a change to the session-host's import closure is not live
 until ``:8466`` restarts, and that restart kills every live session.
 
@@ -77,6 +77,11 @@ def session_model_label(session: Mapping[str, Any]) -> Optional[str]:
         if from_title:
             return from_title
         return _catalog_label(CODEX_MODEL_SPECS, value) if value else None
+    if agent == "copilot":
+        # Copilot logs the id it runs, and the Settings and Switch model
+        # lists name models by that same id.
+        answered = str(session.get("transcript_model") or "")
+        return answered or value or None
     if agent == "pi" and value:
         for spec in PI_MODEL_SPECS.values():
             if spec["model_arg"] == value:
