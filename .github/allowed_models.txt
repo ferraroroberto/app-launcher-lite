@@ -1,0 +1,7 @@
+fallback: gpt-6-luna
+gpt-6-luna
+claude-haiku-5.5
+gemini-4-carbon
+gpt-6.1-sol
+mai-code-2-flash
+mai-code-2
