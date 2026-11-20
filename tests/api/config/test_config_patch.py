@@ -423,10 +423,9 @@ class TestPatchConfig:
 
     def test_a_retired_agent_setting_is_ignored_not_saved(self, webapp_client):
         client, app, _ = webapp_client
-        before = app.state.webapp_config
         resp = client.post("/api/config", json={"claude_effort": "low", "codex_model": "x"})
         assert resp.status_code == 200
-        assert app.state.webapp_config.codex_model == before.codex_model
+        assert not hasattr(app.state.webapp_config, "codex_model")
 
     def test_the_gitlab_forge_settings_round_trip_trimmed(self, webapp_client):
         client, app, _ = webapp_client

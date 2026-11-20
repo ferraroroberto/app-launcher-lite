@@ -35,32 +35,19 @@ from src.agents import DEFAULT_AGENT
 
 # isort: off
 # Grid layout: one name per line would push this module past the structure ratchet's file-size cap.
-from src.launching.model_catalog import (
-    CODEX_MODEL_SPECS,
-    DEFAULT_HIDDEN_MODELS,
-    load_hidden_models, migrate_renamed_models, with_visible_defaults,
-)
 from src.launching.presets import load_launch_presets
 from src import runtime_files
 from src.webapp_settings.values import (  # noqa: F401 — re-exported for webapp_config.<name> callers
-    ALWAYS_ON_CLAUDE_FLAGS, CREDENTIAL_KEYS,
+    CREDENTIAL_KEYS,
     DEFAULT_CHIEF_AUTO_COMPACT_THRESHOLD, DEFAULT_CHIEF_MODEL, DEFAULT_CHIEF_WORKER_CAP,
-    DEFAULT_CHIEF_WORKER_CAP_SCOPE, DEFAULT_CLAUDE_EFFORT, DEFAULT_CLAUDE_MODEL,
-    DEFAULT_CLAUDE_PERMISSION_MODE, DEFAULT_CODEX_EFFORT, DEFAULT_CODEX_MODEL,
-    DEFAULT_CODEX_MODEL_EFFORTS, DEFAULT_CODEX_PERMISSION_MODE, DEFAULT_CODING_MODEL_CHOICE,
-    DEFAULT_GROK_EFFORT, DEFAULT_GROK_PERMISSION_MODE,
-    DEFAULT_HOST, DEFAULT_LARGE_UPLOAD_MAX_MB, DEFAULT_PI_EFFORT, DEFAULT_PI_MODEL,
-    DEFAULT_PI_TRUST_MODE, DEFAULT_PORT, DEFAULT_SESSION_HOST_PORT, DEFAULT_TERMINAL_HISTORY_LINES,
-    LEGACY_CLAUDE_MODELS, MAX_CHIEF_AUTO_COMPACT_THRESHOLD, MAX_CHIEF_WORKER_CAP,
-    MAX_LARGE_UPLOAD_MAX_MB, MAX_TERMINAL_HISTORY_LINES, MIN_CHIEF_AUTO_COMPACT_THRESHOLD,
-    MIN_CHIEF_WORKER_CAP, MIN_LARGE_UPLOAD_MAX_MB, MIN_TERMINAL_HISTORY_LINES,
-    SESSION_HOST_PORT_ENV, VALID_CHIEF_WORKER_CAP_SCOPES, VALID_CLAUDE_EFFORTS,
-    VALID_CLAUDE_MODELS, VALID_CLAUDE_PERMISSION_MODES, VALID_CODEX_EFFORTS, VALID_CODEX_MODELS,
-    VALID_CODEX_PERMISSION_MODES, VALID_CODING_MODEL_CHOICES, VALID_GROK_EFFORTS,
-    VALID_GROK_PERMISSION_MODES, VALID_PI_EFFORTS, VALID_PI_MODELS, VALID_PI_TRUST_MODES,
-    WEBAPP_CONFIG_PATH_ENV, valid_claude_efforts_for,
-    DEFAULT_COPILOT_CONTEXT, DEFAULT_COPILOT_EFFORT, DEFAULT_COPILOT_MODEL, DEFAULT_COPILOT_MODELS,
-    VALID_COPILOT_CONTEXTS, VALID_COPILOT_EFFORTS,
+    DEFAULT_CHIEF_WORKER_CAP_SCOPE, DEFAULT_COPILOT_CONTEXT, DEFAULT_COPILOT_EFFORT,
+    DEFAULT_COPILOT_MODEL, DEFAULT_COPILOT_MODELS, DEFAULT_HOST, DEFAULT_LARGE_UPLOAD_MAX_MB,
+    DEFAULT_PORT, DEFAULT_SESSION_HOST_PORT, DEFAULT_TERMINAL_HISTORY_LINES,
+    MAX_CHIEF_AUTO_COMPACT_THRESHOLD, MAX_CHIEF_WORKER_CAP, MAX_LARGE_UPLOAD_MAX_MB,
+    MAX_TERMINAL_HISTORY_LINES, MIN_CHIEF_AUTO_COMPACT_THRESHOLD, MIN_CHIEF_WORKER_CAP,
+    MIN_LARGE_UPLOAD_MAX_MB, MIN_TERMINAL_HISTORY_LINES, SESSION_HOST_PORT_ENV,
+    VALID_CHIEF_WORKER_CAP_SCOPES, VALID_COPILOT_CONTEXTS, VALID_COPILOT_EFFORTS,
+    WEBAPP_CONFIG_PATH_ENV,
 )
 # isort: on
 
@@ -131,8 +118,6 @@ class WebappConfig:
     # by default and needs no config migration. Stored like
     # `coding_favorites` — a plain string list in this same config.
     coding_hidden_agents: list = field(default_factory=list)
-    # Provider-qualified models the dropdowns leave out (`src.launching.model_catalog`).
-    hidden_models: list = field(default_factory=lambda: list(DEFAULT_HIDDEN_MODELS))
     # Named model + effort launch shortcuts, {id, name, agent, model, effort} rows (`src.launching.presets`).
     launch_presets: list = field(default_factory=list)
     # The one agent whose launch button stays on a Coding project row.
@@ -143,9 +128,6 @@ class WebappConfig:
     # config router coerces an unknown id to, so a removed agent can never
     # leave a row with no launch button at all.
     coding_favorite_agent: str = DEFAULT_AGENT
-    # Provider-qualified value shown in the Coding header's compact picker.
-    # The provider's own model field remains the launch source of truth.
-    coding_model_choice: str = DEFAULT_CODING_MODEL_CHOICE
     # Where the Apps tab scans recursively for launcher `.bat` files.
     apps_scan_root: str = field(default_factory=_default_projects_dir)
     # Folder of helper `.bat` files the Apps tab lists as its Mini apps group;
@@ -188,31 +170,6 @@ class WebappConfig:
     speech_base_url: str = ""
     speech_model: str = ""
     speech_api_key: str = ""
-    # Persisted Claude Code launch flag defaults.
-    claude_model: str = DEFAULT_CLAUDE_MODEL
-    # Overrides only: ``{model: effort}`` for a model whose effort the
-    # owner changed. A model with no entry runs at its catalog default. The old
-    # global ``claude_effort`` key is a legacy read, see _migrate_legacy_keys.
-    claude_model_efforts: dict = field(default_factory=dict)
-    claude_verbose: bool = True
-    claude_debug: bool = False
-    # Permission mode for the `claude` launch — "auto" or "skip"
-    # (see VALID_CLAUDE_PERMISSION_MODES).
-    claude_permission_mode: str = DEFAULT_CLAUDE_PERMISSION_MODE
-    # Antigravity CLI launch toggles. The CLI has
-    # `--model` and `--effort`, but its model is chosen with `/model`
-    # in-session, so the launcher has no model to key an effort on:
-    # these two switches are the whole story.
-    antigravity_skip_permissions: bool = False
-    antigravity_sandbox: bool = False
-    # Codex CLI launch settings. Effort is remembered per model;
-    # ``codex_effort`` mirrors the currently selected model for compatibility.
-    codex_model: str = DEFAULT_CODEX_MODEL
-    codex_effort: str = DEFAULT_CODEX_EFFORT
-    codex_model_efforts: dict = field(
-        default_factory=lambda: dict(DEFAULT_CODEX_MODEL_EFFORTS)
-    )
-    codex_permission_mode: str = DEFAULT_CODEX_PERMISSION_MODE
     # GitHub Copilot CLI launch settings (`src.launching.flags.build_copilot_flags`).
     # `copilot_models` is the per-install list of model ids the pickers offer
     # (explicit ids are gated by the account's plan); `copilot_model` is the
@@ -229,23 +186,6 @@ class WebappConfig:
     copilot_remote_session: bool = True
     copilot_context: str = DEFAULT_COPILOT_CONTEXT
     copilot_effort: str = DEFAULT_COPILOT_EFFORT
-    # Grok Build launch settings. `grok_effort` is the
-    # reasoning tier (low/medium/high); `grok_permission_mode` mirrors
-    # Claude's and Codex's auto/skip. No model picker — see VALID_GROK_*.
-    grok_effort: str = DEFAULT_GROK_EFFORT
-    grok_permission_mode: str = DEFAULT_GROK_PERMISSION_MODE
-    # Pi coding agent launch settings. `pi_model` uses
-    # the curated subscription-safe catalog — never
-    # empty; `build_pi_flags` falls back to DEFAULT_PI_MODEL for an unknown
-    # value so the launch can't slip onto a billing path. `pi_model_efforts`
-    # maps to `--thinking` (default high); `pi_trust_mode` maps to `--approve` /
-    # `--no-approve` (project trust, not a tool-permission gate — see
-    # VALID_PI_TRUST_MODES).
-    pi_model: str = DEFAULT_PI_MODEL
-    # Overrides only, like ``claude_model_efforts``: ``{model: effort}``
-    # sent as ``--thinking``; a model with no entry runs at its catalog default.
-    pi_model_efforts: dict = field(default_factory=dict)
-    pi_trust_mode: str = DEFAULT_PI_TRUST_MODE
     # --- Fleet chief ----------------------------------------
     # Settings for the standing conversational orchestrator (Board chat
     # mode). Editable from the Board's chief-settings dialog; the worker
@@ -463,75 +403,6 @@ def _load_documents(raw: dict) -> list:
     ]
 
 
-def _load_pi_model(raw: dict) -> str:
-    """Migrate the three retired pinned ids to their current successors."""
-    value = str(raw.get("pi_model") or DEFAULT_PI_MODEL)
-    return {
-        "claude-opus-4-8": "claude-opus-5",
-        "claude-sonnet-4-6": "claude-sonnet-5",
-        "gpt-5.5": "gpt-5.6-sol",
-    }.get(value, value)
-
-
-def _load_codex_model_efforts(raw: dict) -> Dict[str, str]:
-    """Load only supported model/effort pairs and seed newly added models.
-
-    ``codex_effort`` mirrors the selected model's entry, and a hand-edited file
-    can make them disagree. The selected model's own ``codex_effort`` has always
-    been the one launched, so it wins here, and ``effective_effort`` reads the
-    dict alone.
-    """
-    result = dict(DEFAULT_CODEX_MODEL_EFFORTS)
-    authored = raw.get("codex_model_efforts") or {}
-    if isinstance(authored, dict):
-        for model, effort in authored.items():
-            if (
-                model in VALID_CODEX_MODELS
-                and effort in CODEX_MODEL_SPECS[model]["efforts"]
-            ):
-                result[str(model)] = str(effort)
-    selected = raw.get("codex_model") or DEFAULT_CODEX_MODEL
-    mirrored = _load_codex_effort(raw)
-    if (
-        ("codex_model" in raw or "codex_model_efforts" in raw)
-        and selected in VALID_CODEX_MODELS
-        and mirrored in CODEX_MODEL_SPECS[selected]["efforts"]
-    ):
-        result[str(selected)] = mirrored
-    return result
-
-
-def _load_claude_model_efforts(raw: dict) -> Dict[str, str]:
-    """Load the Claude overrides: only a known model with an effort it supports."""
-    authored = raw.get("claude_model_efforts") or {}
-    if not isinstance(authored, dict):
-        return {}
-    return {
-        str(model): str(effort)
-        for model, effort in authored.items()
-        if effort in valid_claude_efforts_for(str(model))
-    }
-
-
-def _load_pi_model_efforts(raw: dict) -> Dict[str, str]:
-    """Load the Pi overrides: only a known model with a ``--thinking`` level."""
-    authored = raw.get("pi_model_efforts") or {}
-    if not isinstance(authored, dict):
-        return {}
-    return {
-        str(model): str(effort)
-        for model, effort in authored.items()
-        if str(model) in VALID_PI_MODELS and effort in VALID_PI_EFFORTS
-    }
-
-
-def _load_codex_effort(raw: dict) -> str:
-    """Do not reinterpret the old global High default as Luna's preference."""
-    if "codex_model" not in raw and "codex_model_efforts" not in raw:
-        return DEFAULT_CODEX_EFFORT
-    return str(raw.get("codex_effort") or DEFAULT_CODEX_EFFORT)
-
-
 #: Fields whose on-disk shape can't be derived from the annotation alone.
 #: Everything else is handled by the generic loop in
 #: :func:`load_webapp_config`, so a new setting is declared once — on
@@ -540,12 +411,6 @@ _CUSTOM_LOADERS: Dict[str, Callable[[dict], Any]] = {
     "secrets": _load_secrets,
     "api_tokens": _load_api_tokens,
     "documents": _load_documents,
-    "pi_model": _load_pi_model,
-    "codex_effort": _load_codex_effort,
-    "codex_model_efforts": _load_codex_model_efforts,
-    "claude_model_efforts": _load_claude_model_efforts,
-    "pi_model_efforts": _load_pi_model_efforts,
-    "hidden_models": load_hidden_models,
     "launch_presets": load_launch_presets,
 }
 
@@ -656,57 +521,6 @@ def _migrate_legacy_keys(raw: Dict[str, Any], source: Path) -> Dict[str, Any]:
                 f"ℹ️  {source.name}: key '{old}' is now '{new}'; read it under "
                 f"the new name (the file is rewritten on the next save)"
             )
-    migrated = _migrate_global_effort(
-        migrated, source, legacy_key="claude_effort", dict_key="claude_model_efforts",
-        default=DEFAULT_CLAUDE_EFFORT, models=VALID_CLAUDE_MODELS,
-        allowed_for=valid_claude_efforts_for,
-    )
-    return _migrate_global_effort(
-        migrated, source, legacy_key="pi_effort", dict_key="pi_model_efforts",
-        default=DEFAULT_PI_EFFORT, models=VALID_PI_MODELS,
-        allowed_for=lambda model: VALID_PI_EFFORTS,
-    )
-
-
-def _migrate_global_effort(
-    raw: Dict[str, Any],
-    source: Path,
-    *,
-    legacy_key: str,
-    dict_key: str,
-    default: str,
-    models: Tuple[str, ...],
-    allowed_for: Callable[[str], Tuple[str, ...]],
-) -> Dict[str, Any]:
-    """Turn a legacy global effort key into per-model overrides.
-
-    One global value was sent to every model of the agent, so ``default`` (the
-    old default, ``high``) cannot be told from "never chose" and is dropped:
-    copying it to every model would keep Opus one level above its own default,
-    which is the bug. Any other value was a deliberate choice and is carried to
-    every model that supports it, so nothing changes silently (the live Pi
-    ``medium`` stays ``medium``). An existing ``dict_key`` wins. In memory only,
-    like the key renames above: the next save writes the new shape and drops the
-    old key.
-    """
-    if legacy_key not in raw:
-        return raw
-    migrated = dict(raw)
-    legacy = migrated.pop(legacy_key)
-    if dict_key in migrated:
-        return migrated
-    carried = {model: legacy for model in models if legacy in allowed_for(model)}
-    if legacy in (None, "", default) or not carried:
-        logger.info(
-            f"ℹ️  {source.name}: legacy {legacy_key} {legacy!r} dropped; every "
-            f"model runs at its own default effort"
-        )
-        return migrated
-    migrated[dict_key] = carried
-    logger.info(
-        f"ℹ️  {source.name}: legacy {legacy_key} {legacy!r} carried to every "
-        f"model as a per-model override"
-    )
     return migrated
 
 
@@ -748,7 +562,7 @@ def load_webapp_config(
         cfg = WebappConfig()
         return _apply_session_host_override(cfg) if apply_env_override else cfg
 
-    raw = migrate_renamed_models(_migrate_legacy_keys(raw, target))
+    raw = _migrate_legacy_keys(raw, target)
 
     # One generic pass over the dataclass's own field list: the dataclass is
     # the single declaration of name, type and default both directions read.
@@ -758,7 +572,6 @@ def load_webapp_config(
             for spec in dataclass_fields(WebappConfig)
         }
     )
-    cfg = with_visible_defaults(cfg, VALID_CODING_MODEL_CHOICES)
     if apply_env_override:
         _apply_session_host_override(cfg)
     _validate(cfg)
@@ -793,7 +606,7 @@ def update_webapp_config(**fields) -> WebappConfig:
     life — only the on-disk file is protected.
     """
     current = load_webapp_config(apply_env_override=False)
-    patched = with_visible_defaults(replace(current, **fields), VALID_CODING_MODEL_CHOICES)
+    patched = replace(current, **fields)
     _validate(patched)
     save_webapp_config(patched)
     return _apply_session_host_override(patched)
@@ -815,16 +628,6 @@ def append_auth_token(url: str, token: Optional[str]) -> str:
 #: same declarative-table shape ``_CUSTOM_LOADERS`` above and
 #: ``middleware._TERMINAL_GUARD_RULES`` already use.
 _ENUM_VALIDATIONS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
-    ("coding_model_choice", VALID_CODING_MODEL_CHOICES),
-    ("claude_model", VALID_CLAUDE_MODELS),
-    ("claude_permission_mode", VALID_CLAUDE_PERMISSION_MODES),
-    ("codex_model", VALID_CODEX_MODELS),
-    ("codex_effort", VALID_CODEX_EFFORTS),
-    ("codex_permission_mode", VALID_CODEX_PERMISSION_MODES),
-    ("grok_effort", VALID_GROK_EFFORTS),
-    ("grok_permission_mode", VALID_GROK_PERMISSION_MODES),
-    ("pi_model", VALID_PI_MODELS),
-    ("pi_trust_mode", VALID_PI_TRUST_MODES),
     ("copilot_context", VALID_COPILOT_CONTEXTS),
     ("copilot_effort", VALID_COPILOT_EFFORTS),
     ("chief_context", VALID_COPILOT_CONTEXTS),
@@ -861,39 +664,6 @@ def _validate(cfg: WebappConfig) -> None:
         value = getattr(cfg, field_name)
         if value not in allowed:
             raise ValueError(f"{field_name} must be one of {allowed}; got {value!r}")
-    if not isinstance(cfg.claude_model_efforts, dict):
-        raise ValueError("claude_model_efforts must be an object")
-    for model, effort in cfg.claude_model_efforts.items():
-        if model not in VALID_CLAUDE_MODELS:
-            raise ValueError(f"unknown Claude model in claude_model_efforts: {model!r}")
-        supported = valid_claude_efforts_for(model)
-        if effort not in supported:
-            raise ValueError(
-                f"Claude effort {effort!r} is not supported by {model}; expected one of {supported}"
-            )
-    if not isinstance(cfg.pi_model_efforts, dict):
-        raise ValueError("pi_model_efforts must be an object")
-    for model, effort in cfg.pi_model_efforts.items():
-        if model not in VALID_PI_MODELS:
-            raise ValueError(f"unknown Pi model in pi_model_efforts: {model!r}")
-        if effort not in VALID_PI_EFFORTS:
-            raise ValueError(
-                f"Pi effort {effort!r} is not supported; expected one of {VALID_PI_EFFORTS}"
-            )
-    if not isinstance(cfg.codex_model_efforts, dict):
-        raise ValueError("codex_model_efforts must be an object")
-    for model, effort in cfg.codex_model_efforts.items():
-        if model not in VALID_CODEX_MODELS:
-            raise ValueError(f"unknown Codex model in codex_model_efforts: {model!r}")
-        supported = CODEX_MODEL_SPECS[model]["efforts"]
-        if effort not in supported:
-            raise ValueError(
-                f"Codex effort {effort!r} is not supported by {model}; expected one of {supported}"
-            )
-    if cfg.codex_effort not in CODEX_MODEL_SPECS[cfg.codex_model]["efforts"]:
-        raise ValueError(
-            f"Codex effort {cfg.codex_effort!r} is not supported by {cfg.codex_model}"
-        )
     if cfg.notify_failure_streak < 0:
         raise ValueError(
             f"notify_failure_streak must be >= 0; got {cfg.notify_failure_streak}"

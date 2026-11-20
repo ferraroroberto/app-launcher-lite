@@ -1,6 +1,6 @@
 """The defaults and value sets each :class:`src.webapp_config.WebappConfig` field
-validates against: network ports, credential keys, display bounds and every
-coding agent's launch choices.
+validates against: network ports, credential keys, display bounds and the
+Copilot launch choices.
 
 :mod:`src.webapp_config` re-exports every name here, so callers keep reading
 them from there.
@@ -9,13 +9,6 @@ them from there.
 from __future__ import annotations
 
 from typing import Tuple
-
-from src.launching.model_catalog import (
-    CLAUDE_MODEL_SPECS,
-    CODEX_MODEL_SPECS,
-    PI_MODEL_SPECS,
-    available_values,
-)
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8465
@@ -108,134 +101,6 @@ DEFAULT_CHIEF_WORKER_CAP_SCOPE = "chief"
 DEFAULT_CHIEF_AUTO_COMPACT_THRESHOLD = 30
 MIN_CHIEF_AUTO_COMPACT_THRESHOLD = 10
 MAX_CHIEF_AUTO_COMPACT_THRESHOLD = 90
-
-# Derived from the catalog like the Codex/Pi/chief sets, so a model
-# refresh makes a tier pickable, savable and launchable in one edit. Haiku
-# remains accepted for existing configs and direct launches, but it is not a
-# catalog tier, so the curated phone selectors never offer it.
-LEGACY_CLAUDE_MODELS = ("haiku",)
-VALID_CLAUDE_MODELS = available_values(CLAUDE_MODEL_SPECS) + LEGACY_CLAUDE_MODELS
-VALID_CLAUDE_EFFORTS = ("off", "low", "medium", "high", "xhigh", "max")
-DEFAULT_CLAUDE_MODEL = "opus"
-# The effort of last resort: what a model with no override and no
-# catalog default resolves to. ``src.launching.flags.effective_effort`` owns the rule.
-DEFAULT_CLAUDE_EFFORT = "high"
-
-
-def valid_claude_efforts_for(model: str) -> Tuple[str, ...]:
-    """Efforts a Claude override may hold for ``model``: its catalog list, plus
-    ``off`` ("send no ``--effort``"). A legacy model (haiku) has no catalog row,
-    so it takes the whole enum."""
-    spec = CLAUDE_MODEL_SPECS.get(model)
-    if spec is None:
-        return VALID_CLAUDE_EFFORTS if model in LEGACY_CLAUDE_MODELS else ()
-    return ("off",) + tuple(spec["efforts"])
-
-# Claude Code permission mode for the launch command. "auto" maps to
-# `--permission-mode auto` (no prompts, but a classifier blocks dangerous
-# actions — the safer autopilot); "skip" maps to the legacy
-# `--dangerously-skip-permissions` (no prompts, no safety net).
-VALID_CLAUDE_PERMISSION_MODES = ("auto", "skip")
-DEFAULT_CLAUDE_PERMISSION_MODE = "auto"
-
-# Codex model/effort pairs. The CLI's per-model effort support is
-# encoded in the shared catalog; Luna intentionally defaults to Extra High.
-VALID_CODEX_MODELS = available_values(CODEX_MODEL_SPECS)
-VALID_CODEX_EFFORTS = ("low", "medium", "high", "xhigh", "max", "ultra")
-DEFAULT_CODEX_MODEL = "gpt-6-luna"
-DEFAULT_CODEX_MODEL_EFFORTS = {
-    value: spec["default_effort"]
-    for value, spec in CODEX_MODEL_SPECS.items()
-    if spec.get("available")
-}
-DEFAULT_CODEX_EFFORT = DEFAULT_CODEX_MODEL_EFFORTS[DEFAULT_CODEX_MODEL]
-VALID_CODING_MODEL_CHOICES = tuple(
-    [f"claude:{model}" for model in available_values(CLAUDE_MODEL_SPECS)]
-    + [f"codex:{model}" for model in VALID_CODEX_MODELS]
-)
-DEFAULT_CODING_MODEL_CHOICE = f"claude:{DEFAULT_CLAUDE_MODEL}"
-
-# Permission mode for the `codex` launch, mirroring Claude's auto/skip.
-# "auto" → `--ask-for-approval never --sandbox workspace-write` (no
-# prompts, but still sandboxed — the safe autopilot); "skip" → the
-# legacy `--dangerously-bypass-approvals-and-sandbox` (no prompts, no
-# sandbox).
-VALID_CODEX_PERMISSION_MODES = ("auto", "skip")
-DEFAULT_CODEX_PERMISSION_MODE = "auto"
-
-# GitHub Copilot deliberately has no model catalogue here.
-# The launcher used to mirror `copilot help config`'s list and send the
-# chosen id as `--model`, but that list says what the *CLI* accepts, not
-# what the *account* is entitled to — Copilot resolves entitlement per
-# launch and silently falls back to "auto" when it refuses, so any id the
-# launcher displayed was an unverifiable claim. `build_copilot_flags`
-# sends no model flag; `/model` and `/config model` own the choice and
-# show live what the plan allows.
-
-# Pi coding-agent launch models. The Coding tab shows a
-# deliberately small, segmented model control — three options spanning two
-# subscription providers (the one cross-provider wrinkle in the launcher):
-#
-#   - Opus / Sonnet → the `claude-agent-sdk` provider, driven by the Claude
-#     **subscription** via the claude-agent-sdk-pi extension (the Claude Agent
-#     SDK / Claude Code path). NOT pi's native `anthropic` provider, which
-#     bills metered API "extra usage" credits (that OAuth is disconnected on
-#     this machine — only the SDK + openai-codex paths remain).
-#   - GPT → pi's `openai-codex` provider, the ChatGPT-plan **subscription**
-#     (its OAuth token lives in pi's auth.json). Verified no-API-credit:
-#     `pi -p --provider openai-codex --model openai-codex/gpt-5.6-sol` completes
-#     cleanly with no key set.
-#
-# Each option maps to (provider, full `provider/id` model arg, display label);
-# `build_pi_flags` switches `--provider`/`--model` on the chosen option.
-# `pi_model` is never empty — an unknown value falls back to DEFAULT_PI_MODEL
-# so the launch can never slip onto a billing path. Refresh the model ids from
-# `pi --list-models claude-agent-sdk` / `pi --list-models openai-codex`.
-VALID_PI_MODELS = available_values(PI_MODEL_SPECS)
-DEFAULT_PI_MODEL = "claude-opus-5"
-
-# Pi reasoning effort, mapped to pi's full `--thinking <level>` ladder.
-VALID_PI_EFFORTS = ("off", "minimal", "low", "medium", "high", "xhigh", "max")
-DEFAULT_PI_EFFORT = "high"
-
-# Pi project-trust mode, mapped to pi's `--approve`/`--no-approve` flag.
-# NOTE: this is NOT a tool-execution permission gate like
-# Claude's/Codex's auto/skip — pi has no tool sandbox or per-action prompt
-# (see pi's security.md). It governs project *trust*: whether pi loads
-# project-local `.pi/` settings/extensions/skills. "trust" → `--approve`
-# (load them, no startup trust prompt — the smooth phone default); "ask" →
-# `--no-approve` (ignore project-local resources for the run). Default
-# "trust" so an interactive phone launch never stalls on a trust prompt.
-VALID_PI_TRUST_MODES = ("trust", "ask")
-DEFAULT_PI_TRUST_MODE = "trust"
-
-# Grok Build launch knobs.
-# Reasoning tier for `--reasoning-effort` — the exact set the CLI accepts,
-# probed off the binary rather than the docs (`grok --reasoning-effort bogus`
-# answers "use one of: high, medium, low", verified on 0.2.114). No model
-# picker: a launch runs the account default, which is the one model the
-# Board catalog names; the CLI's `/model` switches it in-session.
-VALID_GROK_EFFORTS = ("low", "medium", "high")
-DEFAULT_GROK_EFFORT = "high"
-
-# Permission mode for the `grok` launch, mirroring Claude's and Codex's
-# auto/skip rather than exposing grok's own six-value `--permission-mode`
-# space (default|acceptEdits|auto|dontAsk|bypassPermissions|plan). "auto" →
-# `--permission-mode auto` (an interactive session still prompts when the
-# check will not pass a call); "skip" → `--permission-mode bypassPermissions`
-# (no prompt; a deny hook still refuses). An unattended Board launch forces
-# skip. `--always-approve` is deliberately not surfaced — it is a third
-# spelling of bypassPermissions, so it would add surface without adding
-# capability.
-VALID_GROK_PERMISSION_MODES = ("auto", "skip")
-DEFAULT_GROK_PERMISSION_MODE = "auto"
-
-# `--remote-control` is *always* added to the generated claude command
-# line — that's the whole point of the Coding tab, and the UI can't turn
-# it off without breaking the workflow. The permission flag used to live
-# here too; it is now user-selectable via `claude_permission_mode`.
-ALWAYS_ON_CLAUDE_FLAGS = ("--remote-control",)
-
 
 # Copilot CLI launch values. The model ids are a starting list for a fresh
 # install: which ids an account may use depends on its plan, so the list is
