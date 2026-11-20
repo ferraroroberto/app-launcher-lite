@@ -39,7 +39,7 @@ def launch(webapp_client, monkeypatch):
 
 
 class TestPresetLaunch:
-    @pytest.mark.parametrize("effort", ["high", "medium"])
+    @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
     def test_flash_launches_with_its_model_and_effort(self, launch, effort):
         post, spawned = launch
         resp = post(model="copilot:mai-code-2-flash", effort=effort)
@@ -71,7 +71,8 @@ class TestPresetLaunch:
 
     @pytest.mark.parametrize("body, fragment", [
         ({"model": "copilot:not-listed", "effort": "high"}, "not in the Copilot model list"),
-        ({"model": "copilot:mai-code-2-flash", "effort": "xhigh"}, "not offered by copilot:mai-code-2-flash"),
+        ({"model": "copilot:mai-code-2-flash", "effort": "minimal"}, "not offered by copilot:mai-code-2-flash"),
+        ({"model": "copilot:gpt-6-luna", "effort": "minimal"}, "not offered by copilot:gpt-6-luna"),
         ({"effort": "high"}, "no model sent"),
         ({"model": "copilot:mai-code-2-flash", "context": "huge"}, "context 'huge' is not offered"),
         ({"model": "claude:opus"}, "does not belong to copilot"),

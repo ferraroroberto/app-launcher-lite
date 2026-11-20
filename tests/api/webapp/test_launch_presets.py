@@ -67,7 +67,7 @@ FLASH = {"name": "MAI Flash high", "agent": "copilot", "model": "mai-code-2-flas
 
 
 class TestCopilotPresets:
-    @pytest.mark.parametrize("effort", ["low", "medium", "high"])
+    @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
     def test_saves_a_flash_preset_at_each_offered_effort(self, webapp_client, effort):
         client, _, _ = webapp_client
         resp = client.post("/api/config", json={"launch_presets": [dict(FLASH, effort=effort)]})
@@ -79,20 +79,31 @@ class TestCopilotPresets:
 
     def test_refuses_an_effort_the_probed_model_does_not_offer(self, webapp_client):
         client, app, _ = webapp_client
-        resp = client.post("/api/config", json={"launch_presets": [dict(FLASH, effort="xhigh")]})
+        resp = client.post("/api/config", json={"launch_presets": [dict(FLASH, effort="minimal")]})
         assert resp.status_code == 400
         assert "not offered by mai-code-2-flash" in resp.json()["detail"]
-        assert "low, medium, high" in resp.json()["detail"]
+        assert "low, medium, high, xhigh, max" in resp.json()["detail"]
         assert app.state.webapp_config.launch_presets == []
+
+    def test_luna_takes_none_but_not_minimal(self, webapp_client):
+        client, _, _ = webapp_client
+        luna = {"name": "Luna long", "agent": "copilot", "model": "gpt-6-luna",
+                "effort": "none", "context": "long_context"}
+        assert client.post("/api/config", json={"launch_presets": [luna]}).status_code == 200
+        saved = client.get("/api/config").json()["launch_presets"]
+        assert saved[0]["context"] == "long_context" and saved[0]["effort"] == "none"
+        refused = client.post("/api/config", json={"launch_presets": [dict(luna, effort="minimal")]})
+        assert refused.status_code == 400
+        assert "not offered by gpt-6-luna" in refused.json()["detail"]
 
     def test_a_model_without_a_catalog_row_takes_any_cli_effort_and_a_context(self, webapp_client):
         client, _, _ = webapp_client
-        luna = {"name": "Luna long", "agent": "copilot", "model": "gpt-6-luna",
-                "effort": "xhigh", "context": "long_context"}
-        assert client.post("/api/config", json={"launch_presets": [luna]}).status_code == 200
+        other = {"name": "Other long", "agent": "copilot", "model": "some-new-model",
+                 "effort": "minimal", "context": "long_context"}
+        assert client.post("/api/config", json={"launch_presets": [other]}).status_code == 200
         saved = client.get("/api/config").json()["launch_presets"]
-        assert saved[0]["context"] == "long_context" and saved[0]["effort"] == "xhigh"
-        bogus = dict(luna, effort="turbo")
+        assert saved[0]["context"] == "long_context" and saved[0]["effort"] == "minimal"
+        bogus = dict(other, effort="turbo")
         assert client.post("/api/config", json={"launch_presets": [bogus]}).status_code == 400
 
     @pytest.mark.parametrize("bad, fragment", [
@@ -121,13 +132,14 @@ class TestPresetEditorContract:
         copilot = client.get("/api/config").json()["copilot"]
         listed = copilot["models_available"]
         assert set(copilot["preset_efforts"]) == set(listed)
-        assert copilot["preset_efforts"]["mai-code-2-flash"] == ["low", "medium", "high"]
+        assert copilot["preset_efforts"]["mai-code-2-flash"] == ["low", "medium", "high", "xhigh", "max"]
         assert "xhigh" in copilot["preset_efforts"]["gpt-6-luna"]
+        assert "minimal" not in copilot["preset_efforts"]["gpt-6-luna"]
         assert copilot["preset_contexts"] == ["default", "long_context"]
         assert app.state.webapp_config.copilot_models == listed
 
     @pytest.mark.parametrize("bad, field", [
-        (dict(FLASH, effort="xhigh"), "effort"),
+        (dict(FLASH, effort="minimal"), "effort"),
         (dict(FLASH, context="huge"), "context"),
         (dict(FLASH, model="default"), "model"),
         (dict(FLASH, name=" "), "name"),
