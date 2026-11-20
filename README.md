@@ -21,17 +21,17 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 **Unknown (not yet verified live):**
 
 - GitLab, in part: group issue reads, issue create and note, and the two-remote mirror are verified live on gitlab.com; the merge-request rows, pipelines, labels, merge and a self-hosted host are `unknown`. See [docs/gitlab.md](docs/gitlab.md).
-- On Copilot CLI (last probed on 1.0.105; the installed CLI is 1.0.114): composer keys for the chief's doorbell, a queued `/compact` running at turn end, `/remote on` typed from the launcher, a background shell finishing waking the agent, and `ask_user` blocking under autopilot.
+- On Copilot CLI (last probed on 1.0.105; the installed CLI is 1.0.114): a queued `/compact` running at turn end, `/remote on` typed from the launcher, a background shell finishing waking the agent, and `ask_user` blocking under autopilot.
 - Android device behaviour (install, safe areas, gesture bar, keyboard) — see [docs/android.md](docs/android.md).
 
-**The chief works** once [fleet-config-lite](https://github.com/ferraroroberto/fleet-config-lite) is installed beside this checkout: its chief helpers (`chief_ops.py`, the chief skill, the plan, journal and mailbox files, the guard hooks) are the requirement. The chief is one long-lived Copilot session that reads the Board, writes its plan and journal, dispatches lanes, opens plain sessions, stops them and raises questions for the owner; the Board shows its card, plan and answer sheet. With the doorbell off, only the owner's own messages wake it. A lane builds in a worktree and needs `git` to reach GitLab without a prompt, which the installer does not check (it checks `glab` only), so run one lane end to end on a new computer before relying on it. See [docs/board.md](docs/board.md#the-chief).
+**The chief works** once [fleet-config-lite](https://github.com/ferraroroberto/fleet-config-lite) is installed beside this checkout: its chief helpers (`chief_ops.py`, the chief skill, the plan, journal and mailbox files, the guard hooks) are the requirement. The chief is one long-lived Copilot session that reads the Board, writes its plan and journal, dispatches lanes, opens plain sessions, stops them and raises questions for the owner; the Board shows its card, plan and answer sheet. Turn on Settings > Chief > Doorbell to have a lane's news wake an idle chief (verified on Copilot CLI 1.0.114); with it off, only the owner's own messages wake it. A lane builds in a worktree and needs `git` to reach GitLab without a prompt, which the installer does not check (it checks `glab` only), so run one lane end to end on a new computer before relying on it. See [docs/board.md](docs/board.md#the-chief).
 
 **Port steps done** (in fleet-config-lite): the probe script; plan and journal; the mailbox; `chief_ops` and the chief settings; the chief skill; the guard hooks; compaction verbs; the merge verb (`glab mr merge --auto-merge`, unit-tested and `unknown` live); worktrees, claims and sweep; drain and owner checks.
 
 **Port steps still open** (each independently shippable):
 
 1. Copilot transcript flavor and context percentage.
-2. The doorbell and a queued `/compact` on Copilot's composer (the keys are `unknown`).
+2. A queued `/compact` on Copilot's composer (`unknown`).
 3. Jobs feeding the chief.
 4. `ui_proof`, the remote-control toggle and the Chat view.
 5. A fresh-machine install checklist.

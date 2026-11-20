@@ -86,11 +86,12 @@ class Agent:
     ``composer_tracked`` records whether the agent's composer was probed for
     the keys :mod:`src.session_host_composer` reads (typed text,
     Backspace, Ctrl-U, Ctrl-C and Enter, idle and mid-turn, on Claude Code,
-    Codex and Pi on 2026-10-17). Only those sessions report
+    Codex and Pi on 2026-10-17; the same keys on Copilot CLI 1.0.114 on
+    2026-11-20). Only those sessions report
     ``composer_dirty`` as ``True``/``False``; ``False`` here means *not
     probed*, and the session reports ``None``. ``backslash_newline`` is the
     one difference the probe found: a backslash right before Enter inserts a
-    newline (Claude Code, Pi) instead of being submitted (Codex).
+    newline (Claude Code, Pi, Copilot) instead of being submitted (Codex).
 
     ``queue_edit`` records whether a message the agent queued mid-turn was
     shown to come back out of its queue from the keyboard. A throwaway probe
@@ -128,6 +129,7 @@ AGENTS: Dict[str, Agent] = {
         id="copilot", label="GitHub Copilot CLI", command="copilot",
         quit_command="/exit", fullscreen=True, resume_token="--resume",
         native_name_flag="--name", console_input=True,
+        composer_tracked=True, backslash_newline=True,
     ),
 }
 
