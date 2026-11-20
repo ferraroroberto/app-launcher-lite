@@ -77,6 +77,7 @@ import { doneEarlierLoaded, renderDoneEarlier } from './board/done-earlier.js';
 import { doneActions, proofGapChips } from './board/proof-chip.js';
 import { folderTrustControls } from './board/folder-trust.js';
 import { isDismissible, isFailing } from './board/attention-state.js';
+import { renderCiCard } from './board/ci-card.js';
 import { ClaimState, claimState } from './board/claim-state.js';
 import { pollJournal, wireJournal } from './board/chief-journal.js';
 import { syncFoldAll, wireFoldAll } from './board/fold-all.js';
@@ -490,6 +491,7 @@ function renderCard(colKey, card, openItem) {
   if (colKey === 'done') return renderDoneCard(card);
   if (card.kind === 'pr') return renderPrCard(card);
   if (card.kind === 'job') return renderJobCard(card);
+  if (card.kind === 'ci') return renderCiCard(card);
   return renderSessionCard(card, openItem);
 }
 

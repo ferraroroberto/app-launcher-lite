@@ -1321,8 +1321,10 @@ surfaces:
       - the lane under Your turn, closed by default
     holds:
       - merge requests and pipeline jobs, one row each
+      - a project whose default-branch pipeline is red, one row each with a CI failed chip that opens the failed pipeline on GitLab
     states:
       - empty line
+      - a project whose pipelines could not be read, one row with a CI unknown chip
 
   - id: board.done
     area: board

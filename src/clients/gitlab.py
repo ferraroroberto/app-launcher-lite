@@ -2,8 +2,9 @@
 
 The GitLab counterpart of the full app's ``src/clients/github.py``, with the
 same public names so the Board's callers read the same either way: open
-issues, open merge requests and today's closed issues across every project
-under the configured group, behind a module-level cache. **``glab`` is a
+issues, open merge requests, today's closed issues and each project's
+default-branch pipeline state across every project under the configured
+group, behind a module-level cache. **``glab`` is a
 subprocess per call and is never invoked on a poll**: :func:`refresh` runs the
 reads only when the user asks (or once on a stale Board activation), while
 :func:`snapshot` is a pure memory read the 5 s board poll can hit for free.
@@ -27,6 +28,7 @@ import os
 import re
 import subprocess
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta, timezone, tzinfo
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import quote
@@ -355,12 +357,126 @@ def comment_issue(group: str, repo: str, number: int, body: str, host: str = "")
           {"body": body}, host)
 
 
+# ------------------------------------------------------------------ pipelines
+
+CI_RED = "red"
+CI_GREEN = "green"
+CI_UNKNOWN = "unknown"
+#: The read worked and there is nothing to say: no pipeline, or none finished yet.
+CI_NONE = "none"
+
+# GitLab's pipeline ``status``. A pipeline that has not finished, or that was
+# cancelled or skipped, says nothing about the branch, so the read looks past it.
+_PIPELINE_RED = frozenset({"failed"})
+_PIPELINE_GREEN = frozenset({"success"})
+# Enough history to find the latest finished pipeline and the start of a red streak.
+_PIPELINES_PER_PAGE = 20
+# A few ``glab`` calls in flight keep a sweep of a few dozen projects short.
+_CI_WORKERS = 4
+
+
+def classify_pipelines(rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """One project's CI state from its default-branch pipelines, newest first.
+
+    ``red`` when the latest finished pipeline failed (``red_since`` is the
+    creation time of the oldest failure in its unbroken streak), ``green``
+    when it did not, ``none`` when no pipeline has finished.
+    """
+    finished = [r for r in rows if r.get("status") in _PIPELINE_RED | _PIPELINE_GREEN]
+    if not finished:
+        return {"state": CI_NONE, "reason": ""}
+    latest = finished[0]
+    if latest.get("status") not in _PIPELINE_RED:
+        return {"state": CI_GREEN, "reason": ""}
+    streak_start = latest
+    for row in finished[1:]:
+        if row.get("status") not in _PIPELINE_RED:
+            break
+        streak_start = row
+    return {
+        "state": CI_RED, "reason": "", "pipeline_id": latest.get("id"),
+        "pipeline_url": latest.get("web_url"), "sha": latest.get("sha"),
+        "red_since": streak_start.get("created_at"),
+    }
+
+
+def _project_ci(project: Dict[str, Any], host: str) -> Dict[str, Any]:
+    """One project's CI state; every failure is an ``unknown`` with its reason.
+
+    The default branch is named from the project row, never guessed: a ref
+    GitLab does not know answers ``[]``, which would read as "no pipelines".
+    """
+    branch = str(project.get("default_branch") or "")
+    base = {"repo": str(project.get("path") or project.get("name") or "?"), "branch": branch}
+    if not branch:
+        return {**base, "state": CI_UNKNOWN, "reason": "default branch not named"}
+    try:
+        rows = _api_json(
+            f"projects/{project['id']}/pipelines?ref={_enc(branch)}"
+            f"&order_by=id&sort=desc&per_page={_PIPELINES_PER_PAGE}",
+            host,
+        )
+    except GlabError as exc:
+        return {**base, "state": CI_UNKNOWN, "reason": str(exc)}
+    if not isinstance(rows, list):
+        return {**base, "state": CI_UNKNOWN, "reason": "pipelines read printed no list"}
+    return {**base, **classify_pipelines([r for r in rows if isinstance(r, dict)])}
+
+
+def read_pipelines(group: str, host: str = "") -> Dict[str, Any]:
+    """Every live project's default-branch CI state, keyed by full project path.
+
+    One project-list call plus one bounded pipelines call per project. A
+    project whose pipelines cannot be read is ``unknown``, never green; a
+    project-list failure raises :class:`GlabError`. A project with CI switched
+    off is left out: it has no pipelines to read.
+    """
+    rows = _api_list(
+        f"groups/{_enc(group)}/projects?include_subgroups=true&archived=false&per_page={_PAGE}",
+        host,
+    )
+    projects = [
+        r for r in rows
+        if isinstance(r.get("id"), int) and r.get("builds_access_level") != "disabled"
+    ]
+    with ThreadPoolExecutor(max_workers=_CI_WORKERS, thread_name_prefix="glab-ci") as pool:
+        states = list(pool.map(lambda r: _project_ci(r, host), projects))
+    keyed = {
+        str(p.get("path_with_namespace") or s["repo"]): s for p, s in zip(projects, states, strict=True)
+    }
+    return {"projects": keyed, "truncated": len(rows) >= _PAGE}
+
+
+def _empty_ci() -> Dict[str, Any]:
+    return {"fetched_at": None, "projects": {}, "truncated": False, "error": None}
+
+
+def _refresh_ci(group: str, host: str, fetched_at: str, previous: Dict[str, Any]) -> Dict[str, Any]:
+    """The new CI snapshot; a failed read never fails the refresh around it.
+
+    When the project list cannot be read, every project last known is turned
+    ``unknown``: an old red or green is not carried forward as current.
+    """
+    try:
+        return {**read_pipelines(group, host), "fetched_at": fetched_at, "error": None}
+    except GlabError as exc:
+        reason, level = str(exc), logging.WARNING
+    except Exception as exc:
+        reason, level = f"{type(exc).__name__}: {exc}", logging.ERROR
+    logger.log(level, "⚠️ glab pipeline read failed: %s", reason)
+    projects = {
+        key: {**state, "state": CI_UNKNOWN, "reason": reason}
+        for key, state in (previous.get("projects") or {}).items()
+    }
+    return {**previous, "projects": projects, "error": reason}
+
+
 # ------------------------------------------------------------------ cache
 
 _lock = threading.Lock()
 _cache: Dict[str, Any] = {
     "fetched_at": None, "issues": [], "records": [], "truncated": False,
-    "prs": [], "done": [], "error": None,
+    "prs": [], "done": [], "ci": _empty_ci(), "error": None,
 }
 
 # Matches the owner-check sweep's own cooldown.
@@ -402,6 +518,7 @@ def refresh(group: str, host: str = "") -> Dict[str, Any]:
         records = [i for i in rows if not _is_actionable(i["labels"])]
         prs = search_open_prs(group, host)
         done = search_done_today(group, host)
+        ci = _refresh_ci(group, host, fetched_at, snapshot()["ci"])
     except GlabError as exc:
         logger.warning("⚠️ glab refresh failed: %s", exc)
         return _record_error(str(exc))
@@ -411,11 +528,12 @@ def refresh(group: str, host: str = "") -> Dict[str, Any]:
     with _lock:
         _cache.update(
             fetched_at=fetched_at, issues=issues, records=records,
-            truncated=len(rows) >= _PAGE, prs=prs, done=done, error=None,
+            truncated=len(rows) >= _PAGE, prs=prs, done=done, ci=ci, error=None,
         )
         logger.info(
-            "✅ glab refresh: %d open issues (%d records), %d MRs, %d done today",
-            len(rows), len(records), len(prs), len(done),
+            "✅ glab refresh: %d open issues (%d records), %d MRs, %d done today, "
+            "%d projects with a pipeline read",
+            len(rows), len(records), len(prs), len(done), len(ci["projects"]),
         )
         return dict(_cache)
 
@@ -431,5 +549,6 @@ def reset_cache() -> None:
     """Test helper: restore the pristine empty cache."""
     with _lock:
         _cache.update(
-            fetched_at=None, issues=[], records=[], truncated=False, prs=[], done=[], error=None,
+            fetched_at=None, issues=[], records=[], truncated=False, prs=[], done=[],
+            ci=_empty_ci(), error=None,
         )
