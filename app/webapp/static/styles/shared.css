@@ -32,6 +32,31 @@
   color: var(--muted);
   line-height: 1.45;
 }
+/* Launch presets (launch-presets-settings.js): flat hairline rows, the name
+   an editable field over a muted model line, and a 44px kebab at the
+   trailing edge; the form under the list adds or edits one. */
+.launch-presets > li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.launch-presets > li:first-child { border-top: 1px solid var(--line); }
+.launch-preset-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.launch-preset-meta { font-size: var(--font-body-sm); color: var(--muted); overflow-wrap: anywhere; }
+.launch-preset-error { margin: 0; }
+.launch-presets .icon-button { --icon-btn-box: var(--hit-min); flex: none; }
+.launch-preset-form-title { margin: 14px 0 6px; font-size: var(--font-body); }
+.launch-preset-add { margin: 10px 0; gap: 8px; }
+.launch-preset-add .button-tint { flex: 1; }
+.select-native[aria-invalid="true"] { border-color: var(--danger); }
 /* Chat file folders (settings-sheets.js): flat full-bleed rows on a
    hairline (design.md list-row), the path in mono, a 44px kebab at the
    trailing edge; the add field and its button sit under the list. */

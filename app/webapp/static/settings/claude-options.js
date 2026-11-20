@@ -15,6 +15,7 @@ import { els, state } from '../state.js';
 import { apiFailToast, jsonApi, toast } from '../api.js';
 import { setTeamOsModelOptions } from '../team-os.js';
 import { syncLaunchPresets } from '../shared/launch-presets.js';
+import { renderLaunchPresetsEditor, wireLaunchPresets } from './launch-presets-settings.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
 import { renderSettingsValues } from './settings-sheets.js';
 import { renderLidKeepAwake } from './lid-keep-awake.js';
@@ -170,6 +171,7 @@ export function renderClaudeOptions() {
   if (els.copilotFlagsPreview) {
     els.copilotFlagsPreview.textContent = 'copilot' + (c.computed_flags ? ' ' + c.computed_flags : '');
   }
+  renderLaunchPresetsEditor();
 }
 
 async function postConfigPatch(patch) {
@@ -192,6 +194,23 @@ export async function patchConfig(patch) {
     apiFailToast('Save failed', exc);
     return false;
   }
+}
+
+// Saves the launch preset list. Resolves null once saved and the config is
+// re-read, or { message, field } for a refusal the editor shows beside the
+// field it names (the server's 400 carries `field`); any other failure toasts.
+async function savePresets(presets) {
+  try {
+    await postConfigPatch({ launch_presets: presets });
+  } catch (exc) {
+    if (exc && exc.status === 400) {
+      return { message: exc.message, field: (exc.body && exc.body.field) || '' };
+    }
+    apiFailToast('Save failed', exc);
+    return { message: '', field: '' };
+  }
+  await fetchConfig();
+  return null;
 }
 
 // role="switch" buttons: click reads the current aria-checked, flips it
@@ -257,4 +276,5 @@ export function wireClaudeOptions() {
   wireConfigSwitch(els.copilotRemote, 'copilot_remote_session', { label: 'Remote session' });
   wireModelList();
   wireAddDefaultModels();
+  wireLaunchPresets(savePresets);
 }

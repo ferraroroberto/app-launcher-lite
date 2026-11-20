@@ -55,6 +55,7 @@ class TestCopilotBlock:
             "skip_permissions", "models_available", "models_missing_defaults", "model", "autopilot",
             "remote_session", "remote_cli_state", "context",
             "contexts_available", "effort", "efforts_available", "computed_flags",
+            "preset_efforts", "preset_contexts",
         }
         assert isinstance(cp["skip_permissions"], bool)
         assert cp["model"] in cp["models_available"]

@@ -48,6 +48,21 @@ MAX_PRESETS = 12
 MAX_NAME_LENGTH = 40
 
 
+class PresetError(ValueError):
+    """A refused preset write, naming the field and row the fault belongs to.
+
+    ``field`` is ``name``, ``model``, ``effort`` or ``context`` for a fault in
+    one row and ``""`` for one about the list as a whole; ``index`` is the
+    row's place in the written list, ``-1`` when no single row is at fault.
+    Settings shows the message next to that field.
+    """
+
+    def __init__(self, message: str, field: str = "", index: int = -1) -> None:
+        super().__init__(message)
+        self.field = field
+        self.index = index
+
+
 def efforts_for(agent: str, model: str) -> Tuple[str, ...]:
     """The efforts ``agent``'s ``model`` offers, ``()`` for an unknown pair.
 
@@ -80,66 +95,75 @@ def load_launch_presets(raw: Dict[str, Any]) -> List[Dict[str, str]]:
 
 
 def checked_launch_presets(value: Any) -> List[Dict[str, str]]:
-    """``value`` as a clean preset list, or a ``ValueError`` naming the fault.
+    """``value`` as a clean preset list, or a ``PresetError`` naming the fault.
 
     A row without an ``id`` gets one, so the client adds a preset by sending
     its name, agent, model and effort alone.
     """
     if not isinstance(value, list):
-        raise ValueError("launch_presets must be a list")
+        raise PresetError("launch_presets must be a list")
     if len(value) > MAX_PRESETS:
-        raise ValueError(f"at most {MAX_PRESETS} launch presets")
+        raise PresetError(f"at most {MAX_PRESETS} launch presets")
     rows: List[Dict[str, str]] = []
-    for item in value:
+    for index, item in enumerate(value):
         if not isinstance(item, dict):
-            raise ValueError("each launch preset must be an object")
-        rows.append(_checked_preset(item))
+            raise PresetError("each launch preset must be an object")
+        rows.append(_checked_preset(item, index))
     _require_unique(rows, "id", "launch preset ids must be unique")
-    names = [row["name"].casefold() for row in rows]
-    if len(set(names)) != len(names):
-        raise ValueError("launch preset names must be unique")
+    seen: set = set()
+    for index, row in enumerate(rows):
+        key = row["name"].casefold()
+        if key in seen:
+            raise PresetError(f"{row['name']}: that name is already used", "name", index)
+        seen.add(key)
     return rows
 
 
-def _checked_model(name: str, agent: str, model: str) -> None:
+def _checked_model(name: str, agent: str, model: str, index: int) -> None:
     if agent in OPEN_MODEL_AGENTS:
         if not model or model == "default" or any(ch.isspace() or ch == ":" for ch in model):
-            raise ValueError(f"{name}: {agent} needs one model id, not {model!r}")
+            raise PresetError(f"{name}: {agent} needs one model id, not {model!r}", "model", index)
         return
     if model not in available_values(PRESET_AGENTS[agent]):
-        raise ValueError(f"{name}: unsupported {agent} model {model!r}")
+        raise PresetError(f"{name}: unsupported {agent} model {model!r}", "model", index)
 
 
-def _checked_context(name: str, agent: str, context: str) -> str:
+def _checked_context(name: str, agent: str, context: str, index: int) -> str:
     if not context:
         return ""
     if agent not in OPEN_MODEL_AGENTS:
-        raise ValueError(f"{name}: {agent} takes no context tier")
+        raise PresetError(f"{name}: {agent} takes no context tier", "context", index)
     if context not in PRESET_CONTEXTS:
-        raise ValueError(
-            f"{name}: context {context!r} is not offered; allowed: {', '.join(PRESET_CONTEXTS)}"
+        raise PresetError(
+            f"{name}: context {context!r} is not offered; allowed: {', '.join(PRESET_CONTEXTS)}",
+            "context",
+            index,
         )
     return context
 
 
-def _checked_preset(item: Dict[str, Any]) -> Dict[str, str]:
+def _checked_preset(item: Dict[str, Any], index: int) -> Dict[str, str]:
     name = " ".join(str(item.get("name") or "").split())
     if not name:
-        raise ValueError("a launch preset needs a name")
+        raise PresetError("a launch preset needs a name", "name", index)
     if len(name) > MAX_NAME_LENGTH:
-        raise ValueError(f"a launch preset name is at most {MAX_NAME_LENGTH} characters")
+        raise PresetError(
+            f"a launch preset name is at most {MAX_NAME_LENGTH} characters", "name", index
+        )
     agent = str(item.get("agent") or "")
     if agent not in PRESET_AGENTS:
-        raise ValueError(f"{name}: {agent or 'no agent'!r} takes no per-launch model")
+        raise PresetError(f"{name}: {agent or 'no agent'!r} takes no per-launch model", "model", index)
     model = str(item.get("model") or "")
-    _checked_model(name, agent, model)
+    _checked_model(name, agent, model, index)
     effort = str(item.get("effort") or "")
     offered = efforts_for(agent, model)
     if effort not in offered:
-        raise ValueError(
-            f"{name}: effort {effort!r} is not offered by {model}; allowed: {', '.join(offered)}"
+        raise PresetError(
+            f"{name}: effort {effort!r} is not offered by {model}; allowed: {', '.join(offered)}",
+            "effort",
+            index,
         )
-    context = _checked_context(name, agent, str(item.get("context") or ""))
+    context = _checked_context(name, agent, str(item.get("context") or ""), index)
     row = {
         "id": str(item.get("id") or "") or uuid.uuid4().hex[:8],
         "name": name,
@@ -155,4 +179,4 @@ def _checked_preset(item: Dict[str, Any]) -> Dict[str, str]:
 def _require_unique(rows: List[Dict[str, str]], key: str, message: str) -> None:
     values = [row[key] for row in rows]
     if len(set(values)) != len(values):
-        raise ValueError(message)
+        raise PresetError(message)
