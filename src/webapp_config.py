@@ -215,6 +215,9 @@ class WebappConfig:
     copilot_models: list = field(default_factory=lambda: list(DEFAULT_COPILOT_MODELS))
     copilot_model: str = DEFAULT_COPILOT_MODEL
     copilot_autopilot: bool = True
+    # Remote access for every Copilot session Lite launches
+    # (`src.launching.copilot_remote`): on by default, off starts sessions unshared.
+    copilot_remote_session: bool = True
     copilot_context: str = DEFAULT_COPILOT_CONTEXT
     copilot_effort: str = DEFAULT_COPILOT_EFFORT
     # Grok Build launch settings. `grok_effort` is the

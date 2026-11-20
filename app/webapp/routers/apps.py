@@ -21,6 +21,7 @@ from app.webapp.routers._helpers import (
     audit_off_loop,
     audit_session_start_and_maybe_mirror,
     client_ip,
+    ensure_copilot_remote,
     maybe_json,
     requested_launch_context,
     requested_launch_effort,
@@ -347,6 +348,7 @@ async def _launch_coding(entry: AppEntry, cfg: WebappConfig, request: Request) -
     flags = _coding_flags(cfg, agent, resume, model_value, effort, context)
 
     if mode == "remote":
+        await ensure_copilot_remote(cfg, agent)
         session = await spawn_session_or_400(
             spawn_claude_session,
             Path(entry.project_dir),

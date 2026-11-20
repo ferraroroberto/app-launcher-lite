@@ -36,7 +36,7 @@
   "_comment_gitlab": "The Board's forge: gitlab_group is the GitLab group or user namespace (subgroups included) whose projects the Board's glab reads span; empty keeps the panel dormant with a Settings hint. gitlab_host targets a self-hosted instance through glab's GITLAB_HOST; empty means glab's default (gitlab.com). glab must be installed and signed in (glab auth login).",
   "gitlab_group": "",
   "gitlab_host": "",
-  "_comment_copilot_flags": "GitHub Copilot CLI (copilot) launch settings, also set from Settings. copilot_models is the list of model ids the pickers offer: which ids an account may use depends on its plan, so edit it per install (Copilot falls back to its own pick and prints one line when an id is not available). copilot_model is the saved --model (empty or 'default' lets Copilot pick). copilot_autopilot adds --autopilot, copilot_context --context (empty omits it), copilot_effort --effort (sent only with an explicit model), copilot_skip_permissions --allow-all. chief_model is the chief's Copilot model; chief_context and chief_effort are its --context and --effort (empty follows copilot_context and copilot_effort).",
+  "_comment_copilot_flags": "GitHub Copilot CLI (copilot) launch settings, also set from Settings. copilot_models is the list of model ids the pickers offer: which ids an account may use depends on its plan, so edit it per install (Copilot falls back to its own pick and prints one line when an id is not available). copilot_model is the saved --model (empty or 'default' lets Copilot pick). copilot_autopilot adds --autopilot, copilot_context --context (empty omits it), copilot_effort --effort (sent only with an explicit model), copilot_skip_permissions --allow-all. copilot_remote_session (default true) turns on remote access for every Copilot session Lite launches, through the CLI user settings, not a flag. chief_model is the chief's Copilot model; chief_context and chief_effort are its --context and --effort (empty follows copilot_context and copilot_effort).",
   "copilot_skip_permissions": false,
   "copilot_models": [
     "gpt-6-luna",
@@ -47,6 +47,7 @@
   ],
   "copilot_model": "gpt-6-luna",
   "copilot_autopilot": true,
+  "copilot_remote_session": true,
   "copilot_context": "long_context",
   "copilot_effort": "xhigh",
   "chief_model": "gpt-6-luna",

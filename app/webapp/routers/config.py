@@ -21,6 +21,7 @@ from src import boot_autostart, password
 from src.agents import AGENTS, DEFAULT_AGENT
 from src.chief.launch_settings import chief_model_problem
 from src.desktop import lid_keep_awake
+from src.launching import copilot_remote
 from src.launching.flags import build_copilot_flags, missing_default_copilot_models
 from src.launching.presets import checked_launch_presets
 from src.middleware import terminal_reachability
@@ -116,6 +117,8 @@ def copilot_payload(cfg: WebappConfig) -> Dict[str, Any]:
         "models_missing_defaults": missing_default_copilot_models(cfg),
         "model": cfg.copilot_model,
         "autopilot": cfg.copilot_autopilot,
+        "remote_session": cfg.copilot_remote_session,
+        "remote_cli_state": copilot_remote.read_state(),
         "context": cfg.copilot_context,
         "contexts_available": list(VALID_COPILOT_CONTEXTS),
         "effort": cfg.copilot_effort,
@@ -177,6 +180,7 @@ _SWITCH_KEYS = (
     "chief_weekly_proposals",
     "copilot_skip_permissions",
     "copilot_autopilot",
+    "copilot_remote_session",
 )
 
 
@@ -207,6 +211,7 @@ _PATCH_KEYS = frozenset({
     "copilot_models",
     "copilot_model",
     "copilot_autopilot",
+    "copilot_remote_session",
     "copilot_context",
     "copilot_effort",
 })

@@ -122,7 +122,7 @@ A detached session of the PC reads exactly the same from the phone, because Chat
 
 ## Rename
 
-The ⋮ menu's pencil opens **Rename**. A Board session whose issue title is known before launch is named at spawn through Copilot's `--name` flag, which syncs its native resume picker. Whether a Copilot remote-control link can be captured and copied (`/remote on` typed from the launcher) is **unknown** until probed.
+The ⋮ menu's pencil opens **Rename**. A Board session whose issue title is known before launch is named at spawn through Copilot's `--name` flag, which syncs its native resume picker. Remote access is not a launch flag: with Settings > GitHub Copilot > **Remote session** on (the default) Lite sets the two Copilot user settings that share each new session before it starts ([docs/config.md](config.md)), and `/remote show` typed in a session reports it as shared through a Mission Control environment. Probed on CLI 1.0.114: `/remote on` typed in a session is refused with *Incoming account connections are disabled* while those settings are off, `/remote show` prints an environment id and not a link, and the CLI records no per-session remote state a card could read (`session.start` carries `remoteSteerable:false` on a shared session). A card therefore shows no remote chip; Settings shows whether Copilot's own setting is on.
 
 ## Reader and its limits
 
@@ -134,4 +134,4 @@ An opened card whose call is unmarked says the outcome was never recorded. A ses
 
 ## Not ported yet
 
-These are **unknown** or planned, not working: a queued `/compact` running at turn end, `/remote on` from the launcher, plan approval and question cards driving Copilot's `ask_user`, the Chat view's context percentage, and `ui_proof`. The `unknown` items were last probed on 1.0.105; the installed CLI is 1.0.114, on which the doorbell's composer keys are verified ([docs/board.md](board.md#the-chief)). Verified on CLI 1.0.105: interactive and `-p` sessions fire the four hooks (`sessionStart`, `userPromptSubmitted`, `agentStop`, `sessionEnd`), and `events.jsonl`'s `session.usage_record` carries `inputTokens` and `maxPromptTokens`.
+These are **unknown** or planned, not working: a queued `/compact` running at turn end, a remote-control link captured and copied from the launcher, plan approval and question cards driving Copilot's `ask_user`, the Chat view's context percentage, and `ui_proof`. The `unknown` items were last probed on 1.0.105; the installed CLI is 1.0.114, on which the doorbell's composer keys are verified ([docs/board.md](board.md#the-chief)). Verified on CLI 1.0.105: interactive and `-p` sessions fire the four hooks (`sessionStart`, `userPromptSubmitted`, `agentStop`, `sessionEnd`), and `events.jsonl`'s `session.usage_record` carries `inputTokens` and `maxPromptTokens`.

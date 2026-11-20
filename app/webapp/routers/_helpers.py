@@ -19,6 +19,7 @@ from src import jobs as jobs_mod
 from src.auth.webauthn_gate import WebAuthnGate
 from src.clients.session import SessionHostError
 from src.jobs.config import get_by_id, load_jobs
+from src.launching import copilot_remote
 from src.launching.presets import OPEN_MODEL_AGENTS, PRESET_CONTEXTS, efforts_for
 from src.webapp_config import (
     WebappConfig,
@@ -447,6 +448,18 @@ async def spawn_session_or_400(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+async def ensure_copilot_remote(cfg: WebappConfig, agent: str) -> None:
+    """Make Copilot's remote-session settings match Settings before a Copilot launch.
+
+    Every Copilot launch route calls this ahead of its spawn
+    (:func:`spawn_launcher_session` does it itself); any other agent is a
+    no-op. It runs off the event loop and never fails the launch: see
+    :func:`src.launching.copilot_remote.apply`.
+    """
+    if agent == "copilot":
+        await asyncio.to_thread(copilot_remote.apply, cfg.copilot_remote_session)
+
+
 async def spawn_launcher_session(
     spawn_fn: Callable[..., Dict[str, Any]],
     cfg: WebappConfig,
@@ -492,6 +505,7 @@ async def spawn_launcher_session(
     extra: Dict[str, Any] = {"history_lines": cfg.terminal_history_lines}
     if label:
         extra["label"] = label
+    await ensure_copilot_remote(cfg, agent)
     session = await spawn_session_or_400(
         spawn_fn,
         project_dir,
