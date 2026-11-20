@@ -44,8 +44,8 @@ def test_the_switch_defaults_on_and_round_trips(webapp_client):
 
 
 def test_team_os_launch_applies_the_switch(webapp_client, tmp_path, monkeypatch, copilot_remote_calls):
-    from src import middleware
     from app.webapp.routers import team_os as team_os_router
+    from src import middleware
 
     monkeypatch.setattr(
         middleware.trust, "LOOPBACK_HOSTS", frozenset({"testclient", "127.0.0.1", "::1", "localhost"}),
