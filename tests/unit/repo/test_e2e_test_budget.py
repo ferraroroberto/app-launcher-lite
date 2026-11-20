@@ -21,6 +21,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from src.subprocess_flags import NO_WINDOW
 
 _REPO = Path(__file__).resolve().parents[3]
@@ -58,6 +60,9 @@ def _collected_nodes() -> int:
     return int(match.group(1))
 
 
+# The budget is the count the Windows gate collects; the Mac nightly collects a
+# different set (platform skips, WebKit deselection), so it does not own this number.
+@pytest.mark.windows_only
 def test_e2e_node_count_equals_the_declared_budget() -> None:
     budget, nodes = _declared_budget(), _collected_nodes()
     assert nodes <= budget, (

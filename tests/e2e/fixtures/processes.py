@@ -82,16 +82,23 @@ def _owns_listener(proc: subprocess.Popen, port: int) -> bool:
     port — another worker's server that won the race for it — does not.
     """
     try:
-        family = {proc.pid} | {
-            child.pid for child in psutil.Process(proc.pid).children(recursive=True)
-        }
+        root = psutil.Process(proc.pid)
+        family = [root, *root.children(recursive=True)]
     except psutil.Error:
         return False
-    return any(
-        conn.status == psutil.CONN_LISTEN and conn.laddr and conn.laddr.port == port
-        and conn.pid in family
-        for conn in psutil.net_connections(kind="tcp")
-    )
+    # Per-process, never the system-wide table: macOS needs root for
+    # ``psutil.net_connections()`` but lets a user read its own children's sockets.
+    for member in family:
+        try:
+            conns = member.net_connections(kind="tcp")
+        except psutil.Error:
+            continue
+        if any(
+            conn.status == psutil.CONN_LISTEN and conn.laddr and conn.laddr.port == port
+            for conn in conns
+        ):
+            return True
+    return False
 
 
 def boot_on_free_port(
