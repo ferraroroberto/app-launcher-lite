@@ -37,6 +37,13 @@ Codex 0.164.0):
 * Codex never asks. ``/model <id>`` prints ``Model changed to gpt-6-luna medium for this
   session only`` and retitles the window ``<folder> | GPT-6-Luna``, the live
   title :mod:`src.session_model` already reads the model from.
+* Copilot never asks either (CLI 1.0.114). ``/model <id>`` prints ``Model
+  changed from GitHub Copilot • GPT-6 Luna (medium) to GitHub Copilot • MAI
+  Code 2 Flash (medium) for this session`` and writes a ``session.model_change``
+  record to the session's ``events.jsonl``, which confirms it
+  (:mod:`src.session_view.copilot_session`); the saved default
+  (``/config model``) is left as it was. The models offered are the install's
+  own ``copilot_models``, since which ids an account may use is its plan's call.
 
 Every other agent has no in-session switch this module can drive.
 """
@@ -44,7 +51,7 @@ Every other agent has no in-session switch this module can drive.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from src.launching.model_catalog import CLAUDE_SESSION_MODEL_SPECS, CODEX_MODEL_SPECS
 
@@ -54,6 +61,11 @@ SWITCHABLE: Dict[str, Mapping[str, Mapping[str, Any]]] = {
     "claude": CLAUDE_SESSION_MODEL_SPECS,
     "codex": CODEX_MODEL_SPECS,
 }
+# Agents whose models are the install's own list rather than a catalog.
+LISTED = ("copilot",)
+# A model id typed after `/model`: the list is free text, so an id with a space
+# or a control character would type more than one command.
+_MODEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 
 _AGENT_NAMES = {
     "pi": "Pi", "copilot": "Copilot", "grok": "Grok", "antigravity": "Antigravity",
@@ -89,23 +101,31 @@ class SwitchRefused(Exception):
 def no_switch_reason(agent: Any) -> Optional[str]:
     """Why ``agent`` has no in-session switch, or ``None`` when it has one."""
     key = str(agent or "").lower()
-    if key in SWITCHABLE:
+    if key in SWITCHABLE or key in LISTED:
         return None
     name = _AGENT_NAMES.get(key, key.capitalize() or "This agent")
     return f"{name} can't switch model inside a session"
 
 
-def switch_keys(agent: Any, value: Any) -> Tuple[List[Keystroke], str]:
+def switch_keys(
+    agent: Any, value: Any, offered: Sequence[str] = ()
+) -> Tuple[List[Keystroke], str]:
     """``(keys, label)``: the keystrokes that switch ``agent`` to ``value``
     and the display name the switch is confirmed against.
 
+    ``offered`` is the model list of an agent in :data:`LISTED` (Copilot's
+    ``copilot_models``); its label is the id itself, as Copilot logs it.
     :class:`SwitchRefused` for an agent with no in-session switch;
-    :class:`ValueError` for a model the agent's catalog does not offer, so
-    nothing outside the catalog is ever typed into a terminal.
+    :class:`ValueError` for a model the agent's catalog or list does not
+    offer, so nothing outside it is ever typed into a terminal.
     """
     reason = no_switch_reason(agent)
     if reason:
         raise SwitchRefused(reason)
+    if str(agent).lower() in LISTED:
+        if not isinstance(value, str) or value not in offered or not _MODEL_ID_RE.match(value):
+            raise ValueError(f"model must be one this agent offers: {', '.join(offered)}")
+        return [(f"/model {value}", True)], value
     specs = SWITCHABLE[str(agent).lower()]
     spec = specs.get(value) if isinstance(value, str) else None
     if not spec or not spec.get("available"):

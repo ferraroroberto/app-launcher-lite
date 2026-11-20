@@ -406,11 +406,14 @@ surfaces:
     states:
       - a session with no transcript reader offers no Chat
       - the model chip hides when the model is not known
+      - the context ring hides when the agent's screen shows no context figure, as on a Copilot session too narrow for its status line
     phone: covers the page
     desktop: docks beside the session list in the wide layout
     links:
       - to: terminal.host
         via: Terminal mode
+      - to: terminal.model-sheet
+        via: model chip
       - to: chat.overlay
         via: Chat mode
       - to: terminal.session-menu
@@ -454,6 +457,22 @@ surfaces:
         via: Changed files
       - to: chrome.confirm-dialog
         via: Stop and kill
+
+  - id: terminal.model-sheet
+    area: terminal
+    title: Switch model sheet
+    root: data-surface
+    reach:
+      - the model chip in the session view's bar, shown for a Copilot session
+    holds:
+      - a note saying the switch is for this session only and the Settings default stays
+      - one row per model on the Copilot list, the current one checked
+    does:
+      - a pick types Copilot's own /model for this session and waits for its event log to report the change
+      - Done closes
+    states:
+      - a switch the server could not confirm leaves the old model showing and says why
+      - a busy Copilot, unsent prompt text or an open menu refuses the switch before anything is typed
 
   - id: terminal.rename-dialog
     area: terminal

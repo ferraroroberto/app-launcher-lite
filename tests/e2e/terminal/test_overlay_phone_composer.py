@@ -20,8 +20,8 @@ same page and PTY, each leg a former test kept as a named helper:
 * the model pill (#1383), formerly ``test_terminal_model_pill.py``: left of the
   context ring and level with it, absent (not blank) with no model, and at
   360px the title takes the squeeze while the bar does not overflow;
-* the model chip is read-only: a tap says the model is set in Settings,
-  and Copilot has no in-session switch;
+* the model chip of a Copilot session opens Switch model, and a pick
+  changes the chip only on the server's confirmation;
 * the bar's row fit (#514, #981), formerly ``test_terminal_bar_overflow.py``:
   every control inside the viewport with no scroller, at 320px and at the
   projection's default width. iPhone only, where that width reproduces.
@@ -261,19 +261,51 @@ def _leg_no_pill_when_the_model_is_unknown(
     expect(pill).to_have_text("")
 
 
-def _leg_model_chip_is_read_only(
+def _leg_model_chip_switches_through_the_sheet(
     page: Page, base_url: str, sid: str, stubs: _BarStubs
 ) -> None:
-    """The chip names the session's model; a tap only says it is set in
-    Settings (Copilot has no in-session switch the launcher drives)."""
+    """A tap on a Copilot session's chip opens Switch model with the Copilot
+    list and the current model checked; a pick changes the chip only on the
+    server's confirmation, and an unconfirmed one keeps the old model and says
+    so. The switch itself (Copilot's /model and its event log) is pinned by
+    ``tests/unit/board/test_copilot_switch_route.py``."""
     page.set_viewport_size({"width": 390, "height": 844})
-    stubs.model, stubs.agent = "gpt-5.6-luna", None
+    stubs.model, stubs.agent = "gpt-5.6-luna", "copilot"
     _open_by_row(page, base_url, sid)
+    posted = []
+    answer = {"outcome": "switched", "model": "gpt-5.6-terra", "confirmed_dialog": False,
+              "detail": None}
+
+    def switch(route) -> None:
+        posted.append(route.request.post_data_json)
+        if answer["outcome"] == "switched":
+            stubs.model = answer["model"]  # Copilot now reports it in the list too
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"ok": True, **answer}))
+
+    page.route(re.compile(r".*/api/claude-code/sessions/[^/]+/model$"), switch)
     chip = page.locator("#terminalModel")
-    expect(chip).to_have_text("gpt-5.6-luna")
-    expect(chip).to_have_attribute("aria-disabled", "true")
-    chip.dispatch_event("click")  # aria-disabled: Playwright refuses a real click
-    expect(page.locator("#toast")).to_contain_text("set in Settings")
+    sheet = page.locator("#modelSwitchSheet")
+    rows = sheet.locator(".model-switch-pick")
+
+    chip.click()
+    expect(sheet).to_be_visible()
+    expect(page.locator("#modelSwitchSheetNote")).to_contain_text("this session only")
+    expect(rows.filter(has_text="gpt-5.6-luna")).to_have_attribute("aria-current", "true")
+    expect(rows.filter(has_text="gpt-5.6-terra")).not_to_have_attribute("aria-current", "true")
+    rows.filter(has_text="gpt-5.6-terra").click()
+    expect(sheet).to_be_hidden()
+    expect(chip).to_have_text("gpt-5.6-terra")
+    assert posted == [{"model": "gpt-5.6-terra"}]
+
+    answer.update(outcome="unconfirmed", model="gpt-6-luna",
+                  detail="Copilot didn't report the switch to gpt-6-luna")
+    chip.click()
+    rows.filter(has_text="gpt-6-luna").first.click()
+    expect(chip).to_have_attribute("data-switch", "unconfirmed")
+    expect(chip).to_have_text("gpt-5.6-terra")
+    expect(page.locator("#toast")).to_contain_text("not confirmed")
+    stubs.agent = None
 
 
 def _leg_terminal_bar_buttons_stay_within_viewport(
@@ -432,7 +464,7 @@ def test_overlay_keeps_composer_reachable_on_a_phone(
 
     _leg_model_pill_sits_left_of_the_ring_and_the_header_still_fits(page, base_url, sid, stubs)
     _leg_no_pill_when_the_model_is_unknown(page, base_url, sid, stubs)
-    _leg_model_chip_is_read_only(page, base_url, sid, stubs)
+    _leg_model_chip_switches_through_the_sheet(page, base_url, sid, stubs)
     if browser_name == "webkit":
         # Phone-width row fit only reproduces under the iPhone projection.
         _leg_terminal_bar_buttons_stay_within_viewport(page, base_url, sid, stubs)

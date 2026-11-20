@@ -39,7 +39,7 @@ from src.board.transcript import (
     last_transcript_model,
 )
 from src.session_model import session_model_label
-from src.session_view import folder_trust, plan_picker
+from src.session_view import copilot_session, folder_trust, plan_picker
 
 logger = logging.getLogger(__name__)
 
@@ -407,7 +407,9 @@ def attach_transcript_model(
     """Each live session plus ``transcript_model`` (the live source of the
     chat header's model pill, which :func:`src.session_model.attach_models`
     reads): the model its Claude transcript last answered on or was last
-    switched to in-session, whichever is newer.
+    switched to in-session, whichever is newer, or the model a Copilot
+    session's event log last put it on
+    (:func:`src.session_view.copilot_session.current_model`).
 
     Same agent-aware claim walk as :func:`attach_shared_names`, so a session
     resolves to the same state row on every tab. ``None`` when there is no
@@ -420,9 +422,12 @@ def attach_transcript_model(
     pairs, _ = _claim_walk(live, state_rows)
     out: List[Dict[str, Any]] = []
     for sess, row, _sid in pairs:
-        transcript = (row or {}).get("transcript_path")
-        is_claude = str(sess.get("agent") or "claude").lower() == "claude"
-        model = last_transcript_model(transcript) if is_claude and transcript else None
+        agent = str(sess.get("agent") or "claude").lower()
+        if agent == "copilot":
+            model = copilot_session.current_model(copilot_session.event_log(sess))
+        else:
+            transcript = (row or {}).get("transcript_path")
+            model = last_transcript_model(transcript) if agent == "claude" and transcript else None
         out.append({**sess, "transcript_model": model})
     return out
 

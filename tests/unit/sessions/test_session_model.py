@@ -50,8 +50,12 @@ from src.session_model import attach_models, session_model_label
     ({"agent": "pi", "flags": "--provider openai-codex --model openai-codex/gpt-5.6-sol --thinking high"}, "Sol"),
     ({"agent": "pi", "flags": "--provider claude-agent-sdk --model claude-agent-sdk/claude-opus-5"}, "Opus"),
     ({"agent": "pi", "flags": "--model nonsense/x"}, None),
+    # Copilot: the id its event log last put it on, then its launch flag.
+    ({"agent": "copilot", "flags": "--model gpt-6-luna", "transcript_model": "mai-code-2-flash"},
+     "mai-code-2-flash"),
+    ({"agent": "copilot", "flags": "--model gpt-6-luna"}, "gpt-6-luna"),
+    ({"agent": "copilot", "flags": ""}, None),
     # Agents with no per-launch model.
-    ({"agent": "copilot", "flags": "--model opus"}, None),
     ({"agent": "grok", "flags": ""}, None),
 ])
 def test_session_model_label(session, expected):
