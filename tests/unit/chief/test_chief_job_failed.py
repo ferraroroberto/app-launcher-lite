@@ -43,7 +43,6 @@ def _job(tmp_path, **over):
         name="Snapshot freshness",
         script_path=str(tmp_path / "projects" / "life-os" / "scripts" / "snap.py"),
         exit_outcomes={},
-        alert_on_failure=False,
     )
     base.update(over)
     return SimpleNamespace(**base)

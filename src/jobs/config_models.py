@@ -403,12 +403,6 @@ class Job:
     # that needs a confirm tap or cannot be run manually can never be
     # True (see :func:`validate_rerun_safe_shape`). Agents only read it.
     rerun_safe: bool = False
-    # When True, a failed run pushes a Telegram alert via the vendored
-    # notifier (``src.notify``), independent of the global Pushover
-    # ``notify_on_failure`` switch in webapp_config.json. Opt-in per job
-    # (default off) so the shared Telegram chat isn't spammed by every
-    # job's failures.
-    alert_on_failure: bool = False
     # What this job's *own* non-zero exit codes mean, e.g. ``{3: "deferred"}``:
     # read at render time by ``src.jobs.outcome.run_outcome``, so a
     # declared code re-labels a ``failed`` run on the card, in the stats and in
@@ -511,8 +505,6 @@ class Job:
             payload["confirm"] = True
         if self.rerun_safe:
             payload["rerun_safe"] = True
-        if self.alert_on_failure:
-            payload["alert_on_failure"] = True
         if self.exit_outcomes:
             payload["exit_outcomes"] = {
                 str(code): outcome
@@ -842,7 +834,6 @@ def job_from_dict(raw: Dict[str, Any]) -> Job:
         on_failure=_validate_chain_list("on_failure", raw.get("on_failure")),
         confirm=bool(raw.get("confirm", False)),
         rerun_safe=rerun_safe,
-        alert_on_failure=bool(raw.get("alert_on_failure", False)),
         exit_outcomes=exit_outcomes_from_dict(raw.get("exit_outcomes")),
         visible=bool(raw.get("visible", False)),
         elevated=bool(raw.get("elevated", False)),

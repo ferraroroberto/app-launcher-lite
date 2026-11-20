@@ -427,7 +427,7 @@ time_budget_s         = 1200
 # Coding launch-preset dropdown is a new control on the Projects toolbar, and its
 # one test shares no setup with an existing node (it mocks the config's presets
 # and the launch request).
-test_budget = 298
+test_budget = 297
 
 # --- static assets under the webapp's static dir -> Chromium smoke ----------
 [[e2e.rule]]

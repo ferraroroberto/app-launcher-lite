@@ -43,13 +43,12 @@ DECLARED = {3: OUTCOME_DEFERRED}
 def _sweep(**kw) -> Job:
     return Job(
         id=SWEEP_ID, name="Email Sweep", script_path="C:\\x\\sweep.bat",
-        alert_on_failure=True, exit_outcomes=dict(DECLARED), **kw,
+        exit_outcomes=dict(DECLARED), **kw,
     )
 
 
 def _plain(job_id: str = "plain") -> Job:
-    return Job(id=job_id, name="Plain", script_path="C:\\x\\plain.bat",
-               alert_on_failure=True)
+    return Job(id=job_id, name="Plain", script_path="C:\\x\\plain.bat")
 
 
 @pytest.fixture
@@ -203,26 +202,22 @@ class TestAlerts:
             pushover_api_token="", pushover_user_key="",
             notify_on_failure=True, notify_failure_streak=0,
             notify_failure_summary=False,
-            telegram_bot_token="tok", telegram_chat_id="chat",
         )
 
     def _notify(self, registry, code):
         rd = _write_run(SWEEP_ID, "20260929T020000", exit_code=code)
-        pushover, telegram = MagicMock(), MagicMock()
+        pushover = MagicMock()
         notif.notify_failure(
             self._cfg(), _sweep(), rd, status="failed", exit_code=code,
-            notifier=pushover, telegram_notifier=telegram,
+            notifier=pushover,
         )
-        return pushover, telegram
+        return pushover
 
-    def test_deferral_sends_no_alert_on_either_channel(self, registry):
-        pushover, telegram = self._notify(registry, 3)
+    def test_deferral_sends_no_alert(self, registry):
+        pushover = self._notify(registry, 3)
         pushover.notify.assert_not_called()
-        telegram.notify.assert_not_called()
 
     @pytest.mark.parametrize("code", [1, 2])
     def test_real_failure_still_alerts(self, registry, code):
-        pushover, telegram = self._notify(registry, code)
-        telegram.notify.assert_called_once()
-        assert "failed" in telegram.notify.call_args.args[0]
+        pushover = self._notify(registry, code)
         pushover.notify.assert_called_once()

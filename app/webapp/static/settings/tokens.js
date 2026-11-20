@@ -7,10 +7,6 @@
  * render. Lazy: nothing is fetched until the Settings tab is first
  * opened (the job <select> needs /api/jobs, which is not a boot cost
  * worth paying for a panel most sessions never open).
- *
- * The same sheet holds the delegate token's one control against
- * /api/delegate-token: turn on / regenerate (show-once, like a mint) and
- * turn off, both asked first because the old value stops working.
  */
 
 import { els, state } from '../state.js';
@@ -20,7 +16,6 @@ import { revealInCard } from '../dom-utils.js';
 import { renderSettingsValues } from './settings-sheets.js';
 
 let loaded = false;
-let delegateOn = false;
 
 function fmtStamp(iso) {
   return iso ? iso.replace('T', ' ').slice(0, 16) : '';
@@ -100,62 +95,11 @@ async function fetchJobChoices() {
   });
 }
 
-function renderDelegate(info) {
-  const on = !!(info && info.enabled);
-  delegateOn = on;
-  els.delegateTokenStatus.textContent = on
-    ? 'On · made ' + fmtStamp(info.created_at)
-    : 'Off';
-  els.delegateTokenRegenLabel.textContent = on ? 'Regenerate' : 'Turn on';
-  els.delegateTokenOffBtn.hidden = !on;
-}
-
-async function fetchDelegate() {
-  renderDelegate(await jsonApi('/api/delegate-token'));
-}
-
-async function regenerateDelegate() {
-  if (delegateOn && !(await confirmDialog({
-    title: 'Regenerate the delegate token?',
-    message: 'The current value stops working at once. The agent using it ' +
-      'needs the new one pasted in.',
-    action: 'Regenerate',
-  }))) return;
-  try {
-    const body = await jsonApi('/api/delegate-token', { method: 'POST' });
-    els.delegateTokenValue.value = body.token || '';
-    els.delegateTokenResult.hidden = false;
-    renderDelegate(body);
-    toast('Delegate token ready — copy it now, it is shown only once.', 'good');
-  } catch (exc) {
-    apiFailToast('Regenerate failed', exc);
-  }
-}
-
-async function disableDelegate() {
-  if (!(await confirmDialog({
-    title: 'Turn off the delegate token?',
-    message: 'Anything calling the launcher with it stops working.',
-    action: 'Turn off',
-  }))) return;
-  try {
-    renderDelegate(await jsonApi('/api/delegate-token', { method: 'DELETE' }));
-    els.delegateTokenValue.value = '';
-    els.delegateTokenResult.hidden = true;
-    toast('Delegate token turned off.', 'good');
-  } catch (exc) {
-    apiFailToast('Turn off failed', exc);
-  }
-}
-
 function ensureLoaded() {
   if (loaded) return;
   loaded = true;
   fetchTokens().catch(function (exc) {
     console.warn('tokens: list fetch failed', exc);
-  });
-  fetchDelegate().catch(function (exc) {
-    console.warn('tokens: delegate token fetch failed', exc);
   });
   fetchJobChoices().catch(function (exc) {
     console.warn('tokens: job choices fetch failed', exc);
@@ -229,10 +173,5 @@ export function wireTokens() {
   els.tokenMintBtn.addEventListener('click', mintToken);
   els.tokenCopyBtn.addEventListener('click', function () {
     copyShown(els.tokenMintValue);
-  });
-  els.delegateTokenRegenBtn.addEventListener('click', regenerateDelegate);
-  els.delegateTokenOffBtn.addEventListener('click', disableDelegate);
-  els.delegateTokenCopyBtn.addEventListener('click', function () {
-    copyShown(els.delegateTokenValue);
   });
 }

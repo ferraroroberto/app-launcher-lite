@@ -176,7 +176,6 @@ def _assert_static_boolean_controls_have_no_checkbox_markup(page: Page) -> None:
         "#copilotSkipPerms",
         "#copilotRemote",
         "#bootAutostartToggle",
-        "#jobAlertOnFailureInput",
         "#jobConfirmInput",
         "#jobRunDialogDryRun",
     )

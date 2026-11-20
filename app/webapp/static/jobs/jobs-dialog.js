@@ -495,9 +495,6 @@ export function openJobDialog(job) {
   if (els.jobMutexGroupInput) {
     els.jobMutexGroupInput.value = (job && job.mutex_group) || '';
   }
-  if (els.jobAlertOnFailureInput) {
-    setSwitch(els.jobAlertOnFailureInput, !!(job && job.alert_on_failure));
-  }
   if (els.jobConfirmInput) {
     setSwitch(els.jobConfirmInput, !!(job && job.confirm));
   }
@@ -705,8 +702,6 @@ function buildJobPayload() {
   // user un-checking the last entry actually clears it server-side.
   payload.on_success = readChainList(els.jobOnSuccessList, 'on_success');
   payload.on_failure = readChainList(els.jobOnFailureList, 'on_failure');
-  // Alert-to-Telegram-on-failure. Always send so unchecking clears it.
-  payload.alert_on_failure = !!(els.jobAlertOnFailureInput && els.jobAlertOnFailureInput.getAttribute('aria-checked') === 'true');
   // Confirm-on-fire. Always send so unchecking clears it.
   payload.confirm = !!(els.jobConfirmInput && els.jobConfirmInput.getAttribute('aria-checked') === 'true');
   // Webhook trigger. null clears an existing config when the
@@ -829,10 +824,10 @@ export function wireJobDialogs() {
       runDialogJob = null;
     });
   }
-  // Alert-on-failure + Require-confirmation + Dry-run role="switch"
+  // Require-confirmation + Dry-run role="switch"
   // buttons — no native checkbox toggling any more, so the
   // click has to flip aria-checked.
-  [els.jobAlertOnFailureInput, els.jobConfirmInput, els.jobRunDialogDryRun].forEach(function (btn) {
+  [els.jobConfirmInput, els.jobRunDialogDryRun].forEach(function (btn) {
     if (!btn) return;
     btn.addEventListener('click', function () {
       setSwitch(btn, btn.getAttribute('aria-checked') !== 'true');

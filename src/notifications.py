@@ -1,12 +1,11 @@
 """Failure notifications for Jobs-tab runs.
 
-A small protocol surface + concrete Pushover/Telegram implementations;
-the executor (:mod:`app.cli.commands.run_job_cmd`) calls
-:func:`build_notifier_from_config` / :func:`build_telegram_notifier_from_config`
+A small protocol surface + the Pushover implementation; the executor
+(:mod:`app.cli.commands.run_job_cmd`) calls :func:`build_notifier_from_config`
 on finalisation and pushes when the run failed (or, optionally, when an
 N-failure streak ticks over).
 
-Three independent channels share this one finalisation hook (the third, the
+Two independent channels share this one finalisation hook (the second, the
 chief mailbox event, lives in :mod:`src.chief.job_failed`):
 
 * **Pushover (global)** — every job, gated by the master
@@ -22,26 +21,11 @@ chief mailbox event, lives in :mod:`src.chief.job_failed`):
     the local LLM hub (``http://127.0.0.1:8000``, ``claude-haiku-4-5``)
     for a one-line "what went wrong" summary prepended to the push body.
     Hub unreachable → silently falls back to the raw tail.
-
-* **Telegram (per-job)** — only jobs with
-  ``Job.alert_on_failure = True``, via the vendored :mod:`src.notify`
-  Telegram primitive. Config keys:
-
-  * ``telegram_bot_token`` / ``telegram_chat_id`` — credentials.
-    Missing creds → :class:`NoopNotifier`.
-  * ``telegram_chat_log`` — optional second chat for routine
-    log lines (the nightly zombie-cleanup summary), mirroring the fleet's
-    ``attention`` / ``log`` split. Unset → the log category falls back to
-    ``telegram_chat_id``, so a single-chat setup is unchanged.
-
-  Opt-in per job (default off) so the shared Telegram chat isn't
-  spammed by every job's failures.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Any, List, NamedTuple, Optional, Protocol
 
@@ -53,8 +37,6 @@ from src.jobs.history import read_output_tail
 from src.jobs.outcome import OUTCOME_DEFERRED, OUTCOME_UNCONFIRMED, run_outcome
 from src.jobs.run_status import RunStatus
 from src.jobs.stats import consecutive_failed_runs
-from src.notify import NotifierError as TelegramNotifierError
-from src.notify import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +67,7 @@ class JobNotifier(Protocol):
     Named to say which channel family it belongs to: this
     module's own Jobs-tab failure-alert protocol, distinct from the
     vendored, domain-free :class:`src.notify.Notifier` (single method
-    ``send_text``, no ``severity``) that :class:`JobTelegramNotifier` below
-    adapts to this shape.
+    ``send_text``, no ``severity``) the login alert uses.
     """
 
     def notify(self, title: str, body: str, severity: str) -> None: ...
@@ -149,29 +130,6 @@ class PushoverNotifier:
             logger.warning(f"⚠️  pushover send failed: {exc}")
 
 
-class JobTelegramNotifier:
-    """Adapts the vendored :class:`src.notify.TelegramNotifier` to the
-    :class:`JobNotifier` protocol used by the executor.
-
-    ``title`` and ``body`` are joined into one plain-text message —
-    Telegram has no separate subject line. Errors are logged and
-    swallowed, same contract as :class:`PushoverNotifier`. Named distinctly
-    from the vendored ``TelegramNotifier`` it wraps — the two
-    classes have incompatible methods (``notify(title, body, severity)``
-    here vs. ``send_text(text)`` there), and a shared name would force an
-    import alias purely to avoid the collision.
-    """
-
-    def __init__(self, bot_token: str, chat_id: str) -> None:
-        self._notifier = TelegramNotifier(bot_token, chat_id)
-
-    def notify(self, title: str, body: str, severity: str = "warning") -> None:
-        try:
-            self._notifier.send_text(f"{title}\n\n{body}" if body else title)
-        except TelegramNotifierError as exc:
-            logger.warning(f"⚠️  telegram send failed: {exc}")
-
-
 def summarise_failure(
     tail: str, *, base_url: Optional[str] = None
 ) -> Optional[str]:
@@ -224,33 +182,6 @@ def build_notifier_from_config(cfg: Any) -> JobNotifier:
     return PushoverNotifier(api_token, user_key)
 
 
-TELEGRAM_CATEGORY_LOG = "log"
-
-
-def build_telegram_notifier_from_config(
-    cfg: Any, *, category: Optional[str] = None
-) -> JobNotifier:
-    """Construct a Telegram :class:`JobNotifier` from a :class:`WebappConfig`-shaped object.
-
-    Returns :class:`NoopNotifier` when either credential is missing —
-    every caller can unconditionally ``notifier.notify(...)``.
-
-    ``category`` picks the chat the way fleet-config's
-    ``resolve_notify_target`` does: :data:`TELEGRAM_CATEGORY_LOG` tries
-    ``cfg.telegram_chat_log`` first and **falls back to** ``telegram_chat_id``
-    when it is unset. No category (failure alerts) always uses
-    ``telegram_chat_id`` — the alerts chat.
-    """
-    bot_token = getattr(cfg, "telegram_bot_token", "") or ""
-    chat_id = ""
-    if category == TELEGRAM_CATEGORY_LOG:
-        chat_id = getattr(cfg, "telegram_chat_log", "") or ""
-    chat_id = chat_id or getattr(cfg, "telegram_chat_id", "") or ""
-    if not (bot_token and chat_id):
-        return NoopNotifier()
-    return JobTelegramNotifier(bot_token, chat_id)
-
-
 def notify_failure(
     cfg: Any,
     job: Any,
@@ -261,7 +192,6 @@ def notify_failure(
     reaped: bool = False,
     watchdog_note: Optional[str] = None,
     notifier: Optional[JobNotifier] = None,
-    telegram_notifier: Optional[JobNotifier] = None,
 ) -> None:
     """Push failure notifications for a ``failed`` finalisation.
 
@@ -271,7 +201,7 @@ def notify_failure(
     fails because the launcher discovered a dead executor pages the same way
     a run that fails on its own exit code does.
 
-    Three independent channels, all no-op on success:
+    Two independent channels, both no-op on success:
 
     * Chief mailbox — one ``job-failed`` event for the fleet chief,
       gated by ``cfg.chief_job_failures``, a live chief and the canonical
@@ -279,11 +209,9 @@ def notify_failure(
 
     * Pushover (global) — gated by ``cfg.notify_on_failure``,
       fires for every job.
-    * Telegram (per-job) — gated by ``job.alert_on_failure``,
-      fires only for jobs that opted in.
 
-    Either resolving to :class:`NoopNotifier` (no creds) is a silent
-    no-op for that channel. The optional LLM summary (Pushover only) is
+    A Pushover notifier resolving to :class:`NoopNotifier` (no creds) is a
+    silent no-op for that channel. The optional LLM summary (Pushover only) is
     best-effort; hub down → raw tail only. Any error inside this path is
     logged and swallowed — finalisation must keep going.
 
@@ -318,9 +246,9 @@ def notify_failure(
         if wording is None:
             return
 
-        # Third channel, independent of the two below: its own switch and its
-        # own swallow, so neither a missing push credential nor a push error
-        # can keep the chief from hearing about the run.
+        # Independent of the push below: its own switch and its own swallow,
+        # so neither a missing push credential nor a push error can keep the
+        # chief from hearing about the run.
         publish_job_failed(
             cfg, job, run_dir,
             exit_code=exit_code,
@@ -329,16 +257,6 @@ def notify_failure(
 
         if cfg.notify_on_failure:
             _push_failure(cfg, job, run_dir, notifier or build_notifier_from_config(cfg), wording)
-
-        if job.alert_on_failure:
-            telegram_notifier = telegram_notifier or build_telegram_notifier_from_config(cfg)
-            if not isinstance(telegram_notifier, NoopNotifier):
-                when = datetime.now().strftime("%Y-%m-%d %H:%M")
-                telegram_notifier.notify(
-                    f"{wording.mark} {job.name} {wording.verdict}",
-                    f"{when} — {wording.detail}",
-                    severity=wording.severity,
-                )
     except Exception as exc:  # noqa: BLE001 — never block finalisation
         logger.warning(f"⚠️  notification path raised: {exc}")
 

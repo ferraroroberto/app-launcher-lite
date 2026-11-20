@@ -90,7 +90,7 @@ _APPS = {"scan_root": "C:\\stub", "apps": [
 
 
 _JOBS = {"jobs": [
-    _job("ledger", "Ledger reconciliation", alert_on_failure=True),
+    _job("ledger", "Ledger reconciliation"),
     _job("mailbox", "Mailbox sweep", schedule_chip="every 15 min", next_run_epoch=NOW + 300),
     _job("planner", "Planner sync", paused=True)]}
 

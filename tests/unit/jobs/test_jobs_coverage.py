@@ -1,6 +1,6 @@
 """Missed-fire coverage for scheduled jobs (issue #697).
 
-``alert_on_failure`` catches a run that failed and ``is_stuck`` catches one
+The failure alert catches a run that failed and ``is_stuck`` catches one
 that never ended; nothing caught one that never *started*. These tests pin
 both halves of ``src.jobs.coverage`` — the structural check (a job whose Task
 Scheduler entry is missing/disabled) and the behavioural one (an elapsed slot
@@ -273,7 +273,7 @@ class TestUnestablishedHistory:
     ``app-launcher-wt-727`` resolved ``JOBS_RUNS_DIR`` to *its own* empty
     ``webapp/jobs/`` (worktrees carry tracked files only) while holding a
     full, real ``config/jobs.json``. Every scheduled slot in the 3-day window
-    looked missed, seven jobs went ``problem``, and three Telegram alerts
+    looked missed, seven jobs went ``problem``, and three alerts
     reached the phone — all false. The behavioural half could not tell "this
     job never ran" from "there is no history here to read", exactly the
     conflation the structural half already refuses for a failed ``schtasks``
@@ -431,36 +431,34 @@ class TestCheckAndAlert:
         defaults = dict(
             pushover_api_token="",
             pushover_user_key="",
-            notify_on_failure=False,
+            notify_on_failure=True,
             notify_failure_streak=0,
             notify_failure_summary=False,
-            telegram_bot_token="tok",
-            telegram_chat_id="chat",
         )
         defaults.update(kw)
         return SimpleNamespace(**defaults)
 
-    def test_alerts_opted_in_job_once_then_dedupes(self, runs_root, monkeypatch):
+    def test_alerts_a_broken_job_once_then_dedupes(self, runs_root, monkeypatch):
         monkeypatch.setattr(
             cov, "registered_task_states", lambda *a, **k: {}
         )
-        job = _daily_job(alert_on_failure=True)
-        telegram = MagicMock()
+        job = _daily_job()
+        push = MagicMock()
         first = cov.check_and_alert(
-            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+            self._cfg(), jobs=[job], now=NOW, notifier=push
         )
         assert first == ["demo"]
-        telegram.notify.assert_called_once()
-        title, body = telegram.notify.call_args.args[:2]
+        push.notify.assert_called_once()
+        title, body = push.notify.call_args.args[:2]
         assert "Demo" in title
         assert "demo" in body
 
         # Same problem on the next cycle → no second ping.
         second = cov.check_and_alert(
-            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+            self._cfg(), jobs=[job], now=NOW, notifier=push
         )
         assert second == []
-        assert telegram.notify.call_count == 1
+        assert push.notify.call_count == 1
 
     def test_no_alert_for_a_job_with_no_run_history(self, runs_root, monkeypatch):
         """End-to-end pin on the 2026-08-10 false alerts (issue #737).
@@ -471,30 +469,19 @@ class TestCheckAndAlert:
         monkeypatch.setattr(
             cov, "registered_task_states", lambda *a, **k: {"\\AppLauncherLite\\demo": True}
         )
-        job = _daily_job(alert_on_failure=True)
-        telegram = MagicMock()
+        job = _daily_job()
+        push = MagicMock()
         assert cov.check_and_alert(
             self._cfg(notify_on_failure=True),
-            jobs=[job], now=NOW, telegram_notifier=telegram,
+            jobs=[job], now=NOW, notifier=push,
         ) == []
-        telegram.notify.assert_not_called()
-
-    def test_no_alert_when_job_flag_off(self, runs_root, monkeypatch):
-        monkeypatch.setattr(
-            cov, "registered_task_states", lambda *a, **k: {}
-        )
-        job = _daily_job()
-        telegram = MagicMock()
-        cov.check_and_alert(
-            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
-        )
-        telegram.notify.assert_not_called()
+        push.notify.assert_not_called()
 
     def test_recovery_clears_state_so_the_next_break_re_alerts(
         self, runs_root, monkeypatch
     ):
-        job = _daily_job(alert_on_failure=True)
-        telegram = MagicMock()
+        job = _daily_job()
+        push = MagicMock()
         # One mutable box so each phase swaps behaviour without stacking
         # (and later undoing) monkeypatches.
         registered = {"value": {}}
@@ -514,17 +501,17 @@ class TestCheckAndAlert:
         )
 
         cov.check_and_alert(
-            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+            self._cfg(), jobs=[job], now=NOW, notifier=push
         )
-        assert telegram.notify.call_count == 1
+        assert push.notify.call_count == 1
 
         # Coverage recovers: task back, every slot covered.
         registered["value"] = {"\\AppLauncherLite\\demo": True}
         missed["value"] = []
         cov.check_and_alert(
-            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+            self._cfg(), jobs=[job], now=NOW, notifier=push
         )
-        assert telegram.notify.call_count == 1
+        assert push.notify.call_count == 1
         assert json.loads(
             cov.coverage_alerts_path().read_text(encoding="utf-8")
         ) == {}
@@ -533,17 +520,17 @@ class TestCheckAndAlert:
         registered["value"] = {}
         missed["value"] = None
         cov.check_and_alert(
-            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+            self._cfg(), jobs=[job], now=NOW, notifier=push
         )
-        assert telegram.notify.call_count == 2
+        assert push.notify.call_count == 2
 
     def test_never_raises_on_a_broken_notifier(self, runs_root, monkeypatch):
         monkeypatch.setattr(cov, "registered_task_states", lambda *a, **k: {})
-        job = _daily_job(alert_on_failure=True)
+        job = _daily_job()
         boom = MagicMock()
-        boom.notify.side_effect = RuntimeError("telegram down")
+        boom.notify.side_effect = RuntimeError("push down")
         assert cov.check_and_alert(
-            self._cfg(), jobs=[job], now=NOW, telegram_notifier=boom
+            self._cfg(), jobs=[job], now=NOW, notifier=boom
         ) == []
 
     def test_pushover_channel_gated_by_global_switch(self, runs_root, monkeypatch):
@@ -582,11 +569,9 @@ class TestAlertTitles:
         defaults = dict(
             pushover_api_token="",
             pushover_user_key="",
-            notify_on_failure=False,
+            notify_on_failure=True,
             notify_failure_streak=0,
             notify_failure_summary=False,
-            telegram_bot_token="tok",
-            telegram_chat_id="chat",
         )
         defaults.update(kw)
         return SimpleNamespace(**defaults)
@@ -597,12 +582,12 @@ class TestAlertTitles:
         monkeypatch.setattr(
             cov, "registered_task_principals", lambda *a, **k: principals or {}
         )
-        telegram = MagicMock()
+        push = MagicMock()
         cov.check_and_alert(
-            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+            self._cfg(), jobs=[job], now=NOW, notifier=push
         )
-        telegram.notify.assert_called_once()
-        return telegram.notify.call_args
+        push.notify.assert_called_once()
+        return push.notify.call_args
 
     def _age_last_alert(self, job_id, seconds):
         """Backdate a job's de-dup stamp by *seconds*, as if time had passed."""
@@ -625,7 +610,7 @@ class TestAlertTitles:
     def test_missing_entry_title_names_the_missing_entry(
         self, runs_root, monkeypatch
     ):
-        job = _daily_job(alert_on_failure=True)
+        job = _daily_job()
         title = self._alert(monkeypatch, job, states={}).args[0]
         assert "Task Scheduler entry missing" in title
         assert "never fired" not in title
@@ -633,7 +618,7 @@ class TestAlertTitles:
     def test_disabled_entry_title_names_the_disabled_entry(
         self, runs_root, monkeypatch
     ):
-        job = _daily_job(alert_on_failure=True)
+        job = _daily_job()
         self._seed_healthy_history(runs_root)
         title = self._alert(
             monkeypatch,
@@ -653,7 +638,7 @@ class TestAlertTitles:
         ``Interactive only``, a warning about a future logged-out box. The
         title must not borrow the observed-failure vocabulary.
         """
-        job = _daily_job(alert_on_failure=True, session_less=True)
+        job = _daily_job(session_less=True)
         self._seed_healthy_history(runs_root)
         call = self._alert(
             monkeypatch,
@@ -671,7 +656,7 @@ class TestAlertTitles:
 
     def test_missed_fire_still_reads_as_a_missed_run(self, runs_root, monkeypatch):
         """The one class the old title *was* true for keeps its wording."""
-        job = _daily_job(alert_on_failure=True)
+        job = _daily_job()
         for stamp in ("20260730", "20260731"):
             _seed_run(
                 runs_root,
@@ -724,7 +709,7 @@ class TestAlertTitles:
         self, runs_root, monkeypatch
     ):
         """Quieter, never silent — the condition is true and still matters."""
-        job = _daily_job(alert_on_failure=True, session_less=True)
+        job = _daily_job(session_less=True)
         self._seed_healthy_history(runs_root)
         monkeypatch.setattr(
             cov, "registered_task_states", lambda *a, **k: _states("\\AppLauncherLite\\demo")
@@ -734,26 +719,26 @@ class TestAlertTitles:
             "registered_task_principals",
             lambda *a, **k: {"\\AppLauncherLite\\demo": False},
         )
-        telegram = MagicMock()
+        push = MagicMock()
         cov.check_and_alert(
-            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+            self._cfg(), jobs=[job], now=NOW, notifier=push
         )
-        assert telegram.notify.call_count == 1
+        assert push.notify.call_count == 1
         # Age the de-dup stamp rather than the clock — patching `time.time`
         # here would land on the stdlib module itself, not a private alias.
         self._age_last_alert("demo", 2 * 24 * 3600)
         cov.check_and_alert(
-            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+            self._cfg(), jobs=[job], now=NOW, notifier=push
         )
         # Two days on: still standing, still suppressed by the weekly cadence
         # (the old 24 h interval would have re-pinged here).
-        assert telegram.notify.call_count == 1
+        assert push.notify.call_count == 1
         # Past a week it speaks up again — quieter, never silent.
         self._age_last_alert("demo", 8 * 24 * 3600)
         cov.check_and_alert(
-            self._cfg(), jobs=[job], now=NOW, telegram_notifier=telegram
+            self._cfg(), jobs=[job], now=NOW, notifier=push
         )
-        assert telegram.notify.call_count == 2
+        assert push.notify.call_count == 2
 
 
 class TestFacadeReExport:

@@ -316,7 +316,6 @@ _SIMPLE_UPDATE_FIELDS: Tuple[Tuple[str, Callable[[Any], Any], bool], ...] = (
     ("mutex_group", _validate_mutex_group, False),
     ("confirm", bool, False),
     ("rerun_safe", validate_rerun_safe, False),
-    ("alert_on_failure", bool, False),
     ("visible", bool, False),
     ("elevated", bool, False),
     ("session_less", bool, False),

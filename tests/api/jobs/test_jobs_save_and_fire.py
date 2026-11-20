@@ -317,13 +317,14 @@ class TestConfirmOnFire:
         assert resp.status_code == 200
 
 
-# ================================================ alert-on-failure (#597)
+# ================================================ retired alert_on_failure
 
 
-class TestAlertOnFailure:
-    """``alert_on_failure`` flag round-trips through create/edit (issue #597)."""
+class TestRetiredAlertOnFailure:
+    """The per-job Telegram alert is gone: a client still sending the flag
+    gets no field back and nothing stored."""
 
-    def test_create_round_trips_alert_on_failure(
+    def test_create_ignores_the_retired_flag(
         self, webapp_client, mocked_jobs_side_effects
     ):
         client, _, _ = webapp_client
@@ -335,24 +336,4 @@ class TestAlertOnFailure:
                 "alert_on_failure": True,
             },
         ).json()["job"]
-        assert job["alert_on_failure"] is True
-
-    def test_alert_on_failure_round_trips_through_put(
-        self, webapp_client, mocked_jobs_side_effects
-    ):
-        client, _, _ = webapp_client
-        created = _seed_one_job(client, name="Demo").json()["job"]
-        r = client.put("/api/jobs/" + created["id"], json={"alert_on_failure": True})
-        assert r.status_code == 200
-        assert r.json()["job"]["alert_on_failure"] is True
-        # Clearing it drops the key (omitted when False).
-        r = client.put("/api/jobs/" + created["id"], json={"alert_on_failure": False})
-        assert r.status_code == 200
-        assert "alert_on_failure" not in r.json()["job"]
-
-    def test_default_omitted_from_response(
-        self, webapp_client, mocked_jobs_side_effects
-    ):
-        client, _, _ = webapp_client
-        created = _seed_one_job(client, name="Demo").json()["job"]
-        assert "alert_on_failure" not in created
+        assert "alert_on_failure" not in job

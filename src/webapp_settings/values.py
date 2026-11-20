@@ -53,7 +53,6 @@ CREDENTIAL_KEYS: Tuple[str, ...] = (
     "secrets",
     "webhook_secrets",
     "api_tokens",
-    "delegate_token",
     "speech_api_key",
 )
 

@@ -935,7 +935,7 @@ flowchart LR
 - **Holds:**
   - name, kind, the script file or inline body or HTTP check fields, arguments
   - a schedule with its type fields, cooldown and exclusive group
-  - switches for Alert to Telegram if failed and Require confirmation
+  - switch for Require confirmation
   - the run-on-success and run-on-failure chains, parameters and a webhook
   - Save anyway and Add and verify
 - **Does:**
@@ -1417,7 +1417,6 @@ flowchart LR
 - **Holds:**
   - the tokens that each run one job from a link
   - a label, a job and Create token, with the value shown once beside Copy
-  - the Delegate token for an outside agent, with Turn on, Turn off and Copy
   - Done
 - **States:** empty - No tokens yet, with Create a token
 

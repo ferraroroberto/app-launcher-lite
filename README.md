@@ -36,7 +36,7 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 4. `ui_proof`, the remote-control toggle and the Chat view.
 5. A fresh-machine install checklist.
 
-**Dropped from the full app** (not documented, not planned): Telegram, Life OS, inspiration, OCR/TTS, usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board, screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
+**Dropped from the full app** (not documented, not planned): Telegram (no job alerts; only the login lock-out alert can send through it), Life OS, inspiration, OCR/TTS, usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board, screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
 
 ## Quick start
 

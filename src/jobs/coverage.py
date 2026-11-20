@@ -1,6 +1,6 @@
 """Missed-fire coverage for scheduled jobs.
 
-``alert_on_failure`` catches a run that *fails*; ``src.jobs.stats.is_stuck``
+The failure alert catches a run that *fails*; ``src.jobs.stats.is_stuck``
 catches a run that never *ends*. Nothing caught a run that never **starts** —
 a job whose Task Scheduler entry is missing, mangled, disabled, or was never
 created simply doesn't fire, and the absence was invisible: the row kept
@@ -55,10 +55,9 @@ normal week"), all enforced in :func:`behavioural_coverage` /
   history (e.g. a worktree that tracks no run files) must read as
   ``unknown``, not as a job that silently never fires.
 
-Alerting reuses the exact channels the failure path uses
+Alerting reuses the channel the failure path uses
 (:func:`src.notifications.notify_failure`): global Pushover
-gated by ``WebappConfig.notify_on_failure``, per-job Telegram gated by
-``Job.alert_on_failure``. De-duplicated through a small on-disk state file so
+gated by ``WebappConfig.notify_on_failure``. De-duplicated through a small on-disk state file so
 a standing problem pings once, not once per check cycle.
 
 **Each problem class is announced in its own words** (table in
@@ -706,14 +705,12 @@ def check_and_alert(
     jobs: Optional[List[Job]] = None,
     now: Optional[datetime] = None,
     notifier: Optional[Any] = None,
-    telegram_notifier: Optional[Any] = None,
 ) -> List[str]:
     """Run a fresh scan and push alerts for newly-broken coverage.
 
-    Returns the job ids alerted on this cycle. Same two channels, same
-    gates as the failure path (``notify_on_failure`` for Pushover,
-    ``Job.alert_on_failure`` for Telegram) — a coverage problem is a job
-    problem, not a new notification surface.
+    Returns the job ids alerted on this cycle. Same channel, same gate as
+    the failure path (``notify_on_failure`` for Pushover) — a coverage
+    problem is a job problem, not a new notification surface.
 
     De-duplicated on disk: a job re-alerts only when its problem
     *signature* changes or :data:`COVERAGE_ALERT_REPEAT_SECONDS` have
@@ -726,11 +723,7 @@ def check_and_alert(
     # Imported here rather than at module scope: src.notifications pulls in
     # requests + the LLM client, and this module is imported by the webapp's
     # hot /api/jobs path purely for the badge.
-    from src.notifications import (
-        NoopNotifier,
-        build_notifier_from_config,
-        build_telegram_notifier_from_config,
-    )
+    from src.notifications import NoopNotifier, build_notifier_from_config
 
     alerted: List[str] = []
     try:
@@ -782,10 +775,6 @@ def check_and_alert(
                 push = notifier or build_notifier_from_config(cfg)
                 if not isinstance(push, NoopNotifier):
                     push.notify(title, body, severity=announcement.severity)
-            if job.alert_on_failure:
-                tg = telegram_notifier or build_telegram_notifier_from_config(cfg)
-                if not isinstance(tg, NoopNotifier):
-                    tg.notify(title, body, severity=announcement.severity)
             alerted.append(job.id)
 
         if dirty:

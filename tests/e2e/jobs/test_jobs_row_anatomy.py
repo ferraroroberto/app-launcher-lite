@@ -39,7 +39,6 @@ _JOB = {
     "next_run": "2026-09-23 03:00", "running": False, "stuck": False,
     "args": "", "confirm": False, "paused": False,
     "schedule": {"type": "daily", "at": "03:00"}, "params": [],
-    "alert_on_failure": True,
     "mutex_group": "reporting", "queue_depth": 0,
     "webhook": {"provider": "github"},
     "run_count": 21, "pinned_count": 1,
@@ -216,9 +215,6 @@ def test_row_is_avatar_name_one_meta_line_history_and_a_kebab_of_five_actions(
         "success",            # last-run sentence
     ):
         expect(details).to_contain_text(text)
-    # The bell left the row: the alert-on-failure fact is the sheet's Alerts line.
-    expect(details.locator("[data-role='alerts-line']")).to_contain_text(
-        "Telegram, on failure")
     # The situational flags travel with it.
     expect(details.locator(".job-mutex-pill")).to_contain_text("reporting")
     expect(details.locator(".job-webhook-pill")).to_contain_text("github")
