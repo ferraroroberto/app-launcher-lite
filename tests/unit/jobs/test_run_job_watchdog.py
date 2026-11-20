@@ -13,7 +13,7 @@ Three layers, matching the three places the feature lives:
   watchdog must finalise ``failed`` with the distinct watchdog fields,
   and an ordinary fast run must gain none of them.
 * :func:`~src.notifications.notify_failure` (issue #819) — the watchdog's
-  ``note`` must reach the Telegram alert body, not just the run record.
+  ``note`` must reach the alert body, not just the run record.
 """
 
 from __future__ import annotations
@@ -502,7 +502,7 @@ class TestExecutorWatchdogIntegration:
 
 
 class TestNotifyFailureWatchdogNote:
-    """issue #819 — the Telegram alert must name the watchdog and its
+    """issue #819 — the alert must name the watchdog and its
     reason instead of a bare, otherwise-unproducible exit code.
     """
 
@@ -510,11 +510,9 @@ class TestNotifyFailureWatchdogNote:
         defaults = dict(
             pushover_api_token="",
             pushover_user_key="",
-            notify_on_failure=False,
+            notify_on_failure=True,
             notify_failure_streak=0,
             notify_failure_summary=False,
-            telegram_bot_token="tok",
-            telegram_chat_id="chat",
         )
         defaults.update(kw)
         return SimpleNamespace(**defaults)
@@ -526,7 +524,7 @@ class TestNotifyFailureWatchdogNote:
         return rd
 
     @pytest.mark.usefixtures("fast_watchdog")
-    def test_max_runtime_note_reaches_telegram_body(self, tmp_path, monkeypatch):
+    def test_max_runtime_note_reaches_alert_body(self, tmp_path, monkeypatch):
         log = tmp_path / "output.log"
         log.write_bytes(b"")
         proc = _sleeper()
@@ -541,20 +539,20 @@ class TestNotifyFailureWatchdogNote:
             proc.wait(timeout=10)
 
         rd = self._run_dir(tmp_path, monkeypatch, "wedged")
-        job = Job(id="wedged", name="Wedged", script_path="C:\\ok.py", alert_on_failure=True)
-        telegram_notifier = MagicMock()
+        job = Job(id="wedged", name="Wedged", script_path="C:\\ok.py")
+        push_notifier = MagicMock()
         notif.notify_failure(
             self._cfg(), job, rd,
             status="failed", exit_code=15, watchdog_note=wd.note,
-            telegram_notifier=telegram_notifier,
+            notifier=push_notifier,
         )
-        telegram_notifier.notify.assert_called_once()
-        _, body = telegram_notifier.notify.call_args.args[:2]
+        push_notifier.notify.assert_called_once()
+        _, body = push_notifier.notify.call_args.args[:2]
         assert wd.note in body
         assert "exit=15" in body
 
     @pytest.mark.usefixtures("fast_watchdog")
-    def test_no_output_note_reaches_telegram_body(self, tmp_path, monkeypatch):
+    def test_no_output_note_reaches_alert_body(self, tmp_path, monkeypatch):
         log = tmp_path / "output.log"
         log.write_bytes(b"started\n")
         proc = _sleeper()
@@ -569,25 +567,25 @@ class TestNotifyFailureWatchdogNote:
             proc.wait(timeout=10)
 
         rd = self._run_dir(tmp_path, monkeypatch, "silent")
-        job = Job(id="silent", name="Silent", script_path="C:\\ok.py", alert_on_failure=True)
-        telegram_notifier = MagicMock()
+        job = Job(id="silent", name="Silent", script_path="C:\\ok.py")
+        push_notifier = MagicMock()
         notif.notify_failure(
             self._cfg(), job, rd,
             status="failed", exit_code=15, watchdog_note=wd.note,
-            telegram_notifier=telegram_notifier,
+            notifier=push_notifier,
         )
-        _, body = telegram_notifier.notify.call_args.args[:2]
+        _, body = push_notifier.notify.call_args.args[:2]
         assert wd.note in body
 
     def test_no_watchdog_note_leaves_body_unchanged(self, tmp_path, monkeypatch):
         rd = self._run_dir(tmp_path, monkeypatch, "fine")
-        job = Job(id="fine", name="Fine", script_path="C:\\ok.py", alert_on_failure=True)
-        telegram_notifier = MagicMock()
+        job = Job(id="fine", name="Fine", script_path="C:\\ok.py")
+        push_notifier = MagicMock()
         notif.notify_failure(
             self._cfg(), job, rd,
-            status="failed", exit_code=1, telegram_notifier=telegram_notifier,
+            status="failed", exit_code=1, notifier=push_notifier,
         )
-        _, body = telegram_notifier.notify.call_args.args[:2]
+        _, body = push_notifier.notify.call_args.args[:2]
         assert "watchdog" not in body
         assert body.endswith("exit=1")
 
@@ -595,15 +593,14 @@ class TestNotifyFailureWatchdogNote:
         rd = self._run_dir(tmp_path, monkeypatch, "reaped-wedged")
         job = Job(
             id="reaped-wedged", name="Reaped Wedged", script_path="C:\\ok.py",
-            alert_on_failure=True,
         )
-        telegram_notifier = MagicMock()
+        push_notifier = MagicMock()
         notif.notify_failure(
             self._cfg(), job, rd,
             status="failed", exit_code=None, reaped=True,
             watchdog_note="watchdog: max runtime 33min exceeded",
-            telegram_notifier=telegram_notifier,
+            notifier=push_notifier,
         )
-        _, body = telegram_notifier.notify.call_args.args[:2]
+        _, body = push_notifier.notify.call_args.args[:2]
         assert "reaped — end time not confirmed" in body
         assert "watchdog: max runtime 33min exceeded" in body

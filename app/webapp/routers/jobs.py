@@ -95,7 +95,6 @@ JOB_OPTIONAL_FIELDS = (
     "on_failure",
     "confirm",
     "rerun_safe",
-    "alert_on_failure",
     "visible",
     "elevated",
     "session_less",

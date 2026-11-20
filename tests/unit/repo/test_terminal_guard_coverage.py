@@ -114,9 +114,8 @@ DELIBERATELY_TOKEN_ONLY: Dict[str, str] = {
         "off-tailnet. Stated as deliberate in the /api/ports/{port}/kill row."
     ),
     "/api/board/issues/file": (
-        "Files a GitHub issue through gh and spawns nothing: no PTY, no "
-        "terminal text in or out. It is the delegate token's one write, and "
-        "that caller is held to its own allow-list before this gate runs."
+        "Files a GitLab issue through glab and spawns nothing: no PTY, no "
+        "terminal text in or out, so the plain bearer token is enough."
     ),
 }
 

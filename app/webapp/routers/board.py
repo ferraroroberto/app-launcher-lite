@@ -16,7 +16,7 @@
     POST /api/board/owner-checks/answer   → answer owner checks (board_owner.py;
                                             Tailscale + passkey)
     POST /api/board/issues/file           → file a GitHub issue, nothing spawned
-                                            (token-gated; the delegate token's one write)
+                                            (token-gated)
     GET  /api/board/sessions/{sid}/exchange → last user↔assistant exchange
                                             (Tailscale + passkey — transcript text)
     POST /api/board/issues/start          → spawn /issue-start|yolo <N> in the
@@ -463,11 +463,6 @@ async def refresh_github(request: Request) -> Dict[str, Any]:
 # request, well under GitLab's description limit, rather than a document dump.
 _FILE_TITLE_MAX = 255
 _FILE_BODY_MAX = 20_000
-# Appended server-side, so a delegate-filed issue always says where it came from.
-_DELEGATE_FOOTER = (
-    "\n\n---\nFiled through the launcher's delegate token. The fleet chief "
-    "triages it before any lane builds it."
-)
 
 
 @router.post("/api/board/issues/file")
@@ -475,9 +470,7 @@ async def file_issue(request: Request) -> Dict[str, Any]:
     """File a GitLab issue for the chief to triage, without spawning anything.
 
     Body: ``{"repo": str, "title": str, "body": str}``. The repo must be one
-    in the projects folder, the same lookup ``issues/start`` uses. This is the
-    one write the delegate token may make (:mod:`src.auth.delegate_token`); an
-    issue it files carries a footer saying so.
+    in the projects folder, the same lookup ``issues/start`` uses.
     """
     cfg: WebappConfig = request.app.state.webapp_config
     body = await maybe_json(request)
@@ -490,9 +483,6 @@ async def file_issue(request: Request) -> Dict[str, Any]:
     if len(text) > _FILE_BODY_MAX:
         raise HTTPException(status_code=400, detail=f"body is over {_FILE_BODY_MAX} characters")
     entry = _resolve_repo_entry(cfg, str(body.get("repo") or "").strip())
-    delegate = bool(getattr(request.state, "delegate", False))
-    if delegate:
-        text += _DELEGATE_FOOTER
     try:
         url = await asyncio.to_thread(
             forge.create_issue, cfg.gitlab_group, entry.name, title, text, cfg.gitlab_host
@@ -500,7 +490,7 @@ async def file_issue(request: Request) -> Dict[str, Any]:
     except forge.GlabError as exc:
         logger.warning(f"⚠️ filing an issue on {entry.name} failed: {exc}")
         raise HTTPException(status_code=502, detail=f"glab could not file the issue: {exc}")
-    logger.info(f"✅ issue filed on {entry.name}{' by the delegate token' if delegate else ''}: {url}")
+    logger.info(f"✅ issue filed on {entry.name}: {url}")
     return {"repo": entry.name, "url": url}
 
 

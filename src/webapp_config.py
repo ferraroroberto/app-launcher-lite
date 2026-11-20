@@ -362,26 +362,18 @@ class WebappConfig:
     # "what went wrong" summary prepended to the push body. Default off
     # so the issue lands without a hard dependency on the hub.
     notify_failure_summary: bool = False
-    # --- Per-job Telegram failure alerts --------------------
-    # Credentials for the vendored src/notify Telegram primitive. Both
-    # empty means no-op — the executor still finalises runs identically.
-    # Unlike notify_on_failure above (global, Pushover, every job), this
-    # channel fires per job: only jobs with Job.alert_on_failure=True push
-    # here, so the shared Telegram chat isn't spammed by every failure.
+    # --- Login-alert Telegram credentials -------------------
+    # The vendored src/notify Telegram primitive the login lock-out alert
+    # sends through. Either empty means no alert is sent.
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
-    # Optional chat for routine log lines, e.g. the nightly
-    # zombie-cleanup summary — not alerts. Empty falls back to
-    # telegram_chat_id, so a single-chat setup is unchanged. Failure alerts
-    # never use it.
-    telegram_chat_log: str = ""
     # --- Jobs missed-fire coverage --------------------------
     # How often the webapp re-scans every scheduled job for coverage: a
     # missing/disabled Task Scheduler entry, or an elapsed slot with no run
     # record. 0 disables the background tick entirely (the `/api/jobs` badge
     # still computes lazily on poll). Deliberately *on* by default — unlike
     # the notify_* switches above it pushes nothing on its own: alerts still
-    # route through notify_on_failure / Job.alert_on_failure, both opt-in.
+    # route through notify_on_failure, which is opt-in.
     jobs_coverage_interval_minutes: int = 60
     # --- webapp/sessions retention --------------------------
     # THE retention window for the per-session audit trail: every
@@ -405,10 +397,7 @@ class WebappConfig:
     # Salted-hash records only; each raw token is shown once and discarded.
     # api_tokens (src.auth.api_tokens): {id, label, salt, hash, scope, ...}, scope
     # "*" (like auth_token) or {"jobs": [ids]}, which fires only those jobs.
-    # delegate_token (src.auth.delegate_token): {salt, hash, created_at},
-    # {} = off; it may only read the Board and file issues.
     api_tokens: list = field(default_factory=list)
-    delegate_token: dict = field(default_factory=dict)
 
 
 def _apply_session_host_override(cfg: WebappConfig) -> WebappConfig:

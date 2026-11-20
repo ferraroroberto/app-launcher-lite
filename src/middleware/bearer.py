@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import logging
-
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from src.auth import api_tokens, delegate_token
+from src.auth import api_tokens
 from src.auth.api_tokens import constant_time_equals
 from src.middleware import trust
 from src.middleware.credentials import credential_required, presented_credential
@@ -18,10 +16,6 @@ from src.middleware.routes import (
     is_webhook_hook_path,
 )
 from src.middleware.terminal_gate import terminal_http_gate
-
-# The logger behind webapp/auth.log, the auth trail that persists on the live
-# tray, so every delegate-token request is reviewable after the fact.
-auth_logger = logging.getLogger("launcher.auth")
 
 
 class BearerTokenMiddleware(BaseHTTPMiddleware):
@@ -44,14 +38,6 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
         is_loopback = trust.is_pc_itself(client_host, request.headers)
         path = request.url.path
         cfg = self._get_config()
-
-        # The delegate token is decided before every other leg, the terminal
-        # gate included, so a delegate caller on the tailnet is still held to
-        # its allow-list. Loopback never reaches it and keeps its bypass.
-        if not is_loopback:
-            presented = presented_credential(request)
-            if delegate_token.matches(presented, getattr(cfg, "delegate_token", None)):
-                return await _delegate_dispatch(request, call_next, client_host)
 
         # Terminal endpoints are Tailscale-only (+ passkey for the
         # interactive ones). Enforced even when no bearer token is
@@ -100,22 +86,3 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
             content={"detail": "missing or invalid bearer token"},
             headers={"WWW-Authenticate": 'Bearer realm="launcher"'},
         )
-
-
-async def _delegate_dispatch(request: Request, call_next, client_host: str):
-    """Serve a delegate-token request on its allow-list, refuse anything else.
-
-    The refusal is a 403 with its own reason, so a caller can tell "this token
-    may not do that" apart from a bad credential's 401. Every request is
-    logged with its method, path and outcome, never the token.
-    """
-    method, path = request.method, request.url.path
-    if not delegate_token.allowed(method, path):
-        auth_logger.info(f"🔒 delegate token from {client_host}: {method} {path} → 403 refused")
-        return JSONResponse(status_code=403, content={"detail": delegate_token.REFUSAL})
-    request.state.delegate = True
-    response = await call_next(request)
-    auth_logger.info(
-        f"ℹ️ delegate token from {client_host}: {method} {path} → {response.status_code}"
-    )
-    return response

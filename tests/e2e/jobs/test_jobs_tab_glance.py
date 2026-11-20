@@ -48,7 +48,7 @@ def _job(job_id: str, name: str, **extra) -> dict:
 
 
 _JOBS = [
-    _job("ledger", "Ledger reconciliation", alert_on_failure=True, target_kind="python"),
+    _job("ledger", "Ledger reconciliation", target_kind="python"),
     _job("mailbox", "Mailbox sweep", schedule_chip="every 15 min", target_kind="http-check",
          next_run_epoch=_NOW + 300,
          last_run={"run_id": "m1", "status": "failed", "outcome": "failed",
@@ -266,10 +266,9 @@ def test_sheet_runs_now_streams_the_new_run_and_a_search_hit_opens_its_run(
     sheet = page.locator("#jobSheet")
     expect(sheet).to_be_visible()
     expect(_row(page, "ledger")).to_have_attribute("aria-current", "true")
-    # Every former accordion section, the Alerts line among the details.
+    # Every former accordion section.
     body = page.locator("#jobSheetBody")
     expect(body.locator("[data-role='job-details']")).to_be_visible()
-    expect(body.locator("[data-role='alerts-line']")).to_contain_text("Telegram")
     expect(body.locator("[data-role='runs-list'] .jobs-run-btn")).to_have_count(2)
     expect(body.locator("[data-role='output-tail']")).to_have_text("output of r2")
 

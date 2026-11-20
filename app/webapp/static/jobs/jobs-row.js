@@ -308,7 +308,7 @@ function describeDuration(job) {
 
 /* The sheet's detail block (in the sheet): what it runs,
  * its cadence and next fire, how long it takes, how often it succeeds, what
- * is kept, whether it alerts (the bell that left the row), and the
+ * is kept, and the
  * situational flags (an externally-managed schedule, a mutex group, a
  * webhook trigger). */
 function detailRow(label, value) {
@@ -358,10 +358,7 @@ export function renderJobDetails(job) {
       ? Math.round(successRate * 100) + '% over 30 days' : null),
     detailRow('Runs', kept.length ? kept.join(' · ') : null),
     detailRow('Last run', describeLastRun(job)),
-    detailRow('Alerts', job.alert_on_failure ? 'Telegram, on failure' : null),
   ];
-  const alerts = rows[rows.length - 1];
-  if (alerts) alerts.dataset.role = 'alerts-line';
 
   // The situational flags, kept as chips: each is a fact, not a measurement.
   const flags = document.createElement('div');
