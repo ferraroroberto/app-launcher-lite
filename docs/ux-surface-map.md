@@ -1255,8 +1255,12 @@ flowchart LR
 
 - **Root:** `data-surface`
 - **Reach:** the lane under Your turn, closed by default
-- **Holds:** merge requests and pipeline jobs, one row each
-- **States:** empty line
+- **Holds:**
+  - merge requests and pipeline jobs, one row each
+  - a project whose default-branch pipeline is red, one row each with a CI failed chip that opens the failed pipeline on GitLab
+- **States:**
+  - empty line
+  - a project whose pipelines could not be read, one row with a CI unknown chip
 
 ### `board.done` Done today
 

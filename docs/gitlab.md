@@ -17,7 +17,13 @@ The client in `src/clients/gitlab.py` ran against gitlab.com with `glab` 1.131 (
 | Closing an issue (`state_event=close`) | verified; the client has no close call, so a live check used `glab api` directly |
 | A group with no issues or merge requests refreshes with no error | verified |
 | A page of 100 (`truncated`) against a real group, a subgroup-nested project, a self-hosted `gitlab_host` | `unknown` |
-| Pipelines, labels, `glab mr merge` | `unknown` (not read or written by the client today) |
+| Project list (`groups/<group>/projects?include_subgroups=true&archived=false`) with `id`, `path`, `path_with_namespace`, `default_branch` and `builds_access_level` | verified |
+| Pipelines on the default branch (`projects/<id>/pipelines?ref=<default>&order_by=id&sort=desc&per_page=20`): a project with none answers `200 []` | verified (empty); the group's projects held no pipeline |
+| The same read for a ref GitLab does not know | verified: `200 []`, the same as "no pipelines", so the ref is named from the project row, never guessed |
+| `projects/<id>/pipelines/latest?ref=<default>` on a project with no pipeline | `403 Forbidden`; not used |
+| Reading a pipeline's row shape and `status` values (`id`, `iid`, `sha`, `ref`, `status`, `source`, `created_at`, `web_url`) | verified against a public project's pipelines (`success` and `failed`); not yet against a pipeline of the group |
+| A red or green pipeline of the group itself, `cancelled`/`skipped` rows, a project with CI switched off, a self-hosted host | `unknown` |
+| Labels, `glab mr merge` | `unknown` (not read or written by the client today) |
 | The two-remote mirror and `scripts/sync_gitlab_mirror.py` | verified (push, level re-run); see below |
 | An Android Git client | `unknown` |
 
@@ -35,6 +41,8 @@ Every read is `glab api` against REST v4, one subprocess per call with a 20 s ti
 - **Open merge requests:** `groups/<group>/merge_requests?state=opened`, most recently updated first.
 - **Merged merge requests, today:** the MRs merged on the local day, used to pair each closed issue with the MR that closed it. The MR description's `VISUAL_PROOF=<state>` token is read for the proof state shown on a Done card.
 - **Issues closed today:** the Done column (`closed_at` inside the local day).
+
+- **Default-branch pipelines:** the group's live projects (archived and CI-off ones left out), then one `projects/<id>/pipelines?ref=<default>` read each, four in flight. The default branch comes from the project row: GitLab answers `[]` for a ref it does not know, so a guessed branch would read as "no pipelines". The latest finished pipeline (`failed` or `success`) decides: `red`, `green`, or `unknown` when the read failed or the row names no default branch. A project with no finished pipeline is not a row. The Board draws a red project as one `CI failed` row and an unreadable one as `CI unknown`; see [board.md](board.md#red-pipelines). No pipeline-file check is made first: the empty answer already says "no pipeline".
 
 **No forge call ever runs on a poll.** `refresh()` runs only on the Board's ↻ button or once on a stale tab activation (with a 60 s cooldown); the 5 s poll reads the in-memory snapshot. A failed refresh keeps the previous data and surfaces an `error` badge; a never-filled cache is "never fetched", not "nothing open".
 

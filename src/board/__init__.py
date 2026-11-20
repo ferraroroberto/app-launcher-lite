@@ -53,7 +53,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from src.board import active_issue_claims, card_status
+from src.board import active_issue_claims, card_status, ci_runs
 from src.board.attention_state import AttentionState, finished_run_state
 from src.board.sessions import (  # noqa: F401 — re-exported for board.<name> callers
     _live_launcher_session_ids,
@@ -236,7 +236,8 @@ def build_board(
     / ``awaiting-input`` — the needs-you split's three genuinely
     human-actionable outcomes) — a terminal that needs a human.
     Other = everything else that needs attention but isn't a terminal: open
-    PRs, then failed/stuck/unreadable jobs. Done = today's closed issues only
+    PRs, then failed/stuck/unreadable jobs, then red or unreadable default-branch
+    pipelines (:mod:`src.board.ci_runs`). Done = today's closed issues only
     — a merged PR that closed one is already reflected by the issue itself.
 
     The standing fleet chief never routes to Your turn: its
@@ -257,7 +258,11 @@ def build_board(
         "backlog": list(github.get("issues") or []),
         "claude_turn": claude_turn,
         "your_turn": your_turn,
-        "other": list(github.get("prs") or []) + job_cards,
+        "other": (
+            list(github.get("prs") or [])
+            + job_cards
+            + ci_runs.board_cards(github.get("ci") or {})
+        ),
         "done": list(github.get("done") or []),
     }
 

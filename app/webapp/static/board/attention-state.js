@@ -26,9 +26,9 @@ export function attentionState(state) {
   return KNOWN.has(state) ? state : null;
 }
 
-// True for a job card that counts as failing; an unknown value never does.
+// True for a job or CI card that counts as failing; an unknown value never does.
 export function isFailing(card) {
-  return card.kind === 'job' && FAILING.has(attentionState(card.state));
+  return (card.kind === 'job' || card.kind === 'ci') && FAILING.has(attentionState(card.state));
 }
 
 // True for a job card whose finished run the owner may dismiss.

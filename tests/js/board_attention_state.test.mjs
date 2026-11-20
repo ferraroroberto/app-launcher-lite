@@ -21,8 +21,12 @@ for (const live of [AttentionState.STUCK, AttentionState.UNREADABLE, AttentionSt
 }
 // A dismissible state still needs the run it dismisses.
 assert.equal(isDismissible(job(AttentionState.FAILED, null)), false);
-// Only job cards carry this state.
+// Only job and CI cards carry this state; a red pipeline counts as failing, an unread one does not,
+// and a CI card is never dismissible (it has no run to dismiss).
 assert.equal(isFailing({ kind: 'issue', state: AttentionState.FAILED }), false);
+assert.equal(isFailing({ kind: 'ci', state: AttentionState.FAILED }), true);
+assert.equal(isFailing({ kind: 'ci', state: AttentionState.UNKNOWN }), false);
+assert.equal(isDismissible({ kind: 'ci', state: AttentionState.FAILED, pipeline_id: 7 }), false);
 
 for (const unknown of ['', 'Failed', 'running', 'dead', null, undefined, 42]) {
   assert.equal(attentionState(unknown), null, String(unknown));

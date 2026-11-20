@@ -36,7 +36,7 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 4. `ui_proof`, the remote-control toggle and the Chat view.
 5. A fresh-machine install checklist.
 
-**Dropped from the full app** (not documented, not planned): Telegram (no job alerts; only the login lock-out alert can send through it), Life OS, inspiration, OCR/TTS, usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board, screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
+**Dropped from the full app** (not documented, not planned): Telegram (no job alerts; only the login lock-out alert can send through it), Life OS, inspiration, OCR/TTS, usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board (GitLab pipelines have their own row), screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
 
 ## Quick start
 
@@ -81,7 +81,7 @@ Surfaces the skills of a sibling `team-os` checkout (`team_os_dir`; skills live 
 
 ### Board
 
-A kanban over four computed columns: **Backlog** (open GitLab issues across `gitlab_group`), **Bot's turn** (live sessions working or idle), **Your turn** (sessions awaiting input, the number that matters) and **Done** (issues closed today). Session presence comes from the `:8466` session-host list; semantic status is joined from `sessions-state.json`, written by fleet-config-lite's Copilot hooks. GitLab data is fetched server-side through `glab` **on demand only** (the ↻ button or a stale tab activation), never on the 5 s poll, and is **not yet verified live**. Tapping a session card opens a drill-down drawer (last exchange plus a reply straight into the live PTY); a Backlog card whose repo exists locally carries **▶ Start / ⚡ YOLO** buttons that spawn `/issue-start N` / `/issue-yolo N`. Full reference: [docs/board.md](docs/board.md); the forge side: [docs/gitlab.md](docs/gitlab.md).
+A kanban over four computed columns: **Backlog** (open GitLab issues across `gitlab_group`), **Bot's turn** (live sessions working or idle), **Your turn** (sessions awaiting input, the number that matters) and **Done** (issues closed today). Session presence comes from the `:8466` session-host list; semantic status is joined from `sessions-state.json`, written by fleet-config-lite's Copilot hooks. GitLab data is fetched server-side through `glab` **on demand only** (the ↻ button or a stale tab activation), never on the 5 s poll, and is **not yet verified live**. The Other lane also shows a `CI failed` row for a project whose default-branch pipeline is red, and `CI unknown` when its pipelines cannot be read ([docs/board.md](docs/board.md#red-pipelines)). Tapping a session card opens a drill-down drawer (last exchange plus a reply straight into the live PTY); a Backlog card whose repo exists locally carries **▶ Start / ⚡ YOLO** buttons that spawn `/issue-start N` / `/issue-yolo N`. Full reference: [docs/board.md](docs/board.md); the forge side: [docs/gitlab.md](docs/gitlab.md).
 
 ### Settings
 
