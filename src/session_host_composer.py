@@ -27,6 +27,13 @@ CLI and Pi, each spawned alone, nothing attached to a live session):
   Claude Code and Pi (the backslash is consumed); Codex submits the line,
   backslash included. That is ``Agent.backslash_newline``.
 
+The same probe on Copilot CLI 1.0.114 (2026-11-20, a throwaway ``copilot``
+in an empty folder) matched every row above, with a backslash before Enter
+inserting a newline. Ctrl-U on a two-line draft cleared only the cursor's
+line, and Ctrl-C on a draft both cleared it and armed "ctrl+c again to
+exit". Copilot also offers a ``#`` issue mention beside ``@``, so a ``#``
+word before Enter reads as a possible completion popup, like ``@``.
+
 Two keys are deliberately not read as a clear although they can empty the
 composer: Ctrl-C with no draft (it interrupts a turn, which can put the
 prompt back) and the submit after a Ctrl-S stash (Claude Code restores the
@@ -224,8 +231,8 @@ class ComposerTracker:
             self._unknown()
             return
         token = re.split(r"\s", typed)[-1]
-        if token.startswith("@") or (typed.startswith("/") and not re.search(r"\s", typed)):
-            # A completion popup (a file mention, a slash command) may take
+        if token.startswith(("@", "#")) or (typed.startswith("/") and not re.search(r"\s", typed)):
+            # A completion popup (a file or issue mention, a slash command) may take
             # the Enter instead of the composer.
             self._unknown()
             return
