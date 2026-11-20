@@ -63,7 +63,7 @@ def _walk(page: Page, base_url: str, auth_token: str) -> None:
 
     # Only the efforts the model offers can be picked.
     page.locator("#launchPresetModel").select_option(_MODEL)
-    expect(page.locator("#launchPresetEffort > option")).to_have_text(["Low", "Medium", "High"])
+    expect(page.locator("#launchPresetEffort > option")).to_have_text(["Low", "Medium", "High", "Xhigh", "Max"])
     page.locator("#launchPresetName").fill("Flash high")
     page.locator("#launchPresetEffort").select_option("high")
     page.locator("#launchPresetContext").select_option("long_context")
