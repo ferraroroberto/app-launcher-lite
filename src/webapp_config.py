@@ -32,6 +32,7 @@ from urllib.parse import urlencode, urlparse, urlunparse
 
 from src._json_io import atomic_write_json
 from src.agents import DEFAULT_AGENT
+from src.app_config import resolve_session_host_port, resolve_webapp_port
 
 # isort: off
 # Grid layout: one name per line would push this module past the structure ratchet's file-size cap.
@@ -368,6 +369,28 @@ def _apply_session_host_override(cfg: WebappConfig) -> WebappConfig:
     return cfg
 
 
+def _apply_configured_ports(cfg: WebappConfig) -> WebappConfig:
+    """Take both ports from ``config.json`` ``webapp``, the one place they are set.
+
+    The tray, the ``.bat``/``.ps1`` launchers and the restart check read the
+    same file, so a leftover ``port`` or ``session_host_port`` in
+    ``webapp_config.json`` can never make two readers disagree about where a
+    service lives.
+    """
+    cfg.port = resolve_webapp_port()
+    cfg.session_host_port = resolve_session_host_port()
+    return cfg
+
+
+def _finish_load(cfg: WebappConfig, apply_env_override: bool, validate: bool = False) -> WebappConfig:
+    _apply_configured_ports(cfg)
+    if apply_env_override:
+        _apply_session_host_override(cfg)
+    if validate:
+        _validate(cfg)
+    return cfg
+
+
 def _load_secrets(raw: dict) -> Dict[str, str]:
     """``secrets``, honouring the legacy ``webhook_secrets`` key.
 
@@ -544,7 +567,7 @@ def load_webapp_config(
             f"(file will be created when settings change)"
         )
         cfg = WebappConfig()
-        return _apply_session_host_override(cfg) if apply_env_override else cfg
+        return _finish_load(cfg, apply_env_override)
 
     try:
         raw = json.loads(target.read_text(encoding="utf-8"))
@@ -553,14 +576,14 @@ def load_webapp_config(
             f"⚠️  Could not read {target} ({exc}); falling back to defaults"
         )
         cfg = WebappConfig()
-        return _apply_session_host_override(cfg) if apply_env_override else cfg
+        return _finish_load(cfg, apply_env_override)
 
     if not isinstance(raw, dict):
         logger.warning(
             f"⚠️  {target} is not a JSON object; falling back to defaults"
         )
         cfg = WebappConfig()
-        return _apply_session_host_override(cfg) if apply_env_override else cfg
+        return _finish_load(cfg, apply_env_override)
 
     raw = _migrate_legacy_keys(raw, target)
 
@@ -572,10 +595,7 @@ def load_webapp_config(
             for spec in dataclass_fields(WebappConfig)
         }
     )
-    if apply_env_override:
-        _apply_session_host_override(cfg)
-    _validate(cfg)
-    return cfg
+    return _finish_load(cfg, apply_env_override, validate=True)
 
 
 def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:

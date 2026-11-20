@@ -97,7 +97,8 @@ There is no `.env`. Committed samples live next to each gitignored real file in 
 
 | File | Key | Default | Effect |
 | --- | --- | --- | --- |
-| `config.json` | `webapp.port` | `8465` | The one place the webapp port is set; the tray, `launcher.py webapp`, the `.bat` files (through `python -m scripts.webapp_port`) and `GET /api/config` all read it. |
+| `config.json` | `webapp.port` | `8465` | The one place the webapp port is set; the tray, `launcher.py webapp`, the `.bat` and `.ps1` scripts (through `python -m scripts.webapp_port`), the restart check, the tray's single-instance mutex and `GET /api/config` all read it. |
+| `config.json` | `webapp.session_host_port` | `8466` | The one place the loopback PTY session-host port is set; the webapp, the tray, `restart-session-host.ps1` and the session-host spawn all read it. Must differ from `webapp.port`. |
 | `config.json` | `tailnet_host` | `""` | Hostname or IP the phone reaches this PC on; builds the Apps tab's remote Open URLs. Empty disables. |
 | `config.json` | `task_namespace` | `AppLauncherLite` | Task Scheduler folder the Jobs tab registers under, read at startup. |
 | `webapp_config.json` | `projects_dir` | repo's parent | Folder whose child dirs the Coding tab lists. |
@@ -129,9 +130,10 @@ There is no `.env`. Committed samples live next to each gitignored real file in 
 
 | Port | Process | Owner |
 | --- | --- | --- |
-| `:8465` | FastAPI webapp (HTTPS when a cert pair exists in `webapp/certificates/`) | Tray; killed and reclaimed by `tray.bat --restart`. |
-| `:8466` | PTY session-host (loopback only, never network-reachable) | Spawned **detached** from the tray subtree; **excluded** from the restart reclaim sweep; re-adopted by the fresh tray. |
+| `:8465` (`webapp.port`) | FastAPI webapp (HTTPS when a cert pair exists in `webapp/certificates/`) | Tray; killed and reclaimed by `tray.bat --restart`. |
+| `:8466` (`webapp.session_host_port`) | PTY session-host (loopback only, never network-reachable) | Spawned **detached** from the tray subtree; **excluded** from the restart reclaim sweep; re-adopted by the fresh tray. |
 
+- **Side by side with another launcher.** Set `webapp.port` and `webapp.session_host_port` in `config/config.json` to two free ports; nothing else changes. `tray.bat`, `--restart`, `scripts/restart-session-host.ps1`, the restart check and the tray's single-instance mutex (`Global\app-launcher-lite-<webapp port>-tray`) all read those two values, so none of them touches `:8465` or `:8466` and each install's tray runs next to the other. Keep `apps_scan_root` empty or scoped to this install's apps.
 - **`tray.bat --restart`** is the canonical restart: an orphan-proof reclaim-then-start through the vendored `scripts/tray_lifecycle.ps1`. It **preserves live Coding/PTY sessions**; the session-host is deliberately not touched. Run it from PowerShell, not Git Bash.
 - A change under `src/session_host.py` or `app/webapp/session_host/` is **not live** until `:8466` itself restarts. `GET /api/version` reports a `session_host` block whose `stale_relevant` field scopes staleness to session-host-relevant paths; `true` means such a change is merged but not yet running. The one supported restart is `C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/restart-session-host.ps1 -Confirm`, operator-only because it kills every live PTY. Details: [docs/restart-and-liveness.md](docs/restart-and-liveness.md).
 - The tray menu offers open/copy-URL (local, remote, Cloudflare), webapp restart, passkey enrollment, status and quit. **Copy remote URL** uses the Tailscale hostname when the CLI resolves one, else `tailnet_host`.

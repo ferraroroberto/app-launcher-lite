@@ -52,6 +52,7 @@ from app.webapp.manager import (
 )
 from src import AppConfig, runtime_files
 from src._tunnel_config import read_tunnel_hostname
+from src.app_config import resolve_webapp_port
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
 from src.webapp_config import append_auth_token, load_webapp_config
 
@@ -713,6 +714,11 @@ class TrayApp:
         return 0
 
 
+def tray_mutex_name(webapp_port: int) -> str:
+    """The tray's single-instance mutex; the webapp port keeps two installs on one PC apart."""
+    return rf"Global\app-launcher-lite-{webapp_port}-tray"
+
+
 def run_tray(app_config: AppConfig) -> int:
     """Run the tray icon. Returns when the user picks Quit."""
     try:
@@ -727,7 +733,7 @@ def run_tray(app_config: AppConfig) -> int:
     # pre-check can let two near-simultaneous launches through, so the guarantee
     # must live in the process. Held for the tray's lifetime; the OS frees the
     # named mutex on exit.
-    instance = SingleInstance(r"Global\app-launcher-lite-tray")
+    instance = SingleInstance(tray_mutex_name(resolve_webapp_port()))
     if not instance.acquired:
         logger.info("ℹ️  Another app-launcher-lite tray is already running; exiting.")
         return 0
