@@ -23,7 +23,7 @@ export function renderCiCard(card) {
   const meta = [
     failed ? card.branch || '' : '',
     failed && card.age_seconds != null ? 'red ' + fmtDuration(card.age_seconds) : '',
-    failed ? '' : 'pipelines not read',
+    failed ? '' : 'not read',
   ].filter(Boolean).join(' · ');
   const url = failed ? card.pipeline_url : null;
   const row = actionRow({

@@ -112,7 +112,7 @@ def test_dismissing_a_failed_job_card_drops_it_and_the_failing_count(
     expect(red).to_contain_text("main")
     expect(red.get_by_role("button", name="Open the failed pipeline of tool on GitLab")).to_have_count(1)
     expect(unread.locator(".board-ci-chip")).to_have_text("CI unknown")
-    expect(unread).to_contain_text("pipelines not read")
+    expect(unread).to_contain_text("not read")
     expect(unread.locator("button")).to_have_count(0)
     expect(lane.locator("li.board-item-ci .action-row-verb")).to_have_count(0)
 
