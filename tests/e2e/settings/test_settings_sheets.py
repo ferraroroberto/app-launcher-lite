@@ -9,7 +9,8 @@ full-width primary, Done. Contract:
     (Coding agent, Chief and GitLab at least);
   * every sheet opens and closes (back, ✕, Done, Escape);
   * the Coding agent sheet offers Default plus the Copilot models, saves a
-    pick and shows the server's flags;
+    pick and shows the server's flags, and its Launch presets add, edit,
+    refuse and remove a preset (``_launch_presets.py``);
   * every ``openSettingsAt`` caller lands inside the sheet that holds its
     field (the Code and Team OS empty states, the Code tab's chief row);
   * no Save button is left: fields save as they change.
@@ -32,6 +33,7 @@ from tests.e2e.fixtures.ui import (
     open_settings,
     open_settings_sheet,
 )
+from tests.e2e.settings._launch_presets import walk_launch_presets
 
 pytestmark = pytest.mark.smoke
 
@@ -153,6 +155,8 @@ def test_copilot_sheet_saves_a_model_and_shows_the_flags(
     expect(page.locator("#copilotFlagsPreview")).not_to_contain_text("--model")
     assert _config(base_url, auth_token)["copilot"]["model"] == ""
     close_settings_sheets(page)
+
+    walk_launch_presets(page, base_url, auth_token)
 
     open_settings_sheet(page, "gitlabSheet")
     group = page.locator("#gitlabGroup")

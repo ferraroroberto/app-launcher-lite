@@ -11,6 +11,7 @@ import asyncio
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from app.webapp.routers._helpers import (
     PROJECT_ROOT,
@@ -23,7 +24,12 @@ from src.chief.launch_settings import chief_model_problem
 from src.desktop import lid_keep_awake
 from src.launching import copilot_remote
 from src.launching.flags import build_copilot_flags, missing_default_copilot_models
-from src.launching.presets import checked_launch_presets
+from src.launching.presets import (
+    PRESET_CONTEXTS,
+    PresetError,
+    checked_launch_presets,
+    efforts_for,
+)
 from src.middleware import terminal_reachability
 from src.session_view import outbox as session_outbox
 from src.webapp_config import (
@@ -121,6 +127,12 @@ def copilot_payload(cfg: WebappConfig) -> Dict[str, Any]:
         "remote_cli_state": copilot_remote.read_state(),
         "context": cfg.copilot_context,
         "contexts_available": list(VALID_COPILOT_CONTEXTS),
+        # What a launch preset may pick: each listed model's efforts (the catalog
+        # narrows one, any other model takes every level) and the context tiers.
+        "preset_efforts": {
+            model: list(efforts_for("copilot", model)) for model in cfg.copilot_models
+        },
+        "preset_contexts": list(PRESET_CONTEXTS),
         "effort": cfg.copilot_effort,
         "efforts_available": list(VALID_COPILOT_EFFORTS),
         "computed_flags": build_copilot_flags(cfg),
@@ -148,14 +160,6 @@ def _checked_outbox_roots(raw: Any, current: List[str]) -> List[str]:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from None
     return entries
-
-
-def _checked_presets(raw: Any) -> List[Dict[str, str]]:
-    """The written launch presets, clean, with an id each; 400 on a bad row."""
-    try:
-        return checked_launch_presets(raw)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
 
 
 def _checked_model_list(raw: Any) -> List[str]:
@@ -226,8 +230,8 @@ def _checked_whole_number(patch: Dict[str, Any], key: str, what: str) -> None:
             raise HTTPException(status_code=400, detail=f"{key} must be {what}")
 
 
-@router.post("/api/config")
-async def patch_config(request: Request) -> Dict[str, Any]:
+@router.post("/api/config", response_model=None)
+async def patch_config(request: Request) -> Any:
     cfg: WebappConfig = request.app.state.webapp_config
     body = await maybe_json(request)
     patch = {k: v for k, v in body.items() if k in _PATCH_KEYS}
@@ -250,7 +254,15 @@ async def patch_config(request: Request) -> Dict[str, Any]:
             str(p).strip() for p in (patch["coding_hidden_agents"] or []) if str(p).strip()
         ]
     if "launch_presets" in patch:
-        patch["launch_presets"] = _checked_presets(patch["launch_presets"])
+        try:
+            patch["launch_presets"] = checked_launch_presets(patch["launch_presets"])
+        except PresetError as exc:
+            # The field and row ride along so Settings can show the message
+            # beside the control it is about.
+            return JSONResponse(
+                status_code=400,
+                content={"detail": str(exc), "field": exc.field, "index": exc.index},
+            )
     if "copilot_models" in patch:
         patch["copilot_models"] = _checked_model_list(patch["copilot_models"])
     for key in ("gitlab_group", "gitlab_host", "copilot_model", "copilot_context", "copilot_effort"):

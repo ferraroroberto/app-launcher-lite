@@ -21,7 +21,7 @@ Walked 2026-11-18 against build `52a7d40`, at widths 390, 1280, themes light, da
 | [Jobs](#jobs) | 10 |
 | [Team OS](#team-os) | 7 |
 | [Board](#board) | 15 |
-| [Settings](#settings) | 12 |
+| [Settings](#settings) | 13 |
 | [Keys and gestures](#keys-and-gestures) | 4 |
 
 ## Chrome
@@ -199,7 +199,7 @@ flowchart LR
   s22(["Rename session · Terminal"])
   s6(["Confirm dialog · Chrome"])
   s84(["Chief sheet · Settings"])
-  s88(["Folders sheet · Settings"])
+  s89(["Folders sheet · Settings"])
   s21(["Overlay session menu · Terminal"])
   s28(["Turn cards and step lines · Chat"])
   s0 -->|"Code"| s9
@@ -217,7 +217,7 @@ flowchart LR
   s13 -->|"row kebab"| s15
   s13 -->|"preset dropdown"| s14
   s13 -->|"Sync all"| s16
-  s13 -->|"Open Settings"| s88
+  s13 -->|"Open Settings"| s89
   s13 -->|"row tap"| s19
   s15 -->|"Show changes"| s17
   s17 -->|"file kebab"| s18
@@ -385,7 +385,7 @@ flowchart LR
   s17(["Changes overlay · Code"])
   s6(["Confirm dialog · Chrome"])
   s75(["Session drawer · Board"])
-  s95(["Composer keys · Keys and gestures"])
+  s96(["Composer keys · Keys and gestures"])
   s10 -->|"row tap"| s19
   s11 -->|"Links"| s23
   s11 -->|"Rename"| s22
@@ -400,7 +400,7 @@ flowchart LR
   s21 -->|"Changed files"| s17
   s21 -->|"Stop and kill"| s6
   s75 -->|"Terminal"| s19
-  s95 -->|"keys button"| s24
+  s96 -->|"keys button"| s24
 ```
 
 ### `terminal.overlay` Session overlay
@@ -600,12 +600,12 @@ flowchart LR
   s34["Quality sheet"]
   s35["Readout"]
   s2(["PC load sheet · Chrome"])
-  s94(["Screen view keys · Keys and gestures"])
+  s95(["Screen view keys · Keys and gestures"])
   s2 -->|"Screen View live"| s32
   s32 -->|"Quality"| s34
   s32 -->|"Paste to PC"| s33
   s32 -->|"readout switch"| s35
-  s94 -->|"Screen view"| s32
+  s95 -->|"Screen view"| s32
 ```
 
 ### `screen.view` Screen view
@@ -955,14 +955,14 @@ flowchart LR
   s63["Skill file"]
   s64["Weekly recap"]
   s0(["Primary navigation · Chrome"])
-  s88(["Folders sheet · Settings"])
+  s89(["Folders sheet · Settings"])
   s6(["Confirm dialog · Chrome"])
   s0 -->|"Team"| s58
   s58 -->|"Skills"| s59
   s58 -->|"Weekly recap"| s64
   s59 -->|"model picker"| s60
   s59 -->|"row kebab"| s61
-  s59 -->|"Open Settings"| s88
+  s59 -->|"Open Settings"| s89
   s61 -->|"Read"| s62
   s62 -->|"a file"| s63
   s63 -->|"Delete log"| s6
@@ -1262,11 +1262,12 @@ flowchart LR
   s84["Chief sheet"]
   s85["Chief model menu"]
   s86["GitLab sheet"]
-  s87["API tokens sheet"]
-  s88["Folders sheet"]
-  s89["Chat folder menu"]
-  s90["Passkeys sheet"]
-  s91["Terminal sheet"]
+  s87["Launch preset menu"]
+  s88["API tokens sheet"]
+  s89["Folders sheet"]
+  s90["Chat folder menu"]
+  s91["Passkeys sheet"]
+  s92["Terminal sheet"]
   s1(["Tab header · Chrome"])
   s11(["Session menu · Code"])
   s12(["Stopped chief menu · Code"])
@@ -1275,19 +1276,20 @@ flowchart LR
   s1 -->|"gear"| s80
   s11 -->|"Chief settings"| s84
   s12 -->|"Chief settings"| s84
-  s13 -->|"Open Settings"| s88
-  s59 -->|"Open Settings"| s88
+  s13 -->|"Open Settings"| s89
+  s59 -->|"Open Settings"| s89
   s80 -->|"the groups"| s81
   s80 -->|"a document row"| s82
   s80 -->|"Coding agent"| s83
   s80 -->|"Chief"| s84
   s80 -->|"GitLab"| s86
-  s80 -->|"API tokens"| s87
-  s80 -->|"Folders"| s88
-  s80 -->|"Passkeys"| s90
-  s80 -->|"Terminal"| s91
+  s80 -->|"API tokens"| s88
+  s80 -->|"Folders"| s89
+  s80 -->|"Passkeys"| s91
+  s80 -->|"Terminal"| s92
+  s83 -->|"preset kebab"| s87
   s84 -->|"model"| s85
-  s88 -->|"a folder's kebab"| s89
+  s89 -->|"a folder's kebab"| s90
 ```
 
 ### `settings.pane` Settings
@@ -1339,12 +1341,15 @@ flowchart LR
   - the sign-in instruction
   - Models offered, one id per line
   - a line with an Add button when the saved list lacks a default model
+  - Launch presets, the saved list with a kebab on each row and one form (name, model from the list above, effort the model offers, context tier) that adds a preset or, from Edit, changes one
   - Done
 - **Does:**
   - Effort applies only with a model picked here
   - Add appends the missing default models to the saved list
+  - a preset is saved as it is added, edited, renamed on its row or removed, and then appears in the Coding launch dropdown; a refusal shows under the field it is about
   - Remote session is applied at each Copilot launch from Coding, Team OS and the Board; off starts sessions unshared
 - **Why:** Copilot takes its model at launch from here and has no in-session switch the launcher drives
+- **Leads to:** [Launch preset menu](#settingspreset-menu-launch-preset-menu) (preset kebab)
 
 ### `settings.chief` Chief sheet
 
@@ -1378,6 +1383,14 @@ flowchart LR
   - the GitLab group and the GitLab host, blank meaning gitlab.com
   - Done
 - **Does:** glab must be signed in to the host on this PC
+
+### `settings.preset-menu` Launch preset menu
+
+- **Root:** `data-surface`
+- **Reach:** the kebab on a saved launch preset in the GitHub Copilot sheet
+- **Holds:**
+  - Edit
+  - Remove
 
 ### `settings.tokens` API tokens sheet
 
@@ -1432,14 +1445,14 @@ Inputs that are not elements.
 
 ```mermaid
 flowchart LR
-  s92["Swipe a row"]
-  s93["Long-press hint"]
-  s94["Screen view keys"]
-  s95["Composer keys"]
+  s93["Swipe a row"]
+  s94["Long-press hint"]
+  s95["Screen view keys"]
+  s96["Composer keys"]
   s32(["Screen view · Screen"])
   s24(["On-screen keys · Terminal"])
-  s94 -->|"Screen view"| s32
-  s95 -->|"keys button"| s24
+  s95 -->|"Screen view"| s32
+  s96 -->|"keys button"| s24
 ```
 
 ### `keys.swipe-row` Swipe a row
@@ -1589,6 +1602,7 @@ flowchart LR
 | [Settings](#settingspane-settings) | Folders | [Folders sheet](#settingsfolders-folders-sheet) |
 | [Settings](#settingspane-settings) | Passkeys | [Passkeys sheet](#settingspasskeys-passkeys-sheet) |
 | [Settings](#settingspane-settings) | Terminal | [Terminal sheet](#settingsterminal-terminal-sheet) |
+| [GitHub Copilot sheet](#settingscopilot-github-copilot-sheet) | preset kebab | [Launch preset menu](#settingspreset-menu-launch-preset-menu) |
 | [Chief sheet](#settingschief-chief-sheet) | model | [Chief model menu](#settingschief-model-menu-chief-model-menu) |
 | [Folders sheet](#settingsfolders-folders-sheet) | a folder's kebab | [Chat folder menu](#settingsoutbox-menu-chat-folder-menu) |
 | [Screen view keys](#keysscreen-screen-view-keys) | Screen view | [Screen view](#screenview-screen-view) |

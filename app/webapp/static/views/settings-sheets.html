@@ -50,6 +50,37 @@
               <button data-track="copilot.add-default-models" type="button" id="copilotAddDefaultModels" class="button-surface">Add</button>
             </div>
           </div>
+          <div class="opt-group">
+            <h3 class="opt-group-title">Launch presets</h3>
+            <p class="opt-hint">A named model with the effort and context it runs at. The Coding launch dropdown offers each one beside Default; picking one launches with its model, effort and context. A preset whose model leaves the list above is hidden there until the model returns.</p>
+            <ul id="launchPresetList" class="card-list launch-presets" aria-label="Launch presets"></ul>
+            <h4 id="launchPresetFormTitle" class="launch-preset-form-title">New preset</h4>
+            <div class="opt-row">
+              <span class="opt-name">Name</span>
+              <input id="launchPresetName" type="text" class="input-native" maxlength="40" aria-label="Preset name" aria-describedby="launchPresetNameHelp launchPresetNameError" autocomplete="off" placeholder="Flash high">
+            </div>
+            <p id="launchPresetNameHelp" class="field-help">What the launch dropdown calls it; up to 40 characters, each name used once.</p>
+            <p id="launchPresetNameError" class="field-error" role="alert" hidden></p>
+            <div class="opt-row">
+              <span class="opt-name">Model</span>
+              <select data-track="launch-presets.model" id="launchPresetModel" class="select-native" aria-label="Preset model" aria-describedby="launchPresetModelError"></select>
+            </div>
+            <p id="launchPresetModelError" class="field-error" role="alert" hidden></p>
+            <div class="opt-row">
+              <span class="opt-name">Effort</span>
+              <select data-track="launch-presets.effort" id="launchPresetEffort" class="select-native" aria-label="Preset effort" aria-describedby="launchPresetEffortError"></select>
+            </div>
+            <p id="launchPresetEffortError" class="field-error" role="alert" hidden></p>
+            <div class="opt-row">
+              <span class="opt-name">Context</span>
+              <select data-track="launch-presets.context" id="launchPresetContext" class="select-native" aria-label="Preset context window" aria-describedby="launchPresetContextError"></select>
+            </div>
+            <p id="launchPresetContextError" class="field-error" role="alert" hidden></p>
+            <div class="row launch-preset-add">
+              <button data-track="launch-presets.cancel" id="launchPresetCancel" type="button" class="button-surface" hidden>Cancel</button>
+              <button data-track="launch-presets.add" id="launchPresetAdd" type="button" class="button-tint">Add preset</button>
+            </div>
+          </div>
         </div>
         <div class="detail-actions">
           <button data-track="copilot.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>

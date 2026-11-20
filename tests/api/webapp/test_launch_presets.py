@@ -111,3 +111,45 @@ class TestCopilotPresets:
         client, _, _ = webapp_client
         client.post("/api/config", json={"launch_presets": [FLASH]})
         assert "context" not in client.get("/api/config").json()["launch_presets"][0]
+
+
+class TestPresetEditorContract:
+    """What the Settings editor reads and the refusals it shows beside a field."""
+
+    def test_config_lists_each_models_efforts_and_the_context_tiers(self, webapp_client):
+        client, app, _ = webapp_client
+        copilot = client.get("/api/config").json()["copilot"]
+        listed = copilot["models_available"]
+        assert set(copilot["preset_efforts"]) == set(listed)
+        assert copilot["preset_efforts"]["mai-code-2-flash"] == ["low", "medium", "high"]
+        assert "xhigh" in copilot["preset_efforts"]["gpt-6-luna"]
+        assert copilot["preset_contexts"] == ["default", "long_context"]
+        assert app.state.webapp_config.copilot_models == listed
+
+    @pytest.mark.parametrize("bad, field", [
+        (dict(FLASH, effort="xhigh"), "effort"),
+        (dict(FLASH, context="huge"), "context"),
+        (dict(FLASH, model="default"), "model"),
+        (dict(FLASH, name=" "), "name"),
+    ])
+    def test_a_refusal_names_the_field_and_the_row(self, webapp_client, bad, field):
+        client, _, _ = webapp_client
+        ok = dict(FLASH, name="Fine", effort="low")
+        resp = client.post("/api/config", json={"launch_presets": [ok, bad]})
+        assert resp.status_code == 400
+        body = resp.json()
+        assert (body["field"], body["index"]) == (field, 1)
+        assert body["detail"]
+
+    def test_a_repeated_name_is_refused_at_the_later_row(self, webapp_client):
+        client, _, _ = webapp_client
+        twin = dict(FLASH, name="mai flash HIGH")
+        resp = client.post("/api/config", json={"launch_presets": [FLASH, twin]})
+        assert resp.status_code == 400
+        assert (resp.json()["field"], resp.json()["index"]) == ("name", 1)
+
+    def test_a_refusal_about_the_whole_list_has_no_field(self, webapp_client):
+        client, _, _ = webapp_client
+        resp = client.post("/api/config", json={"launch_presets": "flash"})
+        assert resp.status_code == 400
+        assert (resp.json()["field"], resp.json()["index"]) == ("", -1)

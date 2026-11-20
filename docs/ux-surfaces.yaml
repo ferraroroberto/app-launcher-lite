@@ -1390,12 +1390,17 @@ surfaces:
       - the sign-in instruction
       - Models offered, one id per line
       - a line with an Add button when the saved list lacks a default model
+      - Launch presets, the saved list with a kebab on each row and one form (name, model from the list above, effort the model offers, context tier) that adds a preset or, from Edit, changes one
       - Done
     does:
       - Effort applies only with a model picked here
       - Add appends the missing default models to the saved list
+      - a preset is saved as it is added, edited, renamed on its row or removed, and then appears in the Coding launch dropdown; a refusal shows under the field it is about
       - Remote session is applied at each Copilot launch from Coding, Team OS and the Board; off starts sessions unshared
     why: Copilot takes its model at launch from here and has no in-session switch the launcher drives
+    links:
+      - to: settings.preset-menu
+        via: preset kebab
 
   - id: settings.chief
     area: settings
@@ -1438,6 +1443,16 @@ surfaces:
       - Done
     does:
       - glab must be signed in to the host on this PC
+
+  - id: settings.preset-menu
+    area: settings
+    title: Launch preset menu
+    root: data-surface
+    reach:
+      - the kebab on a saved launch preset in the GitHub Copilot sheet
+    holds:
+      - Edit
+      - Remove
 
   - id: settings.tokens
     area: settings
