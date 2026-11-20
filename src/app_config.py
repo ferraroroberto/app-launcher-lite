@@ -20,6 +20,12 @@ VALID_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 # Port the webapp binds when ``config.json`` carries no ``webapp.port``. It
 # differs from the full app-launcher's so both can run on one machine.
 DEFAULT_WEBAPP_PORT = 8465
+# Loopback port the PTY session-host binds. Declared here, not imported from
+# ``webapp_settings.values``, so the session-host's import closure stays small;
+# a test pins the two equal.
+DEFAULT_SESSION_HOST_PORT = 8466
+
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "config.json"
 
 
 @dataclass
@@ -38,7 +44,7 @@ class AppConfig:
 def load_app_config(path: Optional[Path] = None) -> AppConfig:
     """Load `config/config.json` from next to this file (or an override)."""
     if path is None:
-        path = Path(__file__).resolve().parent.parent / "config" / "config.json"
+        path = DEFAULT_CONFIG_PATH
     else:
         path = Path(path).resolve()
 
@@ -60,36 +66,53 @@ def _validate(raw: Dict) -> None:
         raise ValueError(f"log_level must be one of {VALID_LOG_LEVELS}")
 
 
-def webapp_port(webapp: Optional[Dict] = None) -> int:
-    """The webapp port from a ``config.json`` ``webapp`` section.
+def _port_setting(webapp: Optional[Dict], key: str, default: int) -> int:
+    """``webapp[key]`` as a port, or ``default`` when it is missing or unusable.
 
-    A missing key yields :data:`DEFAULT_WEBAPP_PORT`. An unusable value
-    (non-integer, out of range) also falls back, with a warning, so a typo
-    can never leave the tray, the ``.bat`` launchers and the mirror window
-    disagreeing about where the webapp lives.
+    An unusable value (non-integer, out of range) falls back with a warning, so
+    a typo can never leave the tray, the ``.bat`` launchers and the mirror
+    window disagreeing about where a service lives.
     """
-    raw = (webapp or {}).get("port", DEFAULT_WEBAPP_PORT)
+    raw = (webapp or {}).get(key, default)
     try:
         port = int(raw)
     except (TypeError, ValueError):
         port = 0
     if not (1 <= port <= 65535):
-        logger.warning(
-            f"⚠️  ignoring unusable webapp.port={raw!r}; using {DEFAULT_WEBAPP_PORT}"
-        )
-        return DEFAULT_WEBAPP_PORT
+        logger.warning(f"⚠️  ignoring unusable webapp.{key}={raw!r}; using {default}")
+        return default
     return port
+
+
+def webapp_port(webapp: Optional[Dict] = None) -> int:
+    """The webapp port from a ``config.json`` ``webapp`` section."""
+    return _port_setting(webapp, "port", DEFAULT_WEBAPP_PORT)
+
+
+def session_host_port(webapp: Optional[Dict] = None) -> int:
+    """The session-host port from a ``config.json`` ``webapp`` section."""
+    return _port_setting(webapp, "session_host_port", DEFAULT_SESSION_HOST_PORT)
+
+
+def _resolve_port(reader, default: int, path: Optional[Path]) -> int:
+    # A missing or unreadable file yields the default rather than raising: the
+    # launchers must still start on a fresh checkout.
+    try:
+        return reader(load_app_config(path).webapp)
+    except (OSError, ValueError) as exc:  # JSONDecodeError is a ValueError
+        logger.warning(f"⚠️  could not read config.json ports ({exc}); using {default}")
+        return default
 
 
 def resolve_webapp_port(path: Optional[Path] = None) -> int:
     """The single source of truth for the webapp port: ``config.json`` ``webapp.port``.
 
-    The tray manager and the ``.bat`` launchers (via ``scripts/webapp_port.py``)
-    read it here. A missing or unreadable file yields the default rather than
-    raising: the launchers must still start on a fresh checkout.
+    The tray manager, the webapp config loader, the restart check and the
+    ``.bat``/``.ps1`` launchers (via ``scripts/webapp_port.py``) all read it here.
     """
-    try:
-        return webapp_port(load_app_config(path).webapp)
-    except (OSError, ValueError) as exc:  # JSONDecodeError is a ValueError
-        logger.warning(f"⚠️  could not read webapp.port ({exc}); using {DEFAULT_WEBAPP_PORT}")
-        return DEFAULT_WEBAPP_PORT
+    return _resolve_port(webapp_port, DEFAULT_WEBAPP_PORT, path)
+
+
+def resolve_session_host_port(path: Optional[Path] = None) -> int:
+    """The single source of truth for the session-host port: ``webapp.session_host_port``."""
+    return _resolve_port(session_host_port, DEFAULT_SESSION_HOST_PORT, path)

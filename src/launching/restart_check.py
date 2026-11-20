@@ -137,9 +137,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
     port = args.port
     if port is None:
-        from src.webapp_config import load_webapp_config
+        from src.app_config import resolve_webapp_port
 
-        port = load_webapp_config().port
+        port = resolve_webapp_port()
     if args.action == "snapshot":
         return snapshot(port)
     return verify(port, args.timeout)

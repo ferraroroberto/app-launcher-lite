@@ -37,9 +37,12 @@ def test_the_mirror_window_title_prefix_is_its_own() -> None:
     assert launcher._MIRROR_TITLE_PREFIX == "app-launcher-lite-mirror-"
 
 
-def test_the_tray_mutex_is_its_own() -> None:
+def test_the_tray_mutex_is_its_own_and_carries_the_webapp_port() -> None:
+    from app.tray.tray import tray_mutex_name
+
+    assert tray_mutex_name(DEFAULT_WEBAPP_PORT) == r"Global\app-launcher-lite-8465-tray"
+    assert tray_mutex_name(9001) != tray_mutex_name(DEFAULT_WEBAPP_PORT)
     source = (REPO_ROOT / "app" / "tray" / "tray.py").read_text(encoding="utf-8")
-    assert r"Global\app-launcher-lite-tray" in source
     assert r"Global\app-launcher-tray" not in source
 
 

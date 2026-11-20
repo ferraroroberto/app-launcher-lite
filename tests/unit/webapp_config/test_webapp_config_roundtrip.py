@@ -118,12 +118,12 @@ def test_unknown_keys_are_ignored(tmp_path):
 def test_unusable_number_falls_back_instead_of_raising(tmp_path):
     """A hand-edited config with a null in an int field degrades to the
     declared default rather than taking the whole webapp down on import."""
-    target = _write(tmp_path, {"chief_worker_cap": None, "port": "8500"})
+    target = _write(tmp_path, {"chief_worker_cap": None, "terminal_history_lines": "5000"})
 
     cfg = load_webapp_config(target, apply_env_override=False)
 
     assert cfg.chief_worker_cap == WebappConfig().chief_worker_cap
-    assert cfg.port == 8500  # numeric strings still coerce
+    assert cfg.terminal_history_lines == 5000  # numeric strings still coerce
 
 
 def test_non_boolean_bool_field_falls_back_instead_of_truthy_coercion(tmp_path):

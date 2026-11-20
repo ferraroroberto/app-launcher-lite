@@ -209,6 +209,24 @@ def _no_real_mirror_window(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_machine_config_json(request, tmp_path_factory, monkeypatch):
+    """Resolve the ports from the code defaults, never from this machine's ``config.json``.
+
+    ``webapp.port`` and ``webapp.session_host_port`` come from that file, so a
+    PC whose Lite install sits on other ports would otherwise change what a
+    unit test sees. A test that exercises the file points
+    ``app_config.DEFAULT_CONFIG_PATH`` at its own copy. Skipped for the e2e
+    suite, whose processes read the real file.
+    """
+    if request.node.get_closest_marker("smoke"):
+        return
+    from src import app_config
+
+    absent = tmp_path_factory.getbasetemp() / "no-machine-config" / "config.json"
+    monkeypatch.setattr(app_config, "DEFAULT_CONFIG_PATH", absent)
+
+
+@pytest.fixture(autouse=True)
 def fake_injector(monkeypatch):
     """Never inject real mouse or keyboard input from a test (#1521).
 

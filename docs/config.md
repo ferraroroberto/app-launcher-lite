@@ -10,7 +10,7 @@ Cross-surface settings read by the tray, the CLI and the server (defaults in `sr
 {
   "log_level": "INFO",
   "tailnet_host": "pc.example-tailnet.ts.net",
-  "webapp": { "enabled": true, "host": "0.0.0.0", "port": 8465 }
+  "webapp": { "enabled": true, "host": "0.0.0.0", "port": 8465, "session_host_port": 8466 }
 }
 ```
 
@@ -19,7 +19,7 @@ Cross-surface settings read by the tray, the CLI and the server (defaults in `sr
 | `log_level` | `INFO` | Root logging level. |
 | `tailnet_host` | `""` | Any hostname or IP the phone reaches this PC on (a Tailscale MagicDNS name, a VPN DNS name, a static VPN or LAN IP). It builds the Apps tab's remote **Open** URLs (`<scheme>://<tailnet_host>:<port>/`, scheme auto-detected per app by a TLS probe) and the tray's copy-remote-URL fallback. Empty disables both; the Open button is then shown disabled with a hint. |
 | `task_namespace` | `AppLauncherLite` | Task Scheduler folder the Jobs tab registers entries under (`\<name>\<job id>`): one name of letters, digits, `_`, `.` or `-`, read at startup. |
-| `webapp` | `{}` | Embed section for the tray-spawned webapp: `enabled` (default true), `host`, `port` (default `8465`). **`webapp.port` is the one place the webapp port is set** — the tray, `launcher.py webapp`, `webapp.bat`, `tray.bat`'s restart reclaim, the PC mirror window URL and `GET /api/config` all read it (the `.bat` files through `python -m scripts.webapp_port`). A machine that serves on another port carries `"webapp": { "port": <n> }`; without the key every reader falls back to `8465`. |
+| `webapp` | `{}` | Embed section for the tray-spawned webapp: `enabled` (default true), `host`, `port` (default `8465`). **`webapp.port` is the one place the webapp port is set** — the tray, `launcher.py webapp`, `webapp.bat`, `tray.bat`'s restart reclaim, the PC mirror window URL and `GET /api/config` all read it (the `.bat` files through `python -m scripts.webapp_port`). A machine that serves on another port carries `"webapp": { "port": <n> }`; without the key every reader falls back to `8465`. `webapp.session_host_port` (default `8466`, must differ from `port`) is the same for the loopback session-host: the webapp, the tray, `restart-session-host.ps1` and the session-host spawn read it, and the tray's single-instance mutex is `Global\app-launcher-lite-<webapp port>-tray`. |
 
 The `webapp` section also takes three tuning knobs whose defaults are almost always right: `startup_timeout_seconds` (`15.0`, how long the tray waits for the webapp to answer before declaring the boot failed), `request_timeout_seconds` (`1.0`, per health-probe timeout) and `poll_interval_seconds` (`0.4`, gap between probes). `server` (`"hypercorn"`) picks the server `app.webapp.serve` runs: `"hypercorn"` speaks HTTP/2 to browsers over TLS and HTTP/1.1 to clients that offer only that; `"uvicorn"` is the HTTP/1.1-only fallback. Any other value stops the tray at boot with an error naming the key; a change takes effect on `tray.bat --restart`.
 
@@ -32,7 +32,6 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 | Key | Default | Effect |
 | --- | --- | --- |
 | `host` | `0.0.0.0` | Webapp bind address. The webapp *port* is `config.json`'s `webapp.port`; a leftover `port` key in an older file is ignored. |
-| `session_host_port` | `8466` | Loopback-only PTY session-host port; must differ from the webapp port. |
 
 ### Coding, Apps and Team OS
 
