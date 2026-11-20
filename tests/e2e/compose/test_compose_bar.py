@@ -37,6 +37,7 @@ import pytest
 from playwright.sync_api import Page, expect
 
 from tests.e2e.fixtures.waits import OVERLAY_OPEN_MS, stable_read
+from tests.e2e.settings._speech import set_speech
 
 # 1x1 transparent PNG — smallest valid image the session-host will accept.
 _PNG_1x1 = base64.b64decode(
@@ -169,6 +170,7 @@ def _assert_mod_enter_sends(page: Page) -> None:
 def test_compose_send_forwards_text_to_pty(
     authed_page: Page,
     base_url: str,
+    auth_token: str,
     launched_pty_session: str,
     wait_for_session_log,
 ) -> None:
@@ -184,6 +186,8 @@ def test_compose_send_forwards_text_to_pty(
       still inserts a newline, and the Send title names the shortcut.
     * ➤ Send forwards the textarea contents + Enter to the PTY, the bar clears
       and stays docked.
+    * Settings > Speech to text gates the mic: hidden while off, shown once on
+      with a base URL, hidden again with the URL cleared.
     * #166: the submitting CR is delivered immediately after the text, as its
       own frame. The intermittent "Send does nothing" bug was the trailing
       ``\r`` riding in the same WS frame as the ``\x1b[201~`` paste-end
@@ -244,6 +248,25 @@ def test_compose_send_forwards_text_to_pty(
         f"➤ Send did not deliver the compose text to webapp/sessions/{sid}.log "
         "— the text never reached the live PTY session"
     )
+
+    _assert_mic_follows_the_speech_setting(authed_page, base_url, auth_token, sid)
+
+
+def _assert_mic_follows_the_speech_setting(page: Page, base_url: str, auth_token: str, sid: str) -> None:
+    """Each step reopens the terminal: the composer re-reads the setting per open."""
+    mic = page.locator(f"{COMPOSER} .composer-mic")
+    try:
+        for patch, visible in (
+            ({"speech_enabled": False, "speech_base_url": "http://127.0.0.1:8000/v1"}, False),
+            ({"speech_enabled": True}, True),
+            ({"speech_base_url": ""}, False),
+        ):
+            set_speech(base_url, auth_token, **patch)
+            _open_terminal(page, base_url, sid)
+            _show_composer(page)
+            expect(mic).to_be_visible() if visible else expect(mic).to_be_hidden()
+    finally:
+        set_speech(base_url, auth_token, speech_enabled=False, speech_base_url="")
 
 
 def test_compose_attach_appends_at_end_with_blank_line(

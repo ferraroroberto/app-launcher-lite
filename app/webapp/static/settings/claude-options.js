@@ -18,6 +18,7 @@ import { syncLaunchPresets } from '../shared/launch-presets.js';
 import { renderLaunchPresetsEditor, wireLaunchPresets } from './launch-presets-settings.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
 import { renderSettingsValues } from './settings-sheets.js';
+import { renderSpeech } from './speech-settings.js';
 import { renderLidKeepAwake } from './lid-keep-awake.js';
 
 export async function fetchConfig(shouldApply) {
@@ -33,6 +34,7 @@ export async function fetchConfig(shouldApply) {
   setFieldValue(els.fleetConfigDir, body.fleet_config_dir || '');
   setFieldValue(els.gitlabGroup, body.gitlab_group || '');
   setFieldValue(els.gitlabHost, body.gitlab_host || '');
+  renderSpeech(body);
   if (els.terminalHistoryLines) {
     if (body.terminal_history_lines_min != null) {
       els.terminalHistoryLines.min = body.terminal_history_lines_min;

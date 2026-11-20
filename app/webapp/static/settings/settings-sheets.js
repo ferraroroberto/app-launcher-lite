@@ -32,6 +32,7 @@ import { plural } from '../shared/format.js';
 import { ACTION_ROW_MENU } from '../action-rows.js';
 import { createRowMenu } from '../_vendored/row-menu/row-menu.js';
 import { icon } from '../_vendored/icons/icons.js';
+import { speechValue, wireSpeech } from './speech-settings.js';
 
 // ------------------------------------------------------------ navigation
 // The open sheets, the shown one last.
@@ -137,6 +138,7 @@ export function renderSettingsValues() {
   setValue('passkeys', passkeysValue());
   if (!cfg) return;
   setValue('copilot', copilotValue(cfg.copilot));
+  setValue('speech', speechValue(cfg.speech));
   setValue('gitlab', cfg.gitlab_group
     ? joined([cfg.gitlab_group, cfg.gitlab_host || ''])
     : 'Not set');
@@ -501,6 +503,7 @@ export function wireSettingsSheets() {
     });
   });
   wireFields();
+  wireSpeech();
   wireChief();
   document.addEventListener('launcher:tab', function (e) {
     if (e.detail && e.detail.tab === 'settings') renderSettingsValues();

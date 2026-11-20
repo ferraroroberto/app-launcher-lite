@@ -2,22 +2,20 @@
  *
  * One module, many mics: the compose bar, the Board
  * dispatch bar and the shared composer (terminal, Chat, Board drawer) each mount a
- * `createDictation` instance on their own button + textarea. The recording
- * pipeline is unchanged from the compose-bar original: preferred flow is
- * *streamed* (create a voice session, POST audio chunks at a 1 s cadence,
- * subscribe to an SSE stream of rolling `partial` transcripts that revise
- * the dictated span live); on any streaming-setup failure it falls back to
- * the single-shot path (buffer the whole take, POST once to
- * /api/transcribe) so dictation degrades rather than breaks. The `finish`
- * call is the source of truth either way. The transcript always lands in
- * the target textarea for review — never straight into a PTY or a dispatch.
+ * `createDictation` instance on their own button + textarea. Lite takes the
+ * single-shot path only (buffer the whole take, POST once to /api/transcribe,
+ * which forwards it to the OpenAI-shaped endpoint in Settings > Speech to
+ * text); the app's streamed-session branch below stays for upstream syncs but
+ * is never entered, because no streamed session is ever opened. The transcript
+ * always lands in the target textarea for review — never straight into a PTY
+ * or a dispatch.
  *
  * A tap while recording stops and transcribes; so does a pause in speech when
  * Settings > Voice turns the auto-stop on (voice-autostop.js). A tap while
  * the stopped take is still transcribing cancels it: its requests are aborted,
  * the button is at rest again at once with "Dictation cancelled", and whatever
- * text is already in the textarea stays. The voice-transcriber has no abort
- * route, so its server-side session is simply dropped.
+ * text is already in the textarea stays. The endpoint has no abort route, so
+ * the upload is simply dropped.
  */
 
 import { AuthRequiredError, apiFailToast, apiRaw, apiRawJson, readToken, toast } from './api.js';
@@ -38,12 +36,11 @@ const _CHUNK_ATTEMPTS = 3;
 const _CHUNK_RETRY_MS = 500;
 
 // The mic-button availability gate shared by every dictation mount point
-// (compose bar, Board dispatch bar, Board drawer reply): the
-// voice-transcriber must be configured server-side and the browser must
-// support MediaRecorder.
+// (compose bar, Board dispatch bar, Board drawer reply): Settings > Speech to
+// text must be on with a base URL, and the browser must support MediaRecorder.
 export function voiceDictationAvailable() {
-  return !!(state.status && state.status.voice_dictation) &&
-    !!window.MediaRecorder;
+  const s = state.config && state.config.speech;
+  return !!(s && s.enabled && s.base_url) && !!window.MediaRecorder;
 }
 
 // Only one mic can own the microphone at a time — starting a second
@@ -462,23 +459,6 @@ function createRecorder(d, stream, mime) {
   return true;
 }
 
-// Try to open a streamed session. On any failure, fall back to
-// the buffered single-shot path — streaming stays false.
-async function openStreamSession(d, signal) {
-  try {
-    const res = await apiRaw('/api/transcribe/sessions', {
-      method: 'POST', terminalToken: readTerminalToken(), signal: signal,
-    });
-    if (res.ok) {
-      const body = await res.json().catch(function () { return null; });
-      if (body && body.session_id) {
-        d.voiceSession = body.session_id;
-        d.streaming = true;
-      }
-    }
-  } catch (_) { /* fall back to buffered */ }
-}
-
 // Anchor the dictation span at the caret (after a separator space when
 // the textarea already has trailing content), then stream partials in.
 function startStreamedSpan(d) {
@@ -596,7 +576,6 @@ async function startRecording(d) {
   _activeInstance = d.api;
   d.aborted = false;
   d.takeCtrl = new AbortController();
-  const signal = d.takeCtrl.signal;
   setArmingUI(d);
   d.onStart();
   const stream = await acquireStream(d);
@@ -609,8 +588,6 @@ async function startRecording(d) {
   d.chunksLost = 0;
   d.voiceSession = null;
   d.streaming = false;
-
-  await openStreamSession(d, signal);
 
   if (d.aborted) {
     // dispose() ran while the session POST was in flight — the recorder

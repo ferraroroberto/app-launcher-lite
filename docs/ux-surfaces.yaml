@@ -1341,6 +1341,8 @@ surfaces:
         via: Chief
       - to: settings.gitlab
         via: GitLab
+      - to: settings.speech
+        via: Speech to text
       - to: settings.tokens
         via: API tokens
       - to: settings.folders
@@ -1443,6 +1445,24 @@ surfaces:
       - Done
     does:
       - glab must be signed in to the host on this PC
+
+  - id: settings.speech
+    area: settings
+    title: Speech to text sheet
+    root: data-surface
+    reach:
+      - Speech to text in Connections
+    holds:
+      - a Dictation switch, the Base URL, an optional Model and an optional API key that is never shown again
+      - Remove key, once a key is set
+      - Test connection, with its result line
+      - Done
+    does:
+      - every field saves as it changes
+      - Test connection reports Reachable, Refused or Unknown with a reason, using the saved settings
+      - with Dictation off no record button shows in any message box
+    states:
+      - the Settings row reads Off, On or No URL
 
   - id: settings.preset-menu
     area: settings

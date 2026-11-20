@@ -21,7 +21,7 @@ Walked 2026-11-18 against build `52a7d40`, at widths 390, 1280, themes light, da
 | [Jobs](#jobs) | 10 |
 | [Team OS](#team-os) | 7 |
 | [Board](#board) | 15 |
-| [Settings](#settings) | 13 |
+| [Settings](#settings) | 14 |
 | [Keys and gestures](#keys-and-gestures) | 4 |
 
 ## Chrome
@@ -199,7 +199,7 @@ flowchart LR
   s22(["Rename session · Terminal"])
   s6(["Confirm dialog · Chrome"])
   s84(["Chief sheet · Settings"])
-  s89(["Folders sheet · Settings"])
+  s90(["Folders sheet · Settings"])
   s21(["Overlay session menu · Terminal"])
   s28(["Turn cards and step lines · Chat"])
   s0 -->|"Code"| s9
@@ -217,7 +217,7 @@ flowchart LR
   s13 -->|"row kebab"| s15
   s13 -->|"preset dropdown"| s14
   s13 -->|"Sync all"| s16
-  s13 -->|"Open Settings"| s89
+  s13 -->|"Open Settings"| s90
   s13 -->|"row tap"| s19
   s15 -->|"Show changes"| s17
   s17 -->|"file kebab"| s18
@@ -385,7 +385,7 @@ flowchart LR
   s17(["Changes overlay · Code"])
   s6(["Confirm dialog · Chrome"])
   s75(["Session drawer · Board"])
-  s96(["Composer keys · Keys and gestures"])
+  s97(["Composer keys · Keys and gestures"])
   s10 -->|"row tap"| s19
   s11 -->|"Links"| s23
   s11 -->|"Rename"| s22
@@ -400,7 +400,7 @@ flowchart LR
   s21 -->|"Changed files"| s17
   s21 -->|"Stop and kill"| s6
   s75 -->|"Terminal"| s19
-  s96 -->|"keys button"| s24
+  s97 -->|"keys button"| s24
 ```
 
 ### `terminal.overlay` Session overlay
@@ -600,12 +600,12 @@ flowchart LR
   s34["Quality sheet"]
   s35["Readout"]
   s2(["PC load sheet · Chrome"])
-  s95(["Screen view keys · Keys and gestures"])
+  s96(["Screen view keys · Keys and gestures"])
   s2 -->|"Screen View live"| s32
   s32 -->|"Quality"| s34
   s32 -->|"Paste to PC"| s33
   s32 -->|"readout switch"| s35
-  s95 -->|"Screen view"| s32
+  s96 -->|"Screen view"| s32
 ```
 
 ### `screen.view` Screen view
@@ -955,14 +955,14 @@ flowchart LR
   s63["Skill file"]
   s64["Weekly recap"]
   s0(["Primary navigation · Chrome"])
-  s89(["Folders sheet · Settings"])
+  s90(["Folders sheet · Settings"])
   s6(["Confirm dialog · Chrome"])
   s0 -->|"Team"| s58
   s58 -->|"Skills"| s59
   s58 -->|"Weekly recap"| s64
   s59 -->|"model picker"| s60
   s59 -->|"row kebab"| s61
-  s59 -->|"Open Settings"| s89
+  s59 -->|"Open Settings"| s90
   s61 -->|"Read"| s62
   s62 -->|"a file"| s63
   s63 -->|"Delete log"| s6
@@ -1262,12 +1262,13 @@ flowchart LR
   s84["Chief sheet"]
   s85["Chief model menu"]
   s86["GitLab sheet"]
-  s87["Launch preset menu"]
-  s88["API tokens sheet"]
-  s89["Folders sheet"]
-  s90["Chat folder menu"]
-  s91["Passkeys sheet"]
-  s92["Terminal sheet"]
+  s87["Speech to text sheet"]
+  s88["Launch preset menu"]
+  s89["API tokens sheet"]
+  s90["Folders sheet"]
+  s91["Chat folder menu"]
+  s92["Passkeys sheet"]
+  s93["Terminal sheet"]
   s1(["Tab header · Chrome"])
   s11(["Session menu · Code"])
   s12(["Stopped chief menu · Code"])
@@ -1276,20 +1277,21 @@ flowchart LR
   s1 -->|"gear"| s80
   s11 -->|"Chief settings"| s84
   s12 -->|"Chief settings"| s84
-  s13 -->|"Open Settings"| s89
-  s59 -->|"Open Settings"| s89
+  s13 -->|"Open Settings"| s90
+  s59 -->|"Open Settings"| s90
   s80 -->|"the groups"| s81
   s80 -->|"a document row"| s82
   s80 -->|"Coding agent"| s83
   s80 -->|"Chief"| s84
   s80 -->|"GitLab"| s86
-  s80 -->|"API tokens"| s88
-  s80 -->|"Folders"| s89
-  s80 -->|"Passkeys"| s91
-  s80 -->|"Terminal"| s92
-  s83 -->|"preset kebab"| s87
+  s80 -->|"Speech to text"| s87
+  s80 -->|"API tokens"| s89
+  s80 -->|"Folders"| s90
+  s80 -->|"Passkeys"| s92
+  s80 -->|"Terminal"| s93
+  s83 -->|"preset kebab"| s88
   s84 -->|"model"| s85
-  s89 -->|"a folder's kebab"| s90
+  s90 -->|"a folder's kebab"| s91
 ```
 
 ### `settings.pane` Settings
@@ -1305,6 +1307,7 @@ flowchart LR
   - [GitHub Copilot sheet](#settingscopilot-github-copilot-sheet) (Coding agent)
   - [Chief sheet](#settingschief-chief-sheet) (Chief)
   - [GitLab sheet](#settingsgitlab-gitlab-sheet) (GitLab)
+  - [Speech to text sheet](#settingsspeech-speech-to-text-sheet) (Speech to text)
   - [API tokens sheet](#settingstokens-api-tokens-sheet) (API tokens)
   - [Folders sheet](#settingsfolders-folders-sheet) (Folders)
   - [Passkeys sheet](#settingspasskeys-passkeys-sheet) (Passkeys)
@@ -1384,6 +1387,21 @@ flowchart LR
   - Done
 - **Does:** glab must be signed in to the host on this PC
 
+### `settings.speech` Speech to text sheet
+
+- **Root:** `data-surface`
+- **Reach:** Speech to text in Connections
+- **Holds:**
+  - a Dictation switch, the Base URL, an optional Model and an optional API key that is never shown again
+  - Remove key, once a key is set
+  - Test connection, with its result line
+  - Done
+- **Does:**
+  - every field saves as it changes
+  - Test connection reports Reachable, Refused or Unknown with a reason, using the saved settings
+  - with Dictation off no record button shows in any message box
+- **States:** the Settings row reads Off, On or No URL
+
 ### `settings.preset-menu` Launch preset menu
 
 - **Root:** `data-surface`
@@ -1445,14 +1463,14 @@ Inputs that are not elements.
 
 ```mermaid
 flowchart LR
-  s93["Swipe a row"]
-  s94["Long-press hint"]
-  s95["Screen view keys"]
-  s96["Composer keys"]
+  s94["Swipe a row"]
+  s95["Long-press hint"]
+  s96["Screen view keys"]
+  s97["Composer keys"]
   s32(["Screen view · Screen"])
   s24(["On-screen keys · Terminal"])
-  s95 -->|"Screen view"| s32
-  s96 -->|"keys button"| s24
+  s96 -->|"Screen view"| s32
+  s97 -->|"keys button"| s24
 ```
 
 ### `keys.swipe-row` Swipe a row
@@ -1598,6 +1616,7 @@ flowchart LR
 | [Settings](#settingspane-settings) | Coding agent | [GitHub Copilot sheet](#settingscopilot-github-copilot-sheet) |
 | [Settings](#settingspane-settings) | Chief | [Chief sheet](#settingschief-chief-sheet) |
 | [Settings](#settingspane-settings) | GitLab | [GitLab sheet](#settingsgitlab-gitlab-sheet) |
+| [Settings](#settingspane-settings) | Speech to text | [Speech to text sheet](#settingsspeech-speech-to-text-sheet) |
 | [Settings](#settingspane-settings) | API tokens | [API tokens sheet](#settingstokens-api-tokens-sheet) |
 | [Settings](#settingspane-settings) | Folders | [Folders sheet](#settingsfolders-folders-sheet) |
 | [Settings](#settingspane-settings) | Passkeys | [Passkeys sheet](#settingspasskeys-passkeys-sheet) |

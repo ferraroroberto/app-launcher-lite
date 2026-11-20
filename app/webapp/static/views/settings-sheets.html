@@ -117,6 +117,50 @@
       </div>
     </dialog>
 
+    <!-- Speech to text: the record button's endpoint, any OpenAI-shaped server
+         (POST <base>/audio/transcriptions). Each field saves as it changes. -->
+    <dialog id="speechSheet" data-surface="settings.speech" class="detail-dialog settings-sheet" data-track-view="sheet.speech" aria-labelledby="speechSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="speech.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="speechSheetTitle" tabindex="-1" autofocus>Speech to text</h2>
+          <button data-track="speech.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <div class="row">
+            <span>Dictation</span>
+            <button data-track="speech.enabled" type="button" id="speechEnabledToggle" class="toggle" role="switch" aria-checked="false" aria-label="Dictation" aria-describedby="speechEnabledHelp" title="Show the record button in every text box"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+          </div>
+          <p id="speechEnabledHelp" class="field-help">On, a record button shows next to every message box and what you say is typed into it for review. Off, no record button shows anywhere.</p>
+          <label class="stacked">
+            <span>Base URL</span>
+            <input id="speechBaseUrl" type="text" class="input-native" placeholder="http://127.0.0.1:8000/v1" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="speechBaseUrlHelp">
+          </label>
+          <p id="speechBaseUrlHelp" class="field-help">Host and port of any OpenAI-shaped speech server, this PC or another. Audio is sent to <code>&lt;base URL&gt;/audio/transcriptions</code>.</p>
+          <label class="stacked">
+            <span>Model (optional)</span>
+            <input id="speechModel" type="text" class="input-native" placeholder="whisper-1" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="speechModelHelp">
+          </label>
+          <p id="speechModelHelp" class="field-help">Sent as the model name when set. Leave blank to let the server choose.</p>
+          <label class="stacked">
+            <span>API key (optional)</span>
+            <!-- password-input-vendored-exempt: a write-only API key for the speech server, not a sign-in -->
+            <input id="speechApiKey" type="password" class="input-native" placeholder="" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="speechApiKeyHelp">
+          </label>
+          <p id="speechApiKeyHelp" class="field-help">Kept on this PC and never shown again. <span id="speechApiKeyState">No key set.</span> <button data-track="speech.clear-key" type="button" id="speechApiKeyClear" class="button-surface" hidden>Remove key</button></p>
+          <div class="row">
+            <button data-track="speech.test" type="button" id="speechTest" class="button-tint">Test connection</button>
+          </div>
+          <p id="speechTestResult" class="field-help" role="status" aria-live="polite" hidden></p>
+        </div>
+        <div class="detail-actions">
+          <button data-track="speech.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
+        </div>
+      </div>
+    </dialog>
+
     <!-- The chief (#1435): model and worker cap from the Board's old
          dialog (PUT /api/board/chief/settings, passkey-gated), the
          auto-compact threshold (#1298) and the doorbell switch
