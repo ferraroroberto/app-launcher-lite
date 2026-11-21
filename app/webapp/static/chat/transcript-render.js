@@ -29,16 +29,11 @@ import { renderMarkdown } from '../markdown.js';
 import { terminalJsonApi } from '../webauthn.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { brandIcon } from '../dom-utils.js';
+import { TRANSCRIPT_AGENTS } from '../session-modes.js';
 import { isPlan, isQuestion, renderPlan, renderQuestion } from './transcript-decisions.js';
 import { chevron, firstLine, fmtTime, linkify } from './transcript-text.js';
 import { isSentFile, renderSentFiles, thumbs } from './transcript-media.js';
 import { renderItem, renderRun, syncRunSummary, tagKey } from './transcript-steps.js';
-
-// Agents whose native history the server-side reader understands. Decides
-// Chat availability without a probe; the pane still shows the server's own
-// reason line if it disagrees. An absent agent field (a ?session= deep
-// link's bare {session_id, name}) defaults to Copilot.
-export const TRANSCRIPT_AGENTS = ['copilot'];
 
 export function isTurn(e) {
   return (e.kind === 'user' || e.kind === 'assistant') && !e.sidechain;

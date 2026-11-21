@@ -30,7 +30,7 @@
 import { els, state } from '../state.js';
 import { applyLaunchSizePayload } from '../shared/launch-size.js';
 import { SensitiveOutcome, runSensitiveAction } from '../shared/sensitive-action.js';
-import { startWorkTimer } from '../voice.js';
+import { startWorkTimer } from '../work-timer.js';
 import { terminalJsonApi } from '../webauthn.js';
 import { sendSessionMessage } from '../sessions.js';
 import { wireModelCombo } from '../shared/model-combo.js';

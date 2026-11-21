@@ -93,7 +93,7 @@ import { mountScrollerPill, scrollerIsAway } from '../latest-pill.js';
 import { closeResumeCard, wireResumeCard } from './chat-resume.js';
 import { CHAT_ANSWERING, clearPicker, pollPicker, syncDecisionCards } from './transcript-decisions.js';
 import {
-  TRANSCRIPT_AGENTS, appendEntries, isAgentTurn, isTurn, openLinksOnThePc, syncTurnHead,
+  appendEntries, isAgentTurn, isTurn, openLinksOnThePc, syncTurnHead,
 } from './transcript-render.js';
 import { tagKey } from './transcript-steps.js';
 import { resetBlobs } from './transcript-media.js';
@@ -105,11 +105,6 @@ import { closePendingSheet, syncPendingChip, wirePendingChip } from './chat-pend
 import { automaticDefault, rememberAutomatic, syncAutomatic } from './automatic-fold.js';
 import { isChiefSession } from '../shared/session-kinds.js';
 
-// Whether Chat can read `s`'s history (TRANSCRIPT_AGENTS, transcript-render.js).
-export function hasTranscriptReader(s) {
-  const agent = String((s && s.agent) || 'copilot').toLowerCase();
-  return TRANSCRIPT_AGENTS.indexOf(agent) !== -1;
-}
 
 // Conversation turns (user + assistant entries) per page — ~20 exchanges.
 const PAGE_LIMIT = 40;

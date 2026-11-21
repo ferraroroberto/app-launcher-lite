@@ -115,12 +115,13 @@
 
 import { apiFailToast, apiRawJson, toast } from './api.js';
 import { readTerminalToken } from './webauthn.js';
-import { createDictation, startWorkTimer, voiceDictationAvailable } from './voice.js';
+import { createDictation, voiceDictationAvailable } from './voice.js';
+import { startWorkTimer } from './work-timer.js';
 import { createRowMenu } from './_vendored/row-menu/row-menu.js';
 import { bindLongPressHint } from './long-press-hint.js';
 import { mountKeysPopover } from './terminal/terminal-keys.js';
 import { icon } from './_vendored/icons/icons.js';
-import { cancelledSummary, createAttachQueue, summarize } from './attach-batch.js';
+import { cancelledSummary, createAttachQueue, pastedFiles, summarize } from './attach-batch.js';
 import { trackFeature } from './settings/feature-track.js';
 
 // Max visible rows before the textarea scrolls internally. Roomy enough
@@ -207,19 +208,6 @@ function render(host, placeholder) {
     largeInput: host.querySelector('.composer-large-input'),
     ocrInput: host.querySelector('.composer-ocr-input'),
   };
-}
-
-// A paste's files, or none when it also carries plain text (see the paste
-// listener in mountComposer).
-export function pastedFiles(dt) {
-  if (!dt || Array.prototype.indexOf.call(dt.types || [], 'text/plain') !== -1) return [];
-  const files = [];
-  const items = dt.items || [];
-  for (let i = 0; i < items.length; i++) {
-    const file = items[i].kind === 'file' ? items[i].getAsFile() : null;
-    if (file) files.push(file);
-  }
-  return files;
 }
 
 function carriesFiles(dt) {

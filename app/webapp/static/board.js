@@ -49,7 +49,7 @@ import { setTab } from './tabs.js';
 import { sessionTitle } from './sessions.js';
 import { applyLaunchSizePayload } from './shared/launch-size.js';
 import { SensitiveOutcome, runSensitiveAction } from './shared/sensitive-action.js';
-import { openTerminal } from './terminal.js';
+import { openTerminal } from './lazy-views.js';
 import { emptyStateEl } from './_vendored/empty-state/empty-state.js';
 import { icon } from './_vendored/icons/icons.js';
 import { terminalJsonApi } from './webauthn.js';
@@ -66,7 +66,6 @@ import {
   boardRepoFilter, getBoardDispatchModel, isChiefCard, matchesRepoFilter, syncDispatchBar,
   wireDispatch,
 } from './board/board-dispatch.js';
-import { wireChiefAnswers } from './board/board-answers.js';
 import { openQuestionCount } from './board/chief-keys.js';
 import {
   buildDrawer, drawerId, drawerShape, endDrawerRender, openDrawerItem, syncDrawerLifecycle,
@@ -967,7 +966,6 @@ export function wireBoard() {
     }).catch(function () {});
   });
   wireDispatch();
-  wireChiefAnswers();
   wireJournal();
   openDesktopColumns();
   wireFoldAll(els.boardFoldAll, els.boardColumns);

@@ -20,6 +20,7 @@
 
 import { AuthRequiredError, apiFailToast, apiRaw, apiRawJson, readToken, toast } from './api.js';
 import { icon } from './_vendored/icons/icons.js';
+import { startWorkTimer } from './work-timer.js';
 import { state } from './state.js';
 import { readTerminalToken } from './webauthn.js';
 import { trackFeature } from './settings/feature-track.js';
@@ -77,29 +78,6 @@ function voiceQuery() {
   if (tt) params.set('tt', tt);
   const q = params.toString();
   return q ? '?' + q : '';
-}
-
-// Tiny "working" indicator: swap a button's label for a ticking
-// elapsed-seconds timer so a blind background wait — OCR, single-shot
-// transcribe, streamed finish — visibly shows progress instead of looking
-// stuck. ``workingLabel`` defaults to the hourglass glyph; pass a richer
-// label for wide buttons. Labels are HTML (the Lucide icon() markup rides
-// them). Returns a stop() that restores ``restoreHtml``.
-export function startWorkTimer(btn, restoreHtml, workingLabel) {
-  const lbl = workingLabel || icon('hourglass') + ' ';
-  const t0 = Date.now();
-  btn.classList.add('working');
-  function tick() {
-    const s = Math.floor((Date.now() - t0) / 1000);
-    btn.innerHTML = lbl + s + 's';
-  }
-  tick();
-  const id = setInterval(tick, 500);
-  return function stop() {
-    clearInterval(id);
-    btn.classList.remove('working');
-    btn.innerHTML = restoreHtml;
-  };
 }
 
 // One mic's mutable state, threaded through the module-level helpers below.

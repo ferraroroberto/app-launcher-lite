@@ -3,8 +3,10 @@
 Every `.js` / `.css` under `app/webapp/static/` (excluding `vendor/`) is hashed
 at app startup. A single **fleet hash** (sha256 over the sorted per-file
 hashes, first 8 hex chars) is stamped onto every asset URL — both in
-`index.html` and on the ES-module `import './foo.js'` lines inside JS files
-(rewritten at serve time, not on disk). This is how the webapp guarantees the
+`index.html` and on the ES-module `import './foo.js'` lines and dynamic
+`import('./foo.js')` calls inside JS files (rewritten at serve time, not on
+disk). A dynamic import carries the same stamp as the static ones because an
+unstamped URL would be a second copy of the module with its own state. This is how the webapp guarantees the
 iPhone PWA never serves a stale asset against fresh HTML, or vice versa.
 
 - The static mount is a `_VersionedStatic(StaticFiles)` subclass that sets
@@ -37,7 +39,21 @@ iPhone PWA never serves a stale asset against fresh HTML, or vice versa.
   gzipped bytes and a quarter of the page's. `tests/api/webapp/test_first_load_budget.py`
   holds every first-load response under 100 KB on the wire, the page plus its
   stylesheet under 70 KB, and the whole first load (page, stylesheet and every
-  module `main.js` reaches) under 400 KB.
+  module `main.js` reaches statically) under 220 KB.
+- The views a tap opens load on that tap, not with the page
+  (`app/webapp/static/lazy-views.js`): Chat, the terminal, the changes overlay,
+  Links, Screen, Progress, the Jobs tab, the Board's answer sheet and the
+  shared composer were about half of the first load's JavaScript, and none of
+  them draws the shell, the session list or the Board. Every caller goes
+  through `lazy-views.js`, which loads and wires each group once. Once the
+  session list has drawn, the session views load straight away and the rest
+  when the phone goes idle, so a later first open finds them parsed. A tap on
+  the Jobs pane that beats its code is held and replayed, and a deep link
+  (`?terminal=`, `?session=`, `?screen=1`) starts its view's load at boot. The
+  predicates the session list draws from (which modes a session offers, the
+  one it opens in) live in `session-modes.js`, apart from the views.
+  `tests/api/webapp/test_first_load_budget.py` fails when a static import pulls
+  one of these views back into the first load.
 - The page starts its first reads before the module graph has loaded. An
   inline script in `index.html` fetches `/api/config`, `/api/agents`,
   `/api/apps` and `/api/claude-code/sessions`, plus the restored tab's own read

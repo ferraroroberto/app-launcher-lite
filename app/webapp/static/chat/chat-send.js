@@ -16,8 +16,9 @@ import { isChiefSession } from '../shared/session-kinds.js';
 import { markLooked } from '../board/journal-look.js';
 import { pickerAllowed } from './transcript-decisions.js';
 import {
-  SENT_REFRESH_MS, chatComposer, forwardRead, hasTranscriptReader, liveAllowed, scheduleLive, view,
+  SENT_REFRESH_MS, chatComposer, forwardRead, liveAllowed, scheduleLive, view,
 } from './session-transcript.js';
+import { hasTranscriptReader } from '../session-modes.js';
 
 // iOS shrinks the visual viewport for the software keyboard but not the
 // layout viewport, so the fixed inset:0 overlay would keep the composer

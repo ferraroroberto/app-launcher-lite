@@ -664,12 +664,4 @@ export function wireScreenView() {
       connect();
     }
   });
-  const row = $('cpuSheetScreen');
-  if (row) {
-    row.addEventListener('click', function () {
-      const sheet = $('cpuSheet');
-      if (sheet && sheet.open) sheet.close();
-      openScreen();
-    });
-  }
 }

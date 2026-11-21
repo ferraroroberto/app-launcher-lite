@@ -17,11 +17,8 @@ import {
   sendSessionMessage,
   stopSession,
 } from '../sessions.js';
-import { openTerminal } from '../terminal.js';
-import { chatAvailable, modeReason, openSessionOverlay, terminalAvailable } from '../session-overlay.js';
-import { mountComposer } from '../composer.js';
-import { voiceDictationAvailable } from '../voice.js';
-import { uploadSessionFile } from '../terminal/terminal-compose.js';
+import { openSessionOverlay, openTerminal, withComposer } from '../lazy-views.js';
+import { chatAvailable, modeReason, terminalAvailable } from '../session-modes.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { terminalJsonApi } from '../webauthn.js';
 import { CHIEF_KILL_CONFIRM } from '../shared/session-kinds.js';
@@ -53,6 +50,9 @@ const CHIEF_EXCHANGE_POLL_MS = 5000;
 // rule as chiefExchangeTimer. A kept drawer keeps this instance, its
 // draft and a live recording included.
 let drawerComposer = null;
+// The host the open drawer's composer mounts into. The composer code loads
+// on the first drawer open, so a drawer dropped before it lands gets none.
+let drawerComposerHost = null;
 
 // The open drawer's kebab menu (Rename, Stop). A kept drawer
 // keeps its menu, open or not; renderBoard() ends it with a drawer it drops.
@@ -78,29 +78,37 @@ function overlaySession(card) {
   };
 }
 
+// The composer kit the open drawer's reply box was mounted from.
+let drawerKit = null;
+
 function composerAvailability() {
-  return { dictate: voiceDictationAvailable(), ocr: false };
+  return { dictate: drawerKit.voiceDictationAvailable(), ocr: false };
 }
 
 function buildDrawerComposer(card) {
   const host = document.createElement('div');
   host.className = 'board-drawer-composer';
-  drawerComposer = mountComposer(host, {
-    placeholder: 'Reply to ' + (card.project || 'session') + '…',
-    send: function (text) { return sendFromDrawer(card, text); },
-    upload: function (file, signal, kind) {
-      return uploadSessionFile(card.session_id, file, signal, kind);
-    },
-    // The Board never opens the PTY's WebSocket, so ⌨ has nothing to drive
-    // for either kind — disabled, with the way to get keys as its reason.
-    keys: null,
-    keysOffReason: DRAWER_KEYS_OFF,
+  drawerComposerHost = host;
+  withComposer(function (kit) {
+    if (drawerComposerHost !== host) return;
+    drawerKit = kit;
+    drawerComposer = kit.mountComposer(host, {
+      placeholder: 'Reply to ' + (card.project || 'session') + '…',
+      send: function (text) { return sendFromDrawer(card, text); },
+      upload: function (file, signal, kind) {
+        return kit.uploadSessionFile(card.session_id, file, signal, kind);
+      },
+      // The Board never opens the PTY's WebSocket, so ⌨ has nothing to drive
+      // for either kind — disabled, with the way to get keys as its reason.
+      keys: null,
+      keysOffReason: DRAWER_KEYS_OFF,
+    });
+    // The console-input gate (agents.py) holds back Send alone, as in Chat.
+    if (detachedSendRefused(card)) {
+      drawerComposer.setSendable(false, 'No console input for this agent: sending is off');
+    }
+    drawerComposer.setAvailability(composerAvailability());
   });
-  // The console-input gate (agents.py) holds back Send alone, as in Chat.
-  if (detachedSendRefused(card)) {
-    drawerComposer.setSendable(false, 'No console input for this agent: sending is off');
-  }
-  drawerComposer.setAvailability(composerAvailability());
   return host;
 }
 
@@ -375,6 +383,7 @@ export function openDrawerItem(card) {
 // instead of wedging every other mic in the app.
 export function syncDrawerLifecycle(openItem) {
   if (!openItem) {
+    drawerComposerHost = null;
     if (chiefExchangeTimer) {
       clearInterval(chiefExchangeTimer);
       chiefExchangeTimer = null;

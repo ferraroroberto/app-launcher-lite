@@ -433,8 +433,6 @@ export function openProgressSheet() {
 export function wireProgressSheet() {
   const d = dialog();
   if (!d) return;
-  const opener = document.getElementById('historyOpen');
-  if (opener) opener.addEventListener('click', openProgressSheet);
   d.addEventListener('click', onControl);
   node('progressFrom').addEventListener('change', onCustomChange);
   node('progressTo').addEventListener('change', onCustomChange);

@@ -17,7 +17,7 @@ import { mountLaunchToolbar } from '../launch-toolbar.js';
 import { createRowMenu } from '../_vendored/row-menu/row-menu.js';
 import { ACTION_ROW_MENU, actionRow } from '../action-rows.js';
 import { listFilter } from '../list-filter.js';
-import { openChanges } from '../changes/changes-overlay.js';
+import { openChanges } from '../lazy-views.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { fetchApps, launchApp, renderApps } from '../apps.js';
 import { openSettingsAt } from '../tabs.js';

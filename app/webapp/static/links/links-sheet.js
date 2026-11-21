@@ -13,15 +13,14 @@
  * groups says how far back the read reached, and Read more asks for the next
  * older window and merges its links in, until the start is reached.
  *
- * Every agent with a transcript reader. `hasLinks` is what both ⋮ menus gate
- * the item on.
+ * Every agent with a transcript reader. `hasLinks` (session-modes.js) is what
+ * both ⋮ menus gate the item on.
  */
 
 import { els } from '../state.js';
 import { terminalJsonApi } from '../webauthn.js';
 import { AuthRequiredError, apiFailToast, sessionRoute, toast } from '../api.js';
 import { setAsyncState } from '../async-state.js';
-import { hasTranscriptReader } from '../chat/session-transcript.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { cutoffLabel, timeLabel } from './link-time.js';
 import { mergeLinks } from './links-merge.js';
@@ -39,10 +38,6 @@ const GROUP_GLYPH = {
 };
 
 let view = null;   // { sid, seq, data, paged } while the sheet is open
-
-export function hasLinks(s) {
-  return !!s && hasTranscriptReader(s);
-}
 
 function copyUrl(url) {
   // iOS only allows a clipboard write inside the tap gesture: writeText is
