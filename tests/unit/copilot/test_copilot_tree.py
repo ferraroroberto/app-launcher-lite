@@ -47,11 +47,13 @@ def test_every_copied_file_matches_its_source_or_says_why_not() -> None:
     manifest = json.loads(_MANIFEST.read_text(encoding="utf-8"))
     identical: dict[str, str] = manifest["files"]
     modified: dict[str, str] = manifest["modified"]
+    added: dict[str, str] = manifest["added"]
     assert not set(identical) & set(modified), "a file is listed as both identical and modified"
-    assert all(reason.strip() for reason in modified.values()), "a modified file has no reason"
+    assert not (set(identical) | set(modified)) & set(added), "a copied file is also listed as added"
+    assert all(reason.strip() for reason in (*modified.values(), *added.values())), "a modified or added file has no reason"
 
     present = _tree_files()
-    listed = set(identical) | set(modified)
+    listed = set(identical) | set(modified) | set(added)
     assert not present - listed, f"files under copilot/ with no provenance entry: {sorted(present - listed)}"
     assert not listed - present, f"provenance entries with no file: {sorted(listed - present)}"
     drifted = sorted(rel for rel, want in identical.items() if _digest(_COPILOT / rel) != want)
