@@ -1,5 +1,5 @@
 {
-  "_comment": "copilot/ is a copy of fleet-config-lite (the Copilot hooks, the chief helpers, the lane skills and their tests). Each file under 'files' is byte-identical to the source at 'commit' (sha256 of its bytes with CRLF read as LF); each file under 'modified' differs on purpose, for the reason given. tests/unit/copilot/test_copilot_tree.py fails when a file drifts, appears or goes missing. Re-copy from the source and update this manifest in the same change.",
+  "_comment": "copilot/ is a copy of fleet-config-lite (the Copilot hooks, the chief helpers, the lane skills and their tests). Each file under 'files' is byte-identical to the source at 'commit' (sha256 of its bytes with CRLF read as LF); each file under 'modified' differs on purpose, for the reason given; each file under 'added' was written here and has no source counterpart. tests/unit/copilot/test_copilot_tree.py fails when a file drifts, appears or goes missing. Re-copy from the source and update this manifest in the same change.",
   "source": "https://github.com/ferraroroberto/fleet-config-lite",
   "commit": "031333bc9366ede888960b05a0cb3bb0b4954e9c",
   "files": {
@@ -94,5 +94,8 @@
     "skills/_lib/lite_ports.py": "reads this checkout's own config/config.json instead of a sibling app-launcher-lite checkout's",
     "tests/test_lite_ports.py": "expects this checkout's own config/config.json as the default",
     "docs/chief.md": "says where lite_ports reads the ports from now"
+  },
+  "added": {
+    "install.ps1": "Lite's own installer, written for this layout: it renders the hook configs and junctions the skills like fleet-config-lite's install.ps1, adds -Uninstall and -Migrate, and keeps no instructions link"
   }
 }
