@@ -8,8 +8,9 @@ __pycache__/
 .ruff_cache/
 
 # --- Virtualenvs ----------------------------------------------------------
-.venv/
-venv/
+# No trailing slash on .venv/venv: git for Windows sees a junctioned venv as a link, not a directory
+.venv
+venv
 env/
 
 # --- Node (Vitest harness) ------------------------------------------------
@@ -86,6 +87,8 @@ webapp/e2e-failures.jsonl
 
 # --- Interactive-terminal scratch (image uploads land here) --------------
 .launcher-tmp/
+# Scratch folder at the repo root
+tmp/
 # Visual-proof store (fleet-config ui_proof): screenshots of a running app, never tracked
 .proof/
 webapp/progress-totals.json
