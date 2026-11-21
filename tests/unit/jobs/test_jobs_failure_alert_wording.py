@@ -49,7 +49,8 @@ class TestNotifyUnconfirmedIsNotAFailureAlert:
         return SimpleNamespace(**defaults)
 
     def _job(self):
-        return Job(id="demo", name="Demo", script_path=r"C:\ok.py")
+        # An adapter job: the exit codes under test are the adapter's.
+        return Job(id="demo", name="Demo", script_path=r"C:\fleet\skills\_lib\claude_progress.py")
 
     def _fire(self, tmp_path, monkeypatch, *, exit_code, **kwargs):
         monkeypatch.setattr(jobs_history_mod, "JOBS_RUNS_DIR", tmp_path)
