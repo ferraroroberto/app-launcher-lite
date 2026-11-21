@@ -90,6 +90,7 @@ from src.session_view.changes import (
     read_text_file,
 )
 from src.session_view.git_changes import select_in_explorer
+from src.session_view.session_git import git_changed_path, git_diff_of, merge_git_files
 from src.session_view.transcript import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
@@ -594,6 +595,13 @@ async def session_links_list(
     return {"available": True, "reason": None, "session_id": sid, **found}
 
 
+def _fold_with_git(path: Path, project_dir: Optional[str], flavor: str, before: Optional[int]) -> Dict[str, Any]:
+    """The transcript fold, plus (newest window only) the files git shows the
+    session changed that no edit step recorded."""
+    found = changed_files(path, project_dir, flavor, before)
+    return found if before is not None else merge_git_files(found, project_dir, path)
+
+
 @router.get("/api/claude-code/sessions/{sid}/changed-files")
 async def session_changed_files(
     sid: str, request: Request, before: Optional[int] = Query(default=None, ge=0),
@@ -604,8 +612,10 @@ async def session_changed_files(
     ending at ``before``, the ``next_cursor`` of the response after it (null
     once the start is read), like Session links.
 
-    Folded from the transcript, never ``git diff`` — see
-    :mod:`src.session_view.changes` for why. Every agent with a transcript reader;
+    Folded from the transcript, plus the files ``git status`` shows changed
+    since the session began that no edit step recorded (a shell command wrote
+    them): those rows say ``source: "git"`` and the ``git`` block names what
+    was read — see :mod:`src.session_view.session_git`. Every agent with a transcript reader;
     ``reason: "unsupported_agent"`` for one without, whose ⋮ menu
     hides the item anyway. On demand only, like Show changes: nothing polls
     this.
@@ -617,14 +627,15 @@ async def session_changed_files(
         return _unavailable(sid, reason)
     project_dir = str((session or {}).get("project_dir") or "") or None
     found, refusal = await _read_or_unavailable(
-        sid, agent, "changed files", asyncio.to_thread(changed_files, path, project_dir, flavor, before),
+        sid, agent, "changed files", asyncio.to_thread(_fold_with_git, path, project_dir, flavor, before),
     )
     if refusal is not None:
         return refusal
     logger.info(
-        "ℹ️ changed files %s (%s): %d files, +%d -%d, window from byte %s, partial=%s, project_exists=%s",
+        "ℹ️ changed files %s (%s): %d files, +%d -%d, window from byte %s, partial=%s, project_exists=%s, git=%s",
         sid[:8], agent, len(found["files"]), found["counts"]["additions"],
         found["counts"]["deletions"], found["next_cursor"] or 0, found["partial"], found["project_exists"],
+        (found.get("git") or {}).get("state", "not read"),
     )
     return {
         "available": True, "reason": None, "session_id": sid,
@@ -653,6 +664,16 @@ async def session_changed_file_diff(
     if refusal is not None:
         return refusal
     if found is None:
+        git_found, refusal = await _read_or_unavailable(
+            sid, agent, "changed file git diff", asyncio.to_thread(git_diff_of, project_dir, source, path),
+        )
+        if refusal is not None:
+            return refusal
+        if git_found is not None:
+            logger.info("ℹ️ changed file diff %s (%s): from git status", sid[:8], agent)
+            return {"available": True, "reason": None, "session_id": sid, "steps": [], "partial": False,
+                    "git_diff": git_found["diff"], "binary": git_found["binary"],
+                    "truncated": git_found["truncated"]}
         logger.info("ℹ️ changed file diff %s (%s): file_not_found", sid[:8], agent)
         return _unavailable(sid, "file_not_found")
     logger.info(
@@ -680,6 +701,13 @@ async def _changed_file_target(
     )
     if refusal is not None:
         return None, refusal, agent
+    if target is None:
+        target, refusal = await _read_or_unavailable(
+            sid, agent, f"changed file {what} (git)",
+            asyncio.to_thread(git_changed_path, project_dir, source, requested),
+        )
+        if refusal is not None:
+            return None, refusal, agent
     if target is None:
         logger.info("ℹ️ changed file %s %s (%s): file_not_found", what, sid[:8], agent)
         return None, _unavailable(sid, "file_not_found"), agent

@@ -379,6 +379,7 @@ flowchart LR
   - a diff that loads the first time its row opens
 - **Does:**
   - a project shows git's unified diff, tinted per line; a session shows each of its own edits in order, folded from the transcript
+  - a session also lists files only git status shows it changed (a command wrote them), marked from git status, with git's diff
   - nothing here stages, commits or discards
 - **States:**
   - empty - nothing changed
