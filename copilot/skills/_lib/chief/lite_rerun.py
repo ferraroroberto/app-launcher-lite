@@ -101,6 +101,7 @@ def run_failed(run_reply: Any) -> Tuple[Optional[bool], str]:
     status = record.get("status") if isinstance(record, dict) else None
     if not isinstance(status, str) or not status:
         return None, "run-record-unreadable"
+    # state-literal-exempt: the launcher's run status read over HTTP; copilot/ cannot import src.jobs.run_status and never moves it
     return status == "failed", f"run-not-failed status={status}"
 
 
