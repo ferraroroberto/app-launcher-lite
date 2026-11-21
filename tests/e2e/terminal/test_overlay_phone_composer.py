@@ -87,13 +87,15 @@ class _BarStubs:
         self.percent = 42
         self.model: Optional[str] = None
         self.agent: Optional[str] = None
+        self.credits: Optional[float] = None
         page.route(re.compile(r".*/api/claude-code/sessions/[^/]+/context$"), self._context)
         page.route(re.compile(r".*/api/claude-code/sessions$"), self._sessions)
 
     def _context(self, route) -> None:
         route.fulfill(
             status=200, content_type="application/json",
-            body=json.dumps({"available": True, "percent": self.percent, "reason": None}),
+            body=json.dumps({"available": True, "percent": self.percent,
+                             "ai_credits": self.credits, "reason": None}),
         )
 
     def _sessions(self, route) -> None:
@@ -248,6 +250,50 @@ def _leg_model_pill_sits_left_of_the_ring_and_the_header_still_fits(
     expect(page.locator("#terminalTitle")).to_have_css("white-space", "nowrap")
 
 
+def _leg_credits_label_and_sheet(
+    page: Page, base_url: str, sid: str, stubs: _BarStubs
+) -> None:
+    """A Copilot session whose footer shows AI credits gets "42% · 5.6 AIC"
+    beside the ring, the bar still fits the narrowest phone, and the ring's
+    sheet lists context and credits (the footer's own two decimals)."""
+    page.set_viewport_size(_PILL_PHONE)
+    stubs.model, stubs.percent, stubs.credits = "gpt-5.6-luna", 42, 5.62
+    stubs.agent = "copilot"
+    try:
+        _open_by_row(page, base_url, sid)
+        label = page.locator("#contextRingLabel")
+        expect(label).to_have_text("42% · 5.6 AIC")
+        # 360px: only the credits fit; the ring and the sheet carry the percent.
+        assert label.inner_text() == "5.6 AIC"
+        geo = page.evaluate(
+            """() => {
+              const bar = document.querySelector('#terminalOverlay .terminal-bar');
+              const menu = document.querySelector('#terminalMenu').getBoundingClientRect();
+              return {vw: window.innerWidth, barScroll: bar.scrollWidth,
+                      barClient: bar.clientWidth, menuRight: menu.right};
+            }"""
+        )
+        assert geo["barScroll"] <= geo["barClient"] + 1, geo
+        assert geo["menuRight"] <= geo["vw"], geo
+        # A current iPhone's width has room for the whole label.
+        page.set_viewport_size({"width": 390, "height": 740})
+        assert label.inner_text() == "42% · 5.6 AIC"
+        geo = page.evaluate(
+            "() => { const b = document.querySelector('#terminalOverlay .terminal-bar');"
+            " return {s: b.scrollWidth, c: b.clientWidth}; }"
+        )
+        assert geo["s"] <= geo["c"] + 1, geo
+        page.set_viewport_size(_PILL_PHONE)
+        page.locator("#contextRing").click()
+        expect(page.locator("#contextSheet")).to_be_visible()
+        expect(page.locator("#contextSheetContext dd")).to_have_text("42%")
+        expect(page.locator("#contextSheetCredits dd")).to_have_text("5.62 AIC")
+        page.locator("#contextSheetClose").click()
+        expect(page.locator("#contextSheet")).to_be_hidden()
+    finally:
+        stubs.credits, stubs.agent = None, None
+
+
 def _leg_no_pill_when_the_model_is_unknown(
     page: Page, base_url: str, sid: str, stubs: _BarStubs
 ) -> None:
@@ -363,9 +409,16 @@ def _leg_terminal_bar_buttons_stay_within_viewport(
     assert ring_box["width"] >= 44 and ring_box["height"] >= 44, f"ring target {ring_box}"
     assert ring_box["right"] <= toggle_box["left"], "the ring overlaps the mode toggle"
 
-    # A tap reads the number out.
+    # A tap opens the context sheet: the number, and no credits line for a
+    # session whose screen shows none.
     ring.click()
-    expect(page.locator("#toast")).to_contain_text("Context window 42% used")
+    sheet = page.locator("#contextSheet")
+    expect(sheet).to_be_visible()
+    expect(page.locator("#contextSheetContext dd")).to_have_text("42%")
+    expect(page.locator("#contextSheetCredits")).to_be_hidden()
+    expect(page.locator("#contextRingLabel")).to_be_hidden()
+    page.locator("#contextSheetDone").click()
+    expect(sheet).to_be_hidden()
 
 
 def _leg_terminal_bar_fits_at_once_on_default_phone(
@@ -463,6 +516,7 @@ def test_overlay_keeps_composer_reachable_on_a_phone(
     _check_no_scroll_chaining(page, browser_name)
 
     _leg_model_pill_sits_left_of_the_ring_and_the_header_still_fits(page, base_url, sid, stubs)
+    _leg_credits_label_and_sheet(page, base_url, sid, stubs)
     _leg_no_pill_when_the_model_is_unknown(page, base_url, sid, stubs)
     _leg_model_chip_switches_through_the_sheet(page, base_url, sid, stubs)
     if browser_name == "webkit":

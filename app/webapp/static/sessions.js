@@ -34,7 +34,7 @@ import { renderHomeHead } from './home-head.js';
 import { closeSessionOverlay, openSessionOverlay, resolveSessionMode } from './session-overlay.js';
 import { revealInCard } from './dom-utils.js';
 import { CHIEF_KILL_CONFIRM, CHIEF_RESTART_CONFIRM, isChiefSession, isOffBoard } from './shared/session-kinds.js';
-import { fmtDuration } from './shared/format.js';
+import { fmtCredits, fmtDuration } from './shared/format.js';
 import { SubmitState, submitState } from './chat/submit-state.js';
 import { SensitiveOutcome, runSensitiveAction } from './shared/sensitive-action.js';
 import { confirmDialog } from './confirm-dialog.js';
@@ -370,7 +370,8 @@ function sessionOpenButton(s, isChief, remote) {
     metaHead: projectFolder(s),
     metaModel: s.model || '',
     meta: status.status,
-    metaTail: [status.age, ago ? 'up ' + ago : ''],
+    // A Copilot session's AI credits sit by the age; no figure, no tail.
+    metaTail: [status.age, s.ai_credits != null ? fmtCredits(s.ai_credits) + ' AIC' : '', ago ? 'up ' + ago : ''],
     chips: chips,
     // `.name`: the hook every row test reads the title through.
     titleClass: 'name',

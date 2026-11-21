@@ -223,6 +223,7 @@ export const els = {
   chatPane: document.getElementById('chatPane'),
   chatNote: document.getElementById('chatNote'),
   contextRing: document.getElementById('contextRing'),
+  contextRingLabel: document.getElementById('contextRingLabel'),
   sessionMode: document.getElementById('sessionMode'),
   sessionModeTerminal: document.getElementById('sessionModeTerminal'),
   sessionModeChat: document.getElementById('sessionModeChat'),

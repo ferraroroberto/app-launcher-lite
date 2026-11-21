@@ -39,6 +39,7 @@ from app.webapp.routers._helpers import (
     maybe_json,
     mirror_url,
 )
+from app.webapp.session_credits import attach_ai_credits
 from src import audit, board, instance_role
 from src.board import owner_checks
 from src.chief import answers as chief_answers
@@ -115,6 +116,11 @@ async def claude_sessions(request: Request) -> Dict[str, Any]:
     (``board.attach_shared_names``), so a live session resolves to the same
     state row — and therefore shows the same title — on both tabs.
 
+    Each carries ``ai_credits``, the AI credits its Copilot footer shows (a
+    float), or ``None`` for any other agent, a detached session, a footer
+    without the figure, or a reading not taken yet: this poll never waits on
+    a screen read (:mod:`app.webapp.session_credits`).
+
     Each also carries ``board_column`` (``claude_turn`` / ``your_turn``) and
     ``board_status`` (the Board card's status, e.g. ``stalled``), so the
     Coding tab's rows show the Board's "needs you" / "stalled" chips from
@@ -177,6 +183,7 @@ async def _build_sessions_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[
             "attach_transcript_model", board.attach_transcript_model, sessions, state["rows"]
         )
         sessions = attach_models(sessions)
+        attach_ai_credits(cfg.session_host_port, sessions)
         for sess in sessions:
             # A session-host that predates the composer fields sends none: that
             # is unknown, never "nothing typed".
