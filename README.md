@@ -113,6 +113,7 @@ There is no `.env`. Committed samples live next to each gitignored real file in 
 | `webapp_config.json` | `copilot_models` | `["gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "mai-code-2-flash"]` | Model ids the pickers offer. Edited here, read-only in the UI. |
 | `webapp_config.json` | `auth_token` | `""` | Bearer token required from non-loopback callers; empty means the gate is off. |
 | `webapp_config.json` | `tailnet_allowlist` | `[]` | Extra IPs/CIDRs allowed on terminal routes beyond loopback and the Tailscale range. |
+| `webapp_config.json` | `terminal_allow_private_lan` | `false` | Trust every private-network address on terminal routes (a PC with no Tailscale on a trusted LAN). |
 | `webapp_config.json` | `webauthn_rp_id` / `webauthn_origin` | `""` | Passkey relying party; both empty turns the passkey gate off. |
 
 ## Copilot models and flags
@@ -154,7 +155,7 @@ Nothing in the launcher requires Tailscale; it is the zero-config default. The t
 
 **Without it (any VPN or LAN):**
 
-1. **`tailnet_allowlist`** — add the VPN's client subnet (for example `"10.8.0.0/24"`) or individual client IPs. This alone unlocks the terminal-grade routes.
+1. **`tailnet_allowlist`** — add the VPN's client subnet (for example `"10.8.0.0/24"`) or individual client IPs. This alone unlocks the terminal-grade routes. On a trusted home or office LAN, `terminal_allow_private_lan: true` does the same for every private address; the bearer token and passkey still apply.
 2. **`tailnet_host`** (`config.json`) — the hostname or IP the phone reaches this PC on. Feeds the Apps tab's Open URLs and the tray's **Copy remote URL** fallback.
 3. **HTTPS** — drop any `cert.pem` + `key.pem` pair into `webapp/certificates/` (a private CA, `mkcert`, or a self-signed cert the phone trusts). `gen_tailscale_cert.py` is only the Tailscale provisioner; its boot-time renewal check no-ops on other certs.
 4. **Passkeys** — set `webauthn_rp_id` (the bare hostname from step 2) and `webauthn_origin` (the full https origin). WebAuthn requires HTTPS on that exact hostname.

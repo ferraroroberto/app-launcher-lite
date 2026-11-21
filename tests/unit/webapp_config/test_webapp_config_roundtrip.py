@@ -68,6 +68,7 @@ def test_non_default_values_survive_a_round_trip(tmp_path):
         chief_worker_cap_scope="all",
         projects_ignore=["skip-me", "and-me"],
         tailnet_allowlist=["10.0.0.0/8"],
+        terminal_allow_private_lan=True,
         secrets={"api": "shh"},
         api_tokens=[{"id": "t1", "label": "phone", "scope": "*"}],
     )
