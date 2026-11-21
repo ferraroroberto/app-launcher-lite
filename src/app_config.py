@@ -104,12 +104,36 @@ def _resolve_port(reader, default: int, path: Optional[Path]) -> int:
         return default
 
 
+def _worktree_port_override(config_path: Path) -> Optional[int]:
+    """The port a linked worktree's setup wrote to ``webapp_config.json``, else ``None``.
+
+    Worktree setup gives each worktree its own port in ``webapp_config.json`` so
+    a webapp started there never binds the live port. A linked worktree has
+    ``.git`` as a *file*; a primary checkout keeps a directory and so never
+    honours that key.
+    """
+    if not (config_path.parent.parent / ".git").is_file():
+        return None
+    try:
+        raw = json.loads((config_path.parent / "webapp_config.json").read_text(encoding="utf-8"))
+        port = int(raw["port"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return port if 1 <= port <= 65535 else None
+
+
 def resolve_webapp_port(path: Optional[Path] = None) -> int:
     """The single source of truth for the webapp port: ``config.json`` ``webapp.port``.
 
     The tray manager, the webapp config loader, the restart check and the
     ``.bat``/``.ps1`` launchers (via ``scripts/webapp_port.py``) all read it here.
+    The one exception is a linked git worktree, whose own ``webapp_config.json``
+    ``port`` wins so its webapp cannot collide with the primary's.
     """
+    config_path = Path(DEFAULT_CONFIG_PATH if path is None else path).resolve()
+    override = _worktree_port_override(config_path)
+    if override is not None:
+        return override
     return _resolve_port(webapp_port, DEFAULT_WEBAPP_PORT, path)
 
 
