@@ -29,7 +29,10 @@ function rowKey(row) {
 // Fold one older chunk's rows into `state.files`. A file seen in both is one
 // row with the summed counts, its path spelled as its first (older) edit gave
 // it; it is deleted if the newer part says so, else created if the older part
-// created it. The caller re-totals `state.counts`.
+// created it. A row that came only from git status (no edit step in the newer
+// part) is taken over by the transcript's row: an edit step now explains it,
+// and its counts are the steps', not git's difference against HEAD. The caller
+// re-totals `state.counts`.
 export function mergeOlder(state, body) {
   const byKey = new Map(state.files.map(function (f) { return [rowKey(f), f]; }));
   (body.files || []).forEach(function (old) {
@@ -38,6 +41,10 @@ export function mergeOlder(state, body) {
       const fresh = Object.assign({}, old);
       byKey.set(rowKey(fresh), fresh);
       state.files.push(fresh);
+      return;
+    }
+    if (row.source === 'git') {
+      Object.assign(row, old);
       return;
     }
     row.path = old.path;
@@ -54,4 +61,17 @@ export function mergeOlder(state, body) {
   });
   state.next_cursor = body.next_cursor == null ? null : body.next_cursor;
   state.partial = state.next_cursor != null;
+}
+
+// What the summary says the list was read from: the transcript, plus git
+// status when it was read, else why it was not.
+const GIT_TAIL = {
+  ok: 'from this session’s transcript and git status',
+  not_a_repo: 'from this session’s transcript only (not a git repository)',
+  baseline_unknown: 'from this session’s transcript only (its start time is unknown)',
+  unavailable: 'from this session’s transcript only (git did not answer)',
+};
+
+export function sessionTail(git) {
+  return (git && GIT_TAIL[git.state]) || 'from this session’s transcript';
 }

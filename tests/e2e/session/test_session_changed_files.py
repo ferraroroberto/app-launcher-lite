@@ -15,6 +15,8 @@ against stubbed routes (every path and line synthetic):
   match count and a no-match way back (#2424); a short one has none;
 * a long transcript read in part offers Load older: each tap merges the next older
   chunk (a file in two chunks is one row, counts summed) until the start (#2425);
+* a file only git status shows the session changed (a shell wrote it) is added to
+  the list, marked, and opens git's diff instead of edit steps;
 * no edits, and a session whose transcript can't be read, each get their
   own sentence — never a blank panel.
 
@@ -174,6 +176,7 @@ def test_changed_files_lists_the_sessions_edits_and_opens_one(
 
     _assert_long_list_filters_by_name_and_folder(authed_page)
     _assert_empty_and_unreadable_say_so(authed_page)
+    _assert_git_only_file_is_marked_and_opens_its_git_diff(authed_page)
     _assert_partial_read_loads_older_in_chunks(authed_page, diffs)
 
     # Closing lands back on the session view it came from.
@@ -202,6 +205,46 @@ def _assert_empty_and_unreadable_say_so(page: Page) -> None:
                         "entries": [], "next_cursor": None, "source": None})
     page.locator("#changesRefresh").click()
     expect(state).to_have_text("No transcript for this session")
+
+
+def _assert_git_only_file_is_marked_and_opens_its_git_diff(page: Page) -> None:
+    """A file a shell command wrote has no edit step: the list adds it from git
+    status, the row says so, the summary names both sources, and opening it
+    shows git's diff instead of edit steps."""
+    _serve_files(page, {
+        **_FILES, "git": {"state": "ok", "added": 1}, "counts": {"additions": 12, "deletions": 3},
+        "files": [*_FILES["files"], {
+            "path": "from-shell.txt", "key": "E:/work/proj/from-shell.txt", "status": "U",
+            "additions": 3, "deletions": 0, "steps": 0, "source": "git", "staged": False,
+        }],
+    })
+    asked: list = []
+
+    def _git_diff(route):
+        asked.append(route.request.url)
+        route.fulfill(status=200, content_type="application/json", body=_json.dumps({
+            "available": True, "reason": None, "session_id": _SID, "steps": [], "partial": False,
+            "truncated": False, "binary": False,
+            "git_diff": "--- /dev/null\n+++ b/from-shell.txt\n@@ -0,0 +1,3 @@\n+made\n+by\n+a shell\n",
+        }))
+
+    diff_url = re.compile(r".*/api/claude-code/sessions/" + re.escape(_SID) + r"/changed-files/diff\?.*")
+    page.route(diff_url, _git_diff)
+    page.locator("#changesRefresh").click()
+
+    summary = page.locator("#changesList .chg-summary")
+    expect(summary).to_contain_text("4 files")
+    expect(summary).to_contain_text("from this session’s transcript and git status")
+    rows = page.locator("#changesList .chg-file")
+    row = rows.filter(has_text="from-shell.txt")
+    expect(row.locator(".chg-dir")).to_contain_text("from git status")
+    expect(rows.filter(has_text="notes.md").locator(".chg-dir")).not_to_contain_text("from git status")
+
+    row.locator("summary").click()
+    expect(row.locator(".chg-diff .d-add").first).to_be_visible()
+    expect(row.locator(".chg-body")).to_contain_text("Read from git status")
+    assert len(asked) == 1 and "from-shell.txt" in asked[0], asked
+    page.unroute(diff_url, _git_diff)
 
 
 def _many_files(n: int = 14) -> dict:
@@ -352,3 +395,4 @@ def _assert_partial_read_loads_older_in_chunks(page: Page, diffs: list) -> None:
     assert len(diffs) == seen_diffs + 1 and "since=0" in diffs[-1], diffs
     fit = stable_read(lambda: page.evaluate(_FIT))
     assert fit["body"] <= 0 and fit["doc"] <= 0, f"sideways scroll at 390px: {fit}"
+

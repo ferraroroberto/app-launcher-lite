@@ -38,7 +38,7 @@ import { createRowMenu } from '../_vendored/row-menu/row-menu.js';
 import { fileBadge, fileCounts, fileKey, fileName } from '../chat/edited-card.js';
 import { previewKind, renderFileView, windowsPath } from './file-view.js';
 import { openTextPreview } from '../lightbox.js';
-import { mergeOlder, olderLine } from './changes-merge.js';
+import { mergeOlder, olderLine, sessionTail } from './changes-merge.js';
 import { onThePc } from '../chat/transcript-render.js';
 
 // Why a session's Changed files could not be read, in the panel's words.
@@ -168,19 +168,23 @@ async function loadProjectDiff(file, body) {
     return;
   }
   if (!view || view.seq !== seq) return;
+  drawUnifiedDiff(res.diff, res, file.path, body);
+}
+
+// git's unified text (a project's diff, or a session file only git status
+// shows), tinted per line; `res` carries `binary` and `truncated`.
+function drawUnifiedDiff(text, res, path, body) {
   if (res.binary) {
     body.innerHTML = note('Binary file');
     return;
   }
-  if (!res.diff) {
+  if (!text) {
     body.innerHTML = note('No textual changes');
     return;
   }
-  const tint = diffTint(res.diff.split('\n'), file.path);
-  let html = (tint.off ? LARGE_NOTE : '') + '<pre class="chg-diff">' + renderDiff(res.diff, tint.lang) + '</pre>';
-  if (res.truncated) {
-    html += note('Diff truncated at 200 KB — open in VS Code for the rest');
-  }
+  const tint = diffTint(text.split('\n'), path);
+  let html = (tint.off ? LARGE_NOTE : '') + '<pre class="chg-diff">' + renderDiff(text, tint.lang) + '</pre>';
+  if (res.truncated) html += note('Diff truncated at 200 KB — open in VS Code for the rest');
   body.innerHTML = html;
 }
 
@@ -203,6 +207,11 @@ async function loadSessionDiff(file, body) {
   if (!view || view.seq !== seq) return;
   if (!res || !res.available) {
     body.innerHTML = note('Couldn’t read this file’s edits');
+    return;
+  }
+  if (res.git_diff != null) {
+    drawUnifiedDiff(res.git_diff, res, file.path, body);
+    body.insertAdjacentHTML('beforeend', note('Read from git status: a command changed this file, so there are no edit steps'));
     return;
   }
   const steps = res.steps || [];
@@ -524,7 +533,8 @@ function fileRow(file) {
   sum.dataset.track = 'changes.file-fold';
   sum.appendChild(fileBadge(file.status));
   const parts = file.base != null ? file : splitPath(file.path);
-  sum.appendChild(fileName(parts.base, parts.dir, file.old_path ? 'renamed from ' + file.old_path : '', file.path));
+  const hint = file.old_path ? 'renamed from ' + file.old_path : file.source === 'git' ? 'from git status' : '';
+  sum.appendChild(fileName(parts.base, parts.dir, hint, file.path));
   if (file.staged) {
     const pip = document.createElement('span');
     pip.className = 'chg-staged';
@@ -740,7 +750,7 @@ function renderSession(body, refocus) {
     return;
   }
   hideState();
-  const tail = 'from this session’s transcript';
+  const tail = sessionTail(body.git);
   const summary = summaryLine(files, body.counts || {}, tail);
   list.appendChild(summary);
   if (view.turn) list.appendChild(scopeSwitch());
