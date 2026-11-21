@@ -12,7 +12,10 @@ from __future__ import annotations
 
 import re
 
+import pytest
 from playwright.sync_api import Error, Page, Route, expect
+
+pytestmark = pytest.mark.smoke
 
 # Sources neither the session list nor the Board lanes need.
 _HUNG = re.compile(
