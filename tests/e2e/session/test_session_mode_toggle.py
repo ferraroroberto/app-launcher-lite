@@ -97,6 +97,12 @@ _COUNT_LINES = """
 }
 """
 
+# The connect's frames have arrived and the repaint batch has written them.
+_FRAMES_WRITTEN = (
+    "() => window.__wsFrames > 0 && !!window.__term()"
+    " && window.__term().element.style.visibility !== 'hidden'"
+)
+
 _TWO_FRAMES = (
     "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
 )
@@ -199,8 +205,9 @@ def test_toggle_keeps_terminal_scrollback_and_socket(
 
     authed_page.evaluate(_LIVE_STATE_SETUP)
     authed_page.wait_for_function("() => !!window.__term()", timeout=OVERLAY_OPEN_MS)
-    # Only write once the connect's clear + replay frame is in (#981 gotcha).
-    authed_page.wait_for_function("() => window.__wsFrames > 0", timeout=OVERLAY_OPEN_MS)
+    # Only write once the connect's clear + replay frame is in and written
+    # (#981 gotcha): the repaint batch holds them until it reveals the canvas.
+    authed_page.wait_for_function(_FRAMES_WRITTEN, timeout=OVERLAY_OPEN_MS)
     authed_page.evaluate(_TWO_FRAMES)
     authed_page.evaluate(
         "(m) => new Promise((r) => window.__term().write("
