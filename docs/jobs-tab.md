@@ -52,7 +52,7 @@ Gitignored; the committed template is `config/jobs.sample.json`. It is separate 
 | --- | --- | --- | --- | --- |
 | `python` | required, `.py` | — | `<venv>/python.exe <script> <args>`, `PYTHONPATH = <project root>` | project root (the dir holding the resolved `.venv`) |
 | `batch` | required, `.bat` | — | `cmd.exe /c <script> <args>` | `script_path.parent` |
-| `powershell` | required, `.ps1` | — | `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <script> <args>` | `script_path.parent` |
+| `powershell` | required, `.ps1` | — | through `src/launching/ps_script.py`, which never overrides the execution policy: `powershell.exe -NoProfile -NonInteractive -File <script> <args>` where the policy lets a local file run (`Bypass`, `Unrestricted`, `RemoteSigned`), otherwise (`AllSigned`, `Restricted`, or a policy that could not be read) the script is loaded as text and run as a ScriptBlock, its path and arguments passed in the child's environment. Under the ScriptBlock launch `$PSScriptRoot` is the script's folder, but `$PSCommandPath` and `$MyInvocation.MyCommand.Path` are empty | `script_path.parent` |
 | `shell-wsl` | required, `.sh` | — | `wsl bash <script> <args>` | `script_path.parent` |
 | `inline-shell` | empty | `{script_body, ext}` | body written to `webapp/jobs/<id>/<run>/_inline<ext>`, then run as the kind matching `ext` (`.ps1` / `.bat` / `.sh`) | matches the delegated kind |
 | `http-check` | empty | `{url, method?, expect_status?, timeout?}` | `python -m src.jobs_kinds.http_check_probe`, a built-in probe with no external script | project root |
