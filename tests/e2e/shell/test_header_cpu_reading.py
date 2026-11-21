@@ -68,6 +68,30 @@ def _route_load(page: Page, current: dict, calls: list) -> None:
     page.route(re.compile(r".*/api/system/load$"), handle)
 
 
+_IP = "192.168.1.20"
+
+
+def _route_ip(page: Page, ip: dict) -> None:
+    """Mock the two reads of the PC's private IP with invented data.
+
+    ``/api/status`` is fetched for real and only ``private_ip`` is replaced;
+    the refresh answers from the same mutable dict, ``discovery_ok`` false
+    when the address is None (a read that found nothing).
+    """
+
+    def status(route):
+        body = route.fetch().json()
+        body["private_ip"] = ip["value"]
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+    def refresh(route):
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(
+            {"private_ip": ip["value"], "discovery_ok": ip["value"] is not None}))
+
+    page.route(re.compile(r".*/api/status$"), status)
+    page.route(re.compile(r".*/api/status/refresh$"), refresh)
+
+
 def _boot(page: Page, base_url: str) -> None:
     """Open the page, and open it again if a ``/static/`` file failed (#1610).
 
@@ -273,6 +297,40 @@ def _assert_the_sheet_groups_a_burn_and_shows_what_the_rows_leave_out(
     page.locator("#cpuSheetDone").click()
 
 
+def _assert_the_sheet_shows_the_ip_and_copy_puts_exactly_it_on_the_clipboard(
+    page: Page, body
+) -> None:
+    """The IP row is the sheet's first row, whether or not the CPU read, and
+    Copy writes the raw address and nothing else, confirmed in the sheet's own
+    toast (the page's toast sits under a modal dialog)."""
+    row = body.locator("[data-row='ip']")
+    expect(row).to_have_text(re.compile(rf"IP\s*{re.escape(_IP)}\s*Copy"))
+    expect(body.locator("[data-row]").first).to_have_attribute("data-row", "ip")
+    page.evaluate(
+        "() => { window.__copied = []; Object.defineProperty(navigator, 'clipboard',"
+        " { configurable: true, value: { writeText: async (t) => { window.__copied.push(t); } } }); }"
+    )
+    row.get_by_role("button", name="Copy").click()
+    expect(page.locator("#cpuSheetToast")).to_contain_text("IP address copied")
+    assert page.evaluate("() => window.__copied") == [_IP]
+
+
+def _assert_an_unknown_ip_reads_unknown_and_cannot_be_copied(
+    page: Page, base_url: str, current: dict, ip: dict
+) -> None:
+    """A PC whose address could not be read shows Unknown and a disabled Copy,
+    and the sheet still draws its CPU rows."""
+    ip["value"] = None
+    current["body"] = _reading("normal", 20.0)
+    _boot(page, base_url)
+    page.locator("#paneClaude > .home-head .cpu-reading").click()
+    row = page.locator("#cpuSheetBody [data-row='ip']")
+    expect(row).to_contain_text("Unknown")
+    expect(row.get_by_role("button", name="Copy")).to_be_disabled()
+    expect(page.locator("#cpuSheetBody [data-row='cpu']")).to_be_visible()
+    page.locator("#cpuSheetDone").click()
+
+
 def _assert_an_unreadable_sample_says_why_in_the_sheet(page: Page, current: dict) -> None:
     """Formerly ``test_an_unreadable_sample_says_why_in_the_sheet``: a dash on
     the header, and the sheet names why."""
@@ -324,7 +382,9 @@ def test_the_tap_sheet_lists_cpu_memory_and_the_top_three(
     page = authed_page
     current = {"body": _reading("danger", 93.0)}
     calls: list = []
+    ip = {"value": _IP}
     _route_load(page, current, calls)
+    _route_ip(page, ip)
     _fake_clock.install(page)
     _boot(page, base_url)
 
@@ -334,6 +394,7 @@ def test_the_tap_sheet_lists_cpu_memory_and_the_top_three(
     sheet = page.locator("#cpuSheet")
     expect(sheet).to_be_visible()
     body = sheet.locator("#cpuSheetBody")
+    _assert_the_sheet_shows_the_ip_and_copy_puts_exactly_it_on_the_clipboard(page, body)
     expect(body.locator("[data-row='cpu']")).to_contain_text("93% of 16 cores")
     expect(body.locator("[data-row='cpu'] .usage-sheet-value")).to_have_attribute("data-tone", "danger")
     expect(body.locator("[data-row='memory']")).to_contain_text("48 of 64 GB (75%)")
@@ -346,4 +407,5 @@ def test_the_tap_sheet_lists_cpu_memory_and_the_top_three(
 
     _assert_the_sheet_groups_a_burn_and_shows_what_the_rows_leave_out(page, current)
     _assert_an_unreadable_sample_says_why_in_the_sheet(page, current)
+    _assert_an_unknown_ip_reads_unknown_and_cannot_be_copied(page, base_url, current, ip)
     _assert_the_poll_stops_while_the_page_is_hidden(page, current, calls)

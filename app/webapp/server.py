@@ -57,6 +57,7 @@ import asyncio
 import logging
 import mimetypes
 import os
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -96,7 +97,7 @@ from app.webapp.routers import (
 )
 from app.webapp.routers._helpers import STATIC_DIR
 from app.webapp.static_trim import trim_js
-from src import app_runtime, instance_role, system_load
+from src import app_runtime, instance_role, private_network, system_load
 from src.app_config import load_app_config
 from src.auth.webauthn_gate import WebAuthnGate
 from src.clients import session as session_client
@@ -504,6 +505,11 @@ def create_app() -> FastAPI:
     app.state.webapp_config = webapp_cfg
     app.state.webauthn_gate = WebAuthnGate()
     app.state.login_lockout = auth.build_login_lockout(lambda: app.state.webapp_config)
+    # The PC load sheet's IP row. A daemon thread, so the lookup neither
+    # blocks nor fails startup; opening the sheet re-reads it.
+    threading.Thread(
+        target=private_network.refresh, name="private-ip-discovery", daemon=True
+    ).start()
 
     asset_hashes = compute_asset_hashes(STATIC_DIR)
     app.state.asset_hashes = asset_hashes
