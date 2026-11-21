@@ -35,6 +35,28 @@ def parse_owner_repo(remote_url: str) -> str:
     return "/".join(parts) if len(parts) >= 2 else ""
 
 
+def parse_host(remote_url: str) -> str:
+    """The web host a remote lives on, or '' if unparseable.
+
+    An https remote keeps its port (it is the web port), an http one keeps its scheme so
+    glab does not retry it over TLS; ssh and scp-style remotes give the bare hostname,
+    since an ssh port is not the web port.
+    """
+    u = (remote_url or "").strip()
+    if "://" in u:
+        m = re.match(r"^([a-zA-Z][a-zA-Z0-9+.-]*)://(?:[^/@]*@)?([^/]+)", u)
+        if not m:
+            return ""
+        scheme, netloc = m.group(1).lower(), m.group(2)
+        if scheme == "https":
+            return netloc
+        if scheme == "http":
+            return f"http://{netloc}"
+        return netloc.rsplit(":", 1)[0] if ":" in netloc and not netloc.endswith("]") else netloc
+    m = re.match(r"^(?:[^@/:]+@)?([^:/]+):", u)
+    return m.group(1) if m else ""
+
+
 def split_owner_repo(full: str) -> tuple[str, str]:
     """('group/subgroup', 'project') from 'group/subgroup/project'; ('', '') when empty."""
     owner, _, repo = (full or "").rpartition("/")

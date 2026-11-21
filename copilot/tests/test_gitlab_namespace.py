@@ -35,7 +35,7 @@ REPO_NAME = "zz-no-such-checkout"
 
 
 def _issue_glab(calls: list):
-    def run(args):
+    def run(args, **_kw):
         calls.append(list(args))
         body = json.dumps({"iid": 5, "title": "T", "state": "opened", "labels": ["needs-owner"]})
         return subprocess.CompletedProcess(args, 0, stdout=body, stderr="")

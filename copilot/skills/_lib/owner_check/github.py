@@ -39,7 +39,6 @@ from no_window import NO_WINDOW  # noqa: E402
 
 from owner_check import block  # noqa: E402
 
-GITLAB_HOST = "gitlab.com"
 GLAB_TIMEOUT_SECONDS = 60
 # A fleet-wide list is ~2 calls per repo plus one notes read per labelled issue.
 LIST_WORKERS = 6
@@ -51,18 +50,41 @@ class GhError(RuntimeError):
     """A forge call that did not establish its answer (the callers' name for it)."""
 
 
+def host() -> str:
+    """The GitLab host every owner-check call goes to: the launcher's `gitlab_host`, else this checkout's `origin` host, else gitlab.com.
+
+    One launcher serves one `gitlab_group`, so the fleet lives on one host.
+    """
+    return gitlab_namespace.resolve_host(REPO_ROOT)
+
+
+def _project_of(args: Sequence[str]) -> str:
+    """The project path a glab call names (`--repo X` or `projects/<encoded X>/`), "" when it names none."""
+    for i, arg in enumerate(args[:-1]):
+        if arg == "--repo":
+            return args[i + 1]
+    for arg in args:
+        if arg.startswith("projects/"):
+            return urllib.parse.unquote(arg.split("/")[1])
+    return ""
+
+
 def _glab(args: Sequence[str]) -> str:
+    """`glab <args>` against `host()`; a failure names the host and the project it tried."""
+    target = host()
     try:
         proc = subprocess.run(  # noqa: S603 -- fixed executable, argv built here
             ["glab", *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=GLAB_TIMEOUT_SECONDS, creationflags=NO_WINDOW, stdin=subprocess.DEVNULL,
+            env=gitlab_namespace.glab_env(target),
         )
     except FileNotFoundError as exc:
         raise GhError("glab not installed") from exc
     except subprocess.TimeoutExpired as exc:
         raise GhError(f"glab timed out after {GLAB_TIMEOUT_SECONDS}s") from exc
     if proc.returncode != 0:
-        raise GhError((proc.stderr or proc.stdout or f"glab {args[0]} failed").strip())
+        said = (proc.stderr or proc.stdout or f"glab {args[0]} failed").strip()
+        raise GhError(said + gitlab_namespace.tried(target, _project_of(args)))
     return proc.stdout
 
 
@@ -176,7 +198,9 @@ def pr_body(repo: str, pr: int) -> str:
 
 
 def pr_url(repo: str, pr: int) -> str:
-    return f"https://{GITLAB_HOST}/{_slug(repo)}/-/merge_requests/{pr}"
+    target = host()
+    base = target if "://" in target else f"https://{target}"
+    return f"{base}/{_slug(repo)}/-/merge_requests/{pr}"
 
 
 def ensure_label(repo: str, label: str) -> None:
@@ -279,13 +303,19 @@ def _item(repo: str, row: Dict[str, Any], kind: str) -> Dict[str, Any]:
 
 
 def fleet_repo_names(projects_toml: Optional[Path] = None) -> List[str]:
-    """Sibling checkouts of this repo whose remotes point at GitLab, by folder name."""
+    """Sibling checkouts of this repo whose remotes point at GitLab, by folder name.
+
+    With `gitlab_host` set a remote qualifies by naming that host; unset, any non-GitHub remote does.
+    """
+    configured = gitlab_namespace.host_from_config()
     names = []
     for path in sorted(REPO_ROOT.parent.iterdir()):
         if not (path / ".git").is_dir():
             continue  # worktrees carry a .git file; their primary is listed already
         proc = git_run.run_git(["-C", str(path), "remote", "-v"], timeout=GLAB_TIMEOUT_SECONDS)
-        if proc.returncode == 0 and GITLAB_HOST in (proc.stdout or ""):
+        urls = [cols[1] for cols in (line.split() for line in (proc.stdout or "").splitlines()) if len(cols) > 1]
+        hosts = {gitlab_namespace.host_from_remote(url) for url in urls} - {""}
+        if proc.returncode == 0 and (configured in hosts if configured else hosts):
             names.append(path.name)
     return names
 

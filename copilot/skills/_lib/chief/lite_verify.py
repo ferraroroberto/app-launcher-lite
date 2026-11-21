@@ -19,6 +19,7 @@ repo that does not resolve, a git that fails, glab missing or signed out) is
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import subprocess
 from pathlib import Path
@@ -69,8 +70,11 @@ def tree_facts(repo_path: Path, default_branch: Optional[str]) -> Tuple[str, boo
     return current, clean, default_branch
 
 
-def merge_requests(project: str, branch: str, glab: Glab) -> List[Dict[str, Any]]:
-    """Every merge request from `branch` in any state, or Unknown when glab can't say."""
+def merge_requests(project: str, branch: str, glab: Glab, host: str = "") -> List[Dict[str, Any]]:
+    """Every merge request from `branch` in any state, or Unknown when glab can't say.
+
+    `host` only names where the lookup went, in the failure message.
+    """
     try:
         res = glab(["mr", "list", "--repo", project, "--source-branch", branch, "--all",
                     "--output", "json"])
@@ -79,7 +83,8 @@ def merge_requests(project: str, branch: str, glab: Glab) -> List[Dict[str, Any]
     except subprocess.TimeoutExpired as exc:
         raise Unknown("glab timed out") from exc
     if res.returncode != 0:
-        raise Unknown(f"glab mr list failed: {(res.stderr or '').strip()[:200] or 'no detail'}")
+        detail = (res.stderr or "").strip()[:200] or "no detail"
+        raise Unknown(f"glab mr list failed: {detail}{gitlab_namespace.tried(host, project)}")
     try:
         data = json.loads(res.stdout or "[]")
     except ValueError as exc:
@@ -113,7 +118,7 @@ def _owner(args: argparse.Namespace, repo_path: Path) -> str:
     return owner
 
 
-def run_verify(args: argparse.Namespace, glab: Glab = launcher.run_glab) -> Tuple[str, str, Optional[str]]:
+def run_verify(args: argparse.Namespace, glab: Optional[Glab] = None) -> Tuple[str, str, Optional[str]]:
     """`(status, current branch, reason)` for one `verify` call."""
     current = ""
     try:
@@ -123,7 +128,9 @@ def run_verify(args: argparse.Namespace, glab: Glab = launcher.run_glab) -> Tupl
         if not branch:
             raise Unknown("--branch is needed to find the lane's merge request")
         project = args.project or f"{_owner(args, repo_path)}/{repo_path.name}"
-        states = [str(mr.get("state") or "") for mr in merge_requests(project, branch, glab)]
+        host = gitlab_namespace.resolve_host(repo_path)
+        run = glab or functools.partial(launcher.run_glab, host=host)
+        states = [str(mr.get("state") or "") for mr in merge_requests(project, branch, run, host)]
     except Unknown as exc:
         return "UNKNOWN", current, str(exc)
     status, reason = evaluate(args.expect, current, clean, default_branch, states, branch)

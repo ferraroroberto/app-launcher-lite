@@ -52,7 +52,7 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 | --- | --- | --- |
 | `sessions_state_file` | `~/.copilot/hooks/state/sessions-state.json` | Session-status file written by the Copilot hooks in `copilot/hooks/`. Absent, corrupt or stale degrades to an `unknown` status, never an error. |
 | `gitlab_group` | `""` | GitLab group or user namespace (subgroups included) the Board's `glab` queries span. Empty keeps the panel dormant with a Settings hint. |
-| `gitlab_host` | `""` | Self-hosted GitLab instance, passed to `glab` as `GITLAB_HOST`. Empty means `glab`'s default (gitlab.com). |
+| `gitlab_host` | `""` | Self-hosted GitLab instance, passed to every `glab` call (the Board's and the chief's) as `GITLAB_HOST`. Empty takes the host of the checkout's `origin` when that is not GitHub, else gitlab.com. |
 
 `gitlab_group` is verified live against gitlab.com; `gitlab_host` for a self-hosted instance is not. See [GitLab](gitlab.md).
 

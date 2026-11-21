@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import chief_plan
+import gitlab_namespace
 
 from . import journal, launcher, rails
 
@@ -70,11 +71,15 @@ def _glab(glab: Glab, args: List[str]) -> subprocess.CompletedProcess:
         raise Unknown("glab timed out") from exc
 
 
-def mr_state(project: str, branch: str, glab: Glab) -> Dict[str, Any]:
-    """The merge request from `branch` as glab shows it (`state`, `iid`, `web_url`)."""
+def mr_state(project: str, branch: str, glab: Glab, host: str = "") -> Dict[str, Any]:
+    """The merge request from `branch` as glab shows it (`state`, `iid`, `web_url`).
+
+    `host` only names where the lookup went, in the failure message.
+    """
     res = _glab(glab, ["mr", "view", branch, "--repo", project, "--output", "json"])
     if res.returncode != 0:
-        raise Unknown(f"glab mr view failed: {first_message(res.stderr or res.stdout)[:200] or 'no detail'}")
+        detail = first_message(res.stderr or res.stdout)[:200] or "no detail"
+        raise Unknown(f"glab mr view failed: {detail}{gitlab_namespace.tried(host, project)}")
     try:
         data = json.loads(res.stdout or "")
     except ValueError as exc:
@@ -84,12 +89,12 @@ def mr_state(project: str, branch: str, glab: Glab) -> Dict[str, Any]:
     return data
 
 
-def merge(project: str, branch: str, glab: Glab) -> Tuple[str, Dict[str, Any], str]:
+def merge(project: str, branch: str, glab: Glab, host: str = "") -> Tuple[str, Dict[str, Any], str]:
     """`(verdict, merge request, reason)` for one merge attempt."""
     res = _glab(glab, ["mr", "merge", branch, "--repo", project, "--auto-merge", "--squash",
                        "--remove-source-branch", "--yes"])
     refusal = first_message(res.stderr or res.stdout)
-    mr = mr_state(project, branch, glab)
+    mr = mr_state(project, branch, glab, host)
     state = str(mr.get("state") or "")
     if state == "merged":
         return "merged", mr, ""
@@ -133,15 +138,17 @@ def ask_on_refusal(plan_path: Path, repo: str, number: int, iid: Any, reason: st
     return qid
 
 
-def cmd_merge(args: argparse.Namespace, glab: Glab = launcher.run_glab) -> int:
+def cmd_merge(args: argparse.Namespace, glab: Optional[Glab] = None) -> int:
     repo, number = rails.parse_issue_ref(args.ref)
     owner, why = (None, "") if args.project else launcher.resolve_owner(repo, args.owner)
     if owner is None and not args.project:
         print(f"MERGE=unknown reason={launcher.OWNER_UNKNOWN} ({why})")
         return 1
     project = args.project or f"{owner}/{repo}"
+    host = gitlab_namespace.resolve_host(launcher.REPOS_ROOT / repo)
+    run = glab or functools.partial(launcher.run_glab, host=host)
     try:
-        verdict, mr, reason = merge(project, args.branch, glab)
+        verdict, mr, reason = merge(project, args.branch, run, host)
     except Unknown as exc:
         print(f"MERGE=unknown reason={exc}")
         return 1
@@ -190,7 +197,9 @@ def create_mr(number: int, glab: Glab) -> Tuple[str, str]:
 
 
 def cmd_mr_create(args: argparse.Namespace, glab: Optional[Glab] = None) -> int:
-    run = glab or functools.partial(launcher.run_glab, timeout=args.timeout)
+    # `mr create` names no --repo: glab reads the checkout's remote, so the host is the cwd checkout's.
+    run = glab or functools.partial(launcher.run_glab, timeout=args.timeout,
+                                    host=gitlab_namespace.resolve_host(Path.cwd()))
     verdict, detail = create_mr(args.number, run)
     print(f"MR={verdict} {'url' if verdict == 'created' else 'reason'}={detail}")
     return 0 if verdict == "created" else 1

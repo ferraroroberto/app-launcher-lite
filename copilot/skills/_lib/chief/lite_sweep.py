@@ -19,6 +19,7 @@ registry and the active-issue markers under `~/.copilot/hooks/state`) or named
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import subprocess
 import sys
@@ -27,6 +28,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 import active_issue
 import chief_managed
+import gitlab_namespace
 import issue_host
 import worktree_claim
 from worktree_residue import WT_SEP
@@ -44,13 +46,14 @@ def normalise_mrs(rows: Any) -> Optional[List[Dict[str, Any]]]:
             for r in rows if isinstance(r, dict)]
 
 
-def gitlab_mr_lookup(remote_url: str, branch: str, glab: Glab = launcher.run_glab) -> Optional[List[Dict[str, Any]]]:
+def gitlab_mr_lookup(remote_url: str, branch: str, glab: Optional[Glab] = None) -> Optional[List[Dict[str, Any]]]:
     """Every merge request (any state) from `branch`, or None if not established."""
     project = issue_host.parse_owner_repo(remote_url)
     if not project:
         return None
+    run = glab or functools.partial(launcher.run_glab, host=gitlab_namespace.resolve_host(remote_url=remote_url))
     try:
-        res = glab(["mr", "list", "--repo", project, "--source-branch", branch, "--all", "--output", "json"])
+        res = run(["mr", "list", "--repo", project, "--source-branch", branch, "--all", "--output", "json"])
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
     if res.returncode != 0:
