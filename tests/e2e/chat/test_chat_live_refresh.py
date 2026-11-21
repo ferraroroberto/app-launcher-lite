@@ -270,11 +270,22 @@ def _check_plan_panel_sends_feedback(page: Page, tr, picker, panel) -> None:
 
 @pytest.mark.iphone
 def test_new_turns_appear_with_no_user_action(authed_page: Page, base_url: str) -> None:
-    """The feature: the conversation refreshes by itself."""
+    """The feature: the conversation refreshes by itself, starting from a chat
+    opened before anything was said: Copilot writes its log at launch, so the
+    first read is empty, and "Nothing in the transcript yet" has to go when the
+    first turns land on a tick, next to a strip already counting actions."""
     page = authed_page
     tr = _boot(page, base_url)
+    first_turns = list(tr.entries)
+    tr.entries.clear()
     _open_chat(page)
-    expect(page.locator("#transcriptList .tr-turn")).to_have_count(2)
+    empty = page.locator("#transcriptState")
+    expect(empty).to_have_text("Nothing in the transcript yet", timeout=OVERLAY_OPEN_MS)
+
+    tr.append(*first_turns)
+    _tick(page, tr)
+    expect(page.locator("#transcriptList .tr-turn")).to_have_count(2, timeout=OVERLAY_OPEN_MS)
+    expect(empty).to_be_hidden()
 
     tr.append(_turn("assistant", "found it — a missing await", 300))
     # No tap, no reload: the next tick brings it in.
