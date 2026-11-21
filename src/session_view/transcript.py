@@ -408,6 +408,21 @@ def _fit_json_budget(
     return collected, _inline_diffs(entries)
 
 
+def _weigh_page(
+    collected: List[Line], entries: List[Entry], build: EntryBuilder, line_key: LineKey,
+    fit_budget: bool,
+) -> Tuple[List[Line], List[Entry]]:
+    """A trimmed page's diff refs, then, with ``fit_budget``, its cut to
+    :data:`PAGE_JSON_BUDGET`. The page served to the chat is held to it; the
+    activity reader, which only needs the newest user message however heavy
+    the turns after it, is not. Diff refs come first: they need every call's
+    offset, and an inline diff is part of what the page weighs."""
+    entries = _inline_diffs(entries)
+    if not fit_budget:
+        return collected, entries
+    return _fit_json_budget(collected, entries, build, line_key)
+
+
 def _page(
     path: Path, before: Optional[int], limit: int, build: EntryBuilder, line_key: LineKey,
     *, fit_budget: bool = False,
@@ -423,10 +438,7 @@ def _page(
     ``limit`` turns, and ``next_cursor`` is the offset of the oldest line it
     kept (``None`` once the file start is included). A page never opens
     inside a multi-line message, and a cut never splits one.
-
-    ``fit_budget`` also holds the page to :data:`PAGE_JSON_BUDGET`: the page
-    served to the chat does, while the activity reader, which only needs the
-    newest user message however heavy the turns after it, does not.
+    ``fit_budget``: see :func:`_weigh_page`.
     """
     size = path.stat().st_size
     at_eof = before is None or before > size
@@ -469,11 +481,7 @@ def _page(
         end = lines[0][0]
 
     collected, entries = _trim_to_turns(collected, build(collected), limit, start == 0, build, line_key)
-    # Diff refs are taken here, before the weighing: they need every call's
-    # offset, and an inline diff is part of what the page weighs.
-    entries = _inline_diffs(entries)
-    if fit_budget:
-        collected, entries = _fit_json_budget(collected, entries, build, line_key)
+    collected, entries = _weigh_page(collected, entries, build, line_key, fit_budget)
     # The next page reads strictly before the oldest line this one kept;
     # None once that line is the file's first (an empty `collected` means an
     # empty file — the loop only exits without lines at offset 0).
