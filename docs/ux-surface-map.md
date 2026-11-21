@@ -13,7 +13,7 @@ Walked 2026-11-18 against build `52a7d40`, at widths 390, 1280, themes light, da
 | Area | Surfaces |
 |---|---|
 | [Chrome](#chrome) | 9 |
-| [Code](#code) | 10 |
+| [Code](#code) | 11 |
 | [Terminal](#terminal) | 8 |
 | [Chat](#chat) | 6 |
 | [Screen](#screen) | 4 |
@@ -39,36 +39,36 @@ flowchart LR
   s6["Confirm dialog"]
   s7["No session open"]
   s8["Build readout"]
-  s66(["Board tab · Board"])
+  s67(["Board tab · Board"])
   s9(["Code tab · Code"])
-  s59(["Team OS tab · Team OS"])
-  s37(["Apps tab · Apps"])
-  s49(["Jobs tab · Jobs"])
-  s81(["Settings · Settings"])
-  s33(["Screen view · Screen"])
+  s60(["Team OS tab · Team OS"])
+  s38(["Apps tab · Apps"])
+  s50(["Jobs tab · Jobs"])
+  s82(["Settings · Settings"])
+  s34(["Screen view · Screen"])
   s11(["Session menu · Code"])
-  s21(["Overlay session menu · Terminal"])
-  s39(["Running app menu · Apps"])
-  s42(["Listener menu · Apps"])
-  s55(["Job menu · Jobs"])
-  s64(["Skill file · Team OS"])
-  s77(["Drawer menu · Board"])
-  s0 -->|"Board"| s66
+  s22(["Overlay session menu · Terminal"])
+  s40(["Running app menu · Apps"])
+  s43(["Listener menu · Apps"])
+  s56(["Job menu · Jobs"])
+  s65(["Skill file · Team OS"])
+  s78(["Drawer menu · Board"])
+  s0 -->|"Board"| s67
   s0 -->|"Code"| s9
-  s0 -->|"Team"| s59
-  s0 -->|"Apps"| s37
-  s0 -->|"Jobs"| s49
+  s0 -->|"Team"| s60
+  s0 -->|"Apps"| s38
+  s0 -->|"Jobs"| s50
   s1 -->|"CPU reading"| s2
-  s1 -->|"gear"| s81
-  s2 -->|"Screen View live"| s33
+  s1 -->|"gear"| s82
+  s2 -->|"Screen View live"| s34
   s9 -->|"header"| s1
   s11 -->|"Stop"| s6
-  s21 -->|"Stop and kill"| s6
-  s39 -->|"Stop"| s6
-  s42 -->|"Stop process"| s6
-  s55 -->|"Remove"| s6
-  s64 -->|"Delete log"| s6
-  s77 -->|"Stop"| s6
+  s22 -->|"Stop and kill"| s6
+  s40 -->|"Stop"| s6
+  s43 -->|"Stop process"| s6
+  s56 -->|"Remove"| s6
+  s65 -->|"Delete log"| s6
+  s78 -->|"Stop"| s6
 ```
 
 ### `chrome.nav` Primary navigation
@@ -190,39 +190,41 @@ flowchart LR
   s14["Launch preset menu"]
   s15["Project menu"]
   s16["Sync all sheet"]
-  s17["Changes overlay"]
-  s18["Changed file menu"]
+  s17["History sheet"]
+  s18["Changes overlay"]
+  s19["Changed file menu"]
   s0(["Primary navigation · Chrome"])
   s1(["Tab header · Chrome"])
-  s19(["Session overlay · Terminal"])
-  s24(["Links sheet · Terminal"])
-  s23(["Rename session · Terminal"])
+  s20(["Session overlay · Terminal"])
+  s25(["Links sheet · Terminal"])
+  s24(["Rename session · Terminal"])
   s6(["Confirm dialog · Chrome"])
-  s85(["Chief sheet · Settings"])
-  s91(["Folders sheet · Settings"])
-  s21(["Overlay session menu · Terminal"])
-  s29(["Turn cards and step lines · Chat"])
+  s86(["Chief sheet · Settings"])
+  s92(["Folders sheet · Settings"])
+  s22(["Overlay session menu · Terminal"])
+  s30(["Turn cards and step lines · Chat"])
   s0 -->|"Code"| s9
   s9 -->|"Sessions"| s10
   s9 -->|"Projects"| s13
   s9 -->|"header"| s1
-  s10 -->|"row tap"| s19
+  s10 -->|"row tap"| s20
   s10 -->|"row kebab"| s11
   s10 -->|"stopped chief kebab"| s12
-  s11 -->|"Links"| s24
-  s11 -->|"Rename"| s23
+  s11 -->|"Links"| s25
+  s11 -->|"Rename"| s24
   s11 -->|"Stop"| s6
-  s11 -->|"Chief settings"| s85
-  s12 -->|"Chief settings"| s85
+  s11 -->|"Chief settings"| s86
+  s12 -->|"Chief settings"| s86
   s13 -->|"row kebab"| s15
   s13 -->|"preset dropdown"| s14
   s13 -->|"Sync all"| s16
-  s13 -->|"Open Settings"| s91
-  s13 -->|"row tap"| s19
-  s15 -->|"Show changes"| s17
-  s17 -->|"file kebab"| s18
-  s21 -->|"Changed files"| s17
-  s29 -->|"file row"| s17
+  s13 -->|"History"| s17
+  s13 -->|"Open Settings"| s92
+  s13 -->|"row tap"| s20
+  s15 -->|"Show changes"| s18
+  s18 -->|"file kebab"| s19
+  s22 -->|"Changed files"| s18
+  s30 -->|"file row"| s18
 ```
 
 ### `code.tab` Code tab
@@ -292,7 +294,7 @@ flowchart LR
 - **Reach:** the second card on the Code tab, closed by default
 - **Holds:**
   - the launch toolbar, with a launch preset dropdown when a preset is saved
-  - Sync all and Refresh for the git check
+  - History, Sync all and Refresh for the git check
   - a filter box with a favorites toggle
   - one row per project folder, with its git flag
   - the time of the last git check
@@ -301,6 +303,7 @@ flowchart LR
   - a preset picked in the toolbar launches it on that preset's model, effort and context
   - Refresh fetches every remote and re-reads branch, changes and ahead or behind
   - Sync all fast-forwards every clean project that is only behind
+  - History opens the History sheet
 - **States:**
   - empty - No projects found, with an Open Settings action that opens the Folders sheet
   - filtered to nothing - No projects match the filter, with Clear filter
@@ -309,6 +312,7 @@ flowchart LR
   - [Project menu](#codeproject-menu-project-menu) (row kebab)
   - [Launch preset menu](#codepreset-menu-launch-preset-menu) (preset dropdown)
   - [Sync all sheet](#codegit-sync-sheet-sync-all-sheet) (Sync all)
+  - [History sheet](#codehistory-sheet-history-sheet) (History)
   - [Folders sheet](#settingsfolders-folders-sheet) (Open Settings)
   - [Session overlay](#terminaloverlay-session-overlay) (row tap)
 
@@ -339,6 +343,28 @@ flowchart LR
   - the result of the run, project by project
   - Done
 - **Does:** Done closes the sheet
+
+### `code.history-sheet` History sheet
+
+- **Root:** `data-surface`
+- **Reach:** History in the Projects card toolbar
+- **Holds:**
+  - a day, week or month grouping and a range of 30 days, 90 days, 6 months or a custom pair of days
+  - tiles for lines added and removed, merge requests merged and issues opened and closed, each with a chart
+  - a per-project table sortable by column
+  - the data sources, each with its age, and the projects skipped for having no GitLab remote
+  - Refresh and Done
+- **Does:**
+  - opens on the saved figures at once, however old, and makes no git or GitLab call
+  - Refresh re-reads local git and GitLab for every project, with a toast while it runs, then updates in place
+  - a column header sorts the project table
+  - Done or the header close closes the sheet
+- **States:**
+  - loading - Reading the history, until the first answer
+  - error - Could not read the history, with Retry, when no figure has loaded yet
+  - stale - the last figures stay under a stale line when a later read fails
+  - a source that was never read shows unknown, one whose last read failed shows stale, a project with no GitLab remote shows skipped; none of them is drawn as zero
+  - a GitLab read that filled a page of 100 says older days may be incomplete
 
 ### `code.changes-overlay` Changes overlay
 
@@ -371,38 +397,38 @@ The session overlay in its terminal mode - the live PTY, the composer under it, 
 
 ```mermaid
 flowchart LR
-  s19["Session overlay"]
-  s20["Terminal"]
-  s21["Overlay session menu"]
-  s22["Switch model sheet"]
-  s23["Rename session"]
-  s24["Links sheet"]
-  s25["On-screen keys"]
-  s26["Attach menu"]
+  s20["Session overlay"]
+  s21["Terminal"]
+  s22["Overlay session menu"]
+  s23["Switch model sheet"]
+  s24["Rename session"]
+  s25["Links sheet"]
+  s26["On-screen keys"]
+  s27["Attach menu"]
   s10(["Sessions · Code"])
   s11(["Session menu · Code"])
   s13(["Projects · Code"])
-  s27(["Chat pane · Chat"])
-  s17(["Changes overlay · Code"])
+  s28(["Chat pane · Chat"])
+  s18(["Changes overlay · Code"])
   s6(["Confirm dialog · Chrome"])
-  s76(["Session drawer · Board"])
-  s98(["Composer keys · Keys and gestures"])
-  s10 -->|"row tap"| s19
-  s11 -->|"Links"| s24
-  s11 -->|"Rename"| s23
-  s13 -->|"row tap"| s19
-  s19 -->|"Terminal mode"| s20
-  s19 -->|"model chip"| s22
-  s19 -->|"Chat mode"| s27
-  s19 -->|"bar kebab"| s21
-  s20 -->|"keys button"| s25
-  s20 -->|"attach button"| s26
-  s21 -->|"Rename"| s23
-  s21 -->|"Links"| s24
-  s21 -->|"Changed files"| s17
-  s21 -->|"Stop and kill"| s6
-  s76 -->|"Terminal"| s19
-  s98 -->|"keys button"| s25
+  s77(["Session drawer · Board"])
+  s99(["Composer keys · Keys and gestures"])
+  s10 -->|"row tap"| s20
+  s11 -->|"Links"| s25
+  s11 -->|"Rename"| s24
+  s13 -->|"row tap"| s20
+  s20 -->|"Terminal mode"| s21
+  s20 -->|"model chip"| s23
+  s20 -->|"Chat mode"| s28
+  s20 -->|"bar kebab"| s22
+  s21 -->|"keys button"| s26
+  s21 -->|"attach button"| s27
+  s22 -->|"Rename"| s24
+  s22 -->|"Links"| s25
+  s22 -->|"Changed files"| s18
+  s22 -->|"Stop and kill"| s6
+  s77 -->|"Terminal"| s20
+  s99 -->|"keys button"| s26
 ```
 
 ### `terminal.overlay` Session overlay
@@ -519,23 +545,23 @@ The session overlay in its chat mode - the same session read from the agent's ow
 
 ```mermaid
 flowchart LR
-  s27["Chat pane"]
-  s28["Question and plan cards"]
-  s29["Turn cards and step lines"]
-  s30["Queued messages"]
-  s31["Image lightbox"]
-  s32["HTML viewer"]
-  s19(["Session overlay · Terminal"])
-  s17(["Changes overlay · Code"])
-  s76(["Session drawer · Board"])
-  s19 -->|"Chat mode"| s27
-  s27 -->|"queued chip"| s30
-  s27 -->|"image thumbnail"| s31
-  s27 -->|"HTML document card"| s32
-  s27 -->|"the agent asks"| s28
-  s27 -->|"a finished turn"| s29
-  s29 -->|"file row"| s17
-  s76 -->|"Chat"| s27
+  s28["Chat pane"]
+  s29["Question and plan cards"]
+  s30["Turn cards and step lines"]
+  s31["Queued messages"]
+  s32["Image lightbox"]
+  s33["HTML viewer"]
+  s20(["Session overlay · Terminal"])
+  s18(["Changes overlay · Code"])
+  s77(["Session drawer · Board"])
+  s20 -->|"Chat mode"| s28
+  s28 -->|"queued chip"| s31
+  s28 -->|"image thumbnail"| s32
+  s28 -->|"HTML document card"| s33
+  s28 -->|"the agent asks"| s29
+  s28 -->|"a finished turn"| s30
+  s30 -->|"file row"| s18
+  s77 -->|"Chat"| s28
 ```
 
 ### `chat.overlay` Chat pane
@@ -613,17 +639,17 @@ The PC's desktop, live, behind the terminal's passkey gate.
 
 ```mermaid
 flowchart LR
-  s33["Screen view"]
-  s34["Paste to PC sheet"]
-  s35["Quality sheet"]
-  s36["Readout"]
+  s34["Screen view"]
+  s35["Paste to PC sheet"]
+  s36["Quality sheet"]
+  s37["Readout"]
   s2(["PC load sheet · Chrome"])
-  s97(["Screen view keys · Keys and gestures"])
-  s2 -->|"Screen View live"| s33
-  s33 -->|"Quality"| s35
-  s33 -->|"Paste to PC"| s34
-  s33 -->|"readout switch"| s36
-  s97 -->|"Screen view"| s33
+  s98(["Screen view keys · Keys and gestures"])
+  s2 -->|"Screen View live"| s34
+  s34 -->|"Quality"| s36
+  s34 -->|"Paste to PC"| s35
+  s34 -->|"readout switch"| s37
+  s98 -->|"Screen view"| s34
 ```
 
 ### `screen.view` Screen view
@@ -671,35 +697,35 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  s37["Apps tab"]
-  s38["Running"]
-  s39["Running app menu"]
-  s40["Other ports card"]
-  s41["Other ports sheet"]
-  s42["Listener menu"]
-  s43["Apps list"]
-  s44["App menu"]
-  s45["Rename"]
-  s46["New entries sheet"]
-  s47["Trays"]
-  s48["Mini apps"]
+  s38["Apps tab"]
+  s39["Running"]
+  s40["Running app menu"]
+  s41["Other ports card"]
+  s42["Other ports sheet"]
+  s43["Listener menu"]
+  s44["Apps list"]
+  s45["App menu"]
+  s46["Rename"]
+  s47["New entries sheet"]
+  s48["Trays"]
+  s49["Mini apps"]
   s0(["Primary navigation · Chrome"])
   s6(["Confirm dialog · Chrome"])
-  s0 -->|"Apps"| s37
-  s37 -->|"Running"| s38
-  s37 -->|"Other ports"| s40
-  s37 -->|"Apps"| s43
-  s37 -->|"Trays"| s47
-  s37 -->|"Mini apps"| s48
-  s38 -->|"row kebab"| s39
+  s0 -->|"Apps"| s38
+  s38 -->|"Running"| s39
   s38 -->|"Other ports"| s41
-  s39 -->|"Stop"| s6
-  s40 -->|"row kebab"| s42
-  s41 -->|"row kebab"| s42
-  s42 -->|"Stop process"| s6
-  s43 -->|"row kebab"| s44
-  s43 -->|"Scan for new apps"| s46
-  s44 -->|"Rename"| s45
+  s38 -->|"Apps"| s44
+  s38 -->|"Trays"| s48
+  s38 -->|"Mini apps"| s49
+  s39 -->|"row kebab"| s40
+  s39 -->|"Other ports"| s42
+  s40 -->|"Stop"| s6
+  s41 -->|"row kebab"| s43
+  s42 -->|"row kebab"| s43
+  s43 -->|"Stop process"| s6
+  s44 -->|"row kebab"| s45
+  s44 -->|"Scan for new apps"| s47
+  s45 -->|"Rename"| s46
 ```
 
 ### `apps.tab` Apps tab
@@ -827,31 +853,31 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  s49["Jobs tab"]
-  s50["Next up"]
-  s51["Schedule sheet"]
-  s52["This week"]
-  s53["Jobs list"]
-  s54["Sort and filter"]
-  s55["Job menu"]
-  s56["Job sheet"]
-  s57["Run job"]
-  s58["Add or edit job"]
+  s50["Jobs tab"]
+  s51["Next up"]
+  s52["Schedule sheet"]
+  s53["This week"]
+  s54["Jobs list"]
+  s55["Sort and filter"]
+  s56["Job menu"]
+  s57["Job sheet"]
+  s58["Run job"]
+  s59["Add or edit job"]
   s0(["Primary navigation · Chrome"])
   s6(["Confirm dialog · Chrome"])
-  s0 -->|"Jobs"| s49
-  s49 -->|"Next up"| s50
-  s49 -->|"Jobs"| s53
-  s49 -->|"wide layout"| s52
-  s50 -->|"Next up title"| s51
-  s53 -->|"filters"| s54
-  s53 -->|"Add job"| s58
-  s53 -->|"row tap"| s56
-  s53 -->|"row kebab"| s55
-  s55 -->|"Run now"| s57
-  s55 -->|"Edit"| s58
-  s55 -->|"Remove"| s6
-  s56 -->|"Run now"| s57
+  s0 -->|"Jobs"| s50
+  s50 -->|"Next up"| s51
+  s50 -->|"Jobs"| s54
+  s50 -->|"wide layout"| s53
+  s51 -->|"Next up title"| s52
+  s54 -->|"filters"| s55
+  s54 -->|"Add job"| s59
+  s54 -->|"row tap"| s57
+  s54 -->|"row kebab"| s56
+  s56 -->|"Run now"| s58
+  s56 -->|"Edit"| s59
+  s56 -->|"Remove"| s6
+  s57 -->|"Run now"| s58
 ```
 
 ### `jobs.tab` Jobs tab
@@ -965,25 +991,25 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  s59["Team OS tab"]
-  s60["Skills"]
-  s61["Skill model menu"]
-  s62["Skill menu"]
-  s63["Skill sheet"]
-  s64["Skill file"]
-  s65["Weekly recap"]
+  s60["Team OS tab"]
+  s61["Skills"]
+  s62["Skill model menu"]
+  s63["Skill menu"]
+  s64["Skill sheet"]
+  s65["Skill file"]
+  s66["Weekly recap"]
   s0(["Primary navigation · Chrome"])
-  s91(["Folders sheet · Settings"])
+  s92(["Folders sheet · Settings"])
   s6(["Confirm dialog · Chrome"])
-  s0 -->|"Team"| s59
-  s59 -->|"Skills"| s60
-  s59 -->|"Weekly recap"| s65
-  s60 -->|"model picker"| s61
-  s60 -->|"row kebab"| s62
-  s60 -->|"Open Settings"| s91
-  s62 -->|"Read"| s63
-  s63 -->|"a file"| s64
-  s64 -->|"Delete log"| s6
+  s0 -->|"Team"| s60
+  s60 -->|"Skills"| s61
+  s60 -->|"Weekly recap"| s66
+  s61 -->|"model picker"| s62
+  s61 -->|"row kebab"| s63
+  s61 -->|"Open Settings"| s92
+  s63 -->|"Read"| s64
+  s64 -->|"a file"| s65
+  s65 -->|"Delete log"| s6
 ```
 
 ### `team.tab` Team OS tab
@@ -1059,45 +1085,45 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  s66["Board tab"]
-  s67["Project combo list"]
-  s68["Backlog"]
-  s69["Start with menu"]
-  s70["Issue menu"]
-  s71["Since you last looked"]
-  s72["Chief's plan"]
-  s73["Plan note"]
-  s74["Bot's turn"]
-  s75["Your turn"]
-  s76["Session drawer"]
-  s77["Drawer menu"]
-  s78["Answer the chief"]
-  s79["MRs and jobs"]
-  s80["Done today"]
+  s67["Board tab"]
+  s68["Project combo list"]
+  s69["Backlog"]
+  s70["Start with menu"]
+  s71["Issue menu"]
+  s72["Since you last looked"]
+  s73["Chief's plan"]
+  s74["Plan note"]
+  s75["Bot's turn"]
+  s76["Your turn"]
+  s77["Session drawer"]
+  s78["Drawer menu"]
+  s79["Answer the chief"]
+  s80["MRs and jobs"]
+  s81["Done today"]
   s0(["Primary navigation · Chrome"])
-  s19(["Session overlay · Terminal"])
-  s27(["Chat pane · Chat"])
+  s20(["Session overlay · Terminal"])
+  s28(["Chat pane · Chat"])
   s6(["Confirm dialog · Chrome"])
-  s0 -->|"Board"| s66
-  s66 -->|"project combo"| s67
-  s66 -->|"Backlog"| s68
-  s66 -->|"Since you last looked"| s71
-  s66 -->|"Chief's plan"| s72
-  s66 -->|"Bot's turn"| s74
-  s66 -->|"Your turn"| s75
-  s66 -->|"MRs and jobs"| s79
-  s66 -->|"Done today"| s80
-  s68 -->|"Start with"| s69
-  s68 -->|"row kebab"| s70
-  s72 -->|"a row's note"| s73
-  s72 -->|"questions"| s78
-  s74 -->|"row tap"| s76
-  s75 -->|"session row"| s76
-  s75 -->|"Answer"| s78
-  s76 -->|"kebab"| s77
-  s76 -->|"Terminal"| s19
-  s76 -->|"Chat"| s27
-  s77 -->|"Stop"| s6
+  s0 -->|"Board"| s67
+  s67 -->|"project combo"| s68
+  s67 -->|"Backlog"| s69
+  s67 -->|"Since you last looked"| s72
+  s67 -->|"Chief's plan"| s73
+  s67 -->|"Bot's turn"| s75
+  s67 -->|"Your turn"| s76
+  s67 -->|"MRs and jobs"| s80
+  s67 -->|"Done today"| s81
+  s69 -->|"Start with"| s70
+  s69 -->|"row kebab"| s71
+  s73 -->|"a row's note"| s74
+  s73 -->|"questions"| s79
+  s75 -->|"row tap"| s77
+  s76 -->|"session row"| s77
+  s76 -->|"Answer"| s79
+  s77 -->|"kebab"| s78
+  s77 -->|"Terminal"| s20
+  s77 -->|"Chat"| s28
+  s78 -->|"Stop"| s6
 ```
 
 ### `board.tab` Board tab
@@ -1277,43 +1303,43 @@ A group list in a pane; every row that holds more than a switch opens a sheet wi
 
 ```mermaid
 flowchart LR
-  s81["Settings"]
-  s82["Settings rows"]
-  s83["Document sheet"]
-  s84["GitHub Copilot sheet"]
-  s85["Chief sheet"]
-  s86["Chief model menu"]
-  s87["GitLab sheet"]
-  s88["Speech to text sheet"]
-  s89["Launch preset menu"]
-  s90["API tokens sheet"]
-  s91["Folders sheet"]
-  s92["Chat folder menu"]
-  s93["Passkeys sheet"]
-  s94["Terminal sheet"]
+  s82["Settings"]
+  s83["Settings rows"]
+  s84["Document sheet"]
+  s85["GitHub Copilot sheet"]
+  s86["Chief sheet"]
+  s87["Chief model menu"]
+  s88["GitLab sheet"]
+  s89["Speech to text sheet"]
+  s90["Launch preset menu"]
+  s91["API tokens sheet"]
+  s92["Folders sheet"]
+  s93["Chat folder menu"]
+  s94["Passkeys sheet"]
+  s95["Terminal sheet"]
   s1(["Tab header · Chrome"])
   s11(["Session menu · Code"])
   s12(["Stopped chief menu · Code"])
   s13(["Projects · Code"])
-  s60(["Skills · Team OS"])
-  s1 -->|"gear"| s81
-  s11 -->|"Chief settings"| s85
-  s12 -->|"Chief settings"| s85
-  s13 -->|"Open Settings"| s91
-  s60 -->|"Open Settings"| s91
-  s81 -->|"the groups"| s82
-  s81 -->|"a document row"| s83
-  s81 -->|"Coding agent"| s84
-  s81 -->|"Chief"| s85
-  s81 -->|"GitLab"| s87
-  s81 -->|"Speech to text"| s88
-  s81 -->|"API tokens"| s90
-  s81 -->|"Folders"| s91
-  s81 -->|"Passkeys"| s93
-  s81 -->|"Terminal"| s94
-  s84 -->|"preset kebab"| s89
-  s85 -->|"model"| s86
-  s91 -->|"a folder's kebab"| s92
+  s61(["Skills · Team OS"])
+  s1 -->|"gear"| s82
+  s11 -->|"Chief settings"| s86
+  s12 -->|"Chief settings"| s86
+  s13 -->|"Open Settings"| s92
+  s61 -->|"Open Settings"| s92
+  s82 -->|"the groups"| s83
+  s82 -->|"a document row"| s84
+  s82 -->|"Coding agent"| s85
+  s82 -->|"Chief"| s86
+  s82 -->|"GitLab"| s88
+  s82 -->|"Speech to text"| s89
+  s82 -->|"API tokens"| s91
+  s82 -->|"Folders"| s92
+  s82 -->|"Passkeys"| s94
+  s82 -->|"Terminal"| s95
+  s85 -->|"preset kebab"| s90
+  s86 -->|"model"| s87
+  s92 -->|"a folder's kebab"| s93
 ```
 
 ### `settings.pane` Settings
@@ -1484,14 +1510,14 @@ Inputs that are not elements.
 
 ```mermaid
 flowchart LR
-  s95["Swipe a row"]
-  s96["Long-press hint"]
-  s97["Screen view keys"]
-  s98["Composer keys"]
-  s33(["Screen view · Screen"])
-  s25(["On-screen keys · Terminal"])
-  s97 -->|"Screen view"| s33
-  s98 -->|"keys button"| s25
+  s96["Swipe a row"]
+  s97["Long-press hint"]
+  s98["Screen view keys"]
+  s99["Composer keys"]
+  s34(["Screen view · Screen"])
+  s26(["On-screen keys · Terminal"])
+  s98 -->|"Screen view"| s34
+  s99 -->|"keys button"| s26
 ```
 
 ### `keys.swipe-row` Swipe a row
@@ -1557,6 +1583,7 @@ flowchart LR
 | [Projects](#codeprojects-projects) | row kebab | [Project menu](#codeproject-menu-project-menu) |
 | [Projects](#codeprojects-projects) | preset dropdown | [Launch preset menu](#codepreset-menu-launch-preset-menu) |
 | [Projects](#codeprojects-projects) | Sync all | [Sync all sheet](#codegit-sync-sheet-sync-all-sheet) |
+| [Projects](#codeprojects-projects) | History | [History sheet](#codehistory-sheet-history-sheet) |
 | [Projects](#codeprojects-projects) | Open Settings | [Folders sheet](#settingsfolders-folders-sheet) |
 | [Projects](#codeprojects-projects) | row tap | [Session overlay](#terminaloverlay-session-overlay) |
 | [Project menu](#codeproject-menu-project-menu) | Show changes | [Changes overlay](#codechanges-overlay-changes-overlay) |

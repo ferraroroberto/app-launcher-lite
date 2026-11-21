@@ -266,3 +266,68 @@ def test_issue_title_and_body(monkeypatch):
     _install(monkeypatch, {"/issues/3": {"title": " T ", "description": "D"}})
     assert forge.issue_title("grp", "tool", 3) == "T"
     assert forge.issue_body("grp", "tool", 3) == "D"
+
+
+# ------------------------------------------------------- project history (the History sheet)
+
+# Trimmed from live `glab api` reads of a project's merged MR and issues; the
+# stamps keep GitLab's millisecond ``Z`` form.
+_LIVE_MERGED_MR = {
+    "iid": 25, "state": "merged", "created_at": "2026-11-20T09:38:50.134Z",
+    "merged_at": "2026-11-20T09:38:54.551Z", "closed_at": None,
+    "updated_at": "2026-11-20T09:38:54.926Z", "labels": [],
+}
+_LIVE_CLOSED_ISSUE = {
+    "iid": 1, "state": "closed", "created_at": "2026-11-19T07:10:46.491Z",
+    "closed_at": "2026-11-19T07:10:55.623Z", "updated_at": "2026-11-19T07:10:55.795Z", "labels": [],
+}
+_SINCE = datetime(2026, 11, 1, tzinfo=timezone.utc)
+
+
+def test_project_history_reads_three_windows_and_returns_utc_stamps(monkeypatch):
+    fake = _install(monkeypatch, {
+        "merge_requests?state=merged": [_LIVE_MERGED_MR],
+        "issues?created_after": [_LIVE_CLOSED_ISSUE],
+        "issues?state=closed": [_LIVE_CLOSED_ISSUE],
+    })
+    got = forge.project_history("grp/sub/tool", _SINCE)
+    assert got == {
+        "merged": ["2026-11-20T09:38:54Z"], "opened": ["2026-11-19T07:10:46Z"],
+        "closed": ["2026-11-19T07:10:55Z"], "truncated": [],
+    }
+    paths = [argv[argv.index("api") + 1] for argv, _ in fake.calls]
+    assert paths == [
+        "projects/grp%2Fsub%2Ftool/merge_requests?state=merged&merged_after=2026-11-01T00%3A00%3A00Z&per_page=100",
+        "projects/grp%2Fsub%2Ftool/issues?created_after=2026-11-01T00%3A00%3A00Z&per_page=100",
+        "projects/grp%2Fsub%2Ftool/issues?state=closed&updated_after=2026-11-01T00%3A00%3A00Z&per_page=100",
+    ]
+
+
+def test_project_history_keeps_a_closed_issue_only_when_it_closed_inside_the_window(monkeypatch):
+    # GitLab ignores `closed_after`, so an issue closed in October but touched
+    # again in November comes back from `updated_after`; its own closed_at decides.
+    reopened_note = {**_LIVE_CLOSED_ISSUE, "iid": 2, "closed_at": "2026-10-20T10:00:00.000Z",
+                     "updated_at": "2026-11-05T10:00:00.000Z"}
+    _install(monkeypatch, {"issues?state=closed": [_LIVE_CLOSED_ISSUE, reopened_note]})
+    assert forge.project_history("grp/tool", _SINCE)["closed"] == ["2026-11-19T07:10:55Z"]
+
+
+def test_project_history_leaves_out_the_audit_ledger(monkeypatch):
+    ledger = {**_LIVE_CLOSED_ISSUE, "iid": 9, "labels": ["audit-meta"]}
+    _install(monkeypatch, {"issues?created_after": [_LIVE_CLOSED_ISSUE, ledger]})
+    assert len(forge.project_history("grp/tool", _SINCE)["opened"]) == 1
+
+
+def test_project_history_names_a_full_page(monkeypatch):
+    _install(monkeypatch, {"merge_requests?state=merged": [_LIVE_MERGED_MR] * 100})
+    got = forge.project_history("grp/tool", _SINCE)
+    assert got["truncated"] == ["merged"]
+    assert len(got["merged"]) == 100
+
+
+def test_project_history_raises_when_glab_fails(monkeypatch):
+    def boom(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr="401 Unauthorized")
+    monkeypatch.setattr(forge.subprocess, "run", boom)
+    with pytest.raises(forge.GlabError):
+        forge.project_history("grp/tool", _SINCE)

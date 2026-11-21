@@ -65,6 +65,8 @@ Five work surfaces plus Settings, in one tabbed PWA at `/`. A one-screen index p
 
 Lists every child directory of `projects_dir` (no marker files needed; `projects_ignore` globs hide folders). One tap launches a **GitHub Copilot CLI** session in that folder, either as a launcher-owned ConPTY streamed live to the phone (typing, compose bar, paste, image attach, Ctrl-keys, scrollback) or as a **Detached** console window on the PC (listed and killable, but no phone terminal). **Resume** re-opens Copilot's own `--resume` session picker. Per-project ★ favorites sort to the top; a repo-issues button links to the project's GitLab issues page; running sessions can be renamed and stopped from the list. Launch flags come from the Copilot settings (see [Copilot models and flags](#copilot-models-and-flags)). Session reference: [docs/session-view.md](docs/session-view.md), [docs/interactive-terminal.md](docs/interactive-terminal.md).
 
+The clock button in the Projects card opens **History**, a dashboard of what the projects shipped: lines added and removed from each project's local `git log`, and merge requests merged and issues opened and closed from GitLab, by day, week or month. It answers from a cache and re-reads only when asked: [docs/history.md](docs/history.md).
+
 A small **CPU reading** in the Coding header answers "is the PC loaded?": muted at rest, amber after about 30 s at or above 70%, red at or above 90%, and `–` when the server could not sample. Tapping it lists the busiest process groups by name and cores used, never paths or command lines. One shared sampler (`src/system_load.py`) feeds it, only while a page is asking.
 
 ### Apps
@@ -186,6 +188,7 @@ app-launcher keeps growing. This repo tracks it through the `[upstream]` waterma
 | [docs/config.md](docs/config.md) | Every config key. |
 | [docs/board.md](docs/board.md) | Board tab: columns, `glab` reads, state-file join, drill-down, security boundary. |
 | [docs/gitlab.md](docs/gitlab.md) | The GitLab side: `glab` setup, what is read and written, dual remote, an Android Git client. |
+| [docs/history.md](docs/history.md) | The History sheet: the two sources, the cache, the honest states. |
 | [docs/jobs-tab.md](docs/jobs-tab.md) | Jobs tab: schema, kinds, schedules, webhooks, alerting, coverage, watchdog. |
 | [docs/android.md](docs/android.md) | Android Chrome as the primary phone: install, HTTPS, what to check. |
 | [docs/installing-agent-clis.md](docs/installing-agent-clis.md) | Installing and signing in to the Copilot CLI and `glab`. |

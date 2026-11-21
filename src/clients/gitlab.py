@@ -309,6 +309,45 @@ def search_done_today(group: str, host: str = "") -> List[Dict[str, Any]]:
     return search_done_on(group, date.today(), host=host)
 
 
+def project_history(path: str, since: datetime, host: str = "") -> Dict[str, Any]:
+    """When one project's merge requests merged and issues opened and closed, since ``since``.
+
+    ``path`` is the project's full path (``group/sub/project``). Returns UTC
+    stamps under ``merged``, ``opened`` and ``closed`` and ``truncated``, the
+    names of the reads that came back as a full page of 100: the read does not
+    paginate, so such a read may be missing its older rows. The filters are the
+    ones a live read showed GitLab honours: ``merged_after`` on merge requests
+    and ``created_after`` on issues. ``closed_after`` is accepted on issues but
+    ignored, so closed issues are asked for by ``updated_after`` and kept when
+    their own ``closed_at`` is not before ``since``. Issues carrying a
+    non-actionable label (the audit ledger) are not work and are left out.
+    """
+    base = f"projects/{_enc(path.strip('/'))}"
+    after = _stamp(since)
+    reads = {
+        "merged": f"{base}/merge_requests?state=merged&merged_after={after}&per_page={_PAGE}",
+        "opened": f"{base}/issues?created_after={after}&per_page={_PAGE}",
+        "closed": f"{base}/issues?state=closed&updated_after={after}&per_page={_PAGE}",
+    }
+    rows = {name: _api_list(query, host) for name, query in reads.items()}
+
+    def stamps(name: str, field: str) -> List[str]:
+        kept = []
+        for row in rows[name]:
+            moment = _parse(row.get(field))
+            if moment is None or moment < since or not _is_actionable(_labels(row)):
+                continue
+            kept.append(moment.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"))
+        return kept
+
+    return {
+        "merged": stamps("merged", "merged_at"),
+        "opened": stamps("opened", "created_at"),
+        "closed": stamps("closed", "closed_at"),
+        "truncated": [name for name, found in rows.items() if len(found) >= _PAGE],
+    }
+
+
 # ------------------------------------------------------------------ writes
 
 def _my_user_id(host: str) -> Optional[int]:

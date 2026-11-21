@@ -11,7 +11,12 @@ The client in `src/clients/gitlab.py` ran against gitlab.com with `glab` 1.131 (
 | Open group issues (`groups/<group>/issues?state=opened`), including `references.full`, `web_url`, `labels` as strings | verified |
 | Closed group issues with `updated_after`, `closed_at` as a millisecond `Z` stamp, landing in Done | verified |
 | Open and merged group merge-request reads (the endpoints and query strings are accepted) | verified to answer; the group held none, so the row shape is `unknown` |
-| Merge-request `draft`, `merged_at`, `description` and the `Closes #N` / `VISUAL_PROOF=` pairing | `unknown` |
+| Merge-request `draft` and `description`, and the `Closes #N` / `VISUAL_PROOF=` pairing | `unknown` |
+| A merged merge request carries `merged_at` as a millisecond `Z` stamp (group and project reads) | verified |
+| `merged_after` on `projects/<path>/merge_requests?state=merged` filters: a stamp in the future answers `[]`, one in the past answers the merged rows | verified |
+| `created_after` on `projects/<path>/issues` filters the same way | verified |
+| `closed_after` on `projects/<path>/issues?state=closed` | verified **ignored**: a stamp in the future still answered a closed issue, so closed issues are asked for by `updated_after` and kept by their own `closed_at` |
+| A project path with subgroups as one encoded segment (`group%2Fsub%2Fproject`) for the History reads | verified for a one-level path; deeper nesting `unknown` |
 | `GET user` for the assignee id | verified |
 | File an issue (assigned to the signed-in user) and add a note | verified |
 | Closing an issue (`state_event=close`) | verified; the client has no close call, so a live check used `glab api` directly |
@@ -45,6 +50,16 @@ Every read is `glab api` against REST v4, one subprocess per call with a 20 s ti
 - **Default-branch pipelines:** the group's live projects (archived and CI-off ones left out), then one `projects/<id>/pipelines?ref=<default>` read each, four in flight. The default branch comes from the project row: GitLab answers `[]` for a ref it does not know, so a guessed branch would read as "no pipelines". The latest finished pipeline (`failed` or `success`) decides: `red`, `green`, or `unknown` when the read failed or the row names no default branch. A project with no finished pipeline is not a row. The Board draws a red project as one `CI failed` row and an unreadable one as `CI unknown`; see [board.md](board.md#red-pipelines). No pipeline-file check is made first: the empty answer already says "no pipeline".
 
 **No forge call ever runs on a poll.** `refresh()` runs only on the Board's ↻ button or once on a stale tab activation (with a 60 s cooldown); the 5 s poll reads the in-memory snapshot. A failed refresh keeps the previous data and surfaces an `error` badge; a never-filled cache is "never fetched", not "nothing open".
+
+## What the History sheet reads
+
+The [History sheet](history.md) reads one project at a time, by the project's full path taken from its local GitLab remote, three `glab api` calls each, only when its Refresh is tapped:
+
+- **Merged:** `projects/<path>/merge_requests?state=merged&merged_after=<since>&per_page=100`, counted by `merged_at`.
+- **Opened:** `projects/<path>/issues?created_after=<since>&per_page=100`, counted by `created_at`.
+- **Closed:** `projects/<path>/issues?state=closed&updated_after=<since>&per_page=100`, counted by `closed_at` and only when that is not before `<since>`, because `closed_after` is ignored (see the table above).
+
+A page of 100 is recorded as `truncated` for that project and shown on the sheet; the reads do not paginate. A failed read keeps the project's previous days and marks the source `stale`.
 
 ## What the Board writes
 
