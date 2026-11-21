@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import ssl
 import subprocess
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -80,6 +81,52 @@ def transport_failure(exc: BaseException) -> Optional[Tuple[str, int]]:
     return None
 
 
+# ---- bounded recovery from a transient transport failure --------------------
+
+# Seconds to wait after the 1st, 2nd and 3rd failed attempt before looking again. A
+# launcher restart or a brief session-host outage clears inside this window; a longer
+# one is the operator's to handle.
+RECOVERY_BACKOFF = (1.0, 2.0, 5.0)
+RECOVERY_ATTEMPTS = len(RECOVERY_BACKOFF)
+
+# What a failed call proves about the request, for `transient_failure`:
+# `NOT_SENT` -- the connection was refused or unreachable, or the host said 503 "nothing
+# was sent", so no byte of the request was handled; `MAYBE_SENT` -- a timeout or a reset
+# after the request went out, so a write may have landed.
+NOT_SENT = "not_sent"
+MAYBE_SENT = "maybe_sent"
+
+
+def transient_failure(exc: BaseException) -> Optional[str]:
+    """`NOT_SENT` / `MAYBE_SENT` for a failure worth a bounded retry, else None.
+
+    An HTTP status other than 503 is the launcher answering, so it is never transient: a
+    502/409/400/403 is an authoritative negative and a 404/500 is not ours to retry.
+    """
+    if isinstance(exc, urllib.error.HTTPError):
+        return NOT_SENT if exc.code == 503 else None
+    if isinstance(exc, urllib.error.URLError):
+        return transient_failure(exc.reason) if isinstance(exc.reason, BaseException) else NOT_SENT
+    if isinstance(exc, (TimeoutError, ConnectionResetError, ConnectionAbortedError)):
+        return MAYBE_SENT
+    if isinstance(exc, OSError):  # refused, host/network unreachable, name not resolved
+        return NOT_SENT
+    return None
+
+
+def request_with_recovery(base_url: str, path: str) -> Dict[str, Any]:
+    """`_request` for a GET, retried across `RECOVERY_BACKOFF` while the failure is transient.
+    The last failure is raised; a read has no side effect, so retrying it is always safe."""
+    for attempt, delay in enumerate(RECOVERY_BACKOFF, start=1):
+        try:
+            return _request(base_url, path)
+        except (OSError, ValueError) as exc:
+            if attempt == RECOVERY_ATTEMPTS or transient_failure(exc) is None:
+                raise
+            time.sleep(delay)
+    raise AssertionError("unreachable: the last attempt returns or raises")
+
+
 # ---- launcher reads behind one command each ---------------------------------
 
 def resolve_sid_via_board(base_url: str, sid: str) -> Tuple[Optional[str], Optional[str]]:
@@ -96,11 +143,12 @@ def resolve_sid_via_board(base_url: str, sid: str) -> Tuple[Optional[str], Optio
     A board that cannot be read is not evidence that the prefix is wrong, so
     the id passes through unchanged and the real endpoint gets to answer —
     the same never-invent-a-verdict rule `resolve_session_id`'s no-match branch
-    already follows.
+    already follows. A launcher that is briefly down is waited out first
+    (`request_with_recovery`), so a prefix is still resolved once it is back.
     """
     try:
-        board = _request(base_url, "/api/board")
-    except (urllib.error.URLError, ValueError):
+        board = request_with_recovery(base_url, "/api/board")
+    except (OSError, ValueError):
         return sid, None
     return rails.resolve_session_id(sid, board.get("columns") or {})
 
@@ -247,12 +295,16 @@ def fetch_exchange_marker(base_url: str, sid: str) -> Dict[str, Any]:
 
 
 def post_session_input(base_url: str, sid: str, text: str) -> Dict[str, Any]:
-    """POST one steer into `sid`'s terminal. **Exactly one POST, always** —
-    this helper never retries, and no caller may call it twice for the same
-    steer (a resent `/issue-finish` can double-execute a merge).
+    """POST one steer into `sid`'s terminal. **Exactly one POST per call** —
+    this helper never retries, and a caller may call it again for the same
+    steer only after reading the session transcript for that exact text
+    (`lite_lanes._post_with_recovery`): a resent `/issue-finish` can
+    double-execute a merge.
 
     Returns `{"ok": bool, "reason": str|None, "http_status": int|None,
-    "error": str|None}`.
+    "transport": str|None, "error": str|None}`; `transport` is
+    `transient_failure`'s verdict for a call that got no usable answer (None
+    for a success or an authoritative HTTP answer).
 
     The session-host answers a *written but never echoed* payload with HTTP
     502, and an already-exited session with 409.
@@ -280,17 +332,22 @@ def post_session_input(base_url: str, sid: str, text: str) -> Dict[str, Any]:
         # 502 is the host's "written, never echoed, no CR sent" — map it onto
         # the same reason vocabulary the body would have carried, so the
         # classifier has one language for authoritative negatives.
-        reason = "not_ingested" if exc.code == 502 else "dropped" if exc.code == 409 else None
+        # A 400/403 is the route refusing the request before it wrote anything: the same
+        # "never reached the PTY" fact as a 409, so it shares that reason.
+        reason = {502: "not_ingested", 409: "dropped", 400: "dropped", 403: "dropped"}.get(exc.code)
         return {
             "ok": False, "reason": reason, "http_status": exc.code,
+            "transport": transient_failure(exc),
             "error": f"HTTP {exc.code}: {detail.strip()[:300] or exc.reason}",
         }
-    except (urllib.error.URLError, ValueError) as exc:
-        # Could not reach the endpoint at all — not evidence either way.
-        return {"ok": False, "reason": None, "http_status": None, "error": str(exc)[:300]}
+    except (OSError, ValueError) as exc:
+        # Could not reach the endpoint, or lost the answer — not evidence either
+        # way. `transport` says whether the request can have been handled.
+        return {"ok": False, "reason": None, "http_status": None,
+                "transport": transient_failure(exc), "error": str(exc)[:300]}
     if not isinstance(result, dict):
-        return {"ok": True, "reason": None, "http_status": None, "error": None}
-    return {"ok": True, "reason": result.get("reason"), "http_status": None, "error": None}
+        return {"ok": True, "reason": None, "http_status": None, "transport": None, "error": None}
+    return {"ok": True, "reason": result.get("reason"), "http_status": None, "transport": None, "error": None}
 
 
 def fetch_session_card(base_url: str, sid: str) -> Dict[str, Any]:

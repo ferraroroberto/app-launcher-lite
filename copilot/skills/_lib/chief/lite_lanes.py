@@ -381,16 +381,104 @@ def _normalise_text(text: str) -> str:
     return " ".join(str(text or "").split())
 
 
-def _transcript_has_user_turn(transcript: Dict[str, Any], message: str) -> bool:
-    """True when a `user` entry of the transcript is `message` (or its truncated head)."""
+def _user_turn_count(transcript: Dict[str, Any], message: str) -> int:
+    """How many `user` entries of the transcript are `message` (or its truncated head)."""
     wanted = _normalise_text(message)
+    count = 0
     for entry in transcript.get("entries") or []:
         if entry.get("kind") != "user":
             continue
         seen = _normalise_text(entry.get("text"))
         if seen and (seen.startswith(wanted[:OPEN_MATCH_CHARS]) or wanted.startswith(seen)):
-            return True
-    return False
+            count += 1
+    return count
+
+
+def _transcript_has_user_turn(transcript: Dict[str, Any], message: str) -> bool:
+    """True when a `user` entry of the transcript is `message` (or its truncated head)."""
+    return _user_turn_count(transcript, message) > 0
+
+
+# What the transcript says about a steer: a copy of it is there (`PRESENT`), the transcript
+# was read and holds none (`ABSENT`), or it could not be read (`UNREADABLE`).
+PRESENT = "present"
+ABSENT = "absent"
+UNREADABLE = "unreadable"
+
+
+def _transcript_copies(base_url: str, sid: str, text: str) -> Optional[int]:
+    """How many user turns carry `text`, or None when the transcript cannot be read.
+    A transcript that reports `available: false` says nothing about the session, so it is
+    unreadable here, never an empty one."""
+    try:
+        transcript = launcher._request(base_url, f"/api/claude-code/sessions/{sid}/transcript")
+    except (OSError, ValueError):
+        return None
+    if not isinstance(transcript, dict) or transcript.get("available") is False:
+        return None
+    return _user_turn_count(transcript, text)
+
+
+def _steer_evidence(base_url: str, sid: str, text: str, baseline: int) -> str:
+    """`PRESENT` only when more copies of `text` are in the transcript than before the first
+    send, so an identical earlier steer is never taken for this one."""
+    copies = _transcript_copies(base_url, sid, text)
+    if copies is None:
+        return UNREADABLE
+    return PRESENT if copies > baseline else ABSENT
+
+
+# Why a verdict line says a steer is `pending` or `unknown` after every POST failed on transport.
+SEND_FAILED_REASONS = {
+    "pending": (
+        "every send attempt failed on transport and the transcript shows no copy "
+        "of the steer; delivery is neither confirmed nor disproved; not resent "
+        "further, operator decides"
+    ),
+    "unknown": (
+        "every send attempt failed on transport and the transcript could not be "
+        "read, so a copy of the steer may have landed; not resent further, "
+        "operator decides"
+    ),
+}
+
+
+class SendOutcome:
+    """What `_post_with_recovery` did: the last POST's result, how many POSTs it made, and
+    the transcript's last word on the steer (None when no transcript read was needed)."""
+
+    def __init__(self, posted: Dict[str, Any], attempts: int, evidence: Optional[str]) -> None:
+        self.posted = posted
+        self.attempts = attempts
+        self.evidence = evidence
+
+
+def _post_with_recovery(args: argparse.Namespace, text: str, baseline: int) -> SendOutcome:
+    """POST `text`, and after a transient transport failure look at the transcript before
+    each further POST, at most `RECOVERY_ATTEMPTS` in all. The exact-text check gates every
+    resend, so a steer that landed is never sent twice:
+
+    - the transcript holds the steer -> stop, `evidence == PRESENT`;
+    - it is readable and holds no copy -> resend;
+    - it is unreadable -> resend only while every failure so far proves the request was never
+      handled (a refused connection); after a timeout or a reset a write may have landed,
+      so it stops.
+
+    An HTTP answer (a 502/409/400/403 negative, or any other status) is never retried.
+    """
+    maybe_landed = False
+    for attempt, delay in enumerate(launcher.RECOVERY_BACKOFF, start=1):
+        posted = launcher.post_session_input(args.base_url, args.sid, text)
+        if posted["ok"] or posted.get("transport") is None:
+            return SendOutcome(posted, attempt, None)
+        maybe_landed = maybe_landed or posted["transport"] == launcher.MAYBE_SENT
+        time.sleep(delay)
+        evidence = _steer_evidence(args.base_url, args.sid, text, baseline)
+        if evidence == PRESENT or attempt == launcher.RECOVERY_ATTEMPTS:
+            return SendOutcome(posted, attempt, evidence)
+        if evidence == UNREADABLE and maybe_landed:
+            return SendOutcome(posted, attempt, evidence)
+    raise AssertionError("unreachable: the last attempt returns")
 
 
 def _await_first_turn(args: argparse.Namespace, sid: str, message: str) -> Tuple[str, str]:
@@ -532,18 +620,26 @@ def cmd_say(args: argparse.Namespace) -> int:
     text = read_brief(args.file)
 
     send_time = datetime.now(timezone.utc)
-    # The one and only POST, on both the plain and the --verify path. Nothing
-    # below this line ever sends again.
-    posted = launcher.post_session_input(args.base_url, args.sid, text)
-
     if not args.verify:
-        # Plain `say` is the most-used call, and a traceback here turns a
-        # steer the operator could deliberately retry into a crash they have
-        # to diagnose. Report the failure instead.
+        # Plain `say` is one POST: the operator who sees `FAILED` decides on a
+        # resend. A traceback here would turn a steer they could deliberately
+        # retry into a crash they have to diagnose, so the failure is reported.
+        posted = launcher.post_session_input(args.base_url, args.sid, text)
         if not posted["ok"]:
             print(f"FAILED sid={args.sid} chars={len(text)} reason={posted['error']}")
             return 1
         print(f"SENT sid={args.sid} chars={len(text)}")
+        return 0
+
+    # Copies of the steer already in the transcript, so a repeated steer is never mistaken
+    # for this one. Unreadable counts as none: any copy then reads as new.
+    baseline = _transcript_copies(args.base_url, args.sid, text) or 0
+    # `--verify` sends at most `RECOVERY_ATTEMPTS` times, and only a transient transport
+    # failure with no copy of the steer in the transcript earns a resend.
+    outcome = _post_with_recovery(args, text, baseline)
+    posted = outcome.posted
+    if outcome.evidence == PRESENT:
+        print(f"DELIVERED sid={args.sid} chars={len(text)}")
         return 0
 
     post_reason = posted.get("reason")
@@ -551,18 +647,25 @@ def cmd_say(args: argparse.Namespace) -> int:
     # input was never submitted. Polling an exchange for movement that cannot
     # come would only spend the timeout budget before reporting the same thing.
     if not posted["ok"] and post_reason not in INPUT_NEGATIVE_REASONS:
-        # The endpoint could not be reached at all — that is not evidence
-        # either way, so it is `unknown`, never `stranded`.
-        print(format_verdict_line(
-            "unknown", args.sid, len(text), None, "unknown",
-            f"send failed: {posted['error']}",
-        ))
+        print(_unsent_verdict(args.sid, len(text), outcome))
         return 1
 
     state, marker = DeliveryState.PENDING, {"available": False, "timestamp": None}
     if posted["ok"]:
-        state, marker = _poll_delivery(args, post_reason, send_time)
+        state, marker, exact = _poll_delivery(args, post_reason, send_time, text, baseline)
+        if exact:
+            print(f"DELIVERED sid={args.sid} chars={len(text)}")
+            return 0
+    return _report_verdict(args, text, state, marker, posted)
 
+
+def _report_verdict(
+    args: argparse.Namespace, text: str, state: DeliveryState,
+    marker: Dict[str, Any], posted: Dict[str, Any],
+) -> int:
+    """Classify the poll's last state against the board and the session card, print the
+    verdict line and return the exit code: 0 only for `DELIVERED`."""
+    post_reason = posted.get("reason")
     board: Dict[str, Any] = {}
     try:
         board = launcher._request(args.base_url, "/api/board")
@@ -605,13 +708,31 @@ def cmd_say(args: argparse.Namespace) -> int:
     return 1
 
 
+def _unsent_verdict(sid: str, chars: int, outcome: SendOutcome) -> str:
+    """The verdict line for a steer no POST was accepted for. Never `stranded`: no HTTP answer
+    said the input was refused, so a transcript that was read and holds no copy is `pending`
+    and one that could not be read is `unknown`."""
+    error = outcome.posted["error"]
+    if outcome.evidence is None:
+        # An HTTP answer that is neither a negative nor transient (a 404, a 500): nothing to read.
+        return format_verdict_line("unknown", sid, chars, None, "unknown", f"send failed: {error}")
+    key, state = (("pending", "pending") if outcome.evidence == ABSENT else ("unknown", "unknown"))
+    detail = f"{SEND_FAILED_REASONS[key]} (attempts={outcome.attempts}; last error: {error})"
+    return format_verdict_line(state, sid, chars, None, "unknown", detail)
+
+
 def _poll_delivery(
     args: argparse.Namespace, post_reason: Optional[str], send_time: datetime,
-) -> Tuple[DeliveryState, Dict[str, Any]]:
-    """Poll the exchange after an accepted POST until it is delivered, the
-    deferred watcher reports, or `--timeout` passes: `(state, last marker)`."""
+    text: str, baseline: int,
+) -> Tuple[DeliveryState, Dict[str, Any], bool]:
+    """Poll after an accepted POST until the transcript holds the steer, the exchange
+    shows delivery, the deferred watcher reports, or `--timeout` passes:
+    `(state, last marker, exact)`, where `exact` is the transcript proof, the only
+    evidence that outranks every other signal."""
     deadline = time.monotonic() + args.timeout
     while True:
+        if _steer_evidence(args.base_url, args.sid, text, baseline) == PRESENT:
+            return DeliveryState.DELIVERED, {"available": False, "timestamp": None}, True
         marker = launcher.fetch_exchange_marker(args.base_url, args.sid)
         state = classify_exchange_marker(marker["available"], marker["timestamp"], send_time)
         if post_reason == INPUT_DEFERRED:
@@ -620,11 +741,11 @@ def _poll_delivery(
             # record instead.
             card = launcher.fetch_session_card(args.base_url, args.sid)
             if deferred_submit_outcome(post_reason, launcher._last_input(card)) != "in_flight":
-                return state, marker
+                return state, marker, False
         elif state == DeliveryState.DELIVERED:
-            return state, marker
+            return state, marker, False
         if time.monotonic() >= deadline:
-            return state, marker
+            return state, marker, False
         time.sleep(args.poll_interval)
 
 
@@ -753,7 +874,8 @@ def add_lane_parsers(sub: argparse._SubParsersAction) -> None:
     say_p.add_argument("--file", default=None)
     say_p.add_argument("--verify", action="store_true",
                        help="poll the exchange after posting and report DELIVERED/PENDING/STRANDED/UNKNOWN; "
-                            "never auto-retries")
+                            "resends only after a transient transport failure, and only while the "
+                            "transcript holds no copy of the steer (at most 3 sends)")
     say_p.add_argument("--timeout", type=float, default=DEFAULT_VERIFY_TIMEOUT)
     say_p.add_argument("--poll-interval", type=float, default=DEFAULT_VERIFY_POLL_INTERVAL)
     say_p.add_argument("--base-url", default=launcher.DEFAULT_BASE_URL)
