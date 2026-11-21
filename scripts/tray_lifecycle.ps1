@@ -4,7 +4,9 @@
       Source: ferraroroberto/fleet-config, tray/tray_lifecycle.ps1
       Copied: 2026-08-02, byte-for-byte except: two em-dashes in comments
       normalized to "--" per the ASCII-only rule below, and the example
-      ports in comments updated to this fork's 8465/8466. No code changes.
+      ports in comments updated to this fork's 8465/8466. Local code change:
+      reclaim also owns a session-host started from this repo root without
+      .venv in its command line, and fails when an owned holder survives.
       Vendored for the lite fork so the tray has zero external dependencies;
       this repo-local copy replaces the machine-shared
       %USERPROFILE%\.claude\tray\tray_lifecycle.ps1. Keep ASCII-only.
@@ -52,7 +54,9 @@ Git Bash/MSYS rewrites `cmd.exe /c` to `cmd.exe C:/`.
         powershell.exe -NoProfile -NonInteractive -File tray_lifecycle.ps1 `
           detect -VenvDir "<repo>\.venv" -TrayMatch "launcher\.py\s+tray"
       reclaim -> kills the owning PID of each listed port whose CommandLine is
-                 under this repo's .venv (orphan-proof), printing each reclaim:
+                 under this repo's .venv, or is this repo's
+                 `launcher.py session-host` (orphan-proof), printing each reclaim
+                 and exiting 1 when an owned holder survives the stop:
         powershell.exe -NoProfile -NonInteractive -File tray_lifecycle.ps1 `
           reclaim -VenvDir "<repo>\.venv" -Ports "8465,8466"
       launch  -> idempotent start, or restart with port reclaim and git_sha
@@ -109,6 +113,32 @@ function Test-UnderVenv {
         $CommandLine.IndexOf($VenvDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
 }
 
+# A session-host re-execs from the base interpreter, so its CommandLine can carry the repo's
+# launcher.py but no .venv path. Ownership is then the repo root plus the role
+# (`launcher.py session-host`), never the port or image name alone. The drive letter is not
+# compared: the same tree is reachable under two spellings (a junction onto another drive) and
+# the live process keeps the spelling it was started from. The root must end at a separator so a
+# sibling checkout (`<repo>-wt-N`) is not this repo.
+function Get-RepoRoot {
+    if ($ScriptDir) { return $ScriptDir }
+    return (Split-Path -Parent ($VenvDir -replace '[\\/]+$', ''))
+}
+
+function Test-IsRepoSessionHost {
+    param([string] $CommandLine)
+    if (-not $CommandLine) { return $false }
+    $segments = @((Get-RepoRoot) -replace '^[A-Za-z]:', '' -split '[\\/]+' | Where-Object { $_ })
+    if ($segments.Count -eq 0) { return $false }
+    $root = ($segments | ForEach-Object { [regex]::Escape($_) }) -join '[\\/]+'
+    $pattern = '(^|[\s"''])([A-Za-z]:)?[\\/]+' + $root + '[\\/]+launcher\.py["'']?\s+session-host(\s|$)'
+    return [regex]::IsMatch($CommandLine, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+}
+
+function Test-OwnsProcess {
+    param([string] $CommandLine)
+    return (Test-UnderVenv $CommandLine) -or (Test-IsRepoSessionHost $CommandLine)
+}
+
 function Get-TrayProcessIds {
     if (-not $TrayMatch) { throw "detect/launch requires -TrayMatch" }
     return @(
@@ -131,17 +161,39 @@ function Get-OwnedPorts {
     return $result
 }
 
+function Wait-ProcessGone {
+    param([int] $ProcessId, [int] $TimeoutSeconds = 5)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        if (-not (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)) { return $true }
+        Start-Sleep -Milliseconds 200
+    } while ((Get-Date) -lt $deadline)
+    return -not (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)
+}
+
+# Returns the number of owned holders that were still alive after the kill. A stop that was
+# acknowledged but did not end the process is a failed reclaim, never a quiet success.
 function Invoke-ReclaimPorts {
+    $survivors = 0
     foreach ($port in (Get-OwnedPorts)) {
-        Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | ForEach-Object {
-            $ownerProcessId = $_.OwningProcess
+        $holders = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty OwningProcess -Unique)
+        foreach ($ownerProcessId in $holders) {
             $cim = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $ownerProcessId) -ErrorAction SilentlyContinue
-            if ($cim -and (Test-UnderVenv $cim.CommandLine)) {
+            if (-not $cim) { continue }
+            if (Test-OwnsProcess $cim.CommandLine) {
                 Write-Host ("Reclaiming :{0} from PID {1}" -f $port, $ownerProcessId)
                 Stop-Process -Id $ownerProcessId -Force -ErrorAction SilentlyContinue
+                if (-not (Wait-ProcessGone -ProcessId $ownerProcessId)) {
+                    Write-Host ("FAILED: old holder PID {0} is still running on :{1} after the stop; the restart did not replace it." -f $ownerProcessId, $port)
+                    $survivors++
+                }
+            } else {
+                Write-Host ("Leaving :{0}: held by PID {1}, which is not this repo's process." -f $port, $ownerProcessId)
             }
         }
     }
+    return [int] $survivors
 }
 
 function Stop-TrayProcesses {
@@ -294,7 +346,7 @@ switch ($Action) {
         Get-TrayProcessIds
     }
     'reclaim' {
-        Invoke-ReclaimPorts
+        if ((Invoke-ReclaimPorts) -gt 0) { exit 1 }
     }
     'launch' {
         if (-not $AppName) { throw "launch requires -AppName" }
@@ -310,7 +362,9 @@ switch ($Action) {
                 Write-Host ("Stopping previous {0} tray (PID: {1})..." -f $AppName, ($trayPids -join " "))
                 Stop-TrayProcesses -ProcessIds $trayPids
             }
-            Invoke-ReclaimPorts
+            if ((Invoke-ReclaimPorts) -gt 0) {
+                throw "restart failed: an old process still holds an owned port"
+            }
             Start-Sleep -Seconds 2
         }
 
