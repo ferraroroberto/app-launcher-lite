@@ -427,8 +427,10 @@ time_budget_s         = 1200
 # every trim; raise it only with a node-for-node reason beside it. 298: the
 # History sheet is a new dialog behind the Projects toolbar, and its one test
 # shares no setup with an existing node (it mocks /api/progress and drives the
-# page clock for the refresh poll).
-test_budget = 298
+# page clock for the refresh poll). 299: the first-load test holds every
+# non-essential source unanswered and pauses the page clock before boot, so it
+# can share no page with another node.
+test_budget = 299
 
 # --- static assets under the webapp's static dir -> Chromium smoke ----------
 [[e2e.rule]]
@@ -766,6 +768,7 @@ pytest_targets = [
     "tests/e2e/terminal/test_overlay_phone_composer.py",
     "tests/e2e/shell/test_primary_nav.py",
     "tests/e2e/shell/test_smoke.py",
+    "tests/e2e/shell/test_first_load_sources.py",
     "tests/e2e/shell/test_row_name_typography.py",
     "tests/e2e/shell/test_icon_sizes.py",
     "tests/e2e/shell/test_vendored_empty_and_select.py",

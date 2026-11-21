@@ -7,11 +7,12 @@ serves it, in the non-browser suite.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
-from app.webapp.shell_html import assemble_shell, shell_stat_key
+from app.webapp.shell_html import assemble_shell, shell_stat_key, trim_shell
 
 _STATIC = Path(__file__).resolve().parents[3] / "app" / "webapp" / "static"
 _INDEX = _STATIC / "index.html"
@@ -68,3 +69,23 @@ def test_the_cache_key_moves_when_a_fragment_changes(tmp_path: Path) -> None:
     before = shell_stat_key(index)
     (tmp_path / "views" / "a.html").write_text("one two\n", encoding="utf-8")
     assert shell_stat_key(index) != before
+
+
+def test_trim_shell_drops_comments_but_keeps_raw_blocks() -> None:
+    shell = (
+        "<div>\n  <!-- why -->\n\n  <p>x</p>\n"
+        "<pre>\n\n<!-- shown --></pre>\n<script>\n\n// <!-- code\n</script>\n"
+    )
+    assert trim_shell(shell) == (
+        "<div>\n  <p>x</p>\n<pre>\n\n<!-- shown --></pre>\n<script>\n\n// <!-- code\n</script>\n"
+    )
+
+
+def test_the_served_shell_keeps_every_element() -> None:
+    """Only comments go: every tag and id of the assembled page survives the trim."""
+    shell = assemble_shell(_INDEX)
+    trimmed = trim_shell(shell)
+    uncommented = re.sub(r"<!--.*?-->", "", shell, flags=re.S)
+    tags = re.compile(r"<[a-zA-Z][^>]*>")
+    assert tags.findall(trimmed) == tags.findall(uncommented)
+    assert "<!--" not in trimmed

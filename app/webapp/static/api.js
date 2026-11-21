@@ -105,12 +105,30 @@ export function logPollFailure(label, exc) {
 }
 
 // --------------------------------------------------------------- fetch
+// index.html's inline boot script starts the first panel reads while the
+// module graph is still loading (window.__bootPrefetch, path -> { at, res }).
+// A plain GET of one of those paths takes the response once; any later call,
+// or one past this age (a boot that stalled on sign-in), fetches afresh.
+const BOOT_PREFETCH_MAX_AGE_MS = 15000;
+
+function takeBootPrefetch(path, opts) {
+  const store = window.__bootPrefetch;
+  if (!store || opts.method || opts.body || opts.headers || opts.signal) return null;
+  const hit = store[path];
+  if (!hit) return null;
+  delete store[path];
+  if (performance.now() - hit.at > BOOT_PREFETCH_MAX_AGE_MS) return null;
+  return hit.res.catch(function () { return null; });
+}
+
 export async function api(path, opts) {
   opts = opts || {};
+  const early = takeBootPrefetch(path, opts);
+  const prefetched = early ? await early : null;
   const headers = new Headers(opts.headers || {});
   const token = readToken();
   if (token) headers.set('Authorization', 'Bearer ' + token);
-  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  const res = prefetched || await fetch(path, Object.assign({}, opts, { headers }));
   if (res.status === 401) {
     showLogin();
     throw new AuthRequiredError();

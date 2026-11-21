@@ -10,6 +10,9 @@ Concatenation keeps the cascade because it is the link order. The sheets use
 no ``@import``/``@charset`` (which only work at the top of a sheet) and no
 relative ``url()`` (which would resolve against the bundle's path), and
 ``tests/unit/static_ui/test_stylesheet_bundle.py`` pins both.
+
+The bundle is sent without its comments (:func:`trim_css`): they were two
+thirds of its gzipped bytes, and it blocks the first paint.
 """
 
 from __future__ import annotations
@@ -66,5 +69,57 @@ def build_bundle(static_dir: Path) -> Optional[str]:
         text = (static_dir / name).read_text(encoding="utf-8")
         if not text.endswith("\n"):
             text += "\n"
-        parts.append(f"/* {name} */\n{text}")
+        parts.append(trim_css(text))
     return "".join(parts)
+
+
+def trim_css(source: str) -> str:
+    """``source`` without its comments and the lines they leave blank.
+
+    Strings are copied verbatim, so a ``/*`` inside one stays. ``/*! ... */``
+    banners (licences) stay. A comment between two non-blank characters
+    becomes one space, so it still separates them. A comment or string that
+    never ends returns ``source`` unchanged: a failed trim costs bytes, never
+    styling.
+    """
+    out: List[str] = []
+    i, n = 0, len(source)
+    while i < n:
+        if source[i] in "\"'":
+            end = _string_end(source, i)
+            if end < 0:
+                return source
+            out.append(source[i:end])
+            i = end
+        elif source.startswith("/*", i):
+            end = source.find("*/", i + 2)
+            if end < 0:
+                return source
+            if source.startswith("/*!", i):
+                out.append(source[i:end + 2])
+            elif out and out[-1][-1:].strip() and source[end + 2:end + 3].strip():
+                out.append(" ")
+            i = end + 2
+        else:
+            j = i + 1
+            while j < n and source[j] not in "\"'/":
+                j += 1
+            out.append(source[i:j])
+            i = j
+    return "".join(line + "\n" for line in "".join(out).split("\n") if line.strip())
+
+
+def _string_end(source: str, start: int) -> int:
+    """Index just past the string opened at ``start``, or -1 if it never closes."""
+    quote = source[start]
+    i = start + 1
+    while i < len(source):
+        if source[i] == "\\":
+            i += 2
+        elif source[i] == quote:
+            return i + 1
+        elif source[i] == "\n":
+            return -1
+        else:
+            i += 1
+    return -1

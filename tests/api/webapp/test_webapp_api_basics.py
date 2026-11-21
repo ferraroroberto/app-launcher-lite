@@ -6,7 +6,7 @@ import os
 import re
 
 from src.static_versioning import compute_asset_hashes, fleet_hash_of
-from src.stylesheet_bundle import BUNDLE_RELPATH
+from src.stylesheet_bundle import BUNDLE_RELPATH, trim_css
 from tests._css import STATIC
 
 
@@ -89,11 +89,14 @@ class TestIndex:
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("text/css")
         assert "immutable" in resp.headers.get("cache-control", "")
-        banners = re.findall(r"^/\* ([\w\-./]+\.css) \*/$", resp.text, re.MULTILINE)
         source = (STATIC / "index.html").read_text(encoding="utf-8")
-        assert banners == re.findall(r'<link rel="stylesheet" href="/static/([^"?]+)"', source)
-        assert "_vendored/nav/nav-tabs.css" in banners
-        assert (STATIC / "styles/base.css").read_text(encoding="utf-8") in resp.text
+        sheets = re.findall(r'<link rel="stylesheet" href="/static/([^"?]+)"', source)
+        assert "_vendored/nav/nav-tabs.css" in sheets
+        # Each sheet, without its comments, in the order the page links them.
+        expected = "".join(
+            trim_css((STATIC / name).read_text(encoding="utf-8") + "\n") for name in sheets
+        )
+        assert resp.text == expected
 
 
 class TestStaticCaching:

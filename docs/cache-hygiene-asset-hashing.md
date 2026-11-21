@@ -29,6 +29,25 @@ iPhone PWA never serves a stale asset against fresh HTML, or vice versa.
   `/*! */` banners are copied verbatim, and a source the scanner cannot follow
   to its end is sent unchanged. `tests/unit/static_ui/test_static_trim.py` runs
   every shipped module through `node --check`.
+- The page and its stylesheet bundle go out without their comments too,
+  because both block the first paint: `trim_shell` (`app/webapp/shell_html.py`)
+  drops HTML comments outside `script`, `style`, `pre` and `textarea`, and
+  `trim_css` (`src/stylesheet_bundle.py`) drops CSS comments outside strings,
+  keeping `/*! */` banners. Comments are about two thirds of the bundle's
+  gzipped bytes and a quarter of the page's. `tests/api/webapp/test_first_load_budget.py`
+  holds every first-load response under 100 KB on the wire, the page plus its
+  stylesheet under 70 KB, and the whole first load (page, stylesheet and every
+  module `main.js` reaches) under 400 KB.
+- The page starts its first reads before the module graph has loaded. An
+  inline script in `index.html` fetches `/api/config`, `/api/agents`,
+  `/api/apps` and `/api/claude-code/sessions`, plus the restored tab's own read
+  (`/api/board` and `/api/board/chief-plan`, or `/api/jobs`). `api.js` takes each
+  response once, for a plain GET within 15 s; any later call fetches afresh.
+  The restored Board or Jobs tab reads at boot instead of on its first poll,
+  and the Board's lanes never wait on the chief-plan read.
+  `tests/e2e/shell/test_first_load_sources.py` holds every other source
+  unanswered with the page clock paused and checks the Board and the session
+  list still draw.
 - `GET /api/version` returns `{git_sha, built_at, asset_hash, head_sha,
   session_host, age_seconds}`. `git_sha`/`built_at` are cached at module
   import; `head_sha` and `session_host` come from a snapshot the webapp

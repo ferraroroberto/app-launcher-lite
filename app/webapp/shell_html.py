@@ -51,3 +51,30 @@ def shell_stat_key(index_path: Path) -> Tuple[Tuple[int, int], ...]:
     paths = [index_path, *sorted((index_path.parent / VIEWS_DIRNAME).glob("*.html"))]
     stats = [p.stat() for p in paths]
     return tuple((st.st_mtime_ns, st.st_size) for st in stats)
+
+
+# A block whose text must stay verbatim: a "<!--" or a blank line inside a
+# script, style, pre or textarea is content.
+_RAW_BLOCK_RE = re.compile(
+    r"(<(script|style|pre|textarea)\b.*?</\2\s*>)", re.DOTALL | re.IGNORECASE
+)
+_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_BLANK_LINES_RE = re.compile(r"\n[ \t]*(?=\n)")
+
+
+def trim_shell(shell: str) -> str:
+    """``shell`` without its HTML comments and the lines they leave blank.
+
+    The markup's comments explain the page to its editors and were a quarter
+    of the first response's gzipped bytes; the browser never reads them.
+    Scripts, styles, ``pre`` and ``textarea`` pass through untouched.
+    """
+    parts = _RAW_BLOCK_RE.split(shell)
+    out = []
+    # split() with two groups yields text, block, tag name, text, block, ...
+    for index, part in enumerate(parts):
+        if index % 3 == 0:
+            out.append(_BLANK_LINES_RE.sub("", _COMMENT_RE.sub("", part)))
+        elif index % 3 == 1:
+            out.append(part)
+    return "".join(out)

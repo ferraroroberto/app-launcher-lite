@@ -263,6 +263,7 @@ _BOARD_TARGETS = (
     "tests/e2e/session/test_session_rename.py "
     "tests/e2e/terminal/test_overlay_phone_composer.py "
     "tests/e2e/shell/test_primary_nav.py tests/e2e/shell/test_smoke.py "
+    "tests/e2e/shell/test_first_load_sources.py "
     "tests/e2e/shell/test_row_name_typography.py tests/e2e/shell/test_icon_sizes.py "
     "tests/e2e/shell/test_vendored_empty_and_select.py tests/e2e/shell/test_touch_targets.py "
     "tests/e2e/session/test_session_row_glance.py tests/e2e/code/test_code_row_status_age.py "

@@ -376,6 +376,8 @@ export function openOwnerAnswersAt(ownerRef, kind) {
 export function renderChiefPlan(body, liveRead) {
   const host = els.boardColumns && els.boardColumns.querySelector('.board-plan-body');
   if (!host) return;
+  // Null until the first plan read lands: not read yet, never "no plan".
+  const unread = !state.chiefPlan;
   const plan = state.chiefPlan || { state: 'empty' };
   const run = plan.state === 'ok' ? chiefRunState(body, liveRead) : '';
   const age = plan.state === 'ok' ? planAge(plan.updated_at) : '';
@@ -394,12 +396,14 @@ export function renderChiefPlan(body, liveRead) {
   const index = backlog.some(function (c) { return typeof c.bucket === 'string'; })
     ? bucketIndex(backlog) : null;
   // Rebuilt only when what it shows changes, not on every 5 s poll.
-  const sig = JSON.stringify([plan, run, age, answered, filter, index]);
+  const sig = JSON.stringify([unread, plan, run, age, answered, filter, index]);
   if (host.dataset.sig === sig) return;
   host.dataset.sig = sig;
   host.dataset.state = plan.state;
   const nodes = [];
-  if (plan.state === 'unreadable') {
+  if (unread) {
+    nodes.push(planLine('board-plan-note', 'Reading the plan…'));
+  } else if (plan.state === 'unreadable') {
     nodes.push(planLine('board-plan-note', 'Plan unreadable.'));
   } else if (plan.state === 'unavailable') {
     nodes.push(planLine('board-plan-note', 'Plan not loaded — the webapp did not answer.'));
