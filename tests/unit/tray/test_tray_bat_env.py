@@ -107,7 +107,8 @@ def test_tray_bat_starts_its_helper_under_allsigned(tmp_path: Path) -> None:
                "PYTHONPATH": str(REPO_ROOT), "PYTHONUTF8": "1"}
         done = subprocess.run(
             ["cmd.exe", "/d", "/c", str(repo / "tray.bat"), *flag],
-            env=env, capture_output=True, text=True, timeout=120, creationflags=NO_WINDOW,
+            env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=120, creationflags=NO_WINDOW,
         )
         assert done.returncode == 0, done.stdout + done.stderr
         got = dict(line.split("=", 1) for line in out.read_text(encoding="ascii").splitlines())
