@@ -9,6 +9,8 @@ This module owns the parts of the Board's launch path that are reused across
 * :func:`_agent_and_flags` — the Board's per-launch model selector.
 * :func:`dispatch_effort` / :func:`applied_effort` — a dispatch's per-launch
   ``effort``: checked against the model, then read back off the built flags.
+* :func:`dispatch_context` / :func:`applied_context` — the same for the
+  per-launch context tier.
 * :func:`_await_dispatch_ready` / :func:`_await_pty_quiescent` /
   :func:`_type_into_session` — the readiness, quiescence and framing rules for
   writing text into a freshly spawned PTY.
@@ -37,9 +39,16 @@ from src import agents
 from src.clients import session as session_client
 from src.launching.flags import build_copilot_flags, unknown_model_detail
 from src.registry import AppEntry, live_claude_code_entries
-from src.webapp_config import VALID_COPILOT_EFFORTS, WebappConfig
+from src.webapp_config import (
+    VALID_COPILOT_CONTEXTS,
+    VALID_COPILOT_EFFORTS,
+    WebappConfig,
+)
 
 logger = logging.getLogger(__name__)
+
+# The tiers a dispatch may name: the saved setting's values minus ``""``.
+VALID_DISPATCH_CONTEXTS = tuple(c for c in VALID_COPILOT_CONTEXTS if c)
 
 
 # The reason a per-session route reports when the session-host's list could
@@ -171,6 +180,35 @@ def applied_effort(agent: str, flags: str, effort: Optional[str]) -> Optional[st
         return None
     parts = flags.split()
     return effort if ("--effort", effort) in zip(parts, parts[1:]) else None
+
+
+def dispatch_context(context: Optional[str]) -> Optional[str]:
+    """The context tier to put on a dispatch's command line, ``None`` for the saved one.
+
+    Only a real tier is accepted: ``""`` would mean "no override" for the
+    saved setting but is ambiguous in a request body, so it is a 400 too.
+    """
+    if context is None:
+        return None
+    if context not in VALID_DISPATCH_CONTEXTS:
+        offered = ", ".join(VALID_DISPATCH_CONTEXTS)
+        raise HTTPException(
+            status_code=400,
+            detail=f"context {context!r} is not offered by Copilot; allowed: {offered}",
+        )
+    return context
+
+
+def applied_context(agent: str, flags: str, context: Optional[str]) -> Optional[str]:
+    """``context`` when the built ``flags`` actually carry it, else ``None``.
+
+    Read off the command line like :func:`applied_effort`, so the dispatcher
+    reports the tier as applied from evidence, not from the request.
+    """
+    if context is None or agent != "copilot":
+        return None
+    parts = flags.split()
+    return context if ("--context", context) in zip(parts, parts[1:]) else None
 
 
 def _require_installed(agent_id: str) -> None:
