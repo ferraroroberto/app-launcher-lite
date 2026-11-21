@@ -50,6 +50,16 @@ process is restarted.
    so it is no proof that `tray.bat --restart` ran. `pid` is.
 7. Don't hand off "done" with a stale process still serving.
 
+The `:8466` restart, `scripts/restart-session-host.ps1 -Confirm`, ends with
+`python -m src.launching.restart_check session-host` instead of a loop of its own. It reads
+`/api/version` over https and falls back to http (the tray serves plain http when no TLS cert
+exists), and ends in one of three states, each logged to `webapp/restart.log`: **live** (exit 0:
+`freshness` is `fresh` or `stale-irrelevant`, reported the moment it is seen however long the
+cold start took), **not confirmed** (the host answers but `freshness` is anything else) and **not
+answering** (the host never answered, or no webapp did), the last two exit 1 with the time waited.
+The deadline is 45 s (`SESSION_HOST_WAIT_S`): the host itself answers about 2 s after its spawn,
+and the rest is the webapp's `/api/version` snapshot, up to 15 s old.
+
 ## A session-host change is not live until `:8466` itself restarts
 
 A diff touching `src/session_host.py` or `app/webapp/session_host/` can merge, pass a

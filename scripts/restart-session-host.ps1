@@ -80,60 +80,21 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Restarting the tray (also spawns a fresh session-host since none is left to adopt)..." -ForegroundColor Cyan
 & $trayBat --restart
 
-# Bounded poll of the same /api/version freshness check the webapp already makes, so this
-# script proves the restart actually worked instead of trusting silence.
-#
-# Gate on `freshness`, NOT raw stale. docs/restart-and-
-# liveness.md is explicit that `stale` is true after any merge anywhere in
-# the repo, so a correct restart used to print a false "STILL STALE"
-# failure here. `freshness` carries the stale_relevant scoping (was a
-# declared session-host path actually touched) -- the only thing this
-# script can claim to have fixed -- as one declared state.
-#
-# `unknown` and `stale-unknown` (a SHA or the scoped diff could not be
-# resolved) are their own states and are NOT treated as success.
-function Format-Tri($value) {
-    if ($value -eq $true) { return "true" }
-    if ($value -eq $false) { return "false" }
-    return "unknown"
+# Bounded wait on the webapp's /api/version `session_host` block, run by the Python check so it
+# tries both https and http (the tray serves plain http when no TLS cert exists, which an
+# https-only probe never sees) and ends in one of three distinct states: live, answering but not
+# provably on the merged code, or not answering, each with the time waited. It gates on
+# `freshness`, not raw `stale`: `stale` is true after any merge anywhere in the repo, `freshness`
+# carries the stale_relevant scoping (docs/restart-and-liveness.md). Exit 0 only when live.
+Push-Location $repoRoot
+try {
+    & $venvPython -m src.launching.restart_check session-host --port $webappPort
+    $waitExit = $LASTEXITCODE
+} finally {
+    Pop-Location
 }
-
-$deadline = (Get-Date).AddSeconds(30)
-$confirmed = $false
-$lastSeen = ""
-while ((Get-Date) -lt $deadline) {
-    try {
-        $body = Invoke-RestMethod -Uri "https://127.0.0.1:$webappPort/api/version" -SkipCertificateCheck -TimeoutSec 3
-        $host_ = $body.session_host
-        if ($host_.reachable -eq $true) {
-            $lastSeen = ("git_sha=$($host_.git_sha) started_at=$($host_.started_at) " +
-                         "stale=$(Format-Tri $host_.stale) " +
-                         "stale_relevant=$(Format-Tri $host_.stale_relevant) " +
-                         "freshness=$($host_.freshness)")
-            if ($host_.freshness -eq "fresh" -or $host_.freshness -eq "stale-irrelevant") {
-                Write-Host "session-host: $lastSeen (live)" -ForegroundColor Green
-                $confirmed = $true
-                break
-            }
-            # stale-relevant -> the fresh host still loads code older than a
-            #          declared session-host path change; keep polling, it may
-            #          still be coming up.
-            # unknown / stale-unknown -> freshness could not be resolved at
-            #          all; also not a pass.
-        }
-    } catch {
-        # webapp or session-host not up yet -- keep polling until the deadline.
-    }
-    Start-Sleep -Seconds 1
-}
-if (-not $confirmed) {
-    if ($lastSeen) {
-        Write-Host "session-host: $lastSeen" -ForegroundColor Yellow
-        Write-Host ("Restart NOT confirmed within 30s: freshness never reached fresh or stale-irrelevant. " +
-                    "The session-host is reachable but is not provably running the merged " +
-                    "session-host code -- check it by hand.") -ForegroundColor Red
-    } else {
-        Write-Host "Could not reach the session-host within 30s -- check it by hand." -ForegroundColor Red
-    }
+if ($waitExit -ne 0) {
+    Write-Host "session-host restart NOT confirmed -- see the line above and webapp/restart.log." -ForegroundColor Red
     exit 1
 }
+Write-Host "session-host restart confirmed live." -ForegroundColor Green

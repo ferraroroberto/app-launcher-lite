@@ -88,3 +88,91 @@ class TestVerify:
         monkeypatch.setattr(restart_check, "fetch_version", lambda _p: None)
         restart_check.snapshot(8465)
         assert json.loads((files / "baseline.json").read_text(encoding="utf-8"))["pid"] is None
+
+
+def _host(reachable=True, freshness="fresh"):
+    return {"session_host": {
+        "reachable": reachable, "git_sha": "c516e60", "started_at": "t",
+        "stale": False, "stale_relevant": False, "freshness": freshness,
+    }}
+
+
+class _Clock:
+    """Virtual time: ``sleep`` advances it, so a 45 s wait costs no wall time."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+class TestWaitSessionHost:
+    def _run(self, files, answers, timeout_s=45.0):
+        clock = _Clock()
+        calls = []
+
+        def fetch(_port):
+            calls.append(clock.now)
+            return answers(clock.now)
+
+        code = restart_check.wait_session_host(
+            8465, timeout_s, fetch=fetch, clock=clock, sleep=clock.sleep
+        )
+        return code, calls, (files / "restart.log").read_text(encoding="utf-8")
+
+    def test_slow_but_successful_cold_start_reads_as_success(self, files):
+        # Unreachable for 30 s (the old deadline), then fresh: a success, not a timeout.
+        code, calls, log = self._run(
+            files, lambda t: _host(reachable=False) if t < 31 else _host()
+        )
+        assert code == 0
+        assert calls[-1] >= 31
+        assert "session-host live" in log and "NOT" not in log
+
+    def test_stale_irrelevant_is_a_success(self, files):
+        code, _, _ = self._run(files, lambda _t: _host(freshness="stale-irrelevant"))
+        assert code == 0
+
+    def test_never_answering_fails_with_the_waited_time(self, files):
+        code, _, log = self._run(files, lambda _t: _host(reachable=False))
+        assert code == 1
+        assert "NOT ANSWERING" in log and "after waiting 45s" in log
+
+    def test_answering_on_an_older_build_is_a_distinct_failure(self, files):
+        code, _, log = self._run(files, lambda _t: _host(freshness="stale-relevant"))
+        assert code == 1
+        assert "NOT CONFIRMED" in log and "freshness=stale-relevant" in log
+        assert "NOT ANSWERING" not in log
+
+    def test_an_unresolved_verdict_is_not_a_pass(self, files):
+        code, _, log = self._run(files, lambda _t: _host(freshness="unknown"))
+        assert code == 1 and "NOT CONFIRMED" in log
+
+    def test_no_webapp_answer_is_its_own_failure(self, files):
+        code, _, log = self._run(files, lambda _t: None)
+        assert code == 1
+        assert "no webapp answering" in log and "NOT ANSWERING" not in log
+
+
+class TestFetchVersionFallsBackToHttp:
+    def test_http_only_webapp_is_read(self, monkeypatch):
+        # The tray serves plain http without a TLS cert; the restart script used to probe https only.
+        import requests
+
+        class _Resp:
+            status_code = 200
+
+            def json(self):
+                return {"pid": 1}
+
+        def fake(_method, url, **_kw):
+            if url.startswith("https"):
+                raise requests.ConnectionError("no TLS here")
+            return _Resp()
+
+        monkeypatch.setattr(restart_check, "pooled_request", fake)
+        assert restart_check.fetch_version(8465) == {"pid": 1}

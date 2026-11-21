@@ -103,7 +103,7 @@ class TestNoScriptActsOnADefaultPort:
         text = (_REPO_ROOT / "scripts" / "restart-session-host.ps1").read_text(encoding="utf-8")
         assert "scripts.webapp_port" in text
         assert "-Ports $sessionHostPort" in text
-        assert "127.0.0.1:$webappPort/api/version" in text
+        assert "restart_check session-host --port $webappPort" in text
         assert not re.search(r"-Ports\s+\d", text)
         assert not re.search(r"127\.0\.0\.1:\d", text)
 
