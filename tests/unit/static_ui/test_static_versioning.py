@@ -98,3 +98,13 @@ def test_unknown_import_passes_through_unchanged(tmp_path: Path) -> None:
     hashes = compute_asset_hashes(static_dir)
     body = "import { foo } from './not-on-disk.js';\n"
     assert rewrite_js_imports(body, hashes, from_dir="") == body
+
+
+def test_rewrite_js_imports_stamps_a_dynamic_import(tmp_path: Path) -> None:
+    """A view loaded on first open must resolve to the same module the static graph does."""
+    static_dir = _make_static_tree(tmp_path)
+    hashes = compute_asset_hashes(static_dir)
+    body = "const load = () => import('../icons/icons.js');\n"
+    stamped = rewrite_js_imports(body, hashes, from_dir="_vendored/empty-state")
+    assert "import('../icons/icons.js?v=" in stamped
+    assert rewrite_js_imports(stamped, hashes, from_dir="_vendored/empty-state") == stamped

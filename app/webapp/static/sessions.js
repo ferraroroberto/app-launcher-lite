@@ -31,7 +31,8 @@ import { renderHomeHead } from './home-head.js';
 // The session overlay's two modes. Circular with this module by
 // design (session-overlay.js → terminal.js / session-transcript.js → here
 // for sessionTitle and the send helpers); nothing runs at import time.
-import { closeSessionOverlay, openSessionOverlay, resolveSessionMode } from './session-overlay.js';
+import { closeSessionOverlay, openLinks, openSessionOverlay } from './lazy-views.js';
+import { hasLinks, hasTranscriptReader, resolveSessionMode } from './session-modes.js';
 import { revealInCard } from './dom-utils.js';
 import { CHIEF_KILL_CONFIRM, CHIEF_RESTART_CONFIRM, isChiefSession, isOffBoard } from './shared/session-kinds.js';
 import { fmtCredits, fmtDuration } from './shared/format.js';
@@ -41,8 +42,6 @@ import { confirmDialog } from './confirm-dialog.js';
 import { attentionChip, chip, sessionRowBody, sessionStatusParts } from './glance.js';
 import { createRowMenu } from './_vendored/row-menu/row-menu.js';
 import { icon } from './_vendored/icons/icons.js';
-import { hasTranscriptReader } from './chat/session-transcript.js';
-import { hasLinks, openLinks } from './links/links-sheet.js';
 // runChiefAction (and the ensureChief it wraps) lives in board-dispatch.js
 // (split off board.js), exported
 // for this cross-tab use, as is the chief settings dialog; board.js already imports

@@ -180,3 +180,16 @@ export function createAttachQueue(opts) {
     },
   };
 }
+
+// A paste's files, or none when it also carries plain text (see the paste
+// listener in composer.js mountComposer).
+export function pastedFiles(dt) {
+  if (!dt || Array.prototype.indexOf.call(dt.types || [], 'text/plain') !== -1) return [];
+  const files = [];
+  const items = dt.items || [];
+  for (let i = 0; i < items.length; i++) {
+    const file = items[i].kind === 'file' ? items[i].getAsFile() : null;
+    if (file) files.push(file);
+  }
+  return files;
+}

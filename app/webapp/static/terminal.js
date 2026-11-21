@@ -25,7 +25,7 @@
  */
 
 import { els, state, SESSIONS_POLL_MS } from './state.js';
-import { apiFailToast, jsonApi, opensInPcWindow } from './api.js';
+import { apiFailToast, jsonApi } from './api.js';
 import { fetchSessions, sessionTitle } from './sessions.js';
 import { enableNativeTouchScroll } from './terminal/terminal-touch.js';
 import { loadXterm } from './terminal/xterm-loader.js';
@@ -91,20 +91,6 @@ export {
   termContrastRatio,
   termScreenTheme,
 };
-
-// The post-launch tail shared by every PTY-launch response handler (Coding
-// tab's launchApp, Life OS's launchRecap/launchSkill): refresh the sessions
-// list, then drop straight into the in-page terminal for a full-control
-// (non-'remote') session on a phone — a desktop browser already got its
-// dedicated PC Edge window instead (the setting is on), so it stays on the SPA.
-// No-op when the launch produced no session (a non-claude-code app launch).
-export function handleLaunchResponse(session) {
-  if (!session) return;
-  fetchSessions().catch(function () {});
-  if (session.kind !== 'remote' && !opensInPcWindow()) {
-    openTerminal(session);
-  }
-}
 
 // Given the layout-viewport height and the current visual-viewport
 // height, return the pixel height to pin the terminal overlay to so its

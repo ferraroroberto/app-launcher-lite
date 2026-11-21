@@ -25,12 +25,13 @@ import {
   openSessionRename, sessionTitle, stopSession,
 } from '../sessions.js';
 import { openSessionChanges } from '../changes/changes-overlay.js';
-import { hasLinks, openLinks } from '../links/links-sheet.js';
+import { openLinks } from '../links/links-sheet.js';
+import { hasLinks, hasTranscriptReader } from '../session-modes.js';
 import { createRowMenu } from '../_vendored/row-menu/row-menu.js';
 import { createLatestPill } from '../latest-pill.js';
 import { refreshTerminalTitle, setTerminalTitleText } from './terminal-mirror.js';
 import {
-  automaticIsHidden, groupsAreHidden, hasTranscriptReader, loadNew, reloadNewest,
+  automaticIsHidden, groupsAreHidden, loadNew, reloadNewest,
   toggleAutomatic, toggleGroups,
 } from '../chat/session-transcript.js';
 import { inChatMode } from '../session-overlay.js';

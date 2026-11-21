@@ -13,7 +13,7 @@ import { els, state } from './state.js';
 import { renderHomeHead } from './home-head.js';
 import { logPollFailure, jsonApi } from './api.js';
 import { applyLaunchSizePayload } from './shared/launch-size.js';
-import { handleLaunchResponse } from './terminal.js';
+import { handleLaunchResponse } from './lazy-views.js';
 import { SensitiveOutcome, runSensitiveAction } from './shared/sensitive-action.js';
 import { icon } from './_vendored/icons/icons.js';
 import { wireModelCombo } from './shared/model-combo.js';

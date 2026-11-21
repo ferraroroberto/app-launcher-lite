@@ -18,22 +18,15 @@ import { fetchSystemLoad, wireSystemLoad } from './system-load.js';
 import { fetchAgents, fetchApps, fetchRunningApps, wireApps } from './apps.js';
 import { refreshGitStatus } from './apps/apps-coding.js';
 import { fetchListeners } from './apps/apps-listeners.js';
-import { fetchJobs, wireJobs } from './jobs.js';
 import { fetchSkills, wireTeamOs } from './team-os.js';
 import { fetchBoard, openBoardCard, renderBoard, wireBoard } from './board.js';
 import { wireHtmlViewer, wireImageLightbox } from './lightbox.js';
-import { openScreenWindow, wireScreenView } from './screen/screen-view.js';
 import { wireTokens } from './settings/tokens.js';
 import { wireDocuments } from './settings/documents.js';
 import { wireSettingsSheets } from './settings/settings-sheets.js';
 import { wireLidKeepAwake } from './settings/lid-keep-awake.js';
-import { openTerminal, wireTerminal } from './terminal.js';
-import { wireChatPane } from './chat/session-transcript.js';
 import { wireQuoteCopy } from './quote-copy.js';
-import { wireChanges } from './changes/changes-overlay.js';
-import { wireLinks } from './links/links-sheet.js';
-import { wireProgressSheet } from './progress/progress-sheet.js';
-import { markMirrorWindowEarly } from './terminal/terminal-mirror.js';
+import { fetchJobs, markMirrorWindowEarly, openScreenWindow, openTerminal, prefetchViews, startSessionViews, wireViewOpeners } from './lazy-views.js';
 import { fetchWebauthnStatus, wireWebauthn, writeTerminalToken } from './webauthn.js';
 import { renderSettingsHead } from './home-head.js';
 import { isWideLayout } from './layout.js';
@@ -211,6 +204,7 @@ async function boot() {
   // construction (each link carries one param).
   const deepLinkSid = mirrorSid || sharedSessionSid;
   const boardSid = deepLinkSid ? null : consumeUrlParam('board');
+  if (deepLinkSid) startSessionViews();
 
   // Every panel fetch starts at once: awaited one by one they cost
   // the phone ~13 serial round trips over the tunnel before the git flags
@@ -245,6 +239,8 @@ async function boot() {
   else others.push(safe(fetchBoard), safe(fetchJobs));
 
   armPolls({ lists, listeners, running, webauthn, load, git });
+  // The views a tap opens load once the list has drawn (lazy-views.js).
+  lists.then(prefetchViews);
 
   if (deepLinkSid) {
     await Promise.all([lists, status, webauthn]);
@@ -352,18 +348,12 @@ wireClaudeOptions();
 wireSessions();
 wireSystemLoad();
 wireApps();
-wireJobs();
 wireTeamOs();
 wireBoard();
 wireImageLightbox();
 wireHtmlViewer();
-wireScreenView();
-wireTerminal();
-wireChatPane();
+wireViewOpeners();
 wireQuoteCopy();
-wireChanges();
-wireLinks();
-wireProgressSheet();
 wireWebauthn();
 wireSettings();
 wireTokens();

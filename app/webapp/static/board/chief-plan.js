@@ -8,7 +8,7 @@ import { els, state } from '../state.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { chip } from '../glance.js';
 import { actionRow } from '../action-rows.js';
-import { openChiefAnswers, openOwnerAnswers, syncChiefAnswers } from './board-answers.js';
+import { openChiefAnswers, openOwnerAnswers, syncChiefAnswers } from '../lazy-views.js';
 import { agoText, newestDateFirst, plural, shortDate } from '../shared/format.js';
 import { answeredKeys, itemKey } from './chief-keys.js';
 import { boardRepoFilter, isChiefCard, matchesRepoFilter } from './board-dispatch.js';

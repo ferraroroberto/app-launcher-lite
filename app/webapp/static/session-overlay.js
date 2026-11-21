@@ -25,7 +25,8 @@
  */
 
 import { els, state } from './state.js';
-import { opensInChatFirst, toast } from './api.js';
+import { toast } from './api.js';
+import { chatAvailable, modeReason, rememberMode, resolveSessionMode, terminalAvailable } from './session-modes.js';
 import {
   attachTerminalPane,
   hideTerminal,
@@ -36,7 +37,6 @@ import {
   chatPaneSession,
   closeChatComposerPopovers,
   closeChatPane,
-  hasTranscriptReader,
   openChatPane,
   syncLiveRefresh,
 } from './chat/session-transcript.js';
@@ -51,62 +51,10 @@ import { isWideLayout } from './layout.js';
 import { setTab } from './tabs.js';
 import { bindLongPressHint } from './long-press-hint.js';
 
-// Last-viewed mode per session id — one JSON map under one key rather than
-// a key per session, capped so ended sessions don't accumulate forever.
-const MODES_KEY = 'launcher.sessionModes';
-const MODES_MAX = 50;
-
-function readModes() {
-  try {
-    const raw = localStorage.getItem(MODES_KEY);
-    const obj = raw ? JSON.parse(raw) : {};
-    return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
-  } catch (_) {
-    return {};
-  }
-}
-
-export function lastMode(sid) {
-  const m = readModes()[sid];
-  return m === 'chat' || m === 'terminal' ? m : null;
-}
-
-function rememberMode(sid, mode) {
-  try {
-    const modes = readModes();
-    // Re-insert so insertion order doubles as LRU.
-    delete modes[sid];
-    modes[sid] = mode;
-    const keys = Object.keys(modes);
-    while (keys.length > MODES_MAX) delete modes[keys.shift()];
-    localStorage.setItem(MODES_KEY, JSON.stringify(modes));
-  } catch (_) { /* private mode / quota: the mode just isn't remembered */ }
-}
-
 // After a session opens, how long the xterm prefetch waits: past the Chat
 // pane's first paint on a slow phone (~0.5 s measured at 4x CPU throttle),
 // well before a reader taps Terminal.
 const XTERM_PREFETCH_DELAY_MS = 700;
-
-export function terminalAvailable(s) {
-  return !!s && s.kind !== 'remote';
-}
-
-export function chatAvailable(s) {
-  return hasTranscriptReader(s);
-}
-
-function agentLabel(s) {
-  const known = (state.agents || []).find(function (a) { return a.id === s.agent; });
-  return known ? known.label : (s.agent || 'this agent');
-}
-
-// The one-line reason a segment is off, shown as the segment's title and
-// toasted on tap (a phone has no hover).
-export function modeReason(s, mode) {
-  if (mode === 'terminal') return 'Detached session — no terminal';
-  return 'No transcript reader for ' + agentLabel(s);
-}
 
 function inChatMode() {
   return !!els.terminalOverlay && els.terminalOverlay.dataset.mode === 'chat';
@@ -204,21 +152,6 @@ export function markSelectedSession(sid) {
     if (sid && li.dataset.sessionId === sid) li.setAttribute('aria-current', 'true');
     else li.removeAttribute('aria-current');
   });
-}
-
-// The mode a session opens in: an explicit choice, else the one it was last
-// viewed in (per session, remembered), else Chat — or Terminal with the
-// "Open in Chat" setting off — clamped to the panes this session has. The
-// row-tap's PC-window gate (sessions.js) resolves through this too, so
-// only a session that resolves to Terminal can leave for the PC window.
-export function resolveSessionMode(session, wantMode) {
-  const termOK = terminalAvailable(session);
-  const chatOK = chatAvailable(session);
-  let mode = wantMode || lastMode(session.session_id) ||
-    (chatOK && opensInChatFirst() ? 'chat' : (termOK ? 'terminal' : 'chat'));
-  if (mode === 'chat' && !chatOK) mode = 'terminal';
-  if (mode === 'terminal' && !termOK) mode = 'chat';
-  return mode;
 }
 
 export function openSessionOverlay(session, wantMode) {

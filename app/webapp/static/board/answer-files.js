@@ -15,9 +15,8 @@
 import { el } from '../dom-utils.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { toast } from '../api.js';
-import { cancelledSummary, createAttachQueue, summarize } from '../attach-batch.js';
+import { cancelledSummary, createAttachQueue, pastedFiles, summarize } from '../attach-batch.js';
 import { trackFeature } from '../settings/feature-track.js';
-import { pastedFiles } from '../composer.js';
 
 export const MAX_ITEM_FILES = 5;
 export const MAX_SHEET_FILES = 30;

@@ -5,7 +5,10 @@ no first-load response may pass 100 KB on the wire, and the render-blocking
 pair (the page and its stylesheet) and the whole first load each stay under a
 budget with a little headroom over what they weigh now. The page and the
 stylesheet are sent without their comments; a change that sends them again
-fails here.
+fails here. The views a tap opens (chat, terminal, changes, links, Screen,
+Progress, the Jobs tab, the Board's answer sheet and the shared composer) load
+on that tap (lazy-views.js); a static import that pulls one back into the
+first load fails here too.
 """
 
 from __future__ import annotations
@@ -17,8 +20,22 @@ from typing import Dict, List
 MAX_RESPONSE_BYTES = 100 * 1024
 # The page and its one stylesheet block the first paint (55 KB together, gzipped).
 RENDER_BLOCKING_BYTES = 70 * 1024
-# Page, stylesheet and every module main.js reaches statically (341 KB now).
-FIRST_LOAD_BYTES = 400 * 1024
+# Page, stylesheet and every module main.js reaches statically (202 KB now).
+FIRST_LOAD_BYTES = 220 * 1024
+# Loaded on first open, never by the first load.
+LAZY_VIEWS = (
+    "/static/terminal.js",
+    "/static/session-overlay.js",
+    "/static/chat/session-transcript.js",
+    "/static/changes/changes-overlay.js",
+    "/static/links/links-sheet.js",
+    "/static/screen/screen-view.js",
+    "/static/progress/progress-sheet.js",
+    "/static/jobs.js",
+    "/static/board/board-answers.js",
+    "/static/composer.js",
+    "/static/voice.js",
+)
 
 _STATIC_IMPORT_RE = re.compile(r"""from\s*['"](\.\.?/[^'"?]+\.js)(\?v=[^'"]*)?['"]""")
 _ENTRY_RE = re.compile(r'<script type="module" src="(/static/main\.js[^"]*)"')
@@ -66,3 +83,10 @@ def test_the_first_paint_and_the_whole_first_load_stay_in_budget(webapp_client):
     assert blocking <= RENDER_BLOCKING_BYTES, f"page + stylesheet: {blocking} bytes"
     total = sum(sizes.values())
     assert total <= FIRST_LOAD_BYTES, f"first load: {total} bytes over {len(sizes)} responses"
+
+
+def test_the_views_a_tap_opens_stay_out_of_the_first_load(webapp_client):
+    client, _, _ = webapp_client
+    loaded = {url.split("?")[0] for url in _first_load(client)}
+    assert "/static/lazy-views.js" in loaded, "the walk never reached the lazy loader"
+    assert not loaded.intersection(LAZY_VIEWS), sorted(loaded.intersection(LAZY_VIEWS))
