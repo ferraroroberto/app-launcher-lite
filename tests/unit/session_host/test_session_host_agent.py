@@ -16,7 +16,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import src.session_host as host
 from src.session_host import PtySession, RemoteSession, SessionManager
 from src.vt_snapshot import VtSnapshot
 
@@ -403,23 +402,3 @@ def test_pty_session_to_api_reports_output_chars():
     assert session.to_api()["output_chars"] == 0
     session._ring = "hello from the agent"
     assert session.to_api()["output_chars"] == len("hello from the agent")
-
-
-def test_create_remote_stamps_started_at_before_the_launch(tmp_path, monkeypatch):
-    """The agent starts inside the PowerShell launch, so a `started_at` taken
-    after a slow launch lands later than the agent's own start record and the
-    transcript finder, which matches on it, misses the session."""
-    from src.session_hosting import remote
-
-    clock = {"now": 1000.0}
-    monkeypatch.setattr(host.time, "time", lambda: clock["now"])
-
-    def slow_run(argv, **kwargs):
-        clock["now"] += 12.0
-        return _FakeCompleted()
-
-    monkeypatch.setattr(remote.subprocess, "run", slow_run)
-
-    session = SessionManager().create_remote(str(tmp_path), "proj", "")
-
-    assert session.started_at == 1000.0

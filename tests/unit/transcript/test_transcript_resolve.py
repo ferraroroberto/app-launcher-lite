@@ -218,6 +218,28 @@ def test_find_copilot_transcript_matches_cwd_and_launch_window(tmp_path: Path, m
     ) is None
 
 
+def test_find_copilot_transcript_allows_a_detached_sessions_launch_delay(
+    tmp_path: Path, monkeypatch
+):
+    """A detached session's ``started_at`` is stamped after its PowerShell
+    launch, and Copilot starts inside it, so its folder can predate the stamp
+    by seconds; an attached session's cannot."""
+    from src.session_view import transcript_locate
+
+    wanted = _copilot_session_dir(
+        tmp_path, "79c18133-52bd-4f8f-9260-b33c853158be",
+        r"E:\work\project", "2026-09-17T21:57:30.465Z",
+    )
+    monkeypatch.setattr(transcript_locate, "_COPILOT_STATE_DIR", tmp_path)
+    slow = 1_789_682_250.465 + 12.0   # the folder is 12 s older than the stamp
+    assert transcript_locate.find_copilot_transcript(
+        _copilot_session(kind="remote", started_at=slow)
+    ) == wanted
+    assert transcript_locate.find_copilot_transcript(
+        _copilot_session(kind="pty", started_at=slow)
+    ) is None
+
+
 def test_find_copilot_transcript_refuses_two_candidates_in_one_window(
     tmp_path: Path, monkeypatch
 ):
