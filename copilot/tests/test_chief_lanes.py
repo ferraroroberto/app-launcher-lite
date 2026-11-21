@@ -134,7 +134,7 @@ class DispatchTests(StubbedLauncherCase):
             code, out = _ops("dispatch", "demo", "7", "--base-url", self.stub.url, *extra)
             self.assertEqual(code, 0, out)
             sent = self.stub.posts[0][1]["brief"]
-            self.assertTrue(sent.startswith("This is a fleet-config-lite lane on GitLab."), sent)
+            self.assertTrue(sent.startswith("This is an app-launcher-lite lane on GitLab."), sent)
             self.assertIn(f"{skills}/issue-{mode}/SKILL.md", sent)
             self.assertIn(f"{skills}/issue-finish/SKILL.md", sent)
             self.assertTrue(sent.rstrip().endswith(tail or "denies them)."), sent)

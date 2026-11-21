@@ -232,7 +232,7 @@ def lane_preamble(mode: str) -> str:
     """
     skills = Path(__file__).resolve().parents[2].as_posix()
     return (
-        f"This is a fleet-config-lite lane on GitLab. The skill text you were handed for `/issue-{mode}` may be "
+        f"This is an app-launcher-lite lane on GitLab. The skill text you were handed for `/issue-{mode}` may be "
         f"another fleet's GitHub skill, which uses `gh` and sends its own notifications. Before any other step, "
         f"read `{skills}/issue-{mode}/SKILL.md` and follow it instead; ship with `{skills}/issue-finish/SKILL.md`. "
         f"Those paths only locate the skills: the issue's repository is this session's working directory. "

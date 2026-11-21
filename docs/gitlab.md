@@ -70,11 +70,11 @@ Both are used by the Board's file-an-issue flow and by anything that answers on 
 
 ## Owner checks
 
-The owner-check feature (shipped work to validate, steps owed before a start) is meant to use GitLab scoped labels. It is opt-in and **not yet live**: the label scheme and the helper that reads and clears the labels ship with fleet-config-lite. Until then the Board's owner-check card stays empty.
+The owner-check feature (shipped work to validate, steps owed before a start) is meant to use GitLab scoped labels. It is opt-in and **not yet live**: the label scheme and the helper that reads and clears the labels are in `copilot/skills/_lib/owner_check/`. Until then the Board's owner-check card stays empty.
 
 ## Merging
 
-The Board merges nothing. The chief's merge verb in fleet-config-lite runs `glab mr merge --auto-merge`; its flags are unit-tested and `unknown` against a live GitLab (see [Status](../README.md#status)).
+The Board merges nothing. The chief's merge verb in `copilot/` runs `glab mr merge --auto-merge`; its flags are unit-tested and `unknown` against a live GitLab (see [Status](../README.md#status)).
 
 ## Two remotes for this repo
 

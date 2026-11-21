@@ -1,4 +1,4 @@
-"""Shared helpers for the fleet-config-lite Copilot CLI hooks.
+"""Shared helpers for app-launcher-lite's Copilot CLI hooks.
 
 Every hook here follows the same contract as the parent fleet-config repo:
 

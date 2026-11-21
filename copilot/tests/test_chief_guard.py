@@ -27,7 +27,8 @@ sys.path.insert(0, str(REPO / "hooks"))
 import chief_guard  # noqa: E402
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-CHIEF_CWD = "E:/automation/fleet-config-lite"
+# The chief runs in this copilot/ folder when Lite's fleet_config_dir setting is empty or absent.
+CHIEF_CWD = str(REPO)
 
 
 class GuardTests(unittest.TestCase):
@@ -44,6 +45,10 @@ class GuardTests(unittest.TestCase):
         fake = mock.patch.object(chief_guard, "chief_ops", side_effect=self._fake_ops)
         fake.start()
         self.addCleanup(fake.stop)
+        self.webapp_config = self.state / "webapp_config.json"
+        config = mock.patch.object(chief_guard, "WEBAPP_CONFIG", self.webapp_config)
+        config.start()
+        self.addCleanup(config.stop)
 
     def _fake_ops(self, *args: str):
         self.calls.append(args[0])
@@ -52,14 +57,27 @@ class GuardTests(unittest.TestCase):
     def chief_payload(self, **extra) -> dict:
         return {"session_id": "cop-1", "cwd": CHIEF_CWD, **extra}
 
-    def test_only_a_fleet_config_lite_session_pays_for_the_chief_read(self) -> None:
+    def test_only_a_session_in_the_chief_folder_pays_for_the_chief_read(self) -> None:
         self.assertFalse(chief_guard.is_chief({"cwd": "E:/automation/other-repo"}, "chief-1"))
+        self.assertFalse(chief_guard.is_chief({"cwd": str(REPO.parent)}, "chief-1"))
         self.assertFalse(chief_guard.is_chief({"cwd": CHIEF_CWD}, ""))
         self.assertEqual(self.calls, [])
-        self.assertTrue(chief_guard.is_chief({"cwd": CHIEF_CWD + "-wt-3"}, "chief-1"))
+        self.assertTrue(chief_guard.is_chief({"cwd": CHIEF_CWD}, "chief-1"))
+        self.assertTrue(chief_guard.is_chief({"cwd": CHIEF_CWD.upper() + "/"}, "chief-1"))
         self.assertFalse(chief_guard.is_chief({"cwd": CHIEF_CWD}, "lane-9"))
         self.lines["chief-sid"] = None
         self.assertFalse(chief_guard.is_chief({"cwd": CHIEF_CWD}, "chief-1"))
+
+    def test_the_chief_folder_follows_lites_fleet_config_dir_setting(self) -> None:
+        self.webapp_config.write_text(json.dumps({"fleet_config_dir": ""}), encoding="utf-8")
+        self.assertTrue(chief_guard.is_chief({"cwd": CHIEF_CWD}, "chief-1"))
+        elsewhere = self.state / "chief-home"
+        elsewhere.mkdir()
+        self.webapp_config.write_text(json.dumps({"fleet_config_dir": str(elsewhere)}), encoding="utf-8")
+        self.assertTrue(chief_guard.is_chief({"cwd": str(elsewhere)}, "chief-1"))
+        self.assertFalse(chief_guard.is_chief({"cwd": CHIEF_CWD}, "chief-1"))
+        self.webapp_config.write_text("{not json", encoding="utf-8")
+        self.assertTrue(chief_guard.is_chief({"cwd": CHIEF_CWD}, "chief-1"))
 
     def test_session_start_hands_back_the_handover_log(self) -> None:
         missing = chief_guard.on_session_start(self.chief_payload(), "chief-1")

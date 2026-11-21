@@ -34,8 +34,8 @@ reaches the model, ``agentStop`` ``decision: block`` forces another turn, and
   comes from this checkout and the prompt is left alone.
 
 Who is the chief: a launcher session (``APP_LAUNCHER_SESSION_ID``) whose working
-directory is a fleet-config-lite checkout and whose id ``chief_ops.py chief-sid``
-names. Every other session is allowed before any subprocess runs. Fail-open: a
+directory is the chief's folder (Lite's ``fleet_config_dir`` setting, which defaults
+to this ``copilot/`` folder) and whose id ``chief_ops.py chief-sid`` names. Every other session is allowed before any subprocess runs. Fail-open: a
 fact that cannot be read allows the action, and that is logged to stderr, never
 treated as fine.
 """
@@ -59,11 +59,12 @@ import session_state  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 CHIEF_OPS = REPO / "skills" / "_lib" / "chief_ops.py"
-CHIEF_DIR_PREFIX = "fleet-config-lite"
+# copilot/ -> the app-launcher-lite checkout's runtime settings, where `fleet_config_dir` lives.
+WEBAPP_CONFIG = REPO.parent / "config" / "webapp_config.json"
 ASK_TOOL = "ask_user"
 SHELL_TOOLS = ("powershell", "bash", "shell")
 # What only the full fleet reaches: the skills folder of its Claude Code user scope and of its own
-# checkout (`fleet-config/`, never this repo's `fleet-config-lite/`), and its completion ping. Its
+# checkout (`fleet-config/`, never this checkout's `copilot/`), and its completion ping. Its
 # hooks folder is not listed: the full fleet's own preToolUse hook runs from there on every command.
 FULL_FLEET_PATH_RE = re.compile(r"[\\/]\.claude[\\/]skills[\\/]|[\\/]fleet-config[\\/]skills[\\/]", re.IGNORECASE)
 # That same hook rewrites a shell command to `... context_filter_cli.py run ... --encoded <base64>`
@@ -107,9 +108,31 @@ def chief_ops(*args: str) -> Optional[str]:
     return res.stdout
 
 
+def chief_dir() -> Path:
+    """The folder the launcher starts the chief in: Lite's `fleet_config_dir`, else this `copilot/`."""
+    try:
+        raw = json.loads(WEBAPP_CONFIG.read_text(encoding="utf-8")).get("fleet_config_dir")
+    except FileNotFoundError:
+        return REPO
+    except (OSError, ValueError, AttributeError) as exc:
+        _log(f"could not read fleet_config_dir from {WEBAPP_CONFIG} ({type(exc).__name__}); using {REPO}")
+        return REPO
+    return Path(raw) if isinstance(raw, str) and raw.strip() else REPO
+
+
+def _same_dir(a: Path, b: Path) -> bool:
+    try:
+        return os.path.normcase(str(a.resolve())) == os.path.normcase(str(b.resolve()))
+    except OSError:
+        return False
+
+
 def is_chief(payload: Dict[str, Any], sid: str) -> bool:
-    """True only when the launcher names this session as the live chief."""
-    if not sid or not _lib.cwd(payload).name.startswith(CHIEF_DIR_PREFIX):
+    """True only when the launcher names this session, started in the chief's folder, as the live chief.
+
+    The folder check is a file read, so only a session there pays for the `chief-sid` launcher read.
+    """
+    if not sid or not _same_dir(_lib.cwd(payload), chief_dir()):
         return False
     out = chief_ops("chief-sid")
     if out is None:
@@ -238,7 +261,7 @@ def foreign_command(payload: Dict[str, Any]) -> Optional[str]:
 def lane_redirect(foreign: str) -> Dict[str, Any]:
     """The deny answer for a lane that reached for the full fleet, naming the skills it must use."""
     skills = (REPO / "skills").as_posix()
-    why = (f"Refused: {foreign}. This is a fleet-config-lite lane on GitLab, and on a PC that also runs the "
+    why = (f"Refused: {foreign}. This is an app-launcher-lite lane on GitLab, and on a PC that also runs the "
            f"full fleet the skill text you were handed may be that fleet's GitHub one. Follow "
            f"{skills}/issue-start/SKILL.md (or issue-yolo / issue-finish there) instead, use `glab` and the "
            f"helpers under {skills}/_lib, and send no completion notification.")
