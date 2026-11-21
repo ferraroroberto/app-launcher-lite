@@ -42,6 +42,7 @@ import {
 } from './chat/session-transcript.js';
 import { pinChatToKeyboard } from './chat/chat-send.js';
 import { applyTermTheme } from './terminal/terminal-theme.js';
+import { loadXterm } from './terminal/xterm-loader.js';
 import { closeTerminalMenu, updateLatestPill } from './terminal/terminal-bar.js';
 import { syncContextRing, wireContextRing } from './context-ring.js';
 import { wireModelChip } from './terminal/model-chip.js';
@@ -81,6 +82,11 @@ function rememberMode(sid, mode) {
     localStorage.setItem(MODES_KEY, JSON.stringify(modes));
   } catch (_) { /* private mode / quota: the mode just isn't remembered */ }
 }
+
+// After a session opens, how long the xterm prefetch waits: past the Chat
+// pane's first paint on a slow phone (~0.5 s measured at 4x CPU throttle),
+// well before a reader taps Terminal.
+const XTERM_PREFETCH_DELAY_MS = 700;
 
 export function terminalAvailable(s) {
   return !!s && s.kind !== 'remote';
@@ -226,6 +232,18 @@ export function openSessionOverlay(session, wantMode) {
   // with no reader — is the only way Rename and Stop stay reachable for it
   // now that the row gear is gone, and they live in the bar's ⋮ menu.
   const mode = resolveSessionMode(session, wantMode);
+  // The xterm stack costs about a second to fetch and parse on a phone, and
+  // loading it waits for the first terminal. Start it soon after a session
+  // that has one opens, so a tap on Terminal finds it already there; the
+  // delay keeps its parse off the main thread while Chat paints its first
+  // page. A Terminal open loads it straight away itself, and reports a
+  // failure, so one here is dropped.
+  if (terminalAvailable(session)) {
+    window.setTimeout(function () {
+      const v = state.sessionView;
+      if (v && v.session.session_id === session.session_id) loadXterm().catch(function () {});
+    }, XTERM_PREFETCH_DELAY_MS);
+  }
   // Panes left showing another session are stale for this one: the chat
   // pane is closed, and an active terminal is stashed warm so its
   // title poll can't keep writing the old title over this session's bar

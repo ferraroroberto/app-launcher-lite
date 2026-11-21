@@ -94,6 +94,19 @@ _COPILOT_YAML_CAP_BYTES = 64 * 1024
 # here are LF, but nothing about the format promises that.
 _COPILOT_CWD_RE = re.compile(r"^cwd:[ \t]*(.+?)[ \t\r]*$", re.M)
 _COPILOT_CREATED_RE = re.compile(r"^created_at:[ \t]*(\S+?)[ \t\r]*$", re.M)
+# `cwd` and `created_at` are fixed when Copilot creates a session folder, so a
+# sidecar that parsed once is never read again: the Chat pane, its live tick
+# and the Board all resolve on every request, and this box keeps hundreds of
+# folders. Only a successful parse is kept, so a sidecar caught half-written
+# is read again next time. Bounded by a clear, not an LRU: past this size the
+# next scan simply re-reads.
+_COPILOT_WORKSPACE_CACHE: Dict[Path, Tuple[str, float]] = {}
+_COPILOT_WORKSPACE_CACHE_MAX = 8192
+# A session's resolved event log, valid while the state folder's own mtime is
+# unchanged: adding or removing a session folder moves it, and that is the
+# only change that can make a match ambiguous or point it elsewhere.
+_COPILOT_MATCH_CACHE: Dict[Tuple[str, str, float, float], Tuple[int, Path]] = {}
+_COPILOT_MATCH_CACHE_MAX = 256
 _AGY_ROOT = Path.home() / ".gemini" / "antigravity-cli"
 # Antigravity names a conversation directory by UUID; the strict shape keeps
 # a mangled cache key from being joined onto a path.
@@ -326,6 +339,9 @@ def _copilot_workspace(path: Path) -> Tuple[str, Optional[float]]:
     keys wanted are unquoted one-line scalars. A file that is missing,
     unreadable or malformed answers ``("", None)``, which no session matches.
     """
+    cached = _COPILOT_WORKSPACE_CACHE.get(path)
+    if cached is not None:
+        return cached
     try:
         with path.open("rb") as fh:
             raw = fh.read(_COPILOT_YAML_CAP_BYTES)
@@ -342,7 +358,11 @@ def _copilot_workspace(path: Path) -> Tuple[str, Optional[float]]:
         ).timestamp()
     except (TypeError, ValueError, OSError):
         return "", None
-    return _normalize_dir(cwd_match.group(1)), created
+    parsed = (_normalize_dir(cwd_match.group(1)), created)
+    if len(_COPILOT_WORKSPACE_CACHE) >= _COPILOT_WORKSPACE_CACHE_MAX:
+        _COPILOT_WORKSPACE_CACHE.clear()
+    _COPILOT_WORKSPACE_CACHE[path] = parsed
+    return parsed
 
 
 def find_copilot_transcript(session: Dict[str, Any]) -> Optional[Path]:
@@ -374,9 +394,11 @@ def find_copilot_transcript(session: Dict[str, Any]) -> Optional[Path]:
     sessions on this box keep a ``session.db`` instead (28 of 71) and are
     refused by the same check.
 
-    Cost: one bounded read of every session folder's sidecar — 71 files of
-    ~500 bytes here. Chat mode has no periodic refresh, so this runs
-    on opening the pane and on Reload, not on a timer.
+    Cost: the Chat pane's open and live tick and the Board's poll all call
+    this, and the state folder holds hundreds of sessions, so it is cached
+    twice. A found log is reused while the state folder's mtime holds (one
+    ``stat``), and each sidecar is parsed once in its life; only a folder
+    added or removed makes the next call list the folder again.
     """
     project_dir = _normalize_dir(session.get("project_dir"))
     started = _started_epoch(session)
@@ -387,6 +409,26 @@ def find_copilot_transcript(session: Dict[str, Any]) -> Optional[Path]:
         if session.get("kind") == "remote"
         else _COPILOT_CLOCK_SKEW_SECONDS
     )
+    try:
+        listing_sig = _COPILOT_STATE_DIR.stat().st_mtime_ns
+    except OSError:
+        return None
+    key = (str(_COPILOT_STATE_DIR), project_dir, started, early_slop)
+    hit = _COPILOT_MATCH_CACHE.get(key)
+    if hit is not None and hit[0] == listing_sig and hit[1].is_file():
+        return hit[1]
+    found = _scan_copilot_workspaces(project_dir, started, early_slop)
+    if found is not None:
+        if len(_COPILOT_MATCH_CACHE) >= _COPILOT_MATCH_CACHE_MAX:
+            _COPILOT_MATCH_CACHE.clear()
+        _COPILOT_MATCH_CACHE[key] = (listing_sig, found)
+    return found
+
+
+def _scan_copilot_workspaces(
+    project_dir: str, started: float, early_slop: float
+) -> Optional[Path]:
+    """:func:`find_copilot_transcript`'s uncached walk of every sidecar."""
     try:
         workspaces = list(_COPILOT_STATE_DIR.glob("*/workspace.yaml"))
     except OSError:

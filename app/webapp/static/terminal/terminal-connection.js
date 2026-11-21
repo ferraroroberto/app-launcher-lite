@@ -57,6 +57,15 @@ function disarmPaintWatchdog(terminal) {
 // a burst) or at a hard deadline, whichever comes first.
 const REPAINT_BATCH_QUIET_MS = 700;
 const REPAINT_BATCH_MAX_MS = 6000;
+// The quiet gap once the batch holds a painted frame. The session-host
+// answers a connect with its clear frame and then the headless-VT snapshot,
+// back to back, so the long gap above only ever waited on silence after the
+// snapshot had already landed: 700 ms of a hidden canvas on every open.
+// Until something past the clear frame arrives (no snapshot yet, so the host
+// falls back to nudging the agent into a repaint) the long gap still holds.
+const REPAINT_BATCH_PAINTED_QUIET_MS = 120;
+// The session-host's clear frame (session_host/server.py `_CLEAR_FRAME`).
+const CLEAR_FRAME = '\x1b[H\x1b[2J\x1b[3J';
 
 // What Claude Code paints while it turns a pasted image path into an
 // attachment: a "Pasting…" hint first, then the "[Image #N]" chip in
@@ -96,6 +105,7 @@ export function beginRepaintBatch(terminal) {
     terminal.batchQuietTimer = null;
   }
   terminal.batchBuf = [];
+  terminal.batchPainted = false;
   terminal.batchDeadline = Date.now() + REPAINT_BATCH_MAX_MS;
   // Conceal the storm: even flushed as ONE write, xterm
   // parses large writes in per-animation-frame slices, so the transcript
@@ -282,13 +292,14 @@ function onTerminalFrame(terminal, event) {
   // quiet gap or at the hard deadline — one write, one render.
   if (terminal.batchBuf) {
     terminal.batchBuf.push(event.data);
+    if (event.data !== CLEAR_FRAME) terminal.batchPainted = true;
     if (terminal.batchQuietTimer) clearTimeout(terminal.batchQuietTimer);
     if (Date.now() >= terminal.batchDeadline) {
       flushRepaintBatch(terminal);
     } else {
       terminal.batchQuietTimer = setTimeout(function () {
         flushRepaintBatch(terminal);
-      }, REPAINT_BATCH_QUIET_MS);
+      }, terminal.batchPainted ? REPAINT_BATCH_PAINTED_QUIET_MS : REPAINT_BATCH_QUIET_MS);
     }
     return;
   }
