@@ -708,9 +708,7 @@ async def ensure_chief(request: Request) -> Dict[str, Any]:
         session, sid = await _spawn_chief(
             cfg, request, body, state["rows"], resumed_session_id, rows=rows, cols=cols,
         )
-        # Reported, not enforced here: a missing skill refuses each lane start instead.
-        skills = await asyncio.to_thread(
-            skills_preflight.log_report, cfg.skills_dir, cfg.fleet_config_dir)
+        skills = await asyncio.to_thread(skills_preflight.log_report, cfg.skills_dir, cfg.fleet_config_dir)
         # The branch ensure took, paired with the "kept" line above:
         # a chief that disappears and comes back is diagnosable from here.
         logger.info(

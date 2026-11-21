@@ -652,14 +652,8 @@ async def start_issue(request: Request) -> Dict[str, Any]:
     title = str(body.get("title") or "").strip()
     model = str(body.get("model") or "").strip().lower()
     brief = _validated_brief(body)
-    entry = _resolve_repo_entry(cfg, repo)
+    entry = await _launchable_entry(cfg, repo, number)
     agent, base_flags, effort, context = _launch_flags(cfg, body, model)
-    # A lane that cannot run its /issue-* skill only stalls: refuse it, naming the skill.
-    skills_refusal = skills_preflight.refusal(await asyncio.to_thread(
-        skills_preflight.check_skills, cfg.skills_dir, cfg.fleet_config_dir))
-    if skills_refusal:
-        logger.warning("⚠️ issue start refused for %s#%s: %s", repo, number, skills_refusal)
-        raise HTTPException(status_code=409, detail=skills_refusal)
 
     prompt = f"/issue-{mode} {number}"
     brief_path = None
@@ -755,6 +749,19 @@ def _requested_text(body: Dict[str, Any], key: str) -> Optional[str]:
     if not isinstance(value, str):
         raise HTTPException(status_code=400, detail=f"{key} must be a string")
     return value.strip().lower()
+
+
+async def _launchable_entry(cfg: WebappConfig, repo: str, number: int) -> Any:
+    """The repo's project entry once all four issue skills are found; 409 naming any that is not.
+
+    A lane that cannot run its /issue-* skill only stalls, so it is never spawned."""
+    entry = _resolve_repo_entry(cfg, repo)
+    refusal = skills_preflight.refusal(await asyncio.to_thread(
+        skills_preflight.check_skills, cfg.skills_dir, cfg.fleet_config_dir))
+    if refusal:
+        logger.warning("⚠️ issue start refused for %s#%s: %s", repo, number, refusal)
+        raise HTTPException(status_code=409, detail=refusal)
+    return entry
 
 
 def _validated_brief(body: Dict[str, Any]) -> Optional[str]:

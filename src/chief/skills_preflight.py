@@ -93,7 +93,9 @@ def payload(skills_dir: str, fleet_config_dir: str) -> Dict[str, object]:
 
 
 def log_report(skills_dir: str, fleet_config_dir: str) -> Dict[str, object]:
-    """Log one line per skill (the chief-start report) and return the payload."""
+    """Log one line per skill (the chief-start report) and return the payload.
+
+    Reported, not enforced, at chief start: a missing skill refuses each lane start instead."""
     body = payload(skills_dir, fleet_config_dir)
     for item in body["skills"]:  # type: ignore[union-attr]
         if item["state"] == "found":
