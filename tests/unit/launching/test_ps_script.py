@@ -125,6 +125,13 @@ class TestUnderAllSigned:
         assert done.returncode == 0, done.stderr
         assert done.stdout.strip() == ""
 
+    def test_the_session_host_restart_starts_under_allsigned(self) -> None:
+        """Bare, without -Confirm, it only prints its warning and exits 1, so this kills nothing."""
+        done = _launch(REPO_ROOT / "scripts" / "restart-session-host.ps1", [], "AllSigned")
+        assert done.returncode == 1, done.stderr
+        assert "Re-run with -Confirm" in done.stdout
+        assert "cannot be loaded" not in done.stderr
+
     def test_the_gate_sibling_scripts_load_as_text_under_allsigned(self, tmp_path: Path) -> None:
         """The two dot-sources verify-before-ship.ps1 runs, as the gate writes them."""
         gate_text = (REPO_ROOT / "scripts" / "verify-before-ship.ps1").read_text(encoding="utf-8")
@@ -156,6 +163,22 @@ class TestNoPolicyOverride:
     def test_the_gate_never_dot_sources_a_script_file(self) -> None:
         gate = (REPO_ROOT / "scripts" / "verify-before-ship.ps1").read_text(encoding="utf-8")
         assert not re.search(r"^\s*\. \(Join-Path", gate, re.MULTILINE)
+
+
+class TestPlainPullOnAnAllSignedMachine:
+    """A signature appended to a tracked script, or a documented `-File` start that would need
+    one, turns every `git pull` on an AllSigned machine into a conflict."""
+
+    def test_no_repo_script_carries_a_signature_block(self) -> None:
+        scripts = [*REPO_ROOT.glob("*.ps1"), *(REPO_ROOT / "scripts").glob("*.ps1")]
+        signed = [p.name for p in scripts if "SIG # Begin signature block" in p.read_text(encoding="utf-8")]
+        assert scripts and signed == []
+
+    def test_the_session_host_restart_is_documented_through_the_launcher(self) -> None:
+        docs = [REPO_ROOT / "README.md", REPO_ROOT / "CLAUDE.md", *(REPO_ROOT / "docs").glob("*.md"),
+                REPO_ROOT / "scripts" / "restart-session-host.ps1"]
+        offenders = [p.name for p in docs if "-File scripts/restart-session-host.ps1" in p.read_text(encoding="utf-8")]
+        assert offenders == []
 
 
 class TestEffectivePolicy:

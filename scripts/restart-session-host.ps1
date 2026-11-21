@@ -13,8 +13,9 @@
 # mid-work), never unattended, never as part of building or testing a
 # session-host change itself.
 #
-# Usage:
-#   C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/restart-session-host.ps1 -Confirm
+# Usage, from the repo root. The launcher starts this script under any execution policy,
+# AllSigned included, so nobody has to sign this tracked file:
+#   .\.venv\Scripts\python.exe -m src.launching.ps_script scripts\restart-session-host.ps1 -Confirm
 #   (bare, with no -Confirm, prints the warning and exits 1 -- does nothing)
 
 param(
@@ -54,7 +55,7 @@ if (-not $Confirm) {
     Write-Host "There is no drain and no idle check. Only proceed at a clean boundary." -ForegroundColor Red
     Write-Host ""
     Write-Host "Re-run with -Confirm to proceed:" -ForegroundColor Yellow
-    Write-Host "  C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/restart-session-host.ps1 -Confirm"
+    Write-Host "  .\.venv\Scripts\python.exe -m src.launching.ps_script scripts\restart-session-host.ps1 -Confirm"
     exit 1
 }
 

@@ -55,7 +55,8 @@ process is restarted.
    so it is no proof that `tray.bat --restart` ran. `pid` is.
 7. Don't hand off "done" with a stale process still serving.
 
-The `:8466` restart, `scripts/restart-session-host.ps1 -Confirm`, ends with
+The `:8466` restart, `.\.venv\Scripts\python.exe -m src.launching.ps_script scripts\restart-session-host.ps1 -Confirm`
+(the launcher starts it under any execution policy, `AllSigned` included), ends with
 `python -m src.launching.restart_check session-host` instead of a loop of its own. It reads
 `/api/version` over https and falls back to http (the tray serves plain http when no TLS cert
 exists), and ends in one of three states, each logged to `webapp/restart.log`: **live** (exit 0:

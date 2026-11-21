@@ -49,6 +49,7 @@ if hasattr(sys.stdout, "reconfigure"):
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.app_config import resolve_webapp_port  # noqa: E402
 from src.subprocess_flags import NO_WINDOW  # noqa: E402
 
 CERT_DIR = PROJECT_ROOT / "webapp" / "certificates"
@@ -193,11 +194,12 @@ def main() -> None:
     print(f"Provisioning Tailscale cert for: {hostname}")
     _provision(hostname)
     print()
+    port = resolve_webapp_port()
     print("Restart the webapp (tray.bat --restart or webapp.bat), then open:")
-    print(f"  https://{hostname}:8465")
+    print(f"  https://{hostname}:{port}")
     print()
     print("Note: the cert is issued only for the Tailscale hostname, so")
-    print("https://127.0.0.1:8465 and LAN-IP URLs will show a hostname-mismatch")
+    print(f"https://127.0.0.1:{port} and LAN-IP URLs will show a hostname-mismatch")
     print("warning. The PC mirror windows connect over loopback — see the")
     print("README HTTPS section before switching an instance that uses them.")
 
