@@ -19,7 +19,7 @@ from app.webapp.routers._helpers import (
     cert_present,
     maybe_json,
 )
-from src import boot_autostart, password
+from src import boot_autostart, password, private_network
 from src.agents import AGENTS, DEFAULT_AGENT
 from src.chief.launch_settings import chief_model_problem
 from src.desktop import lid_keep_awake
@@ -387,4 +387,17 @@ async def status(request: Request) -> Dict[str, Any]:
         "tunnel_url": tunnel_url,
         "tls": cert_present(),
         "terminal": terminal_reachability(request),
+        # The PC load sheet's IP row; null until discovery has found one.
+        "private_ip": private_network.current(),
     }
+
+
+@router.post("/api/status/refresh")
+async def status_refresh() -> Dict[str, Any]:
+    """Re-read this PC's private IP when the PC load sheet opens.
+
+    ``discovery_ok`` false means nothing was found this time; the address is
+    then the last one cached (null when there never was one).
+    """
+    discovery_ok = await asyncio.to_thread(private_network.refresh)
+    return {"private_ip": private_network.current(), "discovery_ok": discovery_ok}

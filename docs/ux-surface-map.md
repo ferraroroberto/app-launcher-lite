@@ -115,10 +115,15 @@ flowchart LR
 - **Root:** `data-surface`
 - **Reach:** the CPU reading in any tab header
 - **Holds:**
+  - the PC's private IP address
   - the load reading and what is using it
   - a Screen row with a View live action
+  - a toast area for the result of a copy
   - Done
-- **Does:** View live opens the Screen view
+- **Does:**
+  - Copy on the IP row puts the address on the clipboard
+  - View live opens the Screen view
+- **States:** Unknown instead of an address, with Copy disabled, when the PC's address could not be read
 - **Leads to:** [Screen view](#screenview-screen-view) (Screen View live)
 
 ### `chrome.toast` Toast

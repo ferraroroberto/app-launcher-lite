@@ -116,11 +116,16 @@ surfaces:
     reach:
       - the CPU reading in any tab header
     holds:
+      - the PC's private IP address
       - the load reading and what is using it
       - a Screen row with a View live action
+      - a toast area for the result of a copy
       - Done
     does:
+      - Copy on the IP row puts the address on the clipboard
       - View live opens the Screen view
+    states:
+      - Unknown instead of an address, with Copy disabled, when the PC's address could not be read
     links:
       - to: screen.view
         via: Screen View live

@@ -67,7 +67,7 @@ Lists every child directory of `projects_dir` (no marker files needed; `projects
 
 The clock button in the Projects card opens **History**, a dashboard of what the projects shipped: lines added and removed from each project's local `git log`, and merge requests merged and issues opened and closed from GitLab, by day, week or month. It answers from a cache and re-reads only when asked: [docs/history.md](docs/history.md).
 
-A small **CPU reading** in the Coding header answers "is the PC loaded?": muted at rest, amber after about 30 s at or above 70%, red at or above 90%, and `–` when the server could not sample. Tapping it lists the busiest process groups by name and cores used, never paths or command lines. One shared sampler (`src/system_load.py`) feeds it, only while a page is asking.
+A small **CPU reading** in the Coding header answers "is the PC loaded?": muted at rest, amber after about 30 s at or above 70%, red at or above 90%, and `–` when the server could not sample. Tapping it lists the busiest process groups by name and cores used, never paths or command lines, and shows the PC's private IP at the top with a Copy button (`src/private_network.py`; `Unknown` when it cannot be read). One shared sampler (`src/system_load.py`) feeds it, only while a page is asking.
 
 ### Apps
 

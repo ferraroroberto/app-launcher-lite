@@ -12,12 +12,18 @@
  * from its shared sampler's cached sample, and the poll skips while the
  * page is hidden. Coming back to the foreground reads once at once. While
  * the sampler is still taking its first sample, one short retry follows.
+ *
+ * The sheet also shows the PC's private IP with a Copy action. The address
+ * comes from the /api/status payload the page already holds and is re-read
+ * (POST /api/status/refresh) each time the sheet opens; one that could not be
+ * read is "Unknown" and Copy is disabled.
  */
 
-import { SYSTEM_LOAD_WARMING_RETRY_MS } from './state.js';
+import { SYSTEM_LOAD_WARMING_RETRY_MS, state } from './state.js';
 import { jsonApi, logPollFailure } from './api.js';
 import { el, sheetRow } from './dom-utils.js';
 import { pctText } from './shared/format.js';
+import { copyText } from './apps/apps-listeners.js';
 
 // The last payload; null when the fetch itself failed. Before the first
 // answer it reads as the server's own "still taking the first sample".
@@ -61,10 +67,43 @@ function renderReadings() {
   });
 }
 
+// The PC's private IP and a Copy that puts exactly that string on the
+// clipboard. First in the sheet, so it shows whether or not the CPU read.
+function appendIpRow(body) {
+  const ip = state.status && state.status.private_ip;
+  const row = sheetRow('IP', ip || 'Unknown', 'ip');
+  const btn = el('button', 'button-ghost', 'Copy');
+  btn.type = 'button';
+  btn.dataset.track = 'cpu.copy-ip';
+  btn.disabled = !ip;
+  btn.addEventListener('click', function () {
+    copyText(ip, 'IP address', { host: document.getElementById('cpuSheetToast') });
+  });
+  row.appendChild(btn);
+  body.appendChild(row);
+}
+
+// Re-read the address when the sheet opens, so a changed one shows without a
+// reload. A failed read, or one that found nothing, keeps the last value.
+async function refreshIp() {
+  let body;
+  try {
+    body = await jsonApi('/api/status/refresh', { method: 'POST' });
+  } catch (exc) {
+    logPollFailure('private ip refresh failed', exc);
+    return;
+  }
+  if (!body || !body.discovery_ok) return;
+  state.status = Object.assign({}, state.status, { private_ip: body.private_ip });
+  const dialog = sheet();
+  if (dialog && dialog.open) renderSheet();
+}
+
 function renderSheet() {
   const body = document.getElementById('cpuSheetBody');
   if (!body) return;
   body.replaceChildren();
+  appendIpRow(body);
   if (!readingKnown(reading)) {
     body.appendChild(sheetRow('CPU', unknownText(reading), 'cpu'));
     return;
@@ -139,6 +178,7 @@ function openSheet() {
   if (!dialog) return;
   renderSheet();
   if (!dialog.open) dialog.showModal();
+  refreshIp().catch(function () {});
 }
 
 function closeSheet() {
