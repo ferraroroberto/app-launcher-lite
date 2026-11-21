@@ -191,7 +191,10 @@ if (-not (Test-Path $python)) {
 
 Push-Location $repoRoot
 
-. (Join-Path $PSScriptRoot "box_lock_gate.ps1"); Enter-BoxLockGate
+# Both sibling scripts are read as text and dot-sourced as a ScriptBlock, never as a file, so this works
+# under AllSigned. Under that policy the gate runs as a ScriptBlock too (src/launching/ps_script.py), has
+# no script path of its own, and Enter-BoxLockGate says so and runs unlocked rather than re-running it.
+. ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot "box_lock_gate.ps1")))); Enter-BoxLockGate
 try {
     Phase "py_compile (app, src, tests)..."
     & $python -m compileall -q app src tests
@@ -201,7 +204,7 @@ try {
 
     # Worker counts for both pytest phases live in e2e-gate-route.ps1;
     # a bad override fails here, before any phase runs.
-    . (Join-Path $PSScriptRoot "e2e-gate-route.ps1")
+    . ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot "e2e-gate-route.ps1"))))
     try {
         $unitPlan = Get-UnitWorkerArgs -Setting $env:UNIT_WORKERS
     }

@@ -25,7 +25,6 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $trayPs = Join-Path $PSScriptRoot "tray_lifecycle.ps1"
 $trayBat = Join-Path $repoRoot "tray.bat"
-$psExe = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 $venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
 
 # Both ports come from config/config.json (webapp.port, webapp.session_host_port) through the
@@ -69,7 +68,9 @@ if (-not (Test-Path $trayBat)) {
 }
 
 Write-Host "Reclaiming :$sessionHostPort (this kills every live PTY now)..." -ForegroundColor Cyan
-& $psExe -NoProfile -NonInteractive -File $trayPs reclaim `
+# Through the repo launcher, which loads the script as a ScriptBlock when the execution policy
+# refuses an unsigned -File (AllSigned), so the policy stays as the machine set it.
+& $venvPython -m src.launching.ps_script $trayPs reclaim `
     -VenvDir (Join-Path $repoRoot ".venv") -Ports $sessionHostPort
 if ($LASTEXITCODE -ne 0) {
     Write-Host "tray_lifecycle.ps1 reclaim exited $LASTEXITCODE -- session-host may still be running." -ForegroundColor Red

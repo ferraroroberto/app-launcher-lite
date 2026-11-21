@@ -51,7 +51,7 @@ app-launcher-lite/
 │   ├── auth/                   # job-scoped API tokens, the passkey (WebAuthn) gate
 │   ├── middleware/             # the webapp's auth gate: trust (loopback / tailnet), credentials, route guard table, bearer
 │   ├── clients/                # loopback HTTP clients (shared base, session-host) and the GitLab client (gitlab.py, via glab)
-│   ├── launching/              # agent launch: Copilot flags (flags.py), spawn helpers (launcher.py), the tray-restart check
+│   ├── launching/              # agent launch: Copilot flags (flags.py), spawn helpers (launcher.py), the tray-restart check, the PowerShell script launcher (ps_script.py)
 │   ├── board/                  # Board backend: column assembly, session-state join, drawer exchange, proof reports, owner checks
 │   ├── chief/                  # the chief's plan, journal, answers and dispatch briefs
 │   ├── session_view/           # a live session's views: transcript pages, changed files, the Chat outbox, plan and resume pickers
