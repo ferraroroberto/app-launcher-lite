@@ -797,14 +797,16 @@ export async function fetchBoard() {
   if (state.tab !== 'board') return;
   if (!state.board) setAsyncState(els.boardFetchState, 'loading', { message: 'Reading the Board…' });
   const editSeq = boardEditSeq;
-  // The chief's plan rides the same poll. Its failure is the card's
+  // The chief's plan rides the same poll but never holds the lanes back: a
+  // slow plan read fills its card when it lands. Its failure is the card's
   // own quiet note, never the Board's error.
-  let board, plan;
+  let plan = null;
+  const planRead = jsonApi('/api/board/chief-plan')
+    .catch(function () { return { state: 'unavailable' }; })
+    .then(function (body) { plan = body; });
+  let board;
   try {
-    [board, plan] = await Promise.all([
-      jsonApi('/api/board'),
-      jsonApi('/api/board/chief-plan').catch(function () { return { state: 'unavailable' }; }),
-    ]);
+    board = await jsonApi('/api/board');
   } catch (exc) {
     // A failed first read replaces the lanes, which would only show zeros;
     // a later one keeps them under a stale line.
@@ -819,10 +821,15 @@ export async function fetchBoard() {
   if (els.boardColumns) els.boardColumns.hidden = false;
   state.board = board;
   state.boardFetchedAt = Date.now();
-  state.chiefPlan = plan;
+  if (plan) state.chiefPlan = plan;
   renderBoard();
   pollJournal();
   maybeAutoRefreshGithub();
+  if (plan) return;
+  await planRead;
+  if (editSeq !== boardEditSeq) return;
+  state.chiefPlan = plan;
+  renderBoard();
 }
 
 // The open Board keeps its GitLab data current without a tap: a stale or

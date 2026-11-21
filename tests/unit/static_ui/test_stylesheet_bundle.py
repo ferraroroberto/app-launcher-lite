@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 from src.static_versioning import compute_asset_hashes
-from src.stylesheet_bundle import build_bundle, link_bundle, linked_stylesheets
+from src.stylesheet_bundle import build_bundle, link_bundle, linked_stylesheets, trim_css
 from tests._css import STATIC
 
 _INDEX = (
@@ -45,7 +45,7 @@ def test_link_bundle_leaves_a_shell_without_sheets_alone() -> None:
 
 def test_build_bundle_concatenates_in_link_order(tmp_path: Path) -> None:
     bundle = build_bundle(_tree(tmp_path))
-    assert bundle == "/* a.css */\na{color:red}\n/* sub/b.css */\nb{color:blue}\n"
+    assert bundle == "a{color:red}\nb{color:blue}\n"
 
 
 def test_build_bundle_is_none_without_links(tmp_path: Path) -> None:
@@ -72,3 +72,28 @@ def test_the_apps_sheets_survive_concatenation() -> None:
         assert not re.search(r"@import|@charset", text), name
         # `url(data:...)` is self-contained; anything else resolves against the file's own path.
         assert not re.search(r"url\(\s*(?!['\"]?(?:data:|#))", text), name
+
+
+def test_trim_css_drops_comments_and_the_lines_they_leave() -> None:
+    source = "/* head */\na {\n  color: red; /* why */\n}\n\n/* gone */\nb{c:1px/**/solid}\n"
+    assert trim_css(source) == "a {\n  color: red; \n}\nb{c:1px solid}\n"
+
+
+def test_trim_css_keeps_strings_and_banners() -> None:
+    source = "a{content:\"/* not a comment */\"}\n/*! licence */\nb{content:'it\\'s /*'}\n"
+    assert trim_css(source) == source
+
+
+def test_trim_css_returns_the_source_when_a_comment_never_ends() -> None:
+    source = "a{color:red}\n/* open\nb{color:blue}\n"
+    assert trim_css(source) == source
+
+
+def test_trimming_the_apps_sheets_removes_only_comments() -> None:
+    """Every rule survives: the trimmed sheet is the source minus its comments, blanks aside."""
+    for name in linked_stylesheets((STATIC / "index.html").read_text(encoding="utf-8")):
+        text = (STATIC / name).read_text(encoding="utf-8")
+        trimmed = trim_css(text)
+        assert "/*" not in trimmed, name
+        stripped = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+        assert re.sub(r"\s+", "", trimmed) == re.sub(r"\s+", "", stripped), name

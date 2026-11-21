@@ -239,6 +239,10 @@ async function boot() {
   const others = [safe(fetchVersion)];
   // The Board card link fetches the Board itself, so it needs none of these.
   if (boardSid) openBoardCard(boardSid).catch(function () {});
+  // A reload restores the last tab without a tap, and the Board and Jobs
+  // read their data only on a tap or their poll: the restored tab would
+  // stay empty for a whole poll interval. Both self-gate to their tab.
+  else others.push(safe(fetchBoard), safe(fetchJobs));
 
   armPolls({ lists, listeners, running, webauthn, load, git });
 

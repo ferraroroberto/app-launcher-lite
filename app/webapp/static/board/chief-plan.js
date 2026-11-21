@@ -376,7 +376,8 @@ export function openOwnerAnswersAt(ownerRef, kind) {
 export function renderChiefPlan(body, liveRead) {
   const host = els.boardColumns && els.boardColumns.querySelector('.board-plan-body');
   if (!host) return;
-  const plan = state.chiefPlan || { state: 'empty' };
+  // Null until the first plan read lands: not read yet, never "no plan".
+  const plan = state.chiefPlan || { state: 'loading' };
   const run = plan.state === 'ok' ? chiefRunState(body, liveRead) : '';
   const age = plan.state === 'ok' ? planAge(plan.updated_at) : '';
   // An open answer sheet follows whether the chief runs, every poll — read
@@ -399,7 +400,9 @@ export function renderChiefPlan(body, liveRead) {
   host.dataset.sig = sig;
   host.dataset.state = plan.state;
   const nodes = [];
-  if (plan.state === 'unreadable') {
+  if (plan.state === 'loading') {
+    nodes.push(planLine('board-plan-note', 'Reading the plan…'));
+  } else if (plan.state === 'unreadable') {
     nodes.push(planLine('board-plan-note', 'Plan unreadable.'));
   } else if (plan.state === 'unavailable') {
     nodes.push(planLine('board-plan-note', 'Plan not loaded — the webapp did not answer.'));

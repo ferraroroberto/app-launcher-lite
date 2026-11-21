@@ -31,6 +31,31 @@
       root.dataset.textsize = size === 'small' || size === 'large' ? size : 'default';
     })();
   </script>
+  <!-- Boot reads, started now: the session list and the open tab's data
+       arrive while the module graph is still loading, instead of one round
+       trip after another once main.js runs. api.js takes each response once
+       (window.__bootPrefetch). The Screen pop-out reads none of them. -->
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      if (params.has('screen') || !window.fetch) return;
+      var token = params.get('token');
+      var tab = null;
+      try {
+        token = token || localStorage.getItem('launcher.token');
+        tab = localStorage.getItem('app-launcher.tab');
+      } catch (e) {}
+      if (params.has('board')) tab = 'board';
+      var paths = ['/api/config', '/api/agents', '/api/apps', '/api/claude-code/sessions'];
+      if (tab === 'board') paths.push('/api/board', '/api/board/chief-plan');
+      if (tab === 'jobs') paths.push('/api/jobs');
+      var headers = token ? { Authorization: 'Bearer ' + token } : {};
+      var store = window.__bootPrefetch = {};
+      paths.forEach(function (path) {
+        store[path] = { at: performance.now(), res: fetch(path, { headers: headers }) };
+      });
+    })();
+  </script>
   <!-- base.css first: form controls inherit the page font (its README's
        load-order contract, project-scaffolding#266). -->
   <link rel="stylesheet" href="/static/_vendored/base/base.css">

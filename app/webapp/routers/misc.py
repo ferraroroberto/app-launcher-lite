@@ -20,7 +20,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.webapp.demand_cache import DemandCache
 from app.webapp.routers._helpers import PROJECT_ROOT, STATIC_DIR, maybe_json
-from app.webapp.shell_html import assemble_shell, shell_stat_key
+from app.webapp.shell_html import assemble_shell, shell_stat_key, trim_shell
 from src import instance_role, system_load
 from src.agents import detect_agents
 from src.build_info import build_identity, resolve_git_sha
@@ -78,7 +78,7 @@ def _stamped_index(app: Any) -> Tuple[str, str]:
     asset_hashes = getattr(app.state, "asset_hashes", {}) or {}
     if getattr(app.state, "stylesheet_bundle", None) is not None:
         shell = link_bundle(shell)
-    stamped = rewrite_index_html(shell, asset_hashes)
+    stamped = trim_shell(rewrite_index_html(shell, asset_hashes))
     etag = '"' + hashlib.sha256(stamped.encode("utf-8")).hexdigest()[:20] + '"'
     app.state.index_cache = (key, stamped, etag)
     return stamped, etag
