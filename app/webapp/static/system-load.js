@@ -69,18 +69,41 @@ function renderReadings() {
 
 // The PC's private IP and a Copy that puts exactly that string on the
 // clipboard. First in the sheet, so it shows whether or not the CPU read.
-function appendIpRow(body) {
-  const ip = state.status && state.status.private_ip;
-  const row = sheetRow('IP', ip || 'Unknown', 'ip');
+// One node for the page's life, updated in place: the sheet's other rows are
+// rebuilt on every poll, and a button replaced between press and release
+// never receives its click.
+let ipRow = null;
+
+function ipRowNode() {
+  if (ipRow) return ipRow;
+  ipRow = sheetRow('IP', 'Unknown', 'ip');
   const btn = el('button', 'button-ghost', 'Copy');
   btn.type = 'button';
   btn.dataset.track = 'cpu.copy-ip';
-  btn.disabled = !ip;
   btn.addEventListener('click', function () {
-    copyText(ip, 'IP address', { host: document.getElementById('cpuSheetToast') });
+    const ip = state.status && state.status.private_ip;
+    if (ip) copyText(ip, 'IP address', { host: document.getElementById('cpuSheetToast') });
   });
-  row.appendChild(btn);
-  body.appendChild(row);
+  ipRow.appendChild(btn);
+  return ipRow;
+}
+
+function syncIpRow() {
+  const row = ipRowNode();
+  const ip = state.status && state.status.private_ip;
+  row.querySelector('.usage-sheet-value').textContent = ip || 'Unknown';
+  row.querySelector('button').disabled = !ip;
+  return row;
+}
+
+// Keeps the IP row attached and replaces everything after it.
+function resetSheetBody(body) {
+  const row = syncIpRow();
+  if (row.parentNode !== body) {
+    body.replaceChildren(row);
+    return;
+  }
+  while (body.lastChild !== row) body.lastChild.remove();
 }
 
 // Re-read the address when the sheet opens, so a changed one shows without a
@@ -102,8 +125,7 @@ async function refreshIp() {
 function renderSheet() {
   const body = document.getElementById('cpuSheetBody');
   if (!body) return;
-  body.replaceChildren();
-  appendIpRow(body);
+  resetSheetBody(body);
   if (!readingKnown(reading)) {
     body.appendChild(sheetRow('CPU', unknownText(reading), 'cpu'));
     return;

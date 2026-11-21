@@ -297,6 +297,73 @@ def _assert_the_sheet_groups_a_burn_and_shows_what_the_rows_leave_out(
     page.locator("#cpuSheetDone").click()
 
 
+_VIEWPORTS = {"desktop": {"width": 1280, "height": 900}, "android": {"width": 412, "height": 915}}
+_BLOCK_WRITE_TEXT = (
+    "() => Object.defineProperty(navigator.clipboard, 'writeText',"
+    " { configurable: true, value: () => Promise.reject(new Error('NotAllowedError')) })"
+)
+
+
+def _clipboard(page: Page) -> str:
+    return page.evaluate("() => navigator.clipboard.readText()")
+
+
+def _assert_the_sheet_toast_is_painted_on_screen(page: Page) -> None:
+    """The toast is in the sheet's footer and nothing paints over it: it once
+    rendered under the Screen row, so a copy gave no visible feedback."""
+    toast = page.locator("#cpuSheetToast")
+    expect(toast).to_be_visible()
+    box, view = toast.bounding_box(), page.viewport_size
+    assert box and 0 <= box["x"] and box["x"] + box["width"] <= view["width"], box
+    assert 0 <= box["y"] and box["y"] + box["height"] <= view["height"], box
+    assert toast.evaluate(
+        "(el) => { const r = el.getBoundingClientRect();"
+        " return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }"
+    ), "the toast is covered by another element"
+
+
+def _assert_copy_really_copies_and_survives_a_poll(
+    page: Page, current: dict, browser_name: str
+) -> None:
+    """Reads the real Chromium clipboard back, on a desktop and an Android-sized
+    viewport. Copy toasts on the sheet; a poll landing between press and release
+    does not lose the tap (the sheet's rows rebuild, the IP row does not);
+    a refused ``writeText`` falls back to a selection copy; a clipboard that
+    refuses both says to copy by hand."""
+    if browser_name != "chromium":
+        return  # WebKit cannot read the clipboard back; the mocked check covers it
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    button = page.locator("#cpuSheetBody [data-row='ip']").get_by_role("button", name="Copy")
+    toast = page.locator("#cpuSheetToast")
+    for size in _VIEWPORTS.values():
+        page.set_viewport_size(size)
+        page.evaluate("() => navigator.clipboard.writeText('not the ip')")
+        button.click()
+        expect(toast).to_contain_text("IP address copied")
+        assert _clipboard(page) == _IP
+        _assert_the_sheet_toast_is_painted_on_screen(page)
+
+        page.evaluate("() => navigator.clipboard.writeText('not the ip')")
+        box = button.bounding_box()
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.mouse.down()
+        _poll(page)  # the load poll rebuilds the open sheet's rows
+        page.mouse.up()
+        assert _clipboard(page) == _IP, "a poll between press and release lost the tap"
+    page.set_viewport_size(_VIEWPORTS["desktop"])
+
+    page.evaluate("() => navigator.clipboard.writeText('not the ip')")
+    page.evaluate(_BLOCK_WRITE_TEXT)
+    button.click()
+    assert _clipboard(page) == _IP, "no selection-copy fallback when writeText is refused"
+
+    page.evaluate("() => { document.execCommand = () => false; }")
+    button.click()
+    expect(toast).to_contain_text("Could not copy the IP address. Copy it by hand")
+    expect(page.locator("#cpuSheetBody [data-row='ip']")).to_contain_text(_IP)
+    page.evaluate("() => { delete document.execCommand; delete navigator.clipboard.writeText; }")
+
+
 def _assert_the_sheet_shows_the_ip_and_copy_puts_exactly_it_on_the_clipboard(
     page: Page, body
 ) -> None:
@@ -374,7 +441,7 @@ def _assert_the_poll_stops_while_the_page_is_hidden(
 
 
 def test_the_tap_sheet_lists_cpu_memory_and_the_top_three(
-    authed_page: Page, base_url: str
+    authed_page: Page, base_url: str, browser_name: str
 ) -> None:
     """The sheet's rows, then on the same load (each reading a poll on the
     fake clock) a grouped burn, an unreadable sample and the hidden-page
@@ -394,6 +461,7 @@ def test_the_tap_sheet_lists_cpu_memory_and_the_top_three(
     sheet = page.locator("#cpuSheet")
     expect(sheet).to_be_visible()
     body = sheet.locator("#cpuSheetBody")
+    _assert_copy_really_copies_and_survives_a_poll(page, current, browser_name)
     _assert_the_sheet_shows_the_ip_and_copy_puts_exactly_it_on_the_clipboard(page, body)
     expect(body.locator("[data-row='cpu']")).to_contain_text("93% of 16 cores")
     expect(body.locator("[data-row='cpu'] .usage-sheet-value")).to_have_attribute("data-tone", "danger")
