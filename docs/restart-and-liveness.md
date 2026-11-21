@@ -22,7 +22,12 @@ process is restarted.
 3. **`:8466` session-host is excluded from that reclaim and survives**
    (mechanism: `CLAUDE.md`'s `## session-host`), so `--restart` preserves open
    Coding/PTY sessions — including one hosted on `:8466` itself — is safe to
-   run from inside such a session, and never restarts `:8466`.
+   run from inside such a session, and never restarts `:8466`. A reclaim owns a
+   port holder whose command line is under this repo's `.venv` **or** is this
+   repo's `launcher.py session-host` (a host re-execed from the base interpreter
+   carries no `.venv` path), and it exits 1 when an owned holder is still alive
+   after the stop, so a restart that did not replace the old process fails
+   instead of reporting success.
 4. Run the restart from **PowerShell**, wrapped by the replacement check:
 
    ```
