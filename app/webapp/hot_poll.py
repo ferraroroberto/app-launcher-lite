@@ -149,13 +149,17 @@ class HotPoll:
         *,
         pool: Optional[ThreadPoolExecutor] = None,
         mark_fresh: bool = True,
+        serve_stale: bool = True,
     ) -> None:
         """``mark_fresh=False`` serves a fresh payload unchanged; ``stale``
-        and ``age_seconds`` then ride only an answer that is stale."""
+        and ``age_seconds`` then ride only an answer that is stale.
+        ``serve_stale=False`` waits for the build however long it takes, for
+        a payload whose last good copy can be wrong rather than just old."""
         self.label = label
         self.deadline_s = DEADLINE_S if deadline_s is None else deadline_s
         self.pool = pool
         self.mark_fresh = mark_fresh
+        self.serve_stale = serve_stale
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._running: Optional["asyncio.Task[Built]"] = None
         self._running_steps: Optional[BuildSteps] = None
@@ -166,7 +170,7 @@ class HotPoll:
     async def get(self, build: Build) -> Dict[str, Any]:
         """The payload, fresh when a build lands within the deadline, else the last good one."""
         target = self._fresh(build)
-        if self._last is None:
+        if self._last is None or not self.serve_stale:
             return self._fresh_answer(await asyncio.shield(target))
         try:
             return self._fresh_answer(
@@ -322,14 +326,17 @@ def hot_poll(state: State, label: str) -> HotPoll:
     return polls[label]
 
 
-def session_poll(state: State, label: str, sid: str, *shape: Any) -> HotPoll:
+def session_poll(
+    state: State, label: str, sid: str, *shape: Any, serve_stale: bool = True
+) -> HotPoll:
     """The app's :class:`HotPoll` for one session's ``label`` poll.
 
     ``shape`` is the rest of what makes two requests the same answer (a
     transcript's cursor and page size), so only identical requests share a
     build or a stale payload. Builds run on :data:`SESSION_READS_POOL`, and a
     fresh answer is the payload unchanged. Past :data:`SESSION_POLLS_MAX`
-    keys, idle polls are dropped before a new one is made.
+    keys, idle polls are dropped before a new one is made. ``serve_stale``
+    is :class:`HotPoll`'s, fixed by the first call for a key.
     """
     polls: Optional[Dict[Tuple[Any, ...], HotPoll]] = getattr(state, "session_polls", None)
     if polls is None:
@@ -341,6 +348,9 @@ def session_poll(state: State, label: str, sid: str, *shape: Any) -> HotPoll:
         if len(polls) >= SESSION_POLLS_MAX:
             for idle_key in [k for k, p in polls.items() if p.idle()]:
                 del polls[idle_key]
-        poll = HotPoll(f"{label} {sid[:8]}", pool=SESSION_READS_POOL, mark_fresh=False)
+        poll = HotPoll(
+            f"{label} {sid[:8]}", pool=SESSION_READS_POOL, mark_fresh=False,
+            serve_stale=serve_stale,
+        )
         polls[key] = poll
     return poll
