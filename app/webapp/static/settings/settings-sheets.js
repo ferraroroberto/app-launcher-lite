@@ -356,11 +356,14 @@ function renderSkillsPreflight(preflight) {
     return;
   }
   const from = preflight.source === 'skills_dir' ? 'from the skills folder' : 'bundled';
-  const lines = preflight.skills.map(function (s) {
-    if (s.state === 'found') return s.name + ': found (' + from + ')';
-    return s.name + ': ' + s.state + (s.reason ? ', ' + s.reason : '');
+  // Skills that share a state and reason (a missing folder fails all four alike) read as one line.
+  const groups = [];
+  preflight.skills.forEach(function (s) {
+    const what = s.state === 'found' ? 'found (' + from + ')' : s.state + (s.reason ? ', ' + s.reason : '');
+    const same = groups.find(function (g) { return g.what === what; });
+    if (same) same.names.push(s.name); else groups.push({ what: what, names: [s.name] });
   });
-  out.textContent = lines.join('. ') + '.';
+  out.textContent = groups.map(function (g) { return g.names.join(', ') + ': ' + g.what; }).join('. ') + '.';
 }
 
 function renderChiefFields(cfg) {
