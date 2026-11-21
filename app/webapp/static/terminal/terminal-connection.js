@@ -157,12 +157,15 @@ export function flushRepaintBatch(terminal) {
   });
 }
 
-function termWsUrl(sid, terminalToken) {
+function termWsUrl(sid, terminalToken, isMirror) {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const params = new URLSearchParams();
   const bearerToken = readToken();
   if (bearerToken) params.set('token', bearerToken);
   if (terminalToken) params.set('tt', terminalToken);
+  // Only the PC mirror window declares role=pc (it never sizes the PTY);
+  // the proxy treats every other client, loopback or not, as the sizer.
+  if (isMirror) params.set('role', 'pc');
   const query = params.toString();
   return proto + '//' + location.host + sessionRoute(sid, '/ws' + (query ? '?' + query : ''));
 }
@@ -223,7 +226,7 @@ export function connectTerminalWs(terminal) {
       terminal.ws.close();
     } catch (_) { /* dying socket; replacement continues */ }
   }
-  const ws = new WebSocket(termWsUrl(terminal.sid, terminal.tt));
+  const ws = new WebSocket(termWsUrl(terminal.sid, terminal.tt, terminal.mirror));
   terminal.ws = ws;
   // Inline agents only: a fresh stream, so no carry from the old
   // socket's last message. A full-screen agent paints from the host's VT
