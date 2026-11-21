@@ -213,6 +213,16 @@ def _assert_dialog_title_has_no_ring_but_tabbed_control_does(page: Page) -> None
         expect(title).to_have_css("outline-style", "none")
         page.keyboard.press("Tab")
         control = page.locator(f"#{dialog_id} :focus")
+        if control.count() == 0:
+            # macOS WebKit leaves buttons out of the Tab order unless the
+            # "Tab highlights each item" setting is on, so a dialog whose
+            # only controls are buttons takes the Tab into the browser chrome.
+            # Focusing the first control by script right after the key keeps
+            # the keyboard as the last input, so :focus-visible still decides
+            # whether the ring draws.
+            page.evaluate(
+                f"document.querySelector('#{dialog_id} button:not([disabled])').focus()"
+            )
         expect(control).to_have_count(1)
         expect(control).not_to_have_id(title_id)
         expect(control).to_have_css("outline-style", "solid")
