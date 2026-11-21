@@ -112,6 +112,14 @@ class TestNoScriptActsOnADefaultPort:
         assert 'Join-Path $PSScriptRoot "tray_lifecycle.ps1"' in text
         assert ".claude" not in text
 
+    def test_the_named_tunnel_serves_the_configured_webapp_port(self, side_by_side, monkeypatch):
+        from scripts import run_named_tunnel
+
+        monkeypatch.delenv("WEBAPP_PORT", raising=False)
+        assert run_named_tunnel.tunnel_port() == _FREE_WEBAPP
+        monkeypatch.setenv("WEBAPP_PORT", "19001")
+        assert run_named_tunnel.tunnel_port() == 19001
+
     def test_tray_bat_reclaims_only_the_resolved_webapp_port(self):
         text = (_REPO_ROOT / "tray.bat").read_text(encoding="utf-8")
         assert "-m scripts.webapp_port" in text
