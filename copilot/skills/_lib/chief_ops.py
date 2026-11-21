@@ -98,6 +98,7 @@ from chief import (  # noqa: E402
     lite_file,
     lite_lanes,
     lite_merge,
+    lite_rerun,
     lite_sweep,
     lite_verify,
     plan_cli,
@@ -115,6 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
     lite_file.add_parser(sub)
     lite_verify.add_parser(sub)
     lite_merge.add_parser(sub)
+    lite_rerun.add_parser(sub)
     lite_sweep.add_parser(sub)
     drain.add_parsers(sub)
     lite_compact.add_compact_parsers(sub)
