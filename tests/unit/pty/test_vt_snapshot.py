@@ -248,3 +248,43 @@ def test_feed_non_private_device_status_still_delegates():
     vt.feed("\x1b[5n")  # DSR mode 5, not private — pyte's default is a no-op
     vt.feed("still works\r\n")
     assert "still works" in vt.render()
+
+
+def test_a_reconnect_renders_only_the_history_rows_added_since_the_last(monkeypatch):
+    """A long session's history is thousands of rows, and rendering each one
+    on every reconnect is what made reopening its terminal slow. A row is
+    rendered once while it stays in history and at that width: the output is
+    byte-identical to a fresh mirror's, including after a resize and after the
+    agent erases the scrollback."""
+    from src import vt_snapshot
+
+    lines = [f"\x1b[3{i % 8}mline {i:05d}\x1b[0m tail {i * 7}\r\n" for i in range(700)]
+    vt = VtSnapshot(10, 40, history=500)
+    for line in lines[:600]:
+        vt.feed(line)
+    vt.render()
+
+    rendered = []
+    real_row = vt_snapshot._render_row
+    monkeypatch.setattr(
+        vt_snapshot, "_render_row", lambda row, cols: rendered.append(1) or real_row(row, cols)
+    )
+    for line in lines[600:650]:
+        vt.feed(line)
+    again = vt.render()
+    # 50 new history rows plus the 10 frame rows, not the 500 in history.
+    assert len(rendered) == 60
+
+    fresh = VtSnapshot(10, 40, history=500)
+    for line in lines[:650]:
+        fresh.feed(line)
+    assert again == fresh.render()
+
+    for mirror in (vt, fresh):
+        mirror.resize(8, 30)
+        for line in lines[650:]:
+            mirror.feed(line)
+    assert vt.render() == fresh.render()
+    for mirror in (vt, fresh):
+        mirror.feed("\x1b[3J")
+    assert vt.render() == fresh.render()

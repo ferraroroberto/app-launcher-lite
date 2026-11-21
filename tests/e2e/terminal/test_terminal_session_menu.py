@@ -77,6 +77,12 @@ _WS_FRAME_PROBE = """
 })();
 """
 
+# The connect's frames have arrived and the repaint batch has written them.
+_FRAMES_WRITTEN = (
+    "() => window.__wsFrames > 0 && !!window.__term()"
+    " && window.__term().element.style.visibility !== 'hidden'"
+)
+
 # Settle past the pill's once-per-frame coalescing before reading it.
 _TWO_FRAMES = (
     "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
@@ -98,8 +104,9 @@ def _open_overlay(page: Page, base_url: str, sid: str) -> None:
 def _leg_latest_pill_shows_only_when_scrolled_up(authed_page: Page) -> None:
     authed_page.evaluate(_LIVE_STATE_SETUP)
     authed_page.wait_for_function("() => !!window.__term()", timeout=OVERLAY_OPEN_MS)
-    # Only write scrollback once the connect's clear + replay frame is in.
-    authed_page.wait_for_function("() => window.__wsFrames > 0", timeout=OVERLAY_OPEN_MS)
+    # Only write once the connect's clear + replay frame is in and written:
+    # the repaint batch holds them until it reveals the canvas.
+    authed_page.wait_for_function(_FRAMES_WRITTEN, timeout=OVERLAY_OPEN_MS)
     authed_page.evaluate(_TWO_FRAMES)
     pill = authed_page.locator("#terminalLatest")
 

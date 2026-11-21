@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -84,6 +85,12 @@ LINE_CHARGE_CAP = 64 * 1024
 REQUEST_READ_CEILING = 16 * 1024 * 1024
 DEFAULT_LIMIT = 40
 MAX_LIMIT = 100
+# What one page's entries may weigh as JSON, whatever its turn count. A page
+# is cut to fewer turns, at a turn boundary, until it fits, so a tool-heavy
+# session's opening read stays small enough to paint at once on a phone;
+# older turns are one scroll away. A single newest turn heavier than this
+# still comes back whole: a page never holds less than one turn.
+PAGE_JSON_BUDGET = 80 * 1024
 
 # Entry kinds that count as a *conversation turn* for pagination — the
 # folded kinds ride along with whichever turns they sit between.
@@ -374,8 +381,51 @@ def _trim_to_turns(
     return collected, entries
 
 
+def _fit_json_budget(
+    collected: List[Line], entries: List[Entry], build: EntryBuilder, line_key: LineKey,
+) -> Tuple[List[Line], List[Entry]]:
+    """``(lines, entries)`` cut to the newest turns whose entries weigh at
+    most :data:`PAGE_JSON_BUDGET` as JSON, never fewer than one turn.
+
+    The weight counted for a turn is everything from that turn's entry to
+    the page's end, so the folded entries riding between turns are paid for
+    too. A page with no turn keeps its edge, as :func:`_trim_to_turns` does.
+    """
+    weights = [len(json.dumps(e, ensure_ascii=False)) for e in entries]
+    if sum(weights) <= PAGE_JSON_BUDGET:
+        return collected, entries
+    keep = 0
+    carried = 0
+    for e, weight in zip(reversed(entries), reversed(weights)):
+        carried += weight
+        if _is_turn(e):
+            if carried > PAGE_JSON_BUDGET and keep:
+                break
+            keep += 1
+    if keep == 0 or keep >= _turns(entries):
+        return collected, entries
+    collected, entries = _trim_to_turns(collected, entries, keep, False, build, line_key)
+    return collected, _inline_diffs(entries)
+
+
+def _weigh_page(
+    collected: List[Line], entries: List[Entry], build: EntryBuilder, line_key: LineKey,
+    fit_budget: bool,
+) -> Tuple[List[Line], List[Entry]]:
+    """A trimmed page's diff refs, then, with ``fit_budget``, its cut to
+    :data:`PAGE_JSON_BUDGET`. The page served to the chat is held to it; the
+    activity reader, which only needs the newest user message however heavy
+    the turns after it, is not. Diff refs come first: they need every call's
+    offset, and an inline diff is part of what the page weighs."""
+    entries = _inline_diffs(entries)
+    if not fit_budget:
+        return collected, entries
+    return _fit_json_budget(collected, entries, build, line_key)
+
+
 def _page(
-    path: Path, before: Optional[int], limit: int, build: EntryBuilder, line_key: LineKey
+    path: Path, before: Optional[int], limit: int, build: EntryBuilder, line_key: LineKey,
+    *, fit_budget: bool = False,
 ) -> Dict[str, Any]:
     """Assemble one page of entries ending at byte ``before``.
 
@@ -388,6 +438,7 @@ def _page(
     ``limit`` turns, and ``next_cursor`` is the offset of the oldest line it
     kept (``None`` once the file start is included). A page never opens
     inside a multi-line message, and a cut never splits one.
+    ``fit_budget``: see :func:`_weigh_page`.
     """
     size = path.stat().st_size
     at_eof = before is None or before > size
@@ -430,6 +481,7 @@ def _page(
         end = lines[0][0]
 
     collected, entries = _trim_to_turns(collected, build(collected), limit, start == 0, build, line_key)
+    collected, entries = _weigh_page(collected, entries, build, line_key, fit_budget)
     # The next page reads strictly before the oldest line this one kept;
     # None once that line is the file's first (an empty `collected` means an
     # empty file — the loop only exits without lines at offset 0).
@@ -449,8 +501,6 @@ def _page(
     # the region a live view re-renders and it needs a stable key per card to
     # carry an open disclosure across the rebuild. `entries` itself stays one
     # complete list — the page contract every other caller reads is unchanged.
-    # Diff refs are taken first: they need every call's offset.
-    _inline_diffs(entries)
     for e in entries:
         if not _is_turn(e) and not (at_eof and e.get("offset", -1) >= tail):
             e.pop("offset", None)
@@ -897,7 +947,7 @@ def transcript_page(
     transcript", which the caller establishes *before* calling.
     """
     build, line_key, tool_errors = _flavor(flavor)
-    page = _page(Path(str(path)), before, limit, build, line_key)
+    page = _page(Path(str(path)), before, limit, build, line_key, fit_budget=True)
     # A property of the harness, not of the page — but it travels with the
     # page because that is what the client has in hand when it decides
     # whether an unmarked tool call means "succeeded" or "nobody can tell".

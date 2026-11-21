@@ -110,6 +110,17 @@ class VtSnapshot:
         self._screen = _MutedQueryScreen(cols, rows, history=history)
         self._stream = pyte.Stream(self._screen)
         self._last_feed_error_at = 0.0
+        # Rendered history rows from the last render, by row identity. A row
+        # pyte has moved into history is never written again (its screen
+        # slot gets the next row object), so its text is reused until it
+        # leaves history. Each entry holds the row itself, so the id cannot
+        # be recycled for another row while the entry exists. Rendering 10,000
+        # history rows from scratch takes ~450 ms on the session-host's event
+        # loop; with the reuse a reconnect renders only the rows added since
+        # the last one.
+        self._row_texts: dict[int, tuple[object, str]] = {}
+        self._row_texts_cols = 0
+        self._render_lock = threading.Lock()
 
     def feed(self, chunk: str) -> None:
         """Feed one chunk of raw PTY output into the mirror.
@@ -166,9 +177,7 @@ class VtSnapshot:
             cols = self._screen.columns
             rows = self._screen.lines
             frame = self._render_frame_locked()
-        history_text = "".join(
-            _render_row(row, cols) + "\r\n" for row in history_rows
-        )
+        history_text = self._render_history(history_rows, cols)
         # Force the viewport clear via real linefeeds before the frame's
         # absolute-positioned paint ("conversation
         # beginning visible, a chunk in the middle missing, latest lines
@@ -189,6 +198,25 @@ class VtSnapshot:
         # every frame (the backward-compatible empty-history case).
         force_scroll = ("\r\n" * rows) if history_rows else ""
         return history_text + force_scroll + frame
+
+    def _render_history(self, history_rows: list, cols: int) -> str:
+        """The history rows as scrolling text, each reused from the last
+        render when that row was in it at this width."""
+        with self._render_lock:
+            known = self._row_texts if self._row_texts_cols == cols else {}
+            kept: dict[int, tuple[object, str]] = {}
+            parts: list[str] = []
+            for row in history_rows:
+                hit = known.get(id(row))
+                if hit is not None and hit[0] is row:
+                    text = hit[1]
+                else:
+                    text = _render_row(row, cols) + "\r\n"
+                kept[id(row)] = (row, text)
+                parts.append(text)
+            self._row_texts = kept
+            self._row_texts_cols = cols
+        return "".join(parts)
 
     def _render_frame_locked(self) -> str:
         """Render the current frame only. Caller must hold ``self._lock``."""

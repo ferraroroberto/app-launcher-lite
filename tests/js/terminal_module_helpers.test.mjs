@@ -82,4 +82,32 @@ const { beginRepaintBatch, connectTerminalWs } =
   assert.notEqual(terminal.ws, oldWs);
 }
 
+// The repaint batch reveals the canvas soon after the VT snapshot lands, not
+// on the long gap: a connect is the clear frame and the snapshot back to back,
+// so waiting 700 ms of silence after them only hid a frame already in hand.
+// Only the clear frame alone keeps waiting, as the host's repaint nudge may
+// still be on its way.
+{
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const written = [];
+  const term = {
+    element: { style: {} },
+    write(data, done) { written.push(data); if (done) done(); },
+    scrollToBottom() {},
+  };
+  const terminal = { sid: 'batch-sid', tt: '', ws: null, isFullscreen: true, term };
+  connectTerminalWs(terminal);
+  beginRepaintBatch(terminal);
+  terminal.ws.onmessage({ data: '\x1b[H\x1b[2J\x1b[3J' });
+  await sleep(250);
+  assert.ok(Array.isArray(terminal.batchBuf), 'a clear frame alone keeps the batch open');
+  assert.equal(written.length, 0);
+  terminal.ws.onmessage({ data: 'SNAPSHOT' });
+  await sleep(250);
+  assert.equal(terminal.batchBuf, null, 'the snapshot flushes on the short gap');
+  assert.deepEqual(written, ['\x1b[H\x1b[2J\x1b[3JSNAPSHOT']);
+  assert.equal(term.element.style.visibility, '', 'the canvas is shown again');
+  clearTimeout(terminal.batchTimer);
+}
+
 console.log('OK');
