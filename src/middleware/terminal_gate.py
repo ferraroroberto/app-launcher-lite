@@ -12,20 +12,26 @@ from src.middleware import trust
 from src.middleware.credentials import credential_accepted, credential_required
 from src.middleware.routes import terminal_guard_level
 
+SCREEN_PREFIX = "/api/screen/"
 
-def client_allowed(client_host: str, cfg: Any) -> bool:
+
+def client_allowed(client_host: str, cfg: Any, *, screen: bool = False) -> bool:
     """The one verdict on whether a client address may reach a terminal route.
 
     Loopback, the tailnet range and ``tailnet_allowlist`` always pass; a
     private-network address passes only when ``terminal_allow_private_lan``
-    is on. Every credential leg (bearer token, passkey) still applies after.
+    is on. The screen view shows the whole desktop, so with ``screen=True`` a
+    private address also needs ``screen_allow_private_lan``: the screen switch
+    alone never opens anything. Every credential leg (bearer token, passkey)
+    still applies after.
     """
     if trust.client_in_tailnet(client_host, getattr(cfg, "tailnet_allowlist", [])):
         return True
-    return bool(
-        getattr(cfg, "terminal_allow_private_lan", False)
-        and trust.client_in_private_lan(client_host)
-    )
+    if not getattr(cfg, "terminal_allow_private_lan", False):
+        return False
+    if screen and not getattr(cfg, "screen_allow_private_lan", False):
+        return False
+    return trust.client_in_private_lan(client_host)
 
 
 def terminal_http_gate(
@@ -46,26 +52,66 @@ def terminal_http_gate(
         )
     cfg = request.app.state.webapp_config
     client_host = request.client.host if request.client else ""
-    if not client_allowed(client_host, cfg):
+    screen = request.url.path.startswith(SCREEN_PREFIX)
+    if not client_allowed(client_host, cfg, screen=screen):
         return JSONResponse(
             status_code=403,
-            content={"detail": "terminal endpoints are Tailscale-only"},
+            content={
+                "detail": (
+                    "screen view is Tailscale-only" if screen
+                    else "terminal endpoints are Tailscale-only"
+                ),
+            },
         )
-    if level == "passkey" and WebAuthnGate.configured(cfg):
-        gate: WebAuthnGate = request.app.state.webauthn_gate
-        presented = request.headers.get("x-terminal-token") or (
-            request.query_params.get("tt", "")
-        )
-        if not gate.valid_terminal_token(presented):
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "passkey unlock required"},
-            )
+    if level == "passkey":
+        return _passkey_refusal(request, cfg)
     return None
 
 
+def _passkey_refusal(request: Request, cfg: Any) -> Optional[JSONResponse]:
+    """The 401 for a request with no valid passkey terminal token, or ``None``
+    when none is configured or the token holds."""
+    if not WebAuthnGate.configured(cfg):
+        return None
+    gate: WebAuthnGate = request.app.state.webauthn_gate
+    presented = request.headers.get("x-terminal-token") or (
+        request.query_params.get("tt", "")
+    )
+    if gate.valid_terminal_token(presented):
+        return None
+    return JSONResponse(status_code=401, content={"detail": "passkey unlock required"})
+
+
+def private_network_switch_gate(request: Request) -> Optional[JSONResponse]:
+    """Who may change the private-network switches (``POST /api/config``).
+
+    Turning one on widens who reaches the terminal and the screen, so the
+    switch itself must not be reachable through the widening: the PC itself,
+    or a client on the tailnet (``tailnet_allowlist`` included), with a
+    passkey token when one is configured. A private-network address does not
+    count here whatever the switch says, and neither does the public tunnel.
+    """
+    client_host = request.client.host if request.client else ""
+    if trust.is_pc_itself(client_host, request.headers):
+        return None
+    cfg = request.app.state.webapp_config
+    if trust.via_cloudflare(request.headers) or not trust.client_in_tailnet(
+        client_host, getattr(cfg, "tailnet_allowlist", []),
+    ):
+        return JSONResponse(
+            status_code=403,
+            content={
+                "detail": (
+                    "the private-network switches can only be changed on the "
+                    "PC itself or over Tailscale"
+                ),
+            },
+        )
+    return _passkey_refusal(request, cfg)
+
+
 def ws_terminal_gate(
-    websocket: WebSocket, *, label: str = "terminal",
+    websocket: WebSocket, *, label: str = "terminal", screen: bool = False,
 ) -> Optional[Tuple[int, str]]:
     """``(code, reason)`` to close a terminal-grade WebSocket with, or
     ``None`` when it may stream.
@@ -81,6 +127,7 @@ def ws_terminal_gate(
 
     ``label`` names the service in the closed-socket reason text
     (``"terminal"`` / ``"screen"``); the legs and close codes are shared.
+    ``screen`` applies :func:`client_allowed`'s extra screen switch.
     """
     cfg: Any = websocket.app.state.webapp_config
     client_host = websocket.client.host if websocket.client else ""
@@ -88,7 +135,7 @@ def ws_terminal_gate(
         return None
     if trust.via_cloudflare(websocket.headers):
         return 4403, f"{label} is Tailscale-only — blocked on the public tunnel"
-    if not client_allowed(client_host, cfg):
+    if not client_allowed(client_host, cfg, screen=screen):
         return 4403, f"{label} is Tailscale-only"
     if credential_required(cfg):
         presented = websocket.query_params.get("token", "").strip()
@@ -129,9 +176,9 @@ def terminal_reachability(request: Request) -> Dict[str, Any]:
             "reason": (
                 f"This connection ({client_host}) is not on your tailnet. "
                 "Open the launcher over your Tailscale URL, add this network "
-                "to tailnet_allowlist, or turn on terminal_allow_private_lan "
-                "(a trusted home or office network), in "
-                "config/webapp_config.json."
+                "to tailnet_allowlist, or turn on Allow private network "
+                "without Tailscale (a trusted home or office network) in "
+                "Settings › Terminal on the PC."
             ),
         }
     if trust.client_in_tailnet(client_host, getattr(cfg, "tailnet_allowlist", [])):

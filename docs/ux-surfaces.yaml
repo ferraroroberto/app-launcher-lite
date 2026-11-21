@@ -1581,7 +1581,13 @@ surfaces:
       - Terminal in This PC
     holds:
       - Terminal history in lines and the Large file limit in MB
+      - the switches Allow private network without Tailscale and Also allow screen view without Tailscale, each with a help line
       - Done
+    does:
+      - turning either switch on asks first, with a warning that names what it opens; turning it off saves at once
+      - a switch saves through the passkey unlock and works only on the PC itself or over Tailscale
+    states:
+      - the screen switch is off and dimmed while the private-network switch is off, and turns off with it
 
   # -------------------------------------------------------------------- keys
   - id: keys.swipe-row

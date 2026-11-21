@@ -241,6 +241,10 @@ class WebappConfig:
     # default: the bearer token and passkey still apply on top, but anything
     # else on that network can now reach the login.
     terminal_allow_private_lan: bool = False
+    # The screen view shows the whole desktop, so it has its own switch on top
+    # of the one above: a private address reaches it only with both on. Off by
+    # default; the gate ignores it while terminal_allow_private_lan is off.
+    screen_allow_private_lan: bool = False
     # Folders, besides a session's own, that an agent may send a file to the
     # Chat pane from: its outbox and Claude's SendUserFile. %VAR% and ~
     # expand, so a temp-dir root needs no machine path. Defaults to Claude's

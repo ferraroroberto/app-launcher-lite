@@ -115,7 +115,8 @@ There is no `.env`. Committed samples live next to each gitignored real file in 
 | `webapp_config.json` | `copilot_models` | `["gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "mai-code-2-flash"]` | Model ids the pickers offer. Edited here, read-only in the UI. |
 | `webapp_config.json` | `auth_token` | `""` | Bearer token required from non-loopback callers; empty means the gate is off. |
 | `webapp_config.json` | `tailnet_allowlist` | `[]` | Extra IPs/CIDRs allowed on terminal routes beyond loopback and the Tailscale range. |
-| `webapp_config.json` | `terminal_allow_private_lan` | `false` | Trust every private-network address on terminal routes (a PC with no Tailscale on a trusted LAN). |
+| `webapp_config.json` | `terminal_allow_private_lan` | `false` | Trust every private-network address on terminal routes (a PC with no Tailscale on a trusted LAN); Settings › Terminal has the switch. |
+| `webapp_config.json` | `screen_allow_private_lan` | `false` | Also trust them for the screen view; needs the row above on. |
 | `webapp_config.json` | `webauthn_rp_id` / `webauthn_origin` | `""` | Passkey relying party; both empty turns the passkey gate off. |
 
 ## Copilot models and flags

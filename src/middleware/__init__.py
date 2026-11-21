@@ -26,6 +26,7 @@ from src.middleware.routes import (
     terminal_guard_level,
 )
 from src.middleware.terminal_gate import (
+    private_network_switch_gate,
     terminal_http_gate,
     terminal_reachability,
     ws_terminal_gate,
@@ -52,6 +53,7 @@ __all__ = [
     "credential_required",
     "is_pc_itself",
     "is_webhook_hook_path",
+    "private_network_switch_gate",
     "terminal_guard_level",
     "terminal_http_gate",
     "terminal_reachability",

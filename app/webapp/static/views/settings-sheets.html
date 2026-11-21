@@ -423,6 +423,12 @@
             <input id="largeUploadMaxMb" type="number" class="input-native" aria-describedby="largeUploadMaxMbHelp" step="1" inputmode="numeric">
           </label>
           <p id="largeUploadMaxMbHelp" class="field-help">The biggest file Attach large file takes. It is stored on this PC for the agent to use by path, never read into its context.</p>
+          <div class="toggles">
+            <span class="switch-row"><span>Allow private network without Tailscale</span><button data-track="terminal.private-lan" type="button" id="privateLanToggle" class="toggle" role="switch" aria-checked="false" aria-label="Allow the private network without Tailscale" aria-describedby="privateLanHelp"><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+            <span class="switch-row"><span>Also allow screen view without Tailscale</span><button data-track="terminal.screen-private-lan" type="button" id="screenPrivateLanToggle" class="toggle" role="switch" aria-checked="false" aria-label="Also allow screen view without Tailscale" aria-describedby="screenPrivateLanHelp" disabled><span class="knob"></span><span class="toggle-label">OFF</span></button></span>
+          </div>
+          <p id="privateLanHelp" class="field-help">For a PC with no Tailscale whose phone joins over a trusted home or office network. Transcripts, the terminal and the other session views then work from any private address; the token and passkey still apply. Off by default. A narrower option is <code>tailnet_allowlist</code> with one subnet. Change it on the PC or over Tailscale.</p>
+          <p id="screenPrivateLanHelp" class="field-help">The screen view shows the whole desktop, terminals included. It has its own switch, which turns on only while the one above is on, and stays Tailscale-only otherwise.</p>
         </div>
         <div class="detail-actions">
           <button data-track="terminal.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>

@@ -348,6 +348,8 @@ export const els = {
   copilotEffort: document.getElementById('copilotEffort'),
   copilotContext: document.getElementById('copilotContext'),
   copilotAutopilot: document.getElementById('copilotAutopilot'),
+  privateLanToggle: document.getElementById('privateLanToggle'),
+  screenPrivateLanToggle: document.getElementById('screenPrivateLanToggle'),
   copilotRemote: document.getElementById('copilotRemote'),
   copilotRemoteState: document.getElementById('copilotRemoteState'),
   copilotModels: document.getElementById('copilotModels'),

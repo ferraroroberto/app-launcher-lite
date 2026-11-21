@@ -171,7 +171,7 @@ async def screen_ws(websocket: WebSocket) -> None:
     """Stream one monitor until the viewer goes away."""
     # Accept first, then gate, so the browser gets the close code and reason.
     await websocket.accept()
-    refusal = ws_terminal_gate(websocket, label="screen")
+    refusal = ws_terminal_gate(websocket, label="screen", screen=True)
     if refusal is not None:
         await websocket.close(code=refusal[0], reason=refusal[1])
         return
