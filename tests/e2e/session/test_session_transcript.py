@@ -501,6 +501,18 @@ def test_unavailable_reasons_are_distinct_sentences(authed_page: Page, base_url:
     _menu_item(authed_page, "Reload transcript").click()
     expect(state).to_have_text("Couldn’t read the transcript")
 
+    # A newest page that never answers (an error, or the wire giving up on a
+    # slow build) is a third sentence, never "nothing" either.
+    failing = re.compile(r".*/api/claude-code/sessions/" + _SID + r"/transcript(\?.*)?$")
+
+    def _fail(route) -> None:
+        route.fulfill(status=503, content_type="application/json", body='{"detail": "x"}')
+
+    authed_page.route(failing, _fail)
+    _menu_item(authed_page, "Reload transcript").click()
+    expect(state).to_have_text("Couldn’t load the transcript")
+    authed_page.unroute(failing, _fail)
+
     # The third outcome state exists only where it is true: a harness that
     # reports every failure leaves an unmarked call to mean "it worked", with
     # no caveat line cluttering every card.

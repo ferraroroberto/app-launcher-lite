@@ -63,6 +63,7 @@ import asyncio
 import functools
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any, Awaitable, Dict, List, Optional, Tuple
@@ -312,7 +313,16 @@ async def session_transcript(
         raise HTTPException(
             status_code=400, detail="pass either before or after, not both"
         )
-    poll = session_poll(request.app.state, "GET transcript", sid, before, after, size, limit, ob)
+    # The newest page is the chat's opening read and the one page whose
+    # bytes still change: its last good copy can be an empty page from when
+    # the session was new, shown as "Nothing in the transcript yet" over a
+    # long history, so it waits for its build while the chat says Loading.
+    # An older page is fixed bytes and a tail read is keyed on its own
+    # cursor, so their last good answers stay true.
+    poll = session_poll(
+        request.app.state, "GET transcript", sid, before, after, size, limit, ob,
+        serve_stale=before is not None or after is not None,
+    )
     return await poll.get(
         functools.partial(_build_transcript, cfg, sid, before, after, size, limit, ob)
     )
@@ -343,6 +353,7 @@ async def _build_transcript(
         if tail.get("available"):
             tail.update(await steps.run("outbox_fields", session_outbox_routes.outbox_fields, sid, ob))
         return tail
+    read_started = time.monotonic()
     page, refusal = await _read_or_unavailable(
         sid, agent, "transcript",
         steps.run("transcript_page", transcript_page, path, before=before, limit=limit, flavor=flavor),
@@ -350,9 +361,12 @@ async def _build_transcript(
     if refusal is not None:
         return refusal
     await steps.run("mark_automatic", mark_automatic, sid, page["entries"])
+    # Size and read time ride the line so a slow or empty page on a long
+    # session can be told apart from the logs alone.
     logger.info(
-        "ℹ️ transcript %s (%s) page: %d entries, source=%s, more=%s",
+        "ℹ️ transcript %s (%s) page: %d entries, source=%s, more=%s, size=%d, read=%.2fs",
         sid[:8], agent, len(page["entries"]), flavor, page["next_cursor"] is not None,
+        page["size"], time.monotonic() - read_started,
     )
     body = {
         "available": True,
