@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.webapp.routers import board_chief as chief_router
 from src.chief import pointer as chief_pointer
 from tests.api.chief._support import (
+    CHIEF_DIR,
     _chief_row,
     _chief_state_row,
     _recent_iso,
@@ -31,7 +32,7 @@ class TestReconcileChiefLabel:
             "kind": "pty",
             "label": "",
             "prompt_title": "",
-            "project_dir": "E:/automation/fleet-config-lite",
+            "project_dir": CHIEF_DIR,
             "alive": True,
         }
         row.update(extra)
@@ -39,7 +40,7 @@ class TestReconcileChiefLabel:
 
     def test_unlabelled_chief_prompt_in_fleet_config_gets_healed(self):
         row = self._unlabelled_row(prompt_title="/chief")
-        healed = chief_router._reconcile_chief_label(row, shared_name=None)
+        healed = chief_router._reconcile_chief_label(row, None, CHIEF_DIR)
         assert healed["label"] == "chief"
 
     def test_resumed_chief_healed_via_shared_name_despite_wrong_prompt(self):
@@ -47,38 +48,38 @@ class TestReconcileChiefLabel:
         first into the resumed PTY, never "/chief" — only shared_name (from
         Claude's own persisted identity) carries the signal."""
         row = self._unlabelled_row(prompt_title="ok restarted, check all is good")
-        healed = chief_router._reconcile_chief_label(row, shared_name="chief")
+        healed = chief_router._reconcile_chief_label(row, "chief", CHIEF_DIR)
         assert healed["label"] == "chief"
 
     def test_already_labelled_row_is_untouched(self):
         row = self._unlabelled_row(label="chief", prompt_title="whatever")
-        assert chief_router._reconcile_chief_label(row, shared_name=None) is row
+        assert chief_router._reconcile_chief_label(row, None, CHIEF_DIR) is row
 
     def test_wrong_prompt_title_and_shared_name_is_not_healed(self):
         row = self._unlabelled_row(prompt_title="/chief please help")
-        healed = chief_router._reconcile_chief_label(row, shared_name="fleet-config-lite")
+        healed = chief_router._reconcile_chief_label(row, "fleet-config-lite", CHIEF_DIR)
         assert healed["label"] == ""
 
     def test_wrong_project_dir_is_not_healed(self):
         row = self._unlabelled_row(
             prompt_title="/chief", project_dir="E:/automation/app-launcher"
         )
-        healed = chief_router._reconcile_chief_label(row, shared_name="chief")
+        healed = chief_router._reconcile_chief_label(row, "chief", CHIEF_DIR)
         assert healed["label"] == ""
 
     def test_remote_kind_is_not_healed(self):
         row = self._unlabelled_row(prompt_title="/chief", kind="remote")
-        healed = chief_router._reconcile_chief_label(row, shared_name="chief")
+        healed = chief_router._reconcile_chief_label(row, "chief", CHIEF_DIR)
         assert healed["label"] == ""
 
     def test_shared_name_match_is_case_insensitive(self):
         row = self._unlabelled_row(prompt_title="hi")
-        healed = chief_router._reconcile_chief_label(row, shared_name="Chief")
+        healed = chief_router._reconcile_chief_label(row, "Chief", CHIEF_DIR)
         assert healed["label"] == "chief"
 
     def test_source_dict_is_never_mutated(self):
         row = self._unlabelled_row(prompt_title="/chief")
-        healed = chief_router._reconcile_chief_label(row, shared_name=None)
+        healed = chief_router._reconcile_chief_label(row, None, CHIEF_DIR)
         assert healed is not row
         assert row["label"] == ""
 
@@ -93,17 +94,17 @@ class TestReconcileChiefLabel:
         row = self._unlabelled_row(
             prompt_title="can I compact now?", live_title="👑 chief"
         )
-        healed = chief_router._reconcile_chief_label(row, shared_name=None)
+        healed = chief_router._reconcile_chief_label(row, None, CHIEF_DIR)
         assert healed["label"] == "chief"
 
     def test_live_title_match_is_case_insensitive_and_tolerates_prefix(self):
         row = self._unlabelled_row(prompt_title="hi", live_title="🔥 CHIEF")
-        healed = chief_router._reconcile_chief_label(row, shared_name=None)
+        healed = chief_router._reconcile_chief_label(row, None, CHIEF_DIR)
         assert healed["label"] == "chief"
 
     def test_unrelated_live_title_is_not_healed(self):
         row = self._unlabelled_row(prompt_title="hi", live_title="fleet-config-lite")
-        healed = chief_router._reconcile_chief_label(row, shared_name=None)
+        healed = chief_router._reconcile_chief_label(row, None, CHIEF_DIR)
         assert healed["label"] == ""
 
 
@@ -116,7 +117,7 @@ class TestReconcileChiefLabels:
         live = [{
             "session_id": "manual-chief", "kind": "pty", "label": "",
             "prompt_title": "ok restarted, check all is good",
-            "project_dir": "E:/automation/fleet-config-lite", "alive": True,
+            "project_dir": CHIEF_DIR, "alive": True,
             "started_at": "2026-07-27T07:14:00Z",
         }]
         state_rows = {
@@ -125,16 +126,16 @@ class TestReconcileChiefLabels:
                 "name": "chief", "updated_at": "2026-07-27T07:14:05Z",
             },
         }
-        healed = chief_router._reconcile_chief_labels(live, state_rows)
+        healed = chief_router._reconcile_chief_labels(live, state_rows, CHIEF_DIR)
         assert healed[0]["label"] == "chief"
 
     def test_no_matching_state_row_leaves_label_empty(self):
         live = [{
             "session_id": "manual-chief", "kind": "pty", "label": "",
-            "prompt_title": "hi", "project_dir": "E:/automation/fleet-config-lite",
+            "prompt_title": "hi", "project_dir": CHIEF_DIR,
             "alive": True, "started_at": "2026-07-27T07:14:00Z",
         }]
-        healed = chief_router._reconcile_chief_labels(live, {})
+        healed = chief_router._reconcile_chief_labels(live, {}, CHIEF_DIR)
         assert healed[0]["label"] == ""
 
     async def test_writes_the_durable_pointer_itself_issue_796(self, tmp_path):
@@ -156,9 +157,10 @@ class TestReconcileChiefLabels:
         chief_router._reconcile_chief_labels(
             [_chief_row(
                 label="", name="fleet-config-lite", live_title="✳ chief",
-                project_dir="E:/automation/fleet-config-lite",
+                project_dir=CHIEF_DIR,
             )],
             rows,
+            CHIEF_DIR,
         )
         pending = [
             task for task in asyncio.all_tasks()

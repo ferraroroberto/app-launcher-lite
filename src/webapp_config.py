@@ -65,8 +65,8 @@ def _default_projects_dir() -> str:
 
 
 def _default_fleet_config_dir() -> str:
-    """Default to the sibling ``fleet-config-lite`` checkout next to this repo."""
-    return str(PROJECT_ROOT.parent / "fleet-config-lite")
+    """Default to this checkout's own ``copilot/`` tree (the chief, hooks and lane skills)."""
+    return str(PROJECT_ROOT / "copilot")
 
 
 def _default_sessions_state_file() -> str:
@@ -138,8 +138,8 @@ class WebappConfig:
     # `.claude/skills` (Copilot reads that folder too). Without the skills
     # dir the tab shows disabled, as Coding does without `projects_dir`.
     team_os_dir: str = field(default_factory=_default_team_os_dir)
-    # Root of the fleet-config checkout. The Board, sessions, Life OS conversations and
-    # the fleet-chief ensure path read their hooks, state and scripts from it.
+    # Root of the Copilot hooks/chief tree: this repo's own ``copilot/`` unless set. It is
+    # the chief's working folder, and the Board and owner checks load their helpers from it.
     fleet_config_dir: str = field(default_factory=_default_fleet_config_dir)
     # --- Board tab -----------------------------------
     # The sessions-state file written by fleet-config's session_state hook. The board

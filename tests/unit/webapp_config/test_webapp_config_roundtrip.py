@@ -28,6 +28,7 @@ from dataclasses import fields as dataclass_fields
 import pytest
 
 from src.webapp_config import (
+    PROJECT_ROOT,
     WebappConfig,
     load_webapp_config,
     save_webapp_config,
@@ -206,6 +207,18 @@ def test_legacy_claude_config_dir_key_loads_as_fleet_config_dir(tmp_path, caplog
     written = json.loads(target.read_text(encoding="utf-8"))
     assert written["fleet_config_dir"] == "D:/fleet"
     assert "claude_config_dir" not in written
+
+
+def test_an_empty_fleet_config_dir_means_this_repos_copilot_tree(tmp_path):
+    cfg = load_webapp_config(_write(tmp_path, {"fleet_config_dir": ""}))
+
+    assert cfg.fleet_config_dir == str(PROJECT_ROOT / "copilot")
+
+
+def test_an_explicit_fleet_config_dir_still_wins(tmp_path):
+    cfg = load_webapp_config(_write(tmp_path, {"fleet_config_dir": "D:/old/fleet-config-lite"}))
+
+    assert cfg.fleet_config_dir == "D:/old/fleet-config-lite"
 
 
 def test_new_fleet_config_dir_key_wins_over_the_legacy_one(tmp_path):

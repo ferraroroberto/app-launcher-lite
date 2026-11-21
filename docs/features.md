@@ -40,7 +40,7 @@ A kanban over four computed columns: **Backlog** (open GitLab issues across `git
 
 ## Settings
 
-- **Folders** — projects dir and ignore globs, apps scan root, mini-apps root, team-os dir, fleet-config-lite dir, documents the reading sheet may show.
+- **Folders** — projects dir and ignore globs, apps scan root, mini-apps root, team-os dir, Copilot dir (`fleet_config_dir`), documents the reading sheet may show.
 - **Board / GitLab** — group and host.
 - **Copilot** — the model list, the saved model, effort, context, autopilot and skip-permissions.
 - **Sessions** — open sessions in Chat, open in a new PC window, mirror window, terminal scrollback lines.
@@ -50,4 +50,4 @@ A kanban over four computed columns: **Backlog** (open GitLab issues across `git
 
 ## The chief
 
-The chief works: one long-lived Copilot session that answers in the Board chat, keeps a plan and a journal, raises questions for the owner, dispatches lanes, opens plain sessions and stops them. It needs fleet-config-lite's chief helpers beside this checkout. The Board shows its card, plan and answer sheet; [The chief](board.md#the-chief) describes each part. The doorbell rings an idle Copilot chief (composer keys verified on CLI 1.0.114); a queued `/compact` is `unknown`, and a lane needs `git` to reach GitLab without a prompt. See the README's Status section.
+The chief works: one long-lived Copilot session that answers in the Board chat, keeps a plan and a journal, raises questions for the owner, dispatches lanes, opens plain sessions and stops them. Its helpers and skill live in this repo's `copilot/` folder, where it runs. The Board shows its card, plan and answer sheet; [The chief](board.md#the-chief) describes each part. The doorbell rings an idle Copilot chief (composer keys verified on CLI 1.0.114); a queued `/compact` is `unknown`, and a lane needs `git` to reach GitLab without a prompt. See the README's Status section.

@@ -81,7 +81,7 @@ from app.webapp.routers.board_spawn import (
     dispatch_context,
     dispatch_effort,
 )
-from src import agents, audit, board, fleet_scope
+from src import agents, audit, board
 from src.board import (
     active_issue_claims,
     backlog_buckets,
@@ -247,7 +247,9 @@ async def _build_board_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[str
     github = forge.snapshot()
     live, live_error = live_read
 
-    live = board_chief._reconcile_chief_labels(live, state["rows"])
+    live = board_chief._reconcile_chief_labels(
+        live, state["rows"], cfg.fleet_config_dir
+    )
     # Claim owner liveness: an unreadable session list is None, so the
     # contract answers unknown rather than calling every owner dead.
     claim_states = await steps.run(
@@ -280,7 +282,7 @@ async def _build_board_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[str
     _mark_active_backlog(columns, active_issues["rows"], claim_states)
     bucket_sources = await steps.run(
         "read_plan_index", _read_bucket_sources,
-        Path(cfg.chief_plan_file), active_issues_file, cfg.fleet_config_dir)
+        Path(cfg.chief_plan_file), active_issues_file)
     buckets, owner_section = _place_backlog(
         columns, github, bucket_sources, active_issues["available"])
 
@@ -324,7 +326,7 @@ async def _build_board_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[str
 def _place_backlog(
     columns: Dict[str, Any],
     github: Dict[str, Any],
-    sources: Tuple[Dict[str, Any], bool, Optional[set]],
+    sources: Tuple[Dict[str, Any], bool],
     markers_available: bool,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Put every open issue in one bucket; return that section and the owner checks.
@@ -334,12 +336,13 @@ def _place_backlog(
     Waiting on you. Before the first GitHub fetch there is no partition, so
     the owner items keep the plain unmarked rule.
     """
-    plan_index, markers_missing, dormant_repos = sources
+    plan_index, markers_missing = sources
     records = [dict(row) for row in github.get("records") or []]
     buckets = backlog_buckets.classify(
         columns["backlog"], records, plan_index,
         markers_read=markers_available or markers_missing,
-        dormant_repos=dormant_repos,
+        # Lite has no dormant-repo switch, so none is dormant: a known answer.
+        dormant_repos=set(),
     )
     columns["backlog"] = columns["backlog"] + records
     owner_section = owner_checks.snapshot()
@@ -354,20 +357,14 @@ def _place_backlog(
 
 
 def _read_bucket_sources(
-    plan_file: Path, markers_file: Path, fleet_config_dir: str,
-) -> Tuple[Dict[str, Any], bool, Optional[set]]:
-    """The plan index, whether the marker file is simply absent, and the dormant repos.
+    plan_file: Path, markers_file: Path,
+) -> Tuple[Dict[str, Any], bool]:
+    """The plan index and whether the marker file is simply absent.
 
     An absent marker file means no issue is claimed, a known answer; a file
-    that is there but unreadable leaves every claim unknown. The dormant
-    repos are ``None`` when the fleet scope could not be read.
+    that is there but unreadable leaves every claim unknown.
     """
-    scope = fleet_scope.list_repos(fleet_config_dir)
-    dormant = (
-        {str(r["name"]).lower() for r in scope["repos"] if r["status"] == fleet_scope.DORMANT}
-        if scope["available"] else None
-    )
-    return chief_plan.read_plan_index(plan_file), not markers_file.exists(), dormant
+    return chief_plan.read_plan_index(plan_file), not markers_file.exists()
 
 
 @router.get("/api/board/chief-plan")

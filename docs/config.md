@@ -44,7 +44,7 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 | `apps_scan_root` | parent of this repo | Root the Apps-tab scan walks for launcher bats. Empty scans nothing; set it empty when another launcher install shares the PC. |
 | `mini_apps_root` | `""` | Optional folder of small helper bats; a scan lists each `.bat` directly inside it in the Apps tab's **Mini apps** group, autostart off. Empty hides the group. Read on the next webapp start. |
 | `team_os_dir` | sibling `../team-os` | Team OS checkout root (skills at `.claude/skills`). When that directory is missing the tab shows disabled. |
-| `fleet_config_dir` | sibling `../fleet-config-lite` | Root of the fleet-config-lite checkout the Board, sessions and the chief read. |
+| `fleet_config_dir` | this repo's `copilot/` | Folder with the Copilot hooks, chief helpers and chief skill. The chief runs in it; the Board, the active-issue claims and the owner checks load their helpers from it. Empty means the default, and a path wins, so a machine that still keeps a fleet-config-lite checkout can point here. |
 
 ### Board and GitLab
 

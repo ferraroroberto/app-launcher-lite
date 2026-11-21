@@ -8,6 +8,10 @@ from pathlib import Path
 
 from src.chief import pointer as chief_pointer
 
+# An existing folder that holds no chief helpers: the endpoint tests need the chief's
+# working folder to exist, and nothing there lets the mark or claim code run a script.
+CHIEF_DIR = str(Path(__file__).resolve().parent)
+
 
 def _chief_row(**extra):
     row = {
@@ -25,7 +29,7 @@ def _chief_row(**extra):
 def _chief_state_row(session_id, updated_at, **extra):
     row = {
         "launcher_session_id": session_id, "agent": "claude",
-        "name": "chief", "cwd": "E:/automation/fleet-config-lite",
+        "name": "chief", "cwd": CHIEF_DIR,
         "updated_at": updated_at,
     }
     row.update(extra)

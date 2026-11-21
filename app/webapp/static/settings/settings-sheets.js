@@ -295,7 +295,7 @@ const TEXT_FIELDS = [
   ['projectsDir', 'projects_dir', 'Projects folder', function () { return fetchApps(); }],
   ['appsScanRoot', 'apps_scan_root', 'Apps folder', null],
   ['teamOsDir', 'team_os_dir', 'Team OS folder', function () { return fetchSkills(); }],
-  ['fleetConfigDir', 'fleet_config_dir', 'fleet-config-lite folder', null],
+  ['fleetConfigDir', 'fleet_config_dir', 'Copilot folder', null],
   ['gitlabGroup', 'gitlab_group', 'GitLab group', null],
   ['gitlabHost', 'gitlab_host', 'GitLab host', null],
 ];
