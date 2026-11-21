@@ -72,7 +72,10 @@ class TestBatchLaunchersReadTheHelper:
             cwd=_REPO_ROOT, capture_output=True, text=True, check=True,
             creationflags=NO_WINDOW,
         )
-        assert out.stdout.strip() == str(resolve_webapp_port())
+        # The subprocess reads this checkout's real config, which the conftest
+        # fixture hides from in-process calls, so resolve against that same path.
+        real_config = _REPO_ROOT / "config" / "config.json"
+        assert out.stdout.strip() == str(resolve_webapp_port(real_config))
 
     def test_webapp_bat_has_no_literal_port_in_its_server_commands(self):
         text = (_REPO_ROOT / "webapp.bat").read_text(encoding="utf-8")
