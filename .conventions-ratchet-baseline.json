@@ -1,4 +1,11 @@
 {
   "version": 1,
-  "entries": []
+  "entries": [
+    {"key": "copilot/hooks/chief_inbox.py", "counts": {"must-use": 1}},
+    {"key": "copilot/hooks/session_state.py", "counts": {"must-use": 1}},
+    {"key": "copilot/scripts/copilot_probe.py", "counts": {"must-use": 1}},
+    {"key": "copilot/skills/_lib/fleet_core/hooks_state.py", "counts": {"must-use": 1}},
+    {"key": "copilot/skills/_lib/fleet_core/runtime_files.py", "counts": {"must-use": 2}},
+    {"key": "copilot/skills/e2e/classify_e2e.py", "counts": {"git-wrapper": 2}}
+  ]
 }

@@ -10,7 +10,7 @@ port         = ":8465"
 display_name = "App Launcher Lite"
 description  = "Copilot + GitLab edition of app-launcher: Coding · Apps · Jobs · Team OS · Board."
 shape        = "webapp-tray"
-extra_roots  = []
+extra_roots  = ["copilot"]
 # Contracts with the rest of the fleet (schema: fleet-config architecture/README.md).
 interfaces = [
   { name = "jobs", kind = "http", doc = "docs/jobs-tab.md" },
@@ -314,7 +314,8 @@ enabled = true
 enabled      = true
 baseline     = ".conventions-ratchet-baseline.json"
 rules        = ["no-window", "logging-not-print", "no-drive-path", "git-wrapper", "password-input-vendored", "nav-standalone-head", "login-lockout", "no-pwsh-stub", "subprocess-timeout", "browser-per-iteration", "state-literal", "state-set-repeat", "state-write"]
-git_wrappers = ["src/git_utils.py"]
+# copilot/skills/_lib/git_run.py is the Copilot side's own run_git; it sets GIT_OPTIONAL_LOCKS=0 too.
+git_wrappers = ["src/git_utils.py", "copilot/skills/_lib/git_run.py"]
 
 [[conventions_ratchet.must_use]]
 call   = ["requests.get", "requests.post", "requests.put", "requests.patch", "requests.delete", "requests.head", "requests.request"]
@@ -638,6 +639,12 @@ label  = "docs"
 tier   = "none"
 prefix = "scripts/"
 label  = "tooling/config"
+# The Copilot side (hooks, chief helpers, lane skills): the webapp never imports
+# it, and its own suite runs in the non-e2e phase.
+[[e2e.rule]]
+tier   = "none"
+prefix = "copilot/"
+label  = "copilot-side"
 [[e2e.rule]]
 tier   = "none"
 prefix = "config/"

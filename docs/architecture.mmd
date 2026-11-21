@@ -115,6 +115,8 @@ flowchart TB
     FCL["fleet-config-lite (sibling)\nCopilot hooks: ~/.copilot/hooks/state/\nsessions-state.json, active-issues.json;\n/issue-start, /issue-yolo skills"]
     TEAMOSREPO["team-os repo (sibling)\n.claude/skills"]
   end
+  COPILOTSIDE["copilot/ — the Copilot side\nhooks, chief helpers, lane skills\ncopied from fleet-config-lite (provenance.json);\nnot read by the webapp yet"]
+  COPILOTSIDE -.->|copy of| FCL
   SESSHOST --> COPILOT
   FORGE --> GLAB
   JOBS --> SCHTASKS
