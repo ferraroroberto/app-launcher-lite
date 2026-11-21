@@ -919,17 +919,13 @@ class SessionManager:
             raise OSError(f"Project directory not found: {project_dir}")
         session_id = uuid.uuid4().hex
         exe = command_for(agent)
-        # Stamped before the launch: the PowerShell hop can take seconds on a
-        # loaded box, and the agent's own start (what the transcript finder
-        # matches `started_at` against) happens inside it.
-        started_at = time.time()
         pid = launch_detached(directory, session_id, agent, exe, flags)
         session = RemoteSession(
             session_id=session_id,
             project_dir=str(directory),
             name=name,
             flags=flags,
-            started_at=started_at,
+            started_at=time.time(),
             pid=pid,
             agent=agent,
         )

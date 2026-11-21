@@ -81,6 +81,11 @@ _COPILOT_START_SLOP_SECONDS = 60
 # Copilot stamps `created_at` from its own clock, so allow it to read a hair
 # before the launcher's `started_at` without disqualifying the folder.
 _COPILOT_CLOCK_SKEW_SECONDS = 5
+# A detached session's `started_at` is stamped after its PowerShell launch
+# returns (the pid liveness check needs that), and Copilot starts inside the
+# launch, so its folder can predate `started_at` by up to the launch's own
+# timeout (`remote._DETACHED_SPAWN_TIMEOUT_S`, 30 s) plus the skew.
+_COPILOT_DETACHED_LAUNCH_SECONDS = 35
 # `workspace.yaml` is ~500 bytes. Read bounded anyway, like every reader here.
 _COPILOT_YAML_CAP_BYTES = 64 * 1024
 # `\r` is matched explicitly on both sides: `re.M`'s `$` stops before a `\n`
@@ -377,6 +382,11 @@ def find_copilot_transcript(session: Dict[str, Any]) -> Optional[Path]:
     started = _started_epoch(session)
     if not project_dir or started is None:
         return None
+    early_slop = (
+        _COPILOT_DETACHED_LAUNCH_SECONDS
+        if session.get("kind") == "remote"
+        else _COPILOT_CLOCK_SKEW_SECONDS
+    )
     try:
         workspaces = list(_COPILOT_STATE_DIR.glob("*/workspace.yaml"))
     except OSError:
@@ -388,7 +398,7 @@ def find_copilot_transcript(session: Dict[str, Any]) -> Optional[Path]:
         if created is None or cwd != project_dir:
             continue
         delta = created - started
-        if -_COPILOT_CLOCK_SKEW_SECONDS <= delta <= _COPILOT_START_SLOP_SECONDS:
+        if -early_slop <= delta <= _COPILOT_START_SLOP_SECONDS:
             matches.append(workspace.parent / "events.jsonl")
         if len(matches) > 1:
             return None
