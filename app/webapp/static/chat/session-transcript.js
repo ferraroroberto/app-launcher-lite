@@ -408,6 +408,9 @@ function applyLive(settled, pending, toolErrors, files) {
   view.pending = pending;
   view.pendingNodes = pending.length ? renderPending(pending, toolErrors, open) : [];
   view.entries = view.settled.concat(view.pending);
+  // The first read of a session nobody has prompted yet says "Nothing in the
+  // transcript yet"; that line has to go once a turn lands on a live tick.
+  if (view.entries.length) hideState();
   syncDecisionCards();
   syncAuto();
   syncLiveStep();
