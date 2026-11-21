@@ -43,6 +43,31 @@ class TestIssueStart:
         assert _spawn["kind"] == "pty" and _spawn["agent"] == "copilot"
         assert resp.json()["session"]["session_id"] == "spawned-1"
 
+    def test_a_missing_issue_skill_refuses_the_start_naming_it(
+        self, webapp_client, _bypass_gate, _spawn, tmp_path
+    ):
+        """A lane that has no /issue-start to run is refused, and nothing spawns."""
+        client, app, overrides = webapp_client
+        (overrides["tmp_projects_dir"] / "myrepo").mkdir()
+        own = tmp_path / "own-skills"
+        for name in ("issue-add", "issue-yolo", "issue-finish"):
+            (own / name).mkdir(parents=True)
+            (own / name / "SKILL.md").touch()
+        app.state.webapp_config.skills_dir = str(own)
+        resp = client.post(
+            "/api/board/issues/start",
+            json={"repo": "myrepo", "number": 42, "mode": "start"},
+        )
+        assert resp.status_code == 409
+        assert "missing skill issue-start" in resp.json()["detail"]
+        assert _spawn == {}
+        (own / "issue-start").mkdir()
+        (own / "issue-start" / "SKILL.md").touch()
+        assert client.post(
+            "/api/board/issues/start",
+            json={"repo": "myrepo", "number": 42, "mode": "start"},
+        ).status_code == 200
+
     def test_yolo_mode(self, webapp_client, _bypass_gate, _spawn):
         client, _, overrides = webapp_client
         (overrides["tmp_projects_dir"] / "myrepo").mkdir()
@@ -425,6 +450,9 @@ class TestChiefManagedMarking:
         repo = overrides["tmp_projects_dir"] / "copilot"
         (repo / "skills" / "_lib").mkdir(parents=True)
         (repo / "skills" / "_lib" / "chief_managed.py").touch()
+        for name in ("issue-add", "issue-start", "issue-yolo", "issue-finish"):
+            (repo / "skills" / name).mkdir()
+            (repo / "skills" / name / "SKILL.md").touch()
         app.state.webapp_config.fleet_config_dir = str(repo)
         return repo
 

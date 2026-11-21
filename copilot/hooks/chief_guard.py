@@ -82,6 +82,8 @@ SKILL_BLOCK_RE = re.compile(
     r'<skill-context name="(?P<name>[\w-]+)">\s*Base directory for this skill: (?P<base>[^\r\n]+)'
     r'.*?(?:\nARGUMENTS: (?P<args>[^\r\n]*)\r?\n)?</skill-context>', re.DOTALL)
 FRONTMATTER_RE = re.compile(r"\A---\r?\n.*?\r?\n---\r?\n", re.DOTALL)
+# The skills Lite's `skills_dir` setting may provide instead of the bundled copies.
+ISSUE_SKILLS = ("issue-add", "issue-start", "issue-yolo", "issue-finish")
 HANDOVER_FILENAME = "chief-handover.md"
 # The handover is prose the chief wrote for itself; past this it is truncated, newest kept.
 HANDOVER_MAX_CHARS = 24000
@@ -108,16 +110,29 @@ def chief_ops(*args: str) -> Optional[str]:
     return res.stdout
 
 
+def _folder_setting(key: str, default: Path) -> Path:
+    """A folder path Lite keeps in `webapp_config.json`, or `default` when it is empty or unreadable."""
+    try:
+        raw = json.loads(WEBAPP_CONFIG.read_text(encoding="utf-8")).get(key)
+    except FileNotFoundError:
+        return default
+    except (OSError, ValueError, AttributeError) as exc:
+        _log(f"could not read {key} from {WEBAPP_CONFIG} ({type(exc).__name__}); using {default}")
+        return default
+    return Path(raw.strip()).expanduser() if isinstance(raw, str) and raw.strip() else default
+
+
 def chief_dir() -> Path:
     """The folder the launcher starts the chief in: Lite's `fleet_config_dir`, else this `copilot/`."""
-    try:
-        raw = json.loads(WEBAPP_CONFIG.read_text(encoding="utf-8")).get("fleet_config_dir")
-    except FileNotFoundError:
-        return REPO
-    except (OSError, ValueError, AttributeError) as exc:
-        _log(f"could not read fleet_config_dir from {WEBAPP_CONFIG} ({type(exc).__name__}); using {REPO}")
-        return REPO
-    return Path(raw) if isinstance(raw, str) and raw.strip() else REPO
+    return _folder_setting("fleet_config_dir", REPO)
+
+
+def skill_dir_for(name: str) -> Path:
+    """Where a lane's `name` skill lives: Lite's `skills_dir` for the four issue skills when it is
+    set (the machine's own skills repo), else this checkout's bundled copy."""
+    bundled = REPO / "skills"
+    root = _folder_setting("skills_dir", bundled) if name in ISSUE_SKILLS else bundled
+    return root / name
 
 
 def _same_dir(a: Path, b: Path) -> bool:
@@ -261,9 +276,10 @@ def foreign_command(payload: Dict[str, Any]) -> Optional[str]:
 def lane_redirect(foreign: str) -> Dict[str, Any]:
     """The deny answer for a lane that reached for the full fleet, naming the skills it must use."""
     skills = (REPO / "skills").as_posix()
+    issue_skills = skill_dir_for("issue-start").parent.as_posix()
     why = (f"Refused: {foreign}. This is an app-launcher-lite lane on GitLab, and on a PC that also runs the "
            f"full fleet the skill text you were handed may be that fleet's GitHub one. Follow "
-           f"{skills}/issue-start/SKILL.md (or issue-yolo / issue-finish there) instead, use `glab` and the "
+           f"{issue_skills}/issue-start/SKILL.md (or issue-yolo / issue-finish there) instead, use `glab` and the "
            f"helpers under {skills}/_lib, and send no completion notification.")
     return {"permissionDecision": "deny", "permissionDecisionReason": why,
             "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
@@ -297,12 +313,14 @@ def _same_dir(a: Path, b: Path) -> bool:
 
 
 def lite_skill_swap(prompt: str) -> Optional[str]:
-    """The prompt with a foreign copy of one of this checkout's skills replaced by lite's, else None."""
+    """The prompt with a foreign copy of one of lite's skills replaced by the one lite uses, else None.
+
+    For the four issue skills that is the `skills_dir` copy when the setting names one."""
     match = SKILL_BLOCK_RE.search(prompt)
     if not match:
         return None
     name = match.group("name")
-    skill_dir = REPO / "skills" / name
+    skill_dir = skill_dir_for(name)
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.is_file() or _same_dir(Path(match.group("base").strip()), skill_dir):
         return None

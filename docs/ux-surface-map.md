@@ -1432,12 +1432,14 @@ flowchart LR
   - the chief's model, context and effort, and a worker cap
   - a line naming a saved chief model the Copilot list no longer offers
   - a switch for counting only chief-dispatched sessions
+  - a Skills folder field, with a line saying whether each issue skill is found, missing or unknown
   - Automations - Doorbell, Auto-drain queue, Auto-compact with its threshold, Job failures, Job self-heal and Weekly proposals
   - Done
 - **Does:**
   - each switch saves when tapped and no restart is needed
   - model, context and effort apply when the chief next starts; Same as Coding agent follows that sheet
   - a chief model outside the Copilot list starts on Copilot's own pick, with a warning
+  - the Skills folder saves on blur; empty uses the bundled issue skills, and a lane start is refused while one is missing
 - **Leads to:** [Chief model menu](#settingschief-model-menu-chief-model-menu) (model)
 
 ### `settings.chief-model-menu` Chief model menu

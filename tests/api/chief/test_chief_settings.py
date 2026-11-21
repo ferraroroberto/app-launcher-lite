@@ -279,3 +279,29 @@ class TestChiefCapRaisedEvent:
         assert resp.status_code == 200
         assert resp.json()["settings"]["worker_cap"] == 6
         assert app.state.webapp_config.chief_worker_cap == 6
+
+
+class TestSkillsDir:
+    """The issue-skills folder: a plain Settings field, and the preflight both readers share."""
+
+    def test_saved_through_settings_and_reported_by_both_reads(self, webapp_client, _bypass_gate, tmp_path):
+        client, app, _ = webapp_client
+        own = tmp_path / "own"
+        (own / "issue-start").mkdir(parents=True)
+        (own / "issue-start" / "SKILL.md").touch()
+        resp = client.post("/api/config", json={"skills_dir": f"  {own}  "})
+        assert resp.status_code == 200, resp.text
+        assert app.state.webapp_config.skills_dir == str(own)
+        cfg = client.get("/api/config").json()
+        assert cfg["skills_dir"] == str(own)
+        chief = client.get("/api/board/chief/skills").json()
+        for body in (cfg["skills_preflight"], chief):
+            assert body["source"] == "skills_dir" and body["ready"] is False
+            states = {s["name"]: s["state"] for s in body["skills"]}
+            assert states == {"issue-add": "missing", "issue-start": "found",
+                              "issue-yolo": "missing", "issue-finish": "missing"}
+
+    def test_empty_uses_the_bundled_skills_which_are_all_found(self, webapp_client, _bypass_gate):
+        client, _, _ = webapp_client
+        body = client.get("/api/board/chief/skills").json()
+        assert body["source"] == "bundled" and body["ready"] is True

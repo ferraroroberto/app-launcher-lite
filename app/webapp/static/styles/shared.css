@@ -32,6 +32,8 @@
   color: var(--muted);
   line-height: 1.45;
 }
+/* The issue-skills status names folder paths, which have no break points of their own. */
+#skillsDirStatus { overflow-wrap: anywhere; }
 /* Launch presets (launch-presets-settings.js): flat hairline rows, the name
    an editable field over a muted model line, and a 44px kebab at the
    trailing edge; the form under the list adds or edits one. */

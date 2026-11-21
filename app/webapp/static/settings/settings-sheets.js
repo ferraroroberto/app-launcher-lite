@@ -296,6 +296,7 @@ const TEXT_FIELDS = [
   ['appsScanRoot', 'apps_scan_root', 'Apps folder', null],
   ['teamOsDir', 'team_os_dir', 'Team OS folder', function () { return fetchSkills(); }],
   ['fleetConfigDir', 'fleet_config_dir', 'Copilot folder', null],
+  ['skillsDir', 'skills_dir', 'Skills folder', null],
   ['gitlabGroup', 'gitlab_group', 'GitLab group', null],
   ['gitlabHost', 'gitlab_host', 'GitLab host', null],
 ];
@@ -345,7 +346,28 @@ let chiefModelCombo = null;
 
 // Default ("" — Copilot picks) plus the config's Copilot models; a stored
 // model since dropped from that list still shows as itself.
+// One line per issue skill: found (and from where), missing, or unknown with why.
+// Unknown is its own word, never shown as found.
+function renderSkillsPreflight(preflight) {
+  const out = els.skillsDirStatus;
+  if (!out) return;
+  if (!preflight || !Array.isArray(preflight.skills)) {
+    out.textContent = 'Issue skills: not checked.';
+    return;
+  }
+  const from = preflight.source === 'skills_dir' ? 'from the skills folder' : 'bundled';
+  // Skills that share a state and reason (a missing folder fails all four alike) read as one line.
+  const groups = [];
+  preflight.skills.forEach(function (s) {
+    const what = s.state === 'found' ? 'found (' + from + ')' : s.state + (s.reason ? ', ' + s.reason : '');
+    const same = groups.find(function (g) { return g.what === what; });
+    if (same) same.names.push(s.name); else groups.push({ what: what, names: [s.name] });
+  });
+  out.textContent = groups.map(function (g) { return g.names.join(', ') + ': ' + g.what; }).join('. ') + '.';
+}
+
 function renderChiefFields(cfg) {
+  renderSkillsPreflight(cfg.skills_preflight);
   if (chiefModelCombo) {
     const models = ((cfg.copilot || {}).models_available || []).slice();
     const current = cfg.chief_model || '';

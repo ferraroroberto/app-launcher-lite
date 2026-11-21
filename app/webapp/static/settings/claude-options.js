@@ -33,6 +33,7 @@ export async function fetchConfig(shouldApply) {
   setFieldValue(els.appsScanRoot, body.apps_scan_root || '');
   setFieldValue(els.teamOsDir, body.team_os_dir || '');
   setFieldValue(els.fleetConfigDir, body.fleet_config_dir || '');
+  setFieldValue(els.skillsDir, body.skills_dir || '');
   setFieldValue(els.gitlabGroup, body.gitlab_group || '');
   setFieldValue(els.gitlabHost, body.gitlab_host || '');
   renderSpeech(body);

@@ -218,6 +218,8 @@ export const els = {
   chiefAnswersDone: document.getElementById('chiefAnswersDone'),
 
   fleetConfigDir: document.getElementById('fleetConfigDir'),
+  skillsDir: document.getElementById('skillsDir'),
+  skillsDirStatus: document.getElementById('skillsDirStatus'),
 
   // Chat pane of the session overlay (transcript, mode)
   chatPane: document.getElementById('chatPane'),
