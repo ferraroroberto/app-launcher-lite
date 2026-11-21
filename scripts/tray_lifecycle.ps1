@@ -113,7 +113,10 @@ function Get-TrayProcessIds {
     if (-not $TrayMatch) { throw "detect/launch requires -TrayMatch" }
     return @(
         Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe' OR Name = 'python.exe'" |
-            Where-Object { (Test-UnderVenv $_.CommandLine) -and $_.CommandLine -match $TrayMatch } |
+            # The repo launcher that started this script has the venv path and the tray's launch
+            # args on its own command line; it is not a tray, and stopping it would end this run.
+            Where-Object { (Test-UnderVenv $_.CommandLine) -and $_.CommandLine -match $TrayMatch -and
+                $_.CommandLine -notlike '*src.launching.ps_script*' } |
             Select-Object -ExpandProperty ProcessId
     )
 }

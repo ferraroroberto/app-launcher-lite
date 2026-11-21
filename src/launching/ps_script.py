@@ -93,11 +93,15 @@ def _inherit(stream: object) -> object:
 
 def effective_policy(timeout: float = _PROBE_TIMEOUT_S) -> Optional[str]:
     """The effective execution policy, lower-cased, or ``None`` when not confirmed."""
+    # A PowerShell 7 parent hands down a PSModulePath that Windows PowerShell 5.1 cannot load
+    # Microsoft.PowerShell.Security from, so the probe would fail for want of its own module.
+    env = {k: v for k, v in os.environ.items() if k.upper() != "PSMODULEPATH"}
     try:
         done = subprocess.run(
             [POWERSHELL_EXE, "-NoProfile", "-NonInteractive", "-Command", "Get-ExecutionPolicy"],
             capture_output=True,
             text=True,
+            env=env,
             timeout=timeout,
             check=False,
             creationflags=NO_WINDOW,
@@ -107,7 +111,7 @@ def effective_policy(timeout: float = _PROBE_TIMEOUT_S) -> Optional[str]:
         return None
     value = done.stdout.strip().lower()
     if done.returncode != 0 or not value:
-        _log.warning("⚠️ execution policy not confirmed (exit %s)", done.returncode)
+        _log.warning("⚠️ execution policy not confirmed (exit %s: %s)", done.returncode, done.stderr.strip()[:200])
         return None
     return value
 

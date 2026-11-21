@@ -110,6 +110,20 @@ class TestUnderAllSigned:
         assert done.returncode == 0, done.stderr
         assert "cannot be loaded" not in done.stderr
 
+    @pytest.mark.parametrize("policy", ["AllSigned", "Unrestricted"])
+    def test_the_launcher_is_not_mistaken_for_the_tray_it_starts(self, policy: str) -> None:
+        """Its command line carries the venv path and the tray's launch args, which `detect`
+        matches on; reporting it as a tray makes `tray.bat` say "already running" and a
+        `--restart` stop the launcher that is running it."""
+        marker = f"psl-marker-{os.getpid()}"
+        done = _launch(
+            REPO_ROOT / "scripts" / "tray_lifecycle.ps1",
+            ["detect", "-VenvDir", str(Path(sys.executable).parent.parent), "-TrayMatch", marker, "-TrayLaunch", marker],
+            policy,
+        )
+        assert done.returncode == 0, done.stderr
+        assert done.stdout.strip() == ""
+
     def test_the_gate_sibling_scripts_load_as_text_under_allsigned(self, tmp_path: Path) -> None:
         """The two dot-sources verify-before-ship.ps1 runs, as the gate writes them."""
         gate_text = (REPO_ROOT / "scripts" / "verify-before-ship.ps1").read_text(encoding="utf-8")
@@ -155,3 +169,10 @@ class TestEffectivePolicy:
     def test_it_reads_the_process_scope_policy(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("PSExecutionPolicyPreference", "AllSigned")
         assert ps_script.effective_policy() == "allsigned"
+
+    @pytest.mark.windows_only
+    def test_a_powershell_7_module_path_does_not_break_the_probe(self) -> None:
+        """A pwsh 7 caller (an agent shell) passes its PSModulePath down to the 5.1 probe."""
+        if "powershell_7" not in os.environ.get("PSModulePath", "").lower():
+            pytest.skip("the test runner is not under a PowerShell 7 module path")
+        assert ps_script.effective_policy() is not None
