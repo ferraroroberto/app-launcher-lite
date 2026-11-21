@@ -36,7 +36,7 @@ Surfaces the skills of a sibling `team-os` checkout (`team_os_dir`, skills under
 
 ## Board
 
-A kanban over four computed columns: **Backlog** (open GitLab issues across `gitlab_group`), **Bot's turn** (live sessions working or idle), **Your turn** (sessions awaiting input — the number that matters) and **Done** (issues closed today). Session presence comes from the `:8466` session-host and semantic status from `sessions-state.json`, written by fleet-config-lite's Copilot hooks. GitLab is read through `glab` on demand only (the refresh button or a stale tab activation), never on the 5 s poll. A session card opens a drill-down drawer (last exchange plus a reply straight into the live PTY); a Backlog card whose project exists locally carries **Start** and **YOLO** buttons that launch `/issue-start N` and `/issue-yolo N`. Full reference: [Board](board.md).
+A kanban over four computed columns: **Backlog** (open GitLab issues across `gitlab_group`), **Bot's turn** (live sessions working or idle), **Your turn** (sessions awaiting input — the number that matters) and **Done** (issues closed today). Session presence comes from the `:8466` session-host and semantic status from `sessions-state.json`, written by the Copilot hooks in `copilot/`. GitLab is read through `glab` on demand only (the refresh button or a stale tab activation), never on the 5 s poll. A session card opens a drill-down drawer (last exchange plus a reply straight into the live PTY); a Backlog card whose project exists locally carries **Start** and **YOLO** buttons that launch `/issue-start N` and `/issue-yolo N`. Full reference: [Board](board.md).
 
 ## Settings
 
