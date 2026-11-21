@@ -22,7 +22,7 @@ REM  other apps' trays and any unrelated python processes are untouched.
 REM
 REM  The full detect -> kill -> reclaim -> start -> verify lifecycle lives in
 REM  the repo-local vendored scripts\tray_lifecycle.ps1 (lite fork: zero
-REM  external dependencies), shelled to with -File, NOT in
+REM  external dependencies), shelled to as a script file, NOT in
 REM  cmd-side `for /f` output capture or inline `powershell -Command "..."`.
 REM  Both cmd shapes have failed under non-interactive nested callers (Git Bash
 REM  -> `cmd /c "tray.bat --restart"`, or a finisher skill's Bash tool): detect
@@ -109,5 +109,14 @@ set "VERSION_URL="
 set "RESTART_ARG="
 if defined WANT_RESTART set "RESTART_ARG=-Restart"
 
+REM  Start the helper through the repo launcher: it reads the effective execution policy and, under
+REM  AllSigned / Restricted, loads the script as a ScriptBlock instead of `-File` (which refuses an
+REM  unsigned file), leaving the policy as the machine set it. Without the venv it is the plain -File.
+REM  No parenthesised if-block: a path holding ")" would end it early.
+if not exist "%TRAY_VENV%\Scripts\python.exe" goto :plain_start
+"%TRAY_VENV%\Scripts\python.exe" -m src.launching.ps_script "%TRAY_PS%" launch -AppName "%TRAY_APP_NAME%" -ScriptDir "%SCRIPT_DIR_ARG%" -VenvDir "%TRAY_VENV%" -TrayMatch "launcher\.py\s+tray" -Ports "%OWNED_PORTS%" -TrayLaunch "%TRAY_LAUNCH%" -VersionUrl "%VERSION_URL%" !RESTART_ARG!
+exit /b %ERRORLEVEL%
+
+:plain_start
 %PS% -NoProfile -NonInteractive -File "%TRAY_PS%" launch -AppName "%TRAY_APP_NAME%" -ScriptDir "%SCRIPT_DIR_ARG%" -VenvDir "%TRAY_VENV%" -TrayMatch "launcher\.py\s+tray" -Ports "%OWNED_PORTS%" -TrayLaunch "%TRAY_LAUNCH%" -VersionUrl "%VERSION_URL%" !RESTART_ARG!
 exit /b %ERRORLEVEL%

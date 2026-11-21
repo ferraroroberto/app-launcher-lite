@@ -82,6 +82,19 @@ C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts/verify-b
 tail -40 gate.log
 ```
 
+### Execution policy `AllSigned`
+
+`-File` refuses an unsigned script under `AllSigned` (or `Restricted`), and `-ExecutionPolicy Bypass` would weaken the machine's own control, so no repo script passes it. `src/launching/ps_script.py` is the one place a repo `.ps1` is started: `tray.bat`, the tray's port reclaim and `restart-session-host.ps1` go through it. It reads the effective policy; one that lets unsigned local files run (`Bypass`, `Unrestricted`, `RemoteSigned`) gets the plain `-File` launch, anything else (or a policy it could not read, reported as such) loads the script text and runs it as a ScriptBlock, which is not a file execution, so the policy stays as set. On that route `$PSScriptRoot` is rewritten to the script's folder, and the gate dot-sources its sibling scripts as text for the same reason.
+
+To run the gate under `AllSigned`, for this one process tree only (the machine and user policy are never touched):
+
+```powershell
+$env:PSExecutionPolicyPreference = "AllSigned"
+.\.venv\Scripts\python.exe -m src.launching.ps_script scripts\verify-before-ship.ps1 > gate.log 2>&1; echo "exit=$?"
+```
+
+A ScriptBlock gate has no script path of its own, so the shared box load lock is not taken: the gate prints `box load lock NOT CONFIRMED` and runs unlocked. Every other stage runs.
+
 ### What the disposable instance isolates
 
 - A tray on `:8465` may be running or not. Autoboot picks a free port for its own webapp and always spawns its own disposable session-host on another free port, never the live `:8466`, whose sessions are real Copilot PTYs. The tray is left untouched.

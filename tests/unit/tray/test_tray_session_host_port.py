@@ -86,11 +86,12 @@ class TestStopSessionHostUsesConfiguredPort:
         tray_dir.mkdir(parents=True)
         (tray_dir / "tray_lifecycle.ps1").write_text("", encoding="utf-8")
         monkeypatch.setenv("USERPROFILE", str(tmp_path))
-        run = MagicMock(return_value=SimpleNamespace(returncode=0))
-        monkeypatch.setattr(tray_mod.subprocess, "run", run)
+        run = MagicMock(return_value=0)
+        monkeypatch.setattr(tray_mod, "run_script", run)
 
         tray_mod.TrayApp._stop_session_host(None)
 
         assert run.called
-        cmd = run.call_args.args[0]
-        assert str(_custom_port) in cmd
+        assert run.call_args.args[0].name == "tray_lifecycle.ps1"
+        args = run.call_args.args[1]
+        assert args[0] == "reclaim" and str(_custom_port) in args
