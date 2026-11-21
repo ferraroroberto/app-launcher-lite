@@ -88,3 +88,4 @@ webapp/e2e-failures.jsonl
 .launcher-tmp/
 # Visual-proof store (fleet-config ui_proof): screenshots of a running app, never tracked
 .proof/
+webapp/progress-totals.json

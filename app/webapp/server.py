@@ -42,6 +42,8 @@ full per-family surface.  Top-level families:
                  GET  /api/claude-code/changes/{id}/diff  → one file's unified diff
                  POST /api/claude-code/folder/{id}        → open in Explorer
 
+    progress     GET  /api/progress            → History sheet: lines (git), MRs and issues (GitLab), cached
+
     jobs         /api/jobs/*                   → Jobs tab (~30 routes)
 
     team_os      /api/team-os/*                → Team OS tab
@@ -82,6 +84,7 @@ from app.webapp.routers import (
     documents,
     jobs,
     misc,
+    progress,
     session_folder_trust,
     session_screen,
     session_transcript,
@@ -535,6 +538,7 @@ def create_app() -> FastAPI:
     app.include_router(session_folder_trust.router)
     app.include_router(desktop_screen.router)
     app.include_router(board.router)
+    app.include_router(progress.router)
     app.include_router(team_os.router)
     app.include_router(speech.router)
     app.include_router(webauthn.router)

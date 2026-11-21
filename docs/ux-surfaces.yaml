@@ -294,7 +294,7 @@ surfaces:
       - the second card on the Code tab, closed by default
     holds:
       - the launch toolbar, with a launch preset dropdown when a preset is saved
-      - Sync all and Refresh for the git check
+      - History, Sync all and Refresh for the git check
       - a filter box with a favorites toggle
       - one row per project folder, with its git flag
       - the time of the last git check
@@ -303,6 +303,7 @@ surfaces:
       - a preset picked in the toolbar launches it on that preset's model, effort and context
       - Refresh fetches every remote and re-reads branch, changes and ahead or behind
       - Sync all fast-forwards every clean project that is only behind
+      - History opens the History sheet
     states:
       - empty - No projects found, with an Open Settings action that opens the Folders sheet
       - filtered to nothing - No projects match the filter, with Clear filter
@@ -314,6 +315,8 @@ surfaces:
         via: preset dropdown
       - to: code.git-sync-sheet
         via: Sync all
+      - to: code.history-sheet
+        via: History
       - to: settings.folders
         via: Open Settings
       - to: terminal.overlay
@@ -357,6 +360,30 @@ surfaces:
       - Done
     does:
       - Done closes the sheet
+
+  - id: code.history-sheet
+    area: code
+    title: History sheet
+    root: data-surface
+    reach:
+      - History in the Projects card toolbar
+    holds:
+      - a day, week or month grouping and a range of 30 days, 90 days, 6 months or a custom pair of days
+      - tiles for lines added and removed, merge requests merged and issues opened and closed, each with a chart
+      - a per-project table sortable by column
+      - the data sources, each with its age, and the projects skipped for having no GitLab remote
+      - Refresh and Done
+    does:
+      - opens on the saved figures at once, however old, and makes no git or GitLab call
+      - Refresh re-reads local git and GitLab for every project, with a toast while it runs, then updates in place
+      - a column header sorts the project table
+      - Done or the header close closes the sheet
+    states:
+      - loading - Reading the history, until the first answer
+      - error - Could not read the history, with Retry, when no figure has loaded yet
+      - stale - the last figures stay under a stale line when a later read fails
+      - a source that was never read shows unknown, one whose last read failed shows stale, a project with no GitLab remote shows skipped; none of them is drawn as zero
+      - a GitLab read that filled a page of 100 says older days may be incomplete
 
   - id: code.changes-overlay
     area: code

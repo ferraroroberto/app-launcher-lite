@@ -55,6 +55,7 @@ flowchart TB
       R_JOBS["jobs.py + jobs_run_store_routes.py\n+ jobs_webhook_routes.py + jobs_outbox_routes.py\n/api/jobs/* (Jobs tab)"]
       R_TEAMOS["team_os.py — /api/team-os/* (Team OS tab)\nskills from team_os_dir launched as Copilot sessions"]
       R_BOARD["board.py — /api/board (Board tab), issue start, file issue\n+ board_chief.py (chief ensure/settings)\n+ board_spawn.py (shared spawn-then-type, Copilot flags)\n+ board_owner.py (owner-check answers)"]
+      R_PROGRESS["progress.py — /api/progress\nHistory sheet: lines from local git, MRs and issues from GitLab, cached"]
       R_SPEECH["speech.py — /api/transcribe, /api/speech/test\ndictation proxy to an OpenAI-shaped endpoint"]
       R_WEBAUTHN["webauthn.py — passkey ceremonies"]
       R_USAGE["src/usage_log.py (vendored) — /api/usage\nlocal view/tap log"]
@@ -99,6 +100,7 @@ flowchart TB
   R_TEAMOS --> SESSCLIENT
   R_BOARD --> BOARD
   R_BOARD --> FORGE
+  R_PROGRESS --> FORGE
   R_BOARD --> CHIEF
   R_JOBS --> JOBS
   R_CONFIG --> CONFIG
