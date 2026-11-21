@@ -238,6 +238,7 @@ surfaces:
     holds:
       - the chief's row first, running or stopped
       - one row per session this launcher started, with an avatar, a one-line title and a status line
+      - on a Copilot row whose screen shows its AI credits, the figure beside the age
       - a kebab on every row
     does:
       - a row's tap opens the session in the terminal overlay, or in Chat when Open in Chat is on
@@ -440,6 +441,7 @@ surfaces:
       - a session with no transcript reader offers no Chat
       - the model chip hides when the model is not known
       - the context ring hides when the agent's screen shows no context figure, as on a Copilot session too narrow for its status line
+      - a Copilot session whose footer shows its AI credits gets a label beside the ring, such as 9% · 5.6 AIC
     phone: covers the page
     desktop: docks beside the session list in the wide layout
     links:
@@ -447,6 +449,8 @@ surfaces:
         via: Terminal mode
       - to: terminal.model-sheet
         via: model chip
+      - to: terminal.context-sheet
+        via: context ring
       - to: chat.overlay
         via: Chat mode
       - to: terminal.session-menu
@@ -490,6 +494,18 @@ surfaces:
         via: Changed files
       - to: chrome.confirm-dialog
         via: Stop and kill
+
+  - id: terminal.context-sheet
+    area: terminal
+    title: Session usage sheet
+    root: data-surface
+    reach:
+      - the context ring in the session view's bar
+    holds:
+      - the context window used, as a percentage
+      - the AI credits used this session, only when a Copilot footer shows them
+    does:
+      - Done closes
 
   - id: terminal.model-sheet
     area: terminal

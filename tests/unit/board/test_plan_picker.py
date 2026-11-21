@@ -456,22 +456,22 @@ def test_the_context_route_serves_the_footers_percent(picker_client, tmp_path):
     client, _, _, _ = picker_client
     capture = tmp_path / "s1.transcript"
     _write_capture(capture, _footer_screen(FOOTER))
-    assert _get_context(client).json() == {"available": True, "percent": 27, "reason": None}
+    assert _get_context(client).json() == {"available": True, "percent": 27, "ai_credits": None, "reason": None}
     _write_capture(capture, _footer_screen(FOOTER_AFTER_COMPACT))
     assert _get_context(client).json() == {
-        "available": True, "percent": None, "reason": "not_showing",
+        "available": True, "percent": None, "ai_credits": None, "reason": "not_showing",
     }
 
 
 def test_the_context_route_says_why_there_is_no_number(picker_client):
     client, session, _, _ = picker_client
     assert _get_context(client).json() == {
-        "available": False, "percent": None, "reason": "no_screen",
+        "available": False, "percent": None, "ai_credits": None, "reason": "no_screen",
     }
     for live, reason in ((_live(kind="remote"), "detached"), (_live(agent="codex"), "unsupported_agent")):
         session.list_sessions.return_value = [live]
         assert _get_context(client).json() == {
-            "available": False, "percent": None, "reason": reason,
+            "available": False, "percent": None, "ai_credits": None, "reason": reason,
         }
     session.list_sessions.return_value = []
     assert _get_context(client).json()["reason"] == "session_not_found"

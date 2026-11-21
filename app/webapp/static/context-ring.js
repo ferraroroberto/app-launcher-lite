@@ -2,7 +2,10 @@
  *
  * How full the open session's context window is, as a ring whose border
  * fills with the percentage, just before the Terminal ⇄ Chat toggle. A tap
- * toasts the number. The value is the one Claude Code itself reports: the
+ * opens the context sheet. A Copilot session whose footer shows the AI
+ * credits it has spent gets them in a quiet label beside the ring
+ * ("9% · 5.6 AIC") and as a second line on the sheet; without the figure,
+ * nothing is drawn for it, never a zero. The value is the one Claude Code itself reports: the
  * server reads the fleet statusline's `NN%c` off the session's terminal
  * screen (GET /api/claude-code/sessions/{sid}/context, the same screen read
  * as Chat's plan picker). Nothing on disk names a context-window size, so
@@ -20,8 +23,8 @@
  */
 
 import { els, state } from './state.js';
-import { jsonApi, sessionRoute, toast } from './api.js';
-import { usageTier } from './shared/format.js';
+import { jsonApi, sessionRoute } from './api.js';
+import { fmtCredits, usageTier } from './shared/format.js';
 import { bindLongPressHint } from './long-press-hint.js';
 
 const CONTEXT_POLL_MS = 10000;
@@ -55,14 +58,17 @@ function pollAllowed() {
   return ringAllowed(viewSession()) && document.visibilityState === 'visible';
 }
 
-function render(percent) {
+function render(percent, credits) {
   const btn = els.contextRing;
   if (!btn) return;
   if (typeof percent !== 'number' || !isFinite(percent)) {
     btn.hidden = true;
     delete btn.dataset.percent;
+    delete btn.dataset.credits;
+    if (els.contextRingLabel) els.contextRingLabel.hidden = true;
     return;
   }
+  const hasCredits = typeof credits === 'number' && isFinite(credits);
   const filled = Math.max(0, Math.min(100, percent));
   const dash = (RING_LENGTH * filled / 100).toFixed(2);
   btn.querySelector('.context-ring-fill')
@@ -71,7 +77,25 @@ function render(percent) {
   const tier = usageTier(percent);
   btn.dataset.tier = tier === 'warn' || tier === 'danger' ? tier : 'normal';
   btn.dataset.percent = String(percent);
-  const label = 'Context window ' + percent + '% used';
+  let label = 'Context window ' + percent + '% used';
+  if (hasCredits) {
+    btn.dataset.credits = String(credits);
+    label += ', ' + fmtCredits(credits, 2) + ' AI credits used';
+  } else {
+    delete btn.dataset.credits;
+  }
+  if (els.contextRingLabel) {
+    els.contextRingLabel.hidden = !hasCredits;
+    // The percent part drops on the narrowest phones (CSS): the ring and the
+    // sheet still carry it, and the credits are the part the bar has no other way to show.
+    els.contextRingLabel.replaceChildren();
+    if (hasCredits) {
+      const pct = document.createElement('span');
+      pct.className = 'context-ring-pct';
+      pct.textContent = percent + '% · ';
+      els.contextRingLabel.append(pct, fmtCredits(credits) + ' AIC');
+    }
+  }
   btn.title = label;
   btn.setAttribute('aria-label', label);
   btn.hidden = false;
@@ -107,7 +131,7 @@ async function tick() {
   if (inflightSid === sid) inflightSid = null;
   const now = viewSession();
   if (!now || now.session_id !== sid) return;   // the overlay moved on meanwhile
-  render(body && typeof body.percent === 'number' ? body.percent : null);
+  render(body && typeof body.percent === 'number' ? body.percent : null, body ? body.ai_credits : null);
   // A session that is gone won't come back: stop asking until it is reopened.
   if (body && body.reason === 'session_not_found') return;
   schedule();
@@ -130,13 +154,29 @@ export function syncContextRing() {
   if (pollAllowed()) tick();
 }
 
+// The sheet reads what the ring last drew, so the two never disagree.
+function openContextSheet() {
+  const pct = els.contextRing.dataset.percent;
+  if (pct == null) return;
+  const sheet = document.getElementById('contextSheet');
+  if (!sheet) return;
+  sheet.querySelector('#contextSheetContext dd').textContent = pct + '%';
+  const credits = els.contextRing.dataset.credits;
+  const row = document.getElementById('contextSheetCredits');
+  row.hidden = credits == null;
+  row.querySelector('dd').textContent = credits == null ? '' : fmtCredits(Number(credits), 2) + ' AIC';
+  if (!sheet.open) sheet.showModal();
+}
+
 export function wireContextRing() {
   if (!els.contextRing) return;
   bindLongPressHint(els.contextRing);
-  els.contextRing.addEventListener('click', function () {
-    const pct = els.contextRing.dataset.percent;
-    if (pct == null) return;
-    toast('Context window ' + pct + '% used');
-  });
+  els.contextRing.addEventListener('click', openContextSheet);
+  const sheet = document.getElementById('contextSheet');
+  if (sheet) {
+    const close = function () { if (sheet.open) sheet.close(); };
+    document.getElementById('contextSheetClose').addEventListener('click', close);
+    document.getElementById('contextSheetDone').addEventListener('click', close);
+  }
   document.addEventListener('visibilitychange', syncContextRing);
 }

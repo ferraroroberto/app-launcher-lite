@@ -103,6 +103,14 @@ export function pctText(pct) {
   return Math.round(pct) + '%';
 }
 
+// AI credits as a Copilot session's label and card show them: one decimal,
+// none from 100 up. The sheet passes `digits` 2 for the footer's own figure.
+export function fmtCredits(value, digits) {
+  if (typeof value !== 'number' || !isFinite(value)) return '';
+  if (digits != null) return value.toFixed(digits);
+  return value >= 100 ? String(Math.round(value)) : value.toFixed(1);
+}
+
 // Color tier for a usage percentage — same 60/80 thresholds as fleet-config's
 // statusline-command.ps1, so every surface agrees on what counts as "close".
 export function usageTier(pct) {

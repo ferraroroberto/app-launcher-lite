@@ -113,6 +113,18 @@ def test_the_context_ring_reads_copilots_status_line(copilot_client, screen, bod
     assert {k: got[k] for k in body} == body
 
 
+def test_the_context_route_carries_the_footers_ai_credits(copilot_client):
+    client, _, state = copilot_client
+    footer = IDLE[-3].replace("/ commands", "/ commands   Session: 5.62 AIC used")
+    state["screen"] = IDLE[:-3] + [footer, "", ""]
+    got = client.get("/api/claude-code/sessions/s1/context").json()
+    assert (got["percent"], got["ai_credits"]) == (3, 5.62)
+    # The footer without the figure, and a narrow terminal, carry none.
+    for screen in (IDLE, NARROW):
+        state["screen"] = screen
+        assert client.get("/api/claude-code/sessions/s1/context").json()["ai_credits"] is None
+
+
 def test_attached_sessions_name_copilots_logged_model(copilot_client):
     from src.board.sessions import attach_transcript_model
     _, _, state = copilot_client

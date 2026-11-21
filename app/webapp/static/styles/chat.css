@@ -164,6 +164,32 @@
 .context-ring[data-tier="warn"] { color: var(--attention); }
 .context-ring[data-tier="danger"] { color: var(--danger); }
 .context-ring-svg { width: 18px; height: 18px; pointer-events: none; }
+/* With credits the ring button grows a quiet "9% · 5.6 AIC" label; without
+   them it stays the 44px ring alone. The label is muted whatever the tier. */
+.context-ring[data-credits] { width: auto; gap: 6px; padding: 0 6px; }
+.context-ring-label {
+  color: var(--muted);
+  font-size: var(--font-caption);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.context-ring-label[hidden] { display: none; }
+/* At 360px the bar has no room for the percent beside the credits. */
+@media (max-width: 380px) { .context-ring-pct { display: none; } }
+.context-sheet-list { margin: 0 0 12px; padding: 0; }
+.context-sheet-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--hit-min);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--font-label);
+}
+.context-sheet-row:last-child { border-bottom: 0; }
+.context-sheet-row[hidden] { display: none; }
+.context-sheet-row dt { color: var(--muted); }
+.context-sheet-row dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 .context-ring-track,
 .context-ring-fill {
   fill: none;

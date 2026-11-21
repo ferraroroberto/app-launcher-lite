@@ -54,6 +54,7 @@ from src.board.transcript import (
 from src.clients import session as session_client
 from src.session_model import session_model_label
 from src.session_view import copilot_session, model_switch, plan_picker, resume_picker
+from src.session_view.copilot_credits import ai_credits_used
 from src.session_view.statusline_context import context_percent
 from src.session_view.vt_screen import read_vt_screen
 from src.webapp_config import WebappConfig
@@ -864,7 +865,9 @@ async def session_context(sid: str, request: Request) -> Dict[str, Any]:
     """How full the session's context window is, as its terminal's
     statusline shows it now (Tailscale + passkey).
 
-    ``{"available", "percent", "reason"}``. ``percent`` is an int only when
+    ``{"available", "percent", "ai_credits", "reason"}``. ``ai_credits`` is the
+    float a Copilot footer shows as ``Session: N AIC used``, and ``None`` for
+    any other agent or a footer without it. ``percent`` is an int only when
     the bottom-most statusline on screen shows ``NN%c`` (Claude) or Copilot's
     status line ends in ``(NN%)``; ``reason`` tells apart a session that is
     gone, an agent with neither, a detached one (no
@@ -896,10 +899,12 @@ async def _build_context(cfg: WebappConfig, sid: str, steps: BuildSteps) -> Dict
             _CONTEXT_SEEN.pop(sid, None)
         else:
             _log_screen(_CONTEXT_SEEN, "context", sid, reason)
-        return {"available": False, "percent": None, "reason": reason}
+        return {"available": False, "percent": None, "ai_credits": None, "reason": reason}
     percent = copilot_session.context_percent(lines) if copilot else context_percent(lines)
+    credits = ai_credits_used(lines) if copilot else None
     if percent is None:
         _log_screen(_CONTEXT_SEEN, "context", sid, "not showing")
-        return {"available": True, "percent": None, "reason": "not_showing"}
-    _log_screen(_CONTEXT_SEEN, "context", sid, "showing", f"{percent}%")
-    return {"available": True, "percent": percent, "reason": None}
+        return {"available": True, "percent": None, "ai_credits": credits, "reason": "not_showing"}
+    detail = f"{percent}%" if credits is None else f"{percent}% {credits} AIC"
+    _log_screen(_CONTEXT_SEEN, "context", sid, "showing", detail)
+    return {"available": True, "percent": percent, "ai_credits": credits, "reason": None}

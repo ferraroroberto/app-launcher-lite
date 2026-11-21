@@ -175,7 +175,7 @@ def test_a_stalled_context_poll_answers_stale_and_a_fresh_one_is_unchanged(
         return first, second, elapsed
 
     first, second, elapsed = asyncio.run(run())
-    assert first == {"available": False, "percent": None, "reason": "no_screen"}
+    assert first == {"available": False, "percent": None, "ai_credits": None, "reason": "no_screen"}
     assert elapsed < 2.0, f"the context poll took {elapsed:.1f}s behind a hung read"
     assert second["stale"] is True
     assert second["age_seconds"] >= 0

@@ -16,9 +16,10 @@
         <button data-track="session.model" id="terminalModel" type="button" class="terminal-model" hidden><span id="terminalModelLabel" class="terminal-model-label"></span></button>
         <!-- Context ring (#1223): how full the session's context window is,
              read off the terminal's statusline by the server. Hidden, not
-             drawn at 0%, whenever the number isn't known; a tap toasts it.
-             Driven by context-ring.js. -->
-        <button data-track="session.context-ring" id="contextRing" type="button" class="icon-button term-btn context-ring" title="Context used" aria-label="Context used" hidden><svg class="context-ring-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle class="context-ring-track" cx="12" cy="12" r="9"></circle><circle class="context-ring-fill" cx="12" cy="12" r="9" transform="rotate(-90 12 12)"></circle></svg></button>
+             drawn at 0%, whenever the number isn't known; a tap opens the context
+             sheet. A Copilot session that shows its AI credits gets them as a
+             label beside the ring. Driven by context-ring.js. -->
+        <button data-track="session.context-ring" id="contextRing" type="button" class="icon-button term-btn context-ring" title="Context used" aria-label="Context used" hidden><svg class="context-ring-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle class="context-ring-track" cx="12" cy="12" r="9"></circle><circle class="context-ring-fill" cx="12" cy="12" r="9" transform="rotate(-90 12 12)"></circle></svg><span id="contextRingLabel" class="context-ring-label" hidden></span></button>
         <!-- Icon-only Terminal / Chat segmented toggle (#982). A segment the
              session can't offer (a detached session has no terminal; an
              agent without a transcript reader has no chat) is aria-disabled
@@ -128,6 +129,27 @@
     <button data-track="lightbox.close" id="imageLightboxClose" type="button" class="image-lightbox-close" title="Close"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg></button>
     <img id="imageLightboxImage" class="image-lightbox-img" alt="">
   </div>
+
+  <!-- Context sheet: the context ring's tap. Context used, and for a Copilot
+       session the AI credits its footer shows. Read-only: header ✕ plus one
+       full-width Done (modal contract). Driven by context-ring.js. -->
+  <dialog id="contextSheet" class="detail-dialog" data-surface="terminal.context-sheet" data-track-view="sheet.context" aria-labelledby="contextSheetTitle">
+    <div class="detail-card">
+      <div class="detail-header">
+        <h2 id="contextSheetTitle" tabindex="-1" autofocus>Session usage</h2>
+        <button data-track="context-sheet.close" type="button" id="contextSheetClose" class="icon-button detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+        </button>
+      </div>
+      <dl class="context-sheet-list">
+        <div id="contextSheetContext" class="context-sheet-row"><dt>Context used</dt><dd></dd></div>
+        <div id="contextSheetCredits" class="context-sheet-row" hidden><dt>AI credits used this session</dt><dd></dd></div>
+      </dl>
+      <div class="detail-actions">
+        <button data-track="context-sheet.done" type="button" id="contextSheetDone" class="button-primary detail-save-btn">Done</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Switch model: the model chip's sheet, one row per model the session's
        agent offers. Header ✕ plus one full-width Done (modal contract). -->
