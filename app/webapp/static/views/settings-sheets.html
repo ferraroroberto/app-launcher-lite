@@ -206,6 +206,12 @@
             <button data-track="chief.worker-cap-scope" type="button" id="chiefWorkerCapScopeToggle" class="toggle" role="switch" aria-checked="true" aria-label="Count only chief-dispatched sessions" aria-describedby="chiefWorkerCapScopeHelp" title="Choose which sessions the worker cap counts"><span class="knob"></span><span class="toggle-label">ON</span></button>
           </div>
           <p id="chiefWorkerCapScopeHelp" class="field-help">On, the cap counts only the sessions the chief started, so the ones you open yourself never use up a slot. Off, it counts every live session. The chief itself never counts.</p>
+          <label class="stacked">
+            <span>Skills folder</span>
+            <input id="skillsDir" type="text" class="input-native" aria-describedby="skillsDirHelp skillsDirStatus">
+          </label>
+          <p id="skillsDirHelp" class="field-help">The folder with the issue skills a lane runs: <code>issue-add</code>, <code>issue-start</code>, <code>issue-yolo</code> and <code>issue-finish</code>. Set it when this PC keeps them in a repo of its own. Empty uses the skills bundled in the Copilot folder. A lane start is refused while one is missing.</p>
+          <p id="skillsDirStatus" class="field-help" role="status" aria-live="polite"></p>
           <h3 class="opt-group-title" id="chiefAutomationsTitle">Automations</h3>
           <p class="opt-hint">Everything the chief does on its own. Each switch saves when you tap it, and no restart is needed.</p>
           <div class="row">

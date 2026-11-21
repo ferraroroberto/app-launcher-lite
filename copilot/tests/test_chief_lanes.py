@@ -84,6 +84,9 @@ class StubLauncher:
         self.server.server_close()
 
 
+_SKILLS_READY = {"ready": True, "refusal": None, "source": "bundled", "folder": "", "skills": []}
+
+
 class StubbedLauncherCase(unittest.TestCase):
     """A scratch state dir, the chief's own session id and a loopback launcher stub per test."""
 
@@ -105,6 +108,7 @@ class DispatchTests(StubbedLauncherCase):
         self.stub.routes.update({
             "/api/board": (200, {"columns": {"claude_turn": [], "your_turn": []}}),
             "/api/board/chief/settings": (200, {"settings": {"worker_cap": 2, "worker_cap_scope": "all"}}),
+            "/api/board/chief/skills": (200, _SKILLS_READY),
             "/api/jobs": (200, {"jobs": []}),
         })
         issue = mock.patch.object(launcher, "fetch_issue_state",
@@ -137,7 +141,42 @@ class DispatchTests(StubbedLauncherCase):
             self.assertTrue(sent.startswith("This is an app-launcher-lite lane on GitLab."), sent)
             self.assertIn(f"{skills}/issue-{mode}/SKILL.md", sent)
             self.assertIn(f"{skills}/issue-finish/SKILL.md", sent)
-            self.assertTrue(sent.rstrip().endswith(tail or "denies them)."), sent)
+            self.assertIn("Keep going until the issue is merged or you are genuinely blocked.", sent)
+            self.assertIn("exactly one adversarial review per yolo run", sent)
+            self.assertTrue(sent.rstrip().endswith(tail or "per yolo run."), sent)
+
+    def test_a_configured_skills_folder_is_the_one_the_brief_names(self) -> None:
+        self.stub.routes["/api/board/issues/start"] = (200, {"session": {"session_id": "lane-1"}})
+        self.stub.routes["/api/board/chief/skills"] = (
+            200, {**_SKILLS_READY, "source": "skills_dir", "folder": "D:/own-skills"})
+        code, out = _ops("dispatch", "demo", "7", "--base-url", self.stub.url)
+        self.assertEqual(code, 0, out)
+        sent = self.stub.posts[0][1]["brief"]
+        self.assertIn("D:/own-skills/issue-start/SKILL.md", sent)
+        self.assertIn("D:/own-skills/issue-finish/SKILL.md", sent)
+        # Lite's GitLab helpers stay its own.
+        self.assertIn(f"{(REPO / 'skills').as_posix()}/_lib", sent)
+
+    def test_a_missing_skill_is_refused_before_any_post_naming_it(self) -> None:
+        why = "issue skills not ready: missing skill issue-start (no issue-start/SKILL.md in D:/own-skills)."
+        self.stub.routes["/api/board/chief/skills"] = (200, {"ready": False, "refusal": why})
+        code, out = _ops("dispatch", "demo", "7", "--base-url", self.stub.url)
+        self.assertEqual(code, 1)
+        self.assertIn(f"REFUSED={why}", out)
+        self.assertEqual(self.stub.posts, [])
+
+    def test_an_unanswered_skills_check_is_not_confirmed_and_refused(self) -> None:
+        del self.stub.routes["/api/board/chief/skills"]
+        code, out = _ops("dispatch", "demo", "7", "--base-url", self.stub.url)
+        self.assertEqual(code, 1)
+        self.assertIn("REFUSED=issue skills not confirmed", out)
+        self.assertEqual(self.stub.posts, [])
+
+    def test_a_4xx_start_prints_the_launchers_reason(self) -> None:
+        self.stub.routes["/api/board/issues/start"] = (409, {"detail": "issue skills not ready: missing skill issue-yolo"})
+        code, out = _ops("dispatch", "demo", "7", "--base-url", self.stub.url)
+        self.assertEqual(code, 1)
+        self.assertIn("REFUSED=launcher refused the start (http-409): issue skills not ready: missing skill issue-yolo", out)
 
     def test_the_preamble_does_not_make_a_brief_fleet_wide(self) -> None:
         from chief import rails

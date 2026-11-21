@@ -9,6 +9,9 @@
     GET  /api/board/chief/settings  → chief settings block (also read by the
                                       /chief skill over loopback)
     PUT  /api/board/chief/settings  → persist chief settings
+    GET  /api/board/chief/skills    → where each of the four issue skills
+                                      resolves and whether it is found (read
+                                      by chief_ops.py dispatch over loopback)
     GET  /api/board/chief-journal   → the chief's journal, new entries flagged
                                       (board token only)
     POST /api/board/chief/journal/looked → stamp the owner's last look
@@ -76,6 +79,7 @@ from src._fleet_contract import fleet_python
 from src.chief import identity as chief_identity
 from src.chief import journal as chief_journal
 from src.chief import pointer as chief_pointer
+from src.chief import skills_preflight
 from src.chief.cap_raised import publish_cap_raised
 from src.chief.launch_settings import chief_launch_model, chief_model_problem
 from src.clients import session as session_client
@@ -542,6 +546,14 @@ async def get_chief_settings(request: Request) -> Dict[str, Any]:
     return {"settings": _chief_settings_payload(cfg)}
 
 
+@router.get("/api/board/chief/skills")
+async def get_chief_skills(request: Request) -> Dict[str, Any]:
+    """The four issue skills' preflight: source, folder, and found/missing/unknown each."""
+    cfg: WebappConfig = request.app.state.webapp_config
+    return await asyncio.to_thread(
+        skills_preflight.payload, cfg.skills_dir, cfg.fleet_config_dir)
+
+
 @router.put("/api/board/chief/settings")
 async def put_chief_settings(request: Request) -> Dict[str, Any]:
     """Persist chief settings."""
@@ -696,6 +708,9 @@ async def ensure_chief(request: Request) -> Dict[str, Any]:
         session, sid = await _spawn_chief(
             cfg, request, body, state["rows"], resumed_session_id, rows=rows, cols=cols,
         )
+        # Reported, not enforced here: a missing skill refuses each lane start instead.
+        skills = await asyncio.to_thread(
+            skills_preflight.log_report, cfg.skills_dir, cfg.fleet_config_dir)
         # The branch ensure took, paired with the "kept" line above:
         # a chief that disappears and comes back is diagnosable from here.
         logger.info(
@@ -708,6 +723,7 @@ async def ensure_chief(request: Request) -> Dict[str, Any]:
             "spawned": True,
             "session": session,
             "warning": chief_model_problem(cfg),
+            "skills": skills,
             "resumed": bool(resumed_session_id),
             "resume_fallback_reason": (
                 "no resumable chief conversation found in the last 24h"

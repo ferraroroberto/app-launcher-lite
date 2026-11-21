@@ -128,6 +128,7 @@ class ChiefTests(PortsCase):
             "/api/jobs": (200, {"jobs": []}),
             "/api/config": (200, {"chief_doorbell": True, "gitlab_group": "team-group"}),
             "/api/board/issues/start": (200, {"session": {"session_id": "lane-1"}}),
+            "/api/board/chief/skills": (200, {"ready": True, "source": "bundled", "folder": ""}),
         })
         self.write_config({"port": _port_of(self.stub), "session_host_port": 1})
 

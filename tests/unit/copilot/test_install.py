@@ -30,6 +30,7 @@ _COPILOT = Path(__file__).resolve().parents[3] / "copilot"
 _POWERSHELL = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 _STATE_FILE = "sessions-state.json"
 _STATE_BODY = '{"rows": [{"sid": "keep-me"}]}'
+_ISSUE_SKILLS = ("issue-add", "issue-start", "issue-yolo", "issue-finish")
 
 
 def _ps(command: str) -> subprocess.CompletedProcess:
@@ -155,6 +156,28 @@ class Lite:
             json.dumps({"webapp": {"port": server.server_address[1]}}), encoding="utf-8")
         return server
 
+    def seed_bundled_issue_skills(self) -> None:
+        for name in _ISSUE_SKILLS:
+            (self.copilot / "skills" / name).mkdir()
+            (self.copilot / "skills" / name / "SKILL.md").write_text("bundled", encoding="utf-8")
+
+    def own_skills_repo(self) -> Path:
+        """A skills repo of the machine's own, holding the four issue skills."""
+        own = self.root / "own-skills"
+        for name in _ISSUE_SKILLS:
+            (own / name).mkdir(parents=True)
+            (own / name / "SKILL.md").write_text(f"own {name}", encoding="utf-8")
+        return own
+
+    def write_config(self, body: dict) -> Path:
+        path = self.repo / "config" / "webapp_config.json"
+        path.write_text(json.dumps(body, indent=2), encoding="utf-8")
+        return path
+
+    def target(self, link: Path) -> Path:
+        # os.readlink keeps the junction's \\?\ long-path prefix.
+        return Path(os.readlink(link).removeprefix("\\\\?\\")).resolve()
+
     def set_config(self, fleet_config_dir: Optional[str]) -> None:
         body = {} if fleet_config_dir is None else {"fleet_config_dir": fleet_config_dir}
         (self.repo / "config" / "webapp_config.json").write_text(json.dumps(body), encoding="utf-8")
@@ -278,10 +301,10 @@ def test_migrate_reports_unknown_when_lite_is_not_running_and_never_edits_the_co
     lite.set_config(r"C:\old\fleet-config-lite")
     (lite.repo / "config" / "config.json").write_text('{"webapp": {"port": 9}}', encoding="utf-8")
     config = lite.repo / "config" / "webapp_config.json"
-    before = config.read_bytes()
     out = lite.ok("-Migrate", "-Yes")
     assert "[unknown] Lite did not take the change" in out
-    assert config.read_bytes() == before
+    # The folder setting is never rewritten in the file; only the missing skills_dir key is added.
+    assert json.loads(config.read_text(encoding="utf-8")) == {"skills_dir": "", "fleet_config_dir": r"C:\old\fleet-config-lite"}
 
 
 def test_a_shared_machine_gets_no_skills_and_a_lite_only_session_hook(lite: Lite) -> None:
@@ -320,3 +343,152 @@ def test_a_link_into_a_sibling_checkout_whose_name_extends_this_one_is_still_for
     lite.junction(lite.home / "skills", sibling)
     out = lite.ok()
     assert "[note] shared machine" in out and list(sibling.iterdir()) == []
+
+
+def _snapshot(*roots: Path) -> dict:
+    """Every file's bytes and every link's target under ``roots``, links not followed."""
+    seen: dict = {}
+    for root in roots:
+        for dirpath, dirnames, files in os.walk(root):
+            for name in list(dirnames):
+                path = Path(dirpath) / name
+                if path.is_junction() or path.is_symlink():
+                    seen[str(path)] = ("link", os.readlink(path))
+                    dirnames.remove(name)
+            for name in files:
+                path = Path(dirpath) / name
+                seen[str(path)] = ("file", path.read_bytes())
+    return seen
+
+
+def _seed_foreign(lite: Lite) -> tuple:
+    """A foreign issue skill in ~/.copilot/skills, a foreign skill in a real ~/.claude/skills."""
+    lite.seed_bundled_issue_skills()
+    foreign = lite.skills / "issue-add"
+    foreign.mkdir(parents=True)
+    (foreign / "SKILL.md").write_text("theirs", encoding="utf-8")
+    claude = lite.profile / ".claude" / "skills"
+    (claude / "their-skill").mkdir(parents=True)
+    (claude / "their-skill" / "SKILL.md").write_text("theirs", encoding="utf-8")
+    return foreign, claude
+
+
+def test_skills_dir_links_the_four_from_that_folder_keeps_foreign_entries_and_a_rerun_is_unchanged(lite: Lite) -> None:
+    foreign, claude = _seed_foreign(lite)
+    own = lite.own_skills_repo()
+    config = lite.write_config({"skills_dir": str(own), "gitlab_host": "git.example.test"})
+    before_config = config.read_bytes()
+
+    out = lite.ok()
+    for name in ("issue-start", "issue-yolo", "issue-finish"):
+        assert lite.target(lite.skills / name) == (own / name).resolve(), name
+        assert lite.target(claude / name) == (own / name).resolve(), name
+    # Not Lite's: kept as it was, and reported as satisfying the skill.
+    assert not foreign.is_junction() and (foreign / "SKILL.md").read_text(encoding="utf-8") == "theirs"
+    assert "[ok] kept (not Lite's), and it counts as issue-add" in out
+    assert lite.target(claude / "issue-add") == (own / "issue-add").resolve()
+    assert (lite.skills / "demo").is_junction(), "Lite's other skills install as before"
+    assert (claude / "their-skill" / "SKILL.md").read_text(encoding="utf-8") == "theirs"
+    assert not (claude / "demo").exists(), "only the four issue skills go into ~/.claude/skills"
+    assert config.read_bytes() == before_config and "[ok] unchanged: skills_dir is already in webapp_config.json" in out
+    record = json.loads((lite.home / "app-launcher-lite-install.json").read_text(encoding="utf-8"))
+    assert len(record["skill_links"]) == 7
+
+    snapshot = _snapshot(lite.profile, lite.repo / "config")
+    again = lite.ok()
+    assert _snapshot(lite.profile, lite.repo / "config") == snapshot
+    assert "[ok] issue skill linked" not in again and "[ok] hook config ->" not in again
+    assert again.count("[ok] unchanged ->") >= 10, again
+
+
+def test_clearing_skills_dir_puts_the_bundled_skills_back_and_drops_the_record(lite: Lite) -> None:
+    lite.seed_bundled_issue_skills()
+    own = lite.own_skills_repo()
+    lite.write_config({"skills_dir": str(own)})
+    lite.ok()
+    lite.write_config({"skills_dir": ""})
+    lite.ok()
+    for name in _ISSUE_SKILLS:
+        assert lite.target(lite.skills / name) == (lite.copilot / "skills" / name).resolve(), name
+    assert not (lite.home / "app-launcher-lite-install.json").exists()
+    assert all((own / name / "SKILL.md").exists() for name in _ISSUE_SKILLS)
+
+
+def test_a_missing_key_is_added_after_a_backup_and_no_value_is_overwritten(lite: Lite) -> None:
+    body = {"fleet_config_dir": "D:/somewhere", "gitlab_group": "team", "copilot_models": ["a", "b"]}
+    config = lite.write_config(body)
+    original = config.read_bytes()
+    out = lite.ok()
+    assert json.loads(config.read_text(encoding="utf-8")) == {**body, "skills_dir": ""}
+    backups = list(config.parent.glob("webapp_config.json.bak-*"))
+    assert len(backups) == 1 and backups[0].read_bytes() == original
+    assert "[ok] key added to webapp_config.json: skills_dir" in out
+
+
+def test_a_config_that_does_not_parse_is_left_untouched_and_reported(lite: Lite) -> None:
+    config = lite.repo / "config" / "webapp_config.json"
+    config.write_text('{"fleet_config_dir": ', encoding="utf-8")
+    out = lite.ok()
+    assert config.read_text(encoding="utf-8") == '{"fleet_config_dir": '
+    assert "[unknown] webapp_config.json did not parse" in out
+    assert not list(config.parent.glob("webapp_config.json.bak-*"))
+
+
+def test_whatif_lists_every_change_and_makes_none(lite: Lite) -> None:
+    _seed_foreign(lite)
+    own = lite.own_skills_repo()
+    lite.seed_state()
+    lite.write_config({"gitlab_host": "git.example.test"})
+    roots = (lite.profile, lite.repo / "config")
+    before = _snapshot(*roots)
+    out = lite.ok("-WhatIf")
+    assert _snapshot(*roots) == before
+    for line in ("[whatif] hook config ->", "[whatif] skill junction ->", "[whatif] backup written ->",
+                 "[whatif] key added to webapp_config.json: skills_dir", "WhatIf: nothing was changed"):
+        assert line in out, line
+
+    # Installed with skills_dir set, -WhatIf names the swap back and the uninstall the same way.
+    lite.write_config({"skills_dir": str(own)})
+    lite.ok()
+    lite.write_config({"skills_dir": ""})
+    before = _snapshot(*roots)
+    out = lite.ok("-WhatIf")
+    assert "[whatif] skills_dir link removed ->" in out
+    out = lite.ok("-Uninstall", "-WhatIf")
+    assert "[whatif] hook config removed ->" in out and "[whatif] install record removed" in out
+    assert _snapshot(*roots) == before
+
+
+def test_uninstall_removes_only_its_own_skills_dir_links_and_keeps_everything_foreign(lite: Lite) -> None:
+    foreign, claude = _seed_foreign(lite)
+    state = lite.seed_state()
+    own = lite.own_skills_repo()
+    lite.write_config({"skills_dir": str(own)})
+    lite.ok()
+    # The owner repoints one recorded link by hand: it is no longer Lite's.
+    elsewhere = lite.root / "elsewhere" / "issue-yolo"
+    os.rmdir(lite.skills / "issue-yolo")
+    lite.junction(lite.skills / "issue-yolo", elsewhere)
+
+    lite.ok("-Uninstall")
+    for name in ("issue-start", "issue-finish"):
+        assert not (lite.skills / name).exists() and not (claude / name).exists(), name
+    assert lite.target(lite.skills / "issue-yolo") == elsewhere.resolve()
+    assert (foreign / "SKILL.md").read_text(encoding="utf-8") == "theirs"
+    assert (claude / "their-skill" / "SKILL.md").exists()
+    assert not (lite.home / "app-launcher-lite-install.json").exists()
+    assert all((own / name / "SKILL.md").exists() for name in _ISSUE_SKILLS), "never followed into the skills repo"
+    assert state.read_text(encoding="utf-8") == _STATE_BODY
+
+
+def test_skills_dir_never_writes_inside_a_skills_folder_that_links_into_another_repo(lite: Lite) -> None:
+    own = lite.own_skills_repo()
+    lite.write_config({"skills_dir": str(own)})
+    other = lite.root / "full-fleet" / "skills"
+    (other / "theirs").mkdir(parents=True)
+    lite.junction(lite.home / "skills", other)
+    claude_other = lite.root / "other-claude" / "skills"
+    lite.junction(lite.profile / ".claude" / "skills", claude_other)
+    lite.ok()
+    assert [p.name for p in other.iterdir()] == ["theirs"]
+    assert list(claude_other.iterdir()) == []

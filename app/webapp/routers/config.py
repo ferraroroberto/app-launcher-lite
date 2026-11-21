@@ -21,6 +21,7 @@ from app.webapp.routers._helpers import (
 )
 from src import boot_autostart, password, private_network
 from src.agents import AGENTS, DEFAULT_AGENT
+from src.chief import skills_preflight
 from src.chief.launch_settings import chief_model_problem
 from src.desktop import lid_keep_awake
 from src.launching import copilot_remote
@@ -79,6 +80,9 @@ async def get_config(request: Request) -> Dict[str, Any]:
         "apps_scan_root": cfg.apps_scan_root,
         "team_os_dir": cfg.team_os_dir,
         "fleet_config_dir": cfg.fleet_config_dir,
+        "skills_dir": cfg.skills_dir,
+        # Settings > Chief shows where each issue skill resolves and whether it is found.
+        "skills_preflight": skills_preflight.payload(cfg.skills_dir, cfg.fleet_config_dir),
         # The forge the Board reads: a GitLab group and, for a self-hosted
         # instance, its host.
         "gitlab_group": cfg.gitlab_group,
@@ -223,6 +227,7 @@ _PATCH_KEYS = frozenset({
     "apps_scan_root",
     "team_os_dir",
     "fleet_config_dir",
+    "skills_dir",
     "gitlab_group",
     "gitlab_host",
     "speech_enabled",
@@ -310,7 +315,7 @@ async def patch_config(request: Request) -> Any:
     if "copilot_models" in patch:
         patch["copilot_models"] = _checked_model_list(patch["copilot_models"])
     for key in (
-        "gitlab_group", "gitlab_host", "copilot_model", "copilot_context", "copilot_effort",
+        "skills_dir", "gitlab_group", "gitlab_host", "copilot_model", "copilot_context", "copilot_effort",
         "speech_base_url", "speech_model", "speech_api_key",
     ):
         if key in patch:

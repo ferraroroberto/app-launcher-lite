@@ -141,6 +141,10 @@ class WebappConfig:
     # Root of the Copilot hooks/chief tree: this repo's own ``copilot/`` unless set. It is
     # the chief's working folder, and the Board and owner checks load their helpers from it.
     fleet_config_dir: str = field(default_factory=_default_fleet_config_dir)
+    # Folder holding the four issue skills (issue-add/start/yolo/finish) a lane runs,
+    # for a machine whose skills live in a repo of its own. Empty uses the skills
+    # bundled in the Copilot folder (`src.chief.skills_preflight`).
+    skills_dir: str = ""
     # --- Board tab -----------------------------------
     # The sessions-state file written by fleet-config's session_state hook. The board
     # reads it defensively: absent/corrupt/stale degrades to unknown, never an error.

@@ -222,23 +222,58 @@ def _unconfirmed_dispatch_text(repo: str, number: int, reason: str) -> str:
     )
 
 
-def lane_preamble(mode: str) -> str:
-    """The lines every dispatch brief opens with, naming this checkout's own issue skills.
+def lane_preamble(mode: str, skills_folder: Optional[str] = None) -> str:
+    """The lines every dispatch brief opens with: where the lane's issue skills are, and how it works.
 
     The launcher types `/issue-<mode> <N>`, which resolves to whatever sits in the user-scope
     skills folder. On a PC that also runs the full fleet that folder is the full fleet's, whose
-    GitHub skill would run `gh` and its own completion ping, so the lane is told where lite's
-    skills are before it starts and the guard hook denies the full fleet's commands if it forgets.
+    GitHub skill would run `gh` and its own completion ping, so the lane is told where its skills
+    are before it starts and the guard hook denies the full fleet's commands if it forgets.
+    `skills_folder` is the launcher's `skills_dir` when one is set (the machine's own skills
+    repo); None means this checkout's bundled skills. Lite's GitLab helpers stay under its own
+    `_lib` either way. The remediation paragraph lives here, not in the skill text, because a
+    machine's own skills repo may not say it.
     """
-    skills = Path(__file__).resolve().parents[2].as_posix()
+    lite = Path(__file__).resolve().parents[2].as_posix()
+    skills = skills_folder or lite
     return (
         f"This is an app-launcher-lite lane on GitLab. The skill text you were handed for `/issue-{mode}` may be "
         f"another fleet's GitHub skill, which uses `gh` and sends its own notifications. Before any other step, "
         f"read `{skills}/issue-{mode}/SKILL.md` and follow it instead; ship with `{skills}/issue-finish/SKILL.md`. "
         f"Those paths only locate the skills: the issue's repository is this session's working directory. "
-        f"Use `glab` and the helpers under `{skills}/_lib`; run no `gh` command, no `notify_complete.py`, and no "
+        f"Use `glab` and the helpers under `{lite}/_lib`; run no `gh` command, no `notify_complete.py`, and no "
         f"helper from a Claude Code user-scope skills or hooks folder (the session's tool guard denies them).\n\n"
+        f"Keep going until the issue is merged or you are genuinely blocked. A red gate, an e2e failure or a "
+        f"blocking review finding is work to fix, then re-run; it is not a reason to stop. Stop only for a step "
+        f"that needs the owner, a destructive git action that needs the owner's confirmation, an environment "
+        f"problem you cannot resolve, or a failure that is still red after the bounded retry policy; then say "
+        f"which one and what you tried. Run exactly one adversarial review per yolo run.\n\n"
     )
+
+
+def _skills_folder(base_url: str) -> Tuple[Optional[str], Optional[str]]:
+    """`(folder, None)` when all four issue skills are found (folder None = bundled), else `(None, why)`.
+
+    Not established is a refusal too: a lane launched on an unknown answer may have no
+    `/issue-start` to run."""
+    try:
+        reply = launcher._request(base_url, "/api/board/chief/skills")
+    except (TimeoutError, urllib.error.URLError, ValueError) as exc:
+        return None, f"issue skills not confirmed: the launcher's skills check did not answer ({exc})"
+    if not reply.get("ready"):
+        return None, str(reply.get("refusal") or "issue skills not confirmed: the launcher gave no reason")
+    return (str(reply.get("folder")) if reply.get("source") == "skills_dir" else None), None
+
+
+def _http_refusal(exc: Exception) -> Optional[str]:
+    """The launcher's own words for a 4xx start, else None."""
+    if not isinstance(exc, urllib.error.HTTPError) or exc.code >= 500:
+        return None
+    try:
+        detail = json.loads(exc.read().decode("utf-8")).get("detail")
+    except (OSError, ValueError, AttributeError):
+        detail = None
+    return f"launcher refused the start (http-{exc.code}): {detail or exc.reason}"
 
 
 def cmd_dispatch(args: argparse.Namespace) -> int:
@@ -250,7 +285,11 @@ def cmd_dispatch(args: argparse.Namespace) -> int:
             print(f"REFUSED={exc}")
             return 1
     fleet_wide = rails.is_fleet_wide_brief(brief)
-    brief = (lane_preamble(args.mode) + (brief or "")).rstrip() + "\n"
+    skills_folder, skills_refusal = _skills_folder(args.base_url)
+    if skills_refusal:
+        print(f"REFUSED={skills_refusal}")
+        return 1
+    brief = (lane_preamble(args.mode, skills_folder) + (brief or "")).rstrip() + "\n"
 
     # Copilot is the only agent: a --model value is a Copilot model id, sent as typed.
     model = args.model or None
@@ -300,7 +339,11 @@ def cmd_dispatch(args: argparse.Namespace) -> int:
     except (TimeoutError, urllib.error.URLError) as exc:
         unconfirmed = _unconfirmed_dispatch_reason(exc)
         if unconfirmed is None:
-            raise  # refused/unreachable/4xx: nothing was spawned, a plain failure
+            refused = _http_refusal(exc)
+            if refused is None:
+                raise  # refused/unreachable: nothing was spawned, a plain failure
+            print(f"REFUSED={refused}")
+            return 1
         # The server may still be spawning -- never a refusal, never a blind retry.
         print(_unconfirmed_dispatch_text(args.repo, args.number, unconfirmed))
         return 1

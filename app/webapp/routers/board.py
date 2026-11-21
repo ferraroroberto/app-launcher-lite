@@ -90,7 +90,7 @@ from src.board import (
 )
 from src.board.exchange import resolve_exchange, unavailable
 from src.chief import answers as chief_answers
-from src.chief import dispatch_brief, plan_prune
+from src.chief import dispatch_brief, plan_prune, skills_preflight
 from src.chief import plan as chief_plan
 from src.clients import gitlab as forge
 from src.clients import session as session_client
@@ -654,6 +654,12 @@ async def start_issue(request: Request) -> Dict[str, Any]:
     brief = _validated_brief(body)
     entry = _resolve_repo_entry(cfg, repo)
     agent, base_flags, effort, context = _launch_flags(cfg, body, model)
+    # A lane that cannot run its /issue-* skill only stalls: refuse it, naming the skill.
+    skills_refusal = skills_preflight.refusal(await asyncio.to_thread(
+        skills_preflight.check_skills, cfg.skills_dir, cfg.fleet_config_dir))
+    if skills_refusal:
+        logger.warning("⚠️ issue start refused for %s#%s: %s", repo, number, skills_refusal)
+        raise HTTPException(status_code=409, detail=skills_refusal)
 
     prompt = f"/issue-{mode} {number}"
     brief_path = None

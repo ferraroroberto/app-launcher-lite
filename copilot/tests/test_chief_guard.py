@@ -190,6 +190,35 @@ class SkillSwapTests(unittest.TestCase):
         hosted = mock.patch.object(chief_guard.session_state, "lite_session", return_value=True)
         self.lite_session = hosted.start()
         self.addCleanup(hosted.stop)
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        self.tmp = Path(td.name)
+        # No webapp_config.json: skills_dir empty, so the bundled skills, unless a test writes one.
+        config = mock.patch.object(chief_guard, "WEBAPP_CONFIG", self.tmp / "webapp_config.json")
+        config.start()
+        self.addCleanup(config.stop)
+
+    def _own_skills(self) -> Path:
+        own = self.tmp / "own-skills"
+        (own / "issue-start").mkdir(parents=True)
+        (own / "issue-start" / "SKILL.md").write_text("---\nname: issue-start\n---\n# issue-start (own repo)\n",
+                                                      encoding="utf-8")
+        (self.tmp / "webapp_config.json").write_text(json.dumps({"skills_dir": str(own)}), encoding="utf-8")
+        return own
+
+    def test_with_skills_dir_set_an_issue_skill_is_swapped_for_that_folders_copy(self) -> None:
+        own = self._own_skills()
+        prompt = chief_guard.on_user_prompt({"prompt": foreign_skill_prompt()}, "lane-1")["modifiedPrompt"]
+        self.assertIn(f"Base directory for this skill: {own / 'issue-start'}\n", prompt)
+        self.assertIn("# issue-start (own repo)", prompt)
+        self.assertNotIn("(lite, GitLab)", prompt)
+
+    def test_with_skills_dir_set_its_own_copy_is_left_alone_and_other_skills_stay_bundled(self) -> None:
+        own = self._own_skills()
+        invoked = foreign_skill_prompt().replace("C:/Users/u/.copilot/skills/issue-start", str(own / "issue-start"))
+        self.assertIsNone(chief_guard.on_user_prompt({"prompt": invoked}, "lane-1"))
+        self.assertEqual(chief_guard.skill_dir_for("e2e"), chief_guard.REPO / "skills" / "e2e")
+        self.assertEqual(chief_guard.skill_dir_for("issue-finish"), own / "issue-finish")
 
     def test_a_foreign_issue_skill_is_swapped_for_lites_in_a_lite_session(self) -> None:
         out = chief_guard.on_user_prompt({"prompt": foreign_skill_prompt()}, "lane-1")
