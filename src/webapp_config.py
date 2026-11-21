@@ -235,6 +235,12 @@ class WebappConfig:
     # Extra IPs / CIDRs allowed to reach the terminal endpoints on top of
     # loopback + the Tailscale CGNAT range (100.64.0.0/10). Empty by default.
     tailnet_allowlist: list = field(default_factory=list)
+    # Trust the whole private network (10/8, 172.16/12, 192.168/16, link-local,
+    # IPv6 unique-local) for the terminal routes, for a machine with no
+    # Tailscale whose phone joins over a trusted home or office Wi-Fi. Off by
+    # default: the bearer token and passkey still apply on top, but anything
+    # else on that network can now reach the login.
+    terminal_allow_private_lan: bool = False
     # Folders, besides a session's own, that an agent may send a file to the
     # Chat pane from: its outbox and Claude's SendUserFile. %VAR% and ~
     # expand, so a temp-dir root needs no machine path. Defaults to Claude's
