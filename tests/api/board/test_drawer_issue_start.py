@@ -246,6 +246,60 @@ class TestIssueStartEffort:
                 "allowed: none, minimal, low, medium, high, xhigh, max")
         assert not _spawn
 
+class TestIssueStartContext:
+    """A dispatch's per-launch ``context`` overrides the saved context tier in
+    both directions, 400s on any other value, and is echoed only off the built
+    command line."""
+
+    _spawn = TestIssueStart._spawn
+
+    def _start(self, client, overrides, **extra):
+        (overrides["tmp_projects_dir"] / "myrepo").mkdir(exist_ok=True)
+        return client.post("/api/board/issues/start", json={
+            "repo": "myrepo", "number": 9, "mode": "start", **extra})
+
+    @pytest.mark.parametrize("saved,sent", [
+        ("default", "long_context"), ("long_context", "default")])
+    def test_context_overrides_the_saved_tier_and_is_echoed(
+        self, webapp_client, _bypass_gate, _spawn, saved, sent
+    ):
+        client, app, overrides = webapp_client
+        app.state.webapp_config.copilot_context = saved
+        resp = self._start(client, overrides, context=sent)
+        assert resp.status_code == 200
+        assert f"--context {sent}" in _spawn["flags"]
+        assert f"--context {saved}" not in _spawn["flags"]
+        assert resp.json()["context"] == sent
+        assert app.state.webapp_config.copilot_context == saved
+
+    def test_context_is_normalised_like_effort(
+        self, webapp_client, _bypass_gate, _spawn
+    ):
+        client, _, overrides = webapp_client
+        resp = self._start(client, overrides, context=" Long_Context ")
+        assert resp.json()["context"] == "long_context"
+
+    def test_absent_context_builds_the_same_command_and_echoes_nothing(
+        self, webapp_client, _bypass_gate, _spawn
+    ):
+        from src.launching.flags import build_copilot_flags
+        client, app, overrides = webapp_client
+        resp = self._start(client, overrides)
+        assert _spawn["flags"] == build_copilot_flags(app.state.webapp_config) + ' -i "/issue-start 9"'
+        assert "context" not in resp.json()
+
+    @pytest.mark.parametrize("context", ["huge", "", "LONG", 3])
+    def test_an_unknown_context_is_a_400_and_spawns_nothing(
+        self, webapp_client, _bypass_gate, _spawn, context
+    ):
+        client, _, overrides = webapp_client
+        resp = self._start(client, overrides, context=context)
+        assert resp.status_code == 400
+        if isinstance(context, str):
+            assert resp.json()["detail"].endswith("allowed: default, long_context")
+        assert not _spawn
+
+
 class TestIssueStartBrief:
     """#1114: an optional dispatch brief rides the launch command as a
     launcher-generated ``--brief <path>`` — never as client text."""

@@ -76,7 +76,9 @@ from app.webapp.routers.board_spawn import (
     SESSION_HOST_UNREACHABLE,
     _read_live_sessions,
     _resolve_repo_entry,
+    applied_context,
     applied_effort,
+    dispatch_context,
     dispatch_effort,
 )
 from src import agents, audit, board, fleet_scope
@@ -638,6 +640,8 @@ async def start_issue(request: Request) -> Dict[str, Any]:
 
     The optional ``effort`` overrides the saved per-model effort for this
     launch (:func:`_launch_flags`); the response echoes it only when applied.
+    The optional ``context`` (``default`` | ``long_context``) does the same for
+    the saved context tier; any other value is a 400 and nothing is spawned.
     """
     cfg: WebappConfig = request.app.state.webapp_config
     body = await maybe_json(request)
@@ -652,7 +656,7 @@ async def start_issue(request: Request) -> Dict[str, Any]:
     model = str(body.get("model") or "").strip().lower()
     brief = _validated_brief(body)
     entry = _resolve_repo_entry(cfg, repo)
-    agent, base_flags, effort = _launch_flags(cfg, body, model)
+    agent, base_flags, effort, context = _launch_flags(cfg, body, model)
 
     prompt = f"/issue-{mode} {number}"
     brief_path = None
@@ -703,38 +707,51 @@ async def start_issue(request: Request) -> Dict[str, Any]:
     name = _dispatch_session_name(entry.name, number, title) if chief_dispatch else title
     if sid and name:
         await _auto_name_session(cfg, sid, name)
-    applied = applied_effort(agent, base_flags, effort)
     return {"launched": prompt, "repo": entry.name, "session": session,
-            **({"effort": applied} if applied else {})}
+            **_applied_overrides(agent, base_flags, effort, context)}
+
+
+def _applied_overrides(
+    agent: str, flags: str, effort: Optional[str], context: Optional[str]
+) -> Dict[str, str]:
+    """The per-launch overrides that reached ``flags``, keyed by body field."""
+    applied = {
+        "effort": applied_effort(agent, flags, effort),
+        "context": applied_context(agent, flags, context),
+    }
+    return {key: value for key, value in applied.items() if value}
 
 
 def _launch_flags(
     cfg: WebappConfig, body: Dict[str, Any], model: str
-) -> Tuple[str, str, Optional[str]]:
-    """``(agent, flags, effort)`` for an issue start, always on Copilot.
+) -> Tuple[str, str, Optional[str], Optional[str]]:
+    """``(agent, flags, effort, context)`` for an issue start, always on Copilot.
 
     ``model`` is the dispatch bar's selector (``copilot:<id>`` or a bare id);
     empty keeps the saved Copilot model. An id outside ``copilot_models`` is
-    a 400. ``effort`` is the body's per-launch override of the saved effort:
-    one Copilot does not accept is a 400, and ``None`` keeps the saved one.
+    a 400. ``effort`` and ``context`` are the body's per-launch overrides of
+    the saved ones: a value Copilot does not accept is a 400, and ``None``
+    keeps the saved one.
     """
     model_id = model.split(":", 1)[1] if model.startswith("copilot:") else model
     if model_id and model_id not in ("default", *cfg.copilot_models):
         raise HTTPException(status_code=400, detail=unknown_model_detail(model))
-    effort = dispatch_effort(_requested_effort(body))
+    effort = dispatch_effort(_requested_text(body, "effort"))
+    context = dispatch_context(_requested_text(body, "context"))
     flags = build_copilot_flags(
-        cfg, model_override=model_id or None, effort_override=effort)
-    return "copilot", flags, effort
+        cfg, model_override=model_id or None, effort_override=effort,
+        context_override=context)
+    return "copilot", flags, effort, context
 
 
-def _requested_effort(body: Dict[str, Any]) -> Optional[str]:
-    """The body's per-launch ``effort``, ``None`` when absent; 400 when not a string."""
-    effort = body.get("effort")
-    if effort is None:
+def _requested_text(body: Dict[str, Any], key: str) -> Optional[str]:
+    """The body's per-launch ``key``, ``None`` when absent; 400 when not a string."""
+    value = body.get(key)
+    if value is None:
         return None
-    if not isinstance(effort, str):
-        raise HTTPException(status_code=400, detail="effort must be a string")
-    return effort.strip().lower()
+    if not isinstance(value, str):
+        raise HTTPException(status_code=400, detail=f"{key} must be a string")
+    return value.strip().lower()
 
 
 def _validated_brief(body: Dict[str, Any]) -> Optional[str]:
