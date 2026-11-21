@@ -1,6 +1,6 @@
 # Android
 
-Android Chrome is the primary phone for the launcher. iOS Safari is still supported (see [iphone-debugging.md](iphone-debugging.md)); nothing in the page is Android-only. Everything marked *to be verified on device* is expected from the page's code and has not been observed on an Android handset.
+Android Chrome is the primary phone for the launcher. iOS Safari is still supported (see [iphone-debugging.md](iphone-debugging.md)); nothing in the page is Android-only. The owner ran every check under [What to check on a device](#what-to-check-on-a-device) on an Android phone and reported that all passed (2026-11-21). The Chrome and Android versions were not given, so they are recorded as *not given*; nothing here names a version it was not told.
 
 ## Install the PWA
 
@@ -8,7 +8,7 @@ Android Chrome is the primary phone for the launcher. iOS Safari is still suppor
 2. Sign in with the bearer token or the password.
 3. Chrome menu (the three dots), then **Install app** (or **Add to Home screen** on versions that offer only that). The launcher then opens full screen from its own icon.
 
-The page declares itself an installable app in `app/webapp/static/manifest.webmanifest`: `display: standalone`, `start_url: /`, a dark `background_color` and `theme_color`, and 192 and 512 pixel icons plus a 512 pixel maskable icon so Android can shape the launcher icon. Installing on a real handset is to be verified on device.
+The page declares itself an installable app in `app/webapp/static/manifest.webmanifest`: `display: standalone`, `start_url: /`, a dark `background_color` and `theme_color`, and 192 and 512 pixel icons plus a 512 pixel maskable icon so Android can shape the launcher icon. Installing on a handset: passed on device (owner, 2026-11-21); versions not given.
 
 ## HTTPS is required
 
@@ -16,12 +16,14 @@ Chrome offers installation, and grants a service worker, WebAuthn passkeys and c
 
 ## What to check on a device
 
-The viewport meta in `app/webapp/static/index.html` is `width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content`. That asks the browser to draw edge to edge and to resize the layout when the keyboard opens. The checks below confirm it behaves that way on Android; each is to be verified on device.
+The viewport meta in `app/webapp/static/index.html` is `width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content`. That asks the browser to draw edge to edge and to resize the layout when the keyboard opens. The checks below confirm it behaves that way on Android. Each one is recorded as *passed on device (owner, 2026-11-21)*; Chrome version and Android version: not given.
 
-- **Safe areas and the gesture bar.** With `viewport-fit=cover` the page extends under the status bar and the gesture bar. Headers and the bottom controls must stay clear of both, in portrait and landscape, installed and in a Chrome tab.
-- **Bottom navigation above system navigation.** The floating bottom-tab pill must sit above the gesture bar or the three-button bar and stay tappable, with no gap that shows content scrolling underneath.
-- **Keyboard not covering the chat bar.** With `interactive-widget=resizes-content` the layout shrinks when the keyboard opens, so the terminal compose bar and the reply box stay above it. Check the compose bar in a live session and the drill-down drawer's reply field on the Board.
-- **Terminal input.** Typing, paste, Ctrl-keys and image attach in the compose bar; Android keyboards with predictive text are the usual source of surprises.
-- **Rotation and resume.** Rotate the phone and background the app for a minute; the terminal should reconnect and replay its scrollback.
+- **Safe areas and the gesture bar.** With `viewport-fit=cover` the page extends under the status bar and the gesture bar. Headers and the bottom controls must stay clear of both, in portrait and landscape, installed and in a Chrome tab. *Passed on device (owner, 2026-11-21).*
+- **Bottom navigation above system navigation.** The floating bottom-tab pill must sit above the gesture bar or the three-button bar and stay tappable, with no gap that shows content scrolling underneath. *Passed on device (owner, 2026-11-21).*
+- **Keyboard not covering the chat bar.** With `interactive-widget=resizes-content` the layout shrinks when the keyboard opens, so the terminal compose bar and the reply box stay above it. Check the compose bar in a live session and the drill-down drawer's reply field on the Board. *Passed on device (owner, 2026-11-21).*
+- **Terminal input.** Typing, paste, Ctrl-keys and image attach in the compose bar; Android keyboards with predictive text are the usual source of surprises. *Passed on device (owner, 2026-11-21).*
+- **Rotation and resume.** Rotate the phone and background the app for a minute; the terminal should reconnect and replay its scrollback. *Passed on device (owner, 2026-11-21).*
+
+The owner's report covered the Android Chrome checks only. The Git client flow in [gitlab.md](gitlab.md#working-from-an-android-git-client) was not reported and stays `unknown`.
 
 Report a failure with the Chrome version, the Android version and whether the app ran installed or in a tab.
