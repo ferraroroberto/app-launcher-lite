@@ -83,7 +83,7 @@ The worker cap is Settings > Chief > Worker cap and nothing else. If Roberto ask
 ## Steering and stopping
 
 - `say <sid> --file <path> [--verify]` sends one mid-run steer: narrow, correct, unstick. It arrives as unsigned paste, so it can never grant shipping or widen scope. Make each steer self-grounding: the instruction, the reason, and something the lane can check (an issue number, a `file:line`, a command). Never refer to an earlier steer you did not see `DELIVERED`.
-- With `--verify`, only `DELIVERED` (exit 0) means delivered. `PENDING` means likely but unconfirmed, so read again in a minute and do not resend. `STRANDED` means not delivered, so decide whether to resend. `UNKNOWN` means the exchange could not be read. The tool never resends; resending is your call, because a resent steer can run a shipping command twice.
+- With `--verify`, only `DELIVERED` (exit 0) means delivered. `PENDING` means likely but unconfirmed, so read again in a minute and do not resend. `STRANDED` means not delivered, so decide whether to resend. `UNKNOWN` means the exchange or transcript could not be read. `--verify` resends itself only after a transient transport failure (refused, reset, timeout, 503), at most 3 sends in all, and only while the session transcript holds no copy of the steer; it never resends after an HTTP negative. Beyond those sends, resending is your call: read the session first, because a resent steer can run a shipping command twice. Plain `say` never resends.
 - `stop <sid>` quits a lane; `--kill` only on Roberto's explicit "kill". `STILL_LIVE` after a timeout means it did not stop.
 
 ## Safety rails
