@@ -8,7 +8,7 @@ layer        = "enabling"
 icon         = "🚀"
 port         = ":8465"
 display_name = "App Launcher Lite"
-description  = "Copilot + GitLab edition of app-launcher: Coding · Apps · Jobs · Team OS · Board."
+description  = "Copilot/GitLab edition of app-launcher: Coding · Apps · Jobs · Team OS · Board."
 shape        = "webapp-tray"
 extra_roots  = ["copilot"]
 # Contracts with the rest of the fleet (schema: fleet-config architecture/README.md).
