@@ -20,6 +20,7 @@ import { setSwitch } from '../_vendored/switch/switch.js';
 import { renderSettingsValues } from './settings-sheets.js';
 import { renderSpeech } from './speech-settings.js';
 import { renderLidKeepAwake } from './lid-keep-awake.js';
+import { renderNetworkAccess, wireNetworkAccess } from './network-access.js';
 
 export async function fetchConfig(shouldApply) {
   const body = await jsonApi('/api/config');
@@ -75,6 +76,7 @@ export async function fetchConfig(shouldApply) {
   if (els.openSessionsInChatToggle) {
     setSwitch(els.openSessionsInChatToggle, body.open_sessions_in_chat !== false);
   }
+  renderNetworkAccess(body);
   renderClaudeOptions();
   renderSettingsValues();
   return true;
@@ -276,6 +278,7 @@ export function wireClaudeOptions() {
   wireConfigSwitch(els.copilotAutopilot, 'copilot_autopilot', { label: 'Autopilot' });
   wireConfigSwitch(els.copilotSkipPerms, 'copilot_skip_permissions', { label: 'Skip permission prompts' });
   wireConfigSwitch(els.copilotRemote, 'copilot_remote_session', { label: 'Remote session' });
+  wireNetworkAccess(fetchConfig);
   wireModelList();
   wireAddDefaultModels();
   wireLaunchPresets(savePresets);

@@ -8,6 +8,7 @@ live terminal won't work on the current connection.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -30,7 +31,7 @@ from src.launching.presets import (
     checked_launch_presets,
     efforts_for,
 )
-from src.middleware import terminal_reachability
+from src.middleware import private_network_switch_gate, terminal_reachability
 from src.session_view import outbox as session_outbox
 from src.webapp_config import (
     MAX_CHIEF_AUTO_COMPACT_THRESHOLD,
@@ -46,6 +47,8 @@ from src.webapp_config import (
     WebappConfig,
     update_webapp_config,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -69,6 +72,10 @@ async def get_config(request: Request) -> Dict[str, Any]:
         # Where the SPA opens a session: the PC window, and Chat first.
         "open_sessions_in_window": cfg.open_sessions_in_window,
         "open_sessions_in_chat": cfg.open_sessions_in_chat,
+        # Settings › Terminal: trust the private network for the terminal-grade
+        # routes, and (a second switch) for the screen view too.
+        "terminal_allow_private_lan": cfg.terminal_allow_private_lan,
+        "screen_allow_private_lan": cfg.screen_allow_private_lan,
         "apps_scan_root": cfg.apps_scan_root,
         "team_os_dir": cfg.team_os_dir,
         "fleet_config_dir": cfg.fleet_config_dir,
@@ -179,6 +186,11 @@ def _checked_model_list(raw: Any) -> List[str]:
     return models
 
 
+# The two switches that widen who reaches the terminal-grade routes; changing
+# either is gated on the caller (private_network_switch_gate).
+PRIVATE_NETWORK_KEYS = ("terminal_allow_private_lan", "screen_allow_private_lan")
+
+
 # The Settings switches: a truthy string must never flip
 # one ("false" is truthy in Python), so patch_config refuses anything but a bool.
 _SWITCH_KEYS = (
@@ -193,6 +205,7 @@ _SWITCH_KEYS = (
     "copilot_autopilot",
     "copilot_remote_session",
     "speech_enabled",
+    *PRIVATE_NETWORK_KEYS,
 )
 
 
@@ -206,6 +219,7 @@ _PATCH_KEYS = frozenset({
     "launch_presets",
     "open_sessions_in_window",
     "open_sessions_in_chat",
+    *PRIVATE_NETWORK_KEYS,
     "apps_scan_root",
     "team_os_dir",
     "fleet_config_dir",
@@ -240,6 +254,24 @@ def _checked_whole_number(patch: Dict[str, Any], key: str, what: str) -> None:
         value = patch[key]
         if isinstance(value, bool) or not isinstance(value, int):
             raise HTTPException(status_code=400, detail=f"{key} must be {what}")
+
+
+def _settle_private_network(patch: Dict[str, Any], cfg: WebappConfig) -> None:
+    """Keep the screen switch under the terminal one: turning the terminal
+    switch off turns the screen off with it, and the screen switch cannot be
+    turned on while the terminal one is off (a 400)."""
+    terminal_on = patch.get("terminal_allow_private_lan", cfg.terminal_allow_private_lan)
+    if not terminal_on:
+        if patch.get("screen_allow_private_lan"):
+            raise HTTPException(
+                status_code=400,
+                detail="screen_allow_private_lan needs terminal_allow_private_lan on first",
+            )
+        patch["screen_allow_private_lan"] = False
+    logger.info(
+        "ℹ️  private-network switches: terminal=%s screen=%s",
+        terminal_on, patch.get("screen_allow_private_lan", cfg.screen_allow_private_lan),
+    )
 
 
 @router.post("/api/config", response_model=None)
@@ -290,6 +322,11 @@ async def patch_config(request: Request) -> Any:
             raise HTTPException(
                 status_code=400, detail=f"{key} must be true or false"
             )
+    if any(key in patch for key in PRIVATE_NETWORK_KEYS):
+        refusal = private_network_switch_gate(request)
+        if refusal is not None:
+            return refusal
+        _settle_private_network(patch, cfg)
     # The favourite agent must name a registered agent; an unknown id is
     # coerced to DEFAULT_AGENT rather than stored, because the row renders
     # exactly one launch button and a dangling id would leave it with none.

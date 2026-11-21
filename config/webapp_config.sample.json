@@ -11,7 +11,8 @@
   "_comment_fleet_config_dir": "Root of the fleet-config-lite checkout (the Copilot hooks and skills) the Board, sessions and the fleet chief read from. Defaults to the sibling ../fleet-config-lite.",
   "_comment_session_host_port": "Loopback port the PTY session-host binds. Never network-reachable; the webapp proxies to it. Must differ from 'port'.",
   "_comment_tailnet_allowlist": "Extra IPs / CIDRs allowed to reach the interactive terminal endpoints, on top of loopback + the Tailscale CGNAT range 100.64.0.0/10. Leave empty unless you need LAN access.",
-  "_comment_terminal_allow_private_lan": "true trusts every private address (10/8, 172.16/12, 192.168/16, link-local, IPv6 unique-local) for the terminal-grade routes, for a machine with no Tailscale whose phone joins over a trusted home or office Wi-Fi. The bearer token and passkey still apply; anything else on that network can reach the login. Off by default.",
+  "_comment_terminal_allow_private_lan": "true trusts every private address (10/8, 172.16/12, 192.168/16, link-local, IPv6 unique-local) for the terminal-grade routes, for a machine with no Tailscale whose phone joins over a trusted home or office Wi-Fi. The bearer token and passkey still apply; anything else on that network can reach the login. Off by default. Settings > Terminal has the switch; it changes only on the PC itself or over Tailscale.",
+  "_comment_screen_allow_private_lan": "true also trusts those private addresses for the screen view (the whole desktop, terminals included). Takes effect only while terminal_allow_private_lan is true; the screen stays Tailscale-only otherwise. Off by default.",
   "_comment_outbox_scratch_roots": "Folders, besides a session's own, that an agent may send a file to the Chat pane from (issue #1530). %VAR% and ~ expand, Defaults to \"%TEMP%/claude\", Claude Code's scratch base (where its SendUserFile files live); a non-empty list here replaces it. Settings > Folders > Chat file folders edits it and checks each folder on save (issue #1748). A .zip, .gz, .tgz or .7z sent from any of these folders is shown as a download-only card (served as an attachment, never rendered).",
   "_comment_documents": "Settings > Documents: files the reading sheet may show, rendered live with Mermaid diagrams. Each entry is {id, title, repo, path}: id a short lowercase slug unique in the list, repo the folder name of a primary checkout under projects_dir (a -wt-N worktree is refused), path a relative .md path with forward slashes. Only listed files can be read, and the text is gated like the Life OS file reader: Tailscale-only, passkey-required. An entry that fails these checks is dropped with a warning in the log; an empty list hides the group.",
   "_comment_claude_show_local_window": "When true (default), launching a session from the phone also opens an interactive terminal window for it on the PC. It connects over loopback so input works from both the phone and the PC.",
@@ -64,6 +65,7 @@
   "session_host_port": 8466,
   "tailnet_allowlist": [],
   "terminal_allow_private_lan": false,
+  "screen_allow_private_lan": false,
   "outbox_scratch_roots": [
     "%TEMP%/claude"
   ],

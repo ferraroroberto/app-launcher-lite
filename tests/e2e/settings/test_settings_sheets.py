@@ -11,6 +11,8 @@ full-width primary, Done. Contract:
   * the Coding agent sheet offers Default plus the Copilot models, saves a
     pick and shows the server's flags, and its Launch presets add, edit,
     refuse and remove a preset (``_launch_presets.py``);
+  * the Terminal sheet's two private-network switches warn before they turn
+    on and the screen one follows the first (``_private_network.py``);
   * every ``openSettingsAt`` caller lands inside the sheet that holds its
     field (the Code and Team OS empty states, the Code tab's chief row);
   * no Save button is left: fields save as they change.
@@ -34,6 +36,7 @@ from tests.e2e.fixtures.ui import (
     open_settings_sheet,
 )
 from tests.e2e.settings._launch_presets import walk_launch_presets
+from tests.e2e.settings._private_network import walk_private_network_switches
 from tests.e2e.settings._speech import walk_speech_sheet
 
 pytestmark = pytest.mark.smoke
@@ -169,6 +172,8 @@ def test_copilot_sheet_saves_a_model_and_shows_the_flags(
     assert _config(base_url, auth_token)["gitlab_group"] == "e2e-group/sub"
     close_settings_sheets(page)
     expect(_value(page, "gitlab")).to_contain_text("e2e-group/sub")
+
+    walk_private_network_switches(page)
 
 
 _OPEN_SETTINGS_AT_CALLERS = [
