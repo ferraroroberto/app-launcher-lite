@@ -69,10 +69,10 @@ from app.webapp.routers.board_spawn import (
     _await_dispatch_ready,
     _await_pty_quiescent,
     _read_live_sessions,
-    _resolve_repo_entry,
     _type_into_session,
 )
 from src import audit, board
+from src._fleet_contract import fleet_python
 from src.chief import identity as chief_identity
 from src.chief import journal as chief_journal
 from src.chief import pointer as chief_pointer
@@ -92,7 +92,6 @@ from src.webapp_config import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-_CHIEF_REPO = "fleet-config-lite"
 _CHIEF_LABEL = chief_identity.CHIEF_LABEL
 _CHIEF_COMMAND = chief_identity.CHIEF_COMMAND
 _CHIEF_TITLE = chief_identity.CHIEF_TITLE
@@ -104,11 +103,6 @@ CHIEF_STOP_POLL_S = 0.25
 # Two concurrent ensures (e.g. a chat send racing a manual Restart) must not
 # double-spawn; the lock serializes the check-then-spawn window.
 _CHIEF_ENSURE_LOCK = asyncio.Lock()
-
-# The directory-name grain every "is this fleet-config?" check in this repo
-# already uses (src/board/state.py's project fallback, the state-row `project`
-# field) — cheap and consistent, no registry scan needed.
-_CHIEF_PROJECT_DIR_NAME = chief_identity.CHIEF_PROJECT_DIR_NAME
 
 _live_title_names_chief = chief_identity.live_title_names_chief
 _reconcile_chief_label = chief_identity.reconcile_chief_label
@@ -160,13 +154,10 @@ async def _mark_chief_managed(
         return False
     if not _find_chief(live):
         return False
-    try:
-        fleet_config = _resolve_repo_entry(cfg, _CHIEF_REPO)
-    except HTTPException:
-        return True
-    venv_python = Path(fleet_config.project_dir) / ".venv" / "Scripts" / "python.exe"
-    script = Path(fleet_config.project_dir) / "skills" / "_lib" / "chief_managed.py"
-    if not venv_python.exists() or not script.exists():
+    chief_dir = Path(cfg.fleet_config_dir)
+    venv_python = fleet_python(chief_dir)
+    script = chief_dir / "skills" / "_lib" / "chief_managed.py"
+    if not script.exists():
         return True
     try:
         await asyncio.to_thread(
@@ -184,7 +175,7 @@ async def _mark_chief_managed(
 
 
 def _reconcile_chief_labels(
-    live: List[Dict[str, Any]], state_rows: Dict[str, Any]
+    live: List[Dict[str, Any]], state_rows: Dict[str, Any], chief_dir: str
 ) -> List[Dict[str, Any]]:
     """Apply :func:`_reconcile_chief_label` across a live session list.
 
@@ -204,7 +195,7 @@ def _reconcile_chief_labels(
     module-level memo in :func:`_note_chief_conversation` keeps this a no-op
     write on every poll after the first for an unchanged chief.
     """
-    reconciled = chief_identity.reconcile_chief_labels(live, state_rows)
+    reconciled = chief_identity.reconcile_chief_labels(live, state_rows, chief_dir)
     _note_chief_conversation(reconciled, state_rows)
     return reconciled
 
@@ -223,7 +214,7 @@ async def _live_sessions_with_chief_label(
         asyncio.to_thread(_read_live_sessions, cfg.session_host_port),
         asyncio.to_thread(board.read_sessions_state, Path(cfg.sessions_state_file)),
     )
-    reconciled = _reconcile_chief_labels(live, state["rows"])
+    reconciled = _reconcile_chief_labels(live, state["rows"], cfg.fleet_config_dir)
     return reconciled, state, host_error
 
 
@@ -283,13 +274,14 @@ def _note_chief_conversation(
     )
 
 
-def _fresh_fleet_config_stamp(row: Any, now: datetime) -> Optional[datetime]:
+def _fresh_chief_dir_stamp(
+    row: Any, now: datetime, chief_dir: str
+) -> Optional[datetime]:
     """This ``sessions-state.json`` row's ``updated_at``, if it is a
-    live-enough fleet-config row — else ``None``.
+    live-enough row of the chief's folder — else ``None``.
 
-    Qualifying means: in the fleet-config checkout (``project``, falling back
-    to ``Path(cwd).name`` — the same fallback ``src.board.sessions._external_card``
-    already applies) and stamped within ``board.STATE_STALE_AFTER``. The 24h
+    Qualifying means: its ``cwd`` is ``chief_dir`` (:func:`chief_identity.is_chief_dir`)
+    and it is stamped within ``board.STATE_STALE_AFTER``. The 24h
     window is applied **per row** rather than trusting the file-level
     ``stale`` flag some *other* row could keep looking fresh: a chief
     conversation that's individually gone cold must not be resumed just
@@ -300,9 +292,7 @@ def _fresh_fleet_config_stamp(row: Any, now: datetime) -> Optional[datetime]:
     """
     if not isinstance(row, dict):
         return None
-    cwd = row.get("cwd")
-    project = str(row.get("project") or Path(str(cwd or "")).name)
-    if project != _CHIEF_PROJECT_DIR_NAME:
+    if not chief_identity.is_chief_dir(row.get("cwd"), chief_dir):
         return None
     stamp = board.parse_iso(row.get("updated_at"))
     if stamp is None or now - stamp > board.STATE_STALE_AFTER:
@@ -312,6 +302,7 @@ def _fresh_fleet_config_stamp(row: Any, now: datetime) -> Optional[datetime]:
 
 def _find_resumable_chief_session_id(
     state_rows: Dict[str, Any],
+    chief_dir: str,
     *,
     now: Optional[datetime] = None,
     preferred_sid: str = "",
@@ -372,7 +363,9 @@ def _find_resumable_chief_session_id(
     when it doesn't.
     """
     now = now or board.utc_now()
-    if preferred_sid and _preferred_is_resumable(state_rows.get(preferred_sid), now):
+    if preferred_sid and _preferred_is_resumable(
+        state_rows.get(preferred_sid), now, chief_dir
+    ):
         logger.info(
             "↩️ chief resume: reattaching the stopped PTY's own conversation %s",
             str(preferred_sid)[:8],
@@ -381,7 +374,7 @@ def _find_resumable_chief_session_id(
 
     tiers = _ResumeTiers()
     for sid, row in state_rows.items():
-        stamp = _fresh_fleet_config_stamp(row, now)
+        stamp = _fresh_chief_dir_stamp(row, now, chief_dir)
         if stamp is None:
             continue
         if str(row.get("name") or "").strip().lower() != _CHIEF_TITLE:
@@ -402,10 +395,10 @@ def _find_resumable_chief_session_id(
     return chosen
 
 
-def _preferred_is_resumable(row: Any, now: datetime) -> bool:
+def _preferred_is_resumable(row: Any, now: datetime, chief_dir: str) -> bool:
     """Whether the stopped live chief's own row is fresh and not confirmed
     bootstrap-only."""
-    return _fresh_fleet_config_stamp(row, now) is not None and (
+    return _fresh_chief_dir_stamp(row, now, chief_dir) is not None and (
         board.has_typed_user_prompt(row.get("transcript_path")) is not False
     )
 
@@ -696,7 +689,10 @@ async def ensure_chief(request: Request) -> Dict[str, Any]:
             )
             await _stop_chief_for_respawn(cfg.session_host_port, sid)
 
-        resumed_session_id = await _resume_target(state["rows"], preferred_sid) if resume else ""
+        resumed_session_id = (
+            await _resume_target(state["rows"], cfg.fleet_config_dir, preferred_sid)
+            if resume else ""
+        )
         session, sid = await _spawn_chief(
             cfg, request, body, state["rows"], resumed_session_id, rows=rows, cols=cols,
         )
@@ -721,10 +717,13 @@ async def ensure_chief(request: Request) -> Dict[str, Any]:
         }
 
 
-async def _resume_target(state_rows: Dict[str, Any], preferred_sid: str) -> str:
+async def _resume_target(
+    state_rows: Dict[str, Any], chief_dir: str, preferred_sid: str
+) -> str:
     """The chief conversation a resume reattaches, ``""`` for none, read off the loop."""
     return await asyncio.to_thread(
-        _find_resumable_chief_session_id, state_rows, preferred_sid=preferred_sid,
+        _find_resumable_chief_session_id, state_rows, chief_dir,
+        preferred_sid=preferred_sid,
     )
 
 
@@ -758,7 +757,12 @@ async def _spawn_chief(
 ) -> Tuple[Dict[str, Any], str]:
     """Spawn the chief, resumed into ``resumed_session_id`` or fresh with
     ``/chief`` typed in, name it and audit the start; ``(session, sid)``."""
-    entry = _resolve_repo_entry(cfg, _CHIEF_REPO)
+    chief_dir = Path(cfg.fleet_config_dir)
+    if not chief_dir.is_dir():
+        raise HTTPException(
+            status_code=404,
+            detail="the chief's copilot folder does not exist; check the Copilot folder in Settings",
+        )
     model, model_warning = chief_launch_model(cfg)
     if model_warning:
         logger.warning("⚠️ chief start: %s", model_warning)
@@ -775,7 +779,7 @@ async def _spawn_chief(
         agent, flags = _agent_and_flags(cfg, model, effort=effort, context=context)
     session, sid = await spawn_launcher_session(
         spawn_claude_session, cfg,
-        project_dir=Path(entry.project_dir), name=_CHIEF_LABEL,
+        project_dir=chief_dir, name=_CHIEF_LABEL,
         flags=flags, agent=agent, rows=rows, cols=cols,
         label=_CHIEF_LABEL,
     )
@@ -827,7 +831,7 @@ async def _spawn_chief(
     await audit_session_start_and_maybe_mirror(
         cfg, request, body,
         sid=sid, agent=agent, name=_CHIEF_LABEL,
-        project=entry.project_dir,
+        project=str(chief_dir),
         skill=None if resumed_session_id else _CHIEF_COMMAND,
         resume=bool(resumed_session_id),
         audit_mod=audit, mirror_fn=open_local_terminal_window,

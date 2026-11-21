@@ -11,6 +11,7 @@ import pytest
 from app.webapp.routers import board_chief as chief_router
 from src.chief import pointer as chief_pointer
 from tests.api.chief._support import (
+    CHIEF_DIR,
     _chief,
     _chief_row,
     _chief_state_row,
@@ -48,8 +49,12 @@ _RANKER_CASES = [
     ),
     pytest.param(
         {"x": _chief(hours=1, cwd="E:/automation/app-launcher-wt-42",
-                     project="fleet-config-lite")},
-        None, "", "x", id="project-field-beats-cwd-basename",
+                     project="copilot")},
+        None, "", "", id="project-field-does-not-make-a-chief-folder",
+    ),
+    pytest.param(
+        {"x": _chief(hours=1, cwd=CHIEF_DIR.replace("\\", "/"))},
+        None, "", "x", id="cwd-compares-with-either-slash-style",
     ),
     pytest.param({"x": "not-a-row"}, None, "", "", id="non-dict-row-skipped"),
     pytest.param(
@@ -164,7 +169,9 @@ def test_resume_reattaches_the_conversation_worth_resuming(
             if kind == "gone":
                 Path(transcript).unlink()
     assert (
-        chief_router._find_resumable_chief_session_id(rows, preferred_sid=preferred)
+        chief_router._find_resumable_chief_session_id(
+            rows, CHIEF_DIR, preferred_sid=preferred
+        )
         == expected
     )
 
@@ -449,9 +456,10 @@ class TestNoteChiefConversation:
         live = chief_router._reconcile_chief_labels(
             [_chief_row(
                 label="", name="fleet-config-lite", live_title="✳ chief",
-                project_dir="E:/automation/fleet-config-lite",
+                project_dir=CHIEF_DIR,
             )],
             rows,
+            CHIEF_DIR,
         )
         chief_router._note_chief_conversation(live, rows)
         await self._drain()

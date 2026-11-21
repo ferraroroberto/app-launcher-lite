@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from src import runtime_files
+from src._fleet_contract import fleet_python
 from src._json_io import atomic_write_json
 from src.board import owner_try
 from src.board.state import parse_utc_iso
@@ -130,17 +131,14 @@ def _now_iso(now: Optional[datetime] = None) -> str:
 # ------------------------------------------------------------------ the CLI
 
 def _cli_argv(fleet_config_dir: str) -> List[str]:
-    """fleet-config's venv python and the owner_check CLI, or OwnerCheckError."""
+    """A python and the owner_check CLI under the copilot tree, or OwnerCheckError."""
     if not str(fleet_config_dir or "").strip():
-        raise OwnerCheckError("the fleet-config folder is not set in Settings")
+        raise OwnerCheckError("the copilot folder is not set in Settings")
     root = Path(fleet_config_dir)
     script = root / "skills" / "_lib" / "owner_check" / "cli.py"
-    python = root / ".venv" / "Scripts" / "python.exe"
     if not script.is_file():
-        raise OwnerCheckError("this fleet-config checkout has no owner_check package")
-    if not python.is_file():
-        raise OwnerCheckError("fleet-config's .venv is missing")
-    return [str(python), str(script)]
+        raise OwnerCheckError("this copilot folder has no owner_check package")
+    return [str(fleet_python(root)), str(script)]
 
 
 def _run_cli(fleet_config_dir: str, args: Sequence[str], timeout: float) -> Tuple[int, str]:

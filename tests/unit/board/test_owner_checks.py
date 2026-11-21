@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -184,6 +185,20 @@ def test_corrupt_marks_read_as_none(tmp_path):
 def test_no_fleet_config_is_its_own_error():
     with pytest.raises(owner_checks.OwnerCheckError, match="not set"):
         owner_checks._cli_argv("")
+
+
+def test_the_cli_runs_from_a_folder_with_no_venv_of_its_own(tmp_path):
+    cli = tmp_path / "skills" / "_lib" / "owner_check" / "cli.py"
+    cli.parent.mkdir(parents=True)
+    cli.touch()
+    python, script = owner_checks._cli_argv(str(tmp_path))
+    assert script == str(cli)
+    assert Path(python).is_file()
+
+
+def test_a_folder_without_the_owner_check_package_is_its_own_error(tmp_path):
+    with pytest.raises(owner_checks.OwnerCheckError, match="no owner_check"):
+        owner_checks._cli_argv(str(tmp_path))
 
 
 # ------------------------------------------------------------------ the route

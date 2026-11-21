@@ -1481,7 +1481,7 @@ flowchart LR
   - Folders in This PC
   - an empty state's Open Settings
 - **Holds:**
-  - Projects folder, Hidden projects, Apps folder, Team OS folder and fleet-config-lite folder
+  - Projects folder, Hidden projects, Apps folder, Team OS folder and Copilot folder
   - Chat file folders with an Add action and one row per folder
   - Done
 - **Leads to:** [Chat folder menu](#settingsoutbox-menu-chat-folder-menu) (a folder's kebab)

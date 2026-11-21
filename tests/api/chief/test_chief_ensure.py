@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.api.chief._support import _chief_row
+from tests.api.chief._support import CHIEF_DIR, _chief_row
 
 
 class TestEnsureSpawn:
@@ -41,7 +41,7 @@ class TestEnsureSpawn:
         # Default chief model is gpt-6-luna; no positional prompt in flags.
         assert "--model gpt-6-luna" in _spawn["flags"]
         assert not _spawn["flags"].rstrip().endswith('"')
-        assert str(_spawn["project_dir"]).endswith("fleet-config-lite")
+        assert str(_spawn["project_dir"]) == CHIEF_DIR
         # /chief rides the PTY input path: framing + the submit CR are the
         # session-host's own job now (#611) — one call, submit=True.
         calls = overrides["session"].send_input.call_args_list
@@ -156,7 +156,7 @@ class TestEnsureSpawn:
         del row["label"]
         row["name"] = "fleet-config-lite"
         row["prompt_title"] = "/chief"
-        row["project_dir"] = "E:/automation/fleet-config-lite"
+        row["project_dir"] = CHIEF_DIR
         overrides["session"].list_sessions.return_value = [row]
         resp = client.post("/api/board/chief/ensure", json={})
         assert resp.json()["spawned"] is False
@@ -177,7 +177,7 @@ class TestEnsureSpawn:
         del row["label"]
         row["name"] = "fleet-config-lite"
         row["prompt_title"] = "ok restarted, check all is good"
-        row["project_dir"] = "E:/automation/fleet-config-lite"
+        row["project_dir"] = CHIEF_DIR
         row["started_at"] = "2026-07-27T07:14:00Z"
         overrides["session"].list_sessions.return_value = [row]
 
@@ -261,13 +261,14 @@ class TestEnsureSpawn:
         assert resp.json()["spawned"] is True
         assert len(overrides["session"].send_input.call_args_list) == 1
 
-    def test_missing_fleet_config_checkout_404s(
-        self, webapp_client, _bypass_gate, _fast_probe, _spawn
+    def test_missing_copilot_folder_404s(
+        self, webapp_client, _bypass_gate, _fast_probe, _spawn, tmp_path
     ):
-        client, _, _ = webapp_client
+        client, app, _ = webapp_client
+        app.state.webapp_config.fleet_config_dir = str(tmp_path / "absent")
         resp = client.post("/api/board/chief/ensure", json={})
         assert resp.status_code == 404
-        assert "fleet-config-lite" in resp.json()["detail"]
+        assert "copilot folder" in resp.json()["detail"]
         assert not _spawn
 
     def test_readiness_timeout_kills_half_spawn(

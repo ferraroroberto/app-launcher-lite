@@ -19,6 +19,7 @@ from app.webapp.chief_doorbell import count_pending
 from src import instance_role, notifications
 from src.chief import job_failed as cjf
 from src.clients import session as session_client
+from tests.api.chief._support import CHIEF_DIR
 
 
 def _cfg(tmp_path, **over):
@@ -28,6 +29,7 @@ def _cfg(tmp_path, **over):
         projects_dir=str(tmp_path / "projects"),
         sessions_state_file=str(tmp_path / "sessions-state.json"),
         session_host_port=54321,
+        fleet_config_dir=CHIEF_DIR,
         notify_on_failure=False,
         notify_failure_streak=0,
         notify_failure_summary=False,
@@ -232,7 +234,7 @@ class TestChiefLive:
     @pytest.mark.parametrize("sessions,expected", [
         ([{"session_id": "s1", "kind": "pty", "alive": True, "label": "chief"}], True),
         # A chief typed by hand into a plain session carries no label and self-heals.
-        ([{"session_id": "s1", "kind": "pty", "alive": True, "project_dir": "E:/x/fleet-config-lite",
+        ([{"session_id": "s1", "kind": "pty", "alive": True, "project_dir": CHIEF_DIR,
            "prompt_title": "/chief"}], True),
         ([{"session_id": "s1", "kind": "pty", "alive": True, "label": "worker"},
           {"session_id": "s2", "kind": "pty", "alive": False, "label": "chief"}], False),

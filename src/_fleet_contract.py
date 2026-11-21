@@ -22,6 +22,20 @@ from pathlib import Path
 from types import ModuleType
 
 
+def fleet_python(fleet_config_dir: Path) -> Path:
+    """The interpreter that runs a helper script under ``fleet_config_dir``.
+
+    The helpers are stdlib-only, so the tree's own ``.venv`` is used when it
+    has one (a sibling checkout), else this repo's ``.venv``, else the
+    interpreter running the launcher. ``copilot/`` ships no ``.venv`` of its own.
+    """
+    own = fleet_config_dir / ".venv" / "Scripts" / "python.exe"
+    if own.is_file():
+        return own
+    repo = Path(__file__).resolve().parent.parent / ".venv" / "Scripts" / "python.exe"
+    return repo if repo.is_file() else Path(sys.executable)
+
+
 @lru_cache(maxsize=4)
 def load_fleet_contract(path_text: str, alias: str, label: str) -> ModuleType:
     """Import ``path_text`` as a module named ``alias``.

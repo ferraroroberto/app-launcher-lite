@@ -46,12 +46,17 @@ def test_the_tray_mutex_is_its_own_and_carries_the_webapp_port() -> None:
     assert r"Global\app-launcher-tray" not in source
 
 
-def test_the_chiefs_project_folder_is_the_lite_fleet_checkout() -> None:
-    assert chief_identity.CHIEF_PROJECT_DIR_NAME == "fleet-config-lite"
+def test_the_chief_is_recognised_by_its_whole_folder_path() -> None:
+    chief_dir = str(REPO_ROOT / "copilot")
+    assert chief_identity.is_chief_dir(chief_dir.replace("\\", "/"), chief_dir)
+    assert not chief_identity.is_chief_dir(REPO_ROOT.parent / "copilot", chief_dir)
+    assert not chief_identity.is_chief_dir("", chief_dir)
+    assert not chief_identity.is_chief_dir(chief_dir, "")
 
 
-def test_the_fleet_checkout_defaults_to_the_lite_sibling() -> None:
-    assert Path(webapp_config._default_fleet_config_dir()) == REPO_ROOT.parent / "fleet-config-lite"
+def test_the_chiefs_folder_defaults_to_this_repos_copilot_tree() -> None:
+    assert Path(webapp_config._default_fleet_config_dir()) == REPO_ROOT / "copilot"
+    assert webapp_config.WebappConfig().fleet_config_dir == str(REPO_ROOT / "copilot")
 
 
 def test_session_and_chief_state_default_under_the_copilot_hook_state_dir() -> None:

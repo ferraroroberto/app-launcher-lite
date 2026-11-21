@@ -417,16 +417,15 @@ class TestChiefManagedMarking:
 
     @pytest.fixture
     def _fleet_config_repo(self, webapp_client):
-        """A resolvable ``fleet-config-lite`` project dir with a fake venv python
-        and `chief_managed.py`, so `_resolve_repo_entry` + the two
-        `.exists()` checks in `_mark_chief_managed` succeed without ever
-        really invoking a subprocess (`subprocess.run` is faked below)."""
-        _, _, overrides = webapp_client
-        repo = overrides["tmp_projects_dir"] / "fleet-config-lite"
-        (repo / ".venv" / "Scripts").mkdir(parents=True)
-        (repo / ".venv" / "Scripts" / "python.exe").touch()
+        """The chief's folder (``fleet_config_dir``) holding a fake
+        `chief_managed.py`, so the `.exists()` check in `_mark_chief_managed`
+        succeeds without ever really invoking a subprocess (`subprocess.run`
+        is faked below)."""
+        _, app, overrides = webapp_client
+        repo = overrides["tmp_projects_dir"] / "copilot"
         (repo / "skills" / "_lib").mkdir(parents=True)
         (repo / "skills" / "_lib" / "chief_managed.py").touch()
+        app.state.webapp_config.fleet_config_dir = str(repo)
         return repo
 
     @pytest.fixture

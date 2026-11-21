@@ -62,7 +62,9 @@ def chief_live(cfg: Any, kind: str = KIND) -> Optional[bool]:
         return None
     state = board.read_sessions_state(Path(cfg.sessions_state_file))
     return bool(chief_identity.find_chief(
-        chief_identity.reconcile_chief_labels(live, state["rows"])
+        chief_identity.reconcile_chief_labels(
+            live, state["rows"], cfg.fleet_config_dir
+        )
     ))
 
 

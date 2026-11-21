@@ -6,6 +6,7 @@ import pytest
 
 from app.webapp.routers import board_chief as chief_router
 from app.webapp.routers import board_spawn
+from tests.api.chief._support import CHIEF_DIR
 
 
 @pytest.fixture
@@ -53,8 +54,9 @@ def _spawn(webapp_client, monkeypatch):
 
 @pytest.fixture
 def _fleet_config_dir(webapp_client):
-    _, _, overrides = webapp_client
-    (overrides["tmp_projects_dir"] / "fleet-config-lite").mkdir(exist_ok=True)
+    """Point the chief's working folder at ``CHIEF_DIR`` for the endpoint tests."""
+    _, app, overrides = webapp_client
+    app.state.webapp_config.fleet_config_dir = CHIEF_DIR
     return overrides
 
 

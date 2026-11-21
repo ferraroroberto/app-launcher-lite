@@ -37,6 +37,7 @@ from app.webapp.chief_doorbell import (
 from src import instance_role
 from src.clients import session as session_client
 from src.webapp_config import SESSION_HOST_PORT_ENV
+from tests.api.chief._support import CHIEF_DIR
 
 NOW_MS = 1_800_000_000_000
 CHIEF_SID = "chief-launcher-sid"
@@ -464,10 +465,10 @@ def _setup(tmp_path, monkeypatch, *, status="needs-you", chief_extra=None,
     now = datetime.now(timezone.utc)
     state_file.write_text(json.dumps({
         "conv-chief": {
-            "project": "fleet-config-lite",
+            "project": "copilot",
             "status": status,
             "transcript_path": None,
-            "cwd": "E:/automation/fleet-config-lite",
+            "cwd": CHIEF_DIR,
             "agent": "claude",
             "launcher_session_id": CHIEF_SID,
             "updated_at": _iso(now - timedelta(seconds=30)),
@@ -478,8 +479,8 @@ def _setup(tmp_path, monkeypatch, *, status="needs-you", chief_extra=None,
         "kind": "pty",
         "agent": "claude",
         "label": "chief",
-        "project_dir": "E:/automation/fleet-config-lite",
-        "name": "fleet-config-lite",
+        "project_dir": CHIEF_DIR,
+        "name": "copilot",
         "alive": True,
         "started_at": _iso(now - timedelta(hours=1)),
         "live_title": "",
@@ -503,6 +504,7 @@ def _setup(tmp_path, monkeypatch, *, status="needs-you", chief_extra=None,
         chief_inbox_dir=str(inbox),
         sessions_state_file=str(state_file),
         session_host_port=54321,
+        fleet_config_dir=CHIEF_DIR,
     )
     return cfg, reads
 

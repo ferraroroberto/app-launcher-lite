@@ -2,7 +2,7 @@
 
 The plan file is written only through fleet-config's ``skills/_lib/chief_plan.py``,
 which owns the format and the locking. This module loads that contract by path
-(the load :mod:`src.fleet_scope` uses) and calls ``prune_plan_file``; it never
+(the load :mod:`src.board.active_issue_claims` uses) and calls ``prune_plan_file``; it never
 opens the plan itself.
 
 A missing or older fleet-config is its own outcome, :class:`PlanPruneUnavailable`,

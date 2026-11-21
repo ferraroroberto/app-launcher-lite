@@ -8,7 +8,7 @@ can ask it without importing the router.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+import os
 from typing import Any, Dict, List
 
 from src import board
@@ -18,9 +18,21 @@ logger = logging.getLogger(__name__)
 CHIEF_LABEL = "chief"
 CHIEF_COMMAND = "/chief"
 CHIEF_TITLE = "chief"
-# The directory-name grain every "is this fleet-config?" check in this repo
-# uses (the Board state's project fallback, the state-row `project` field).
-CHIEF_PROJECT_DIR_NAME = "fleet-config-lite"
+
+
+def is_chief_dir(path: Any, chief_dir: str) -> bool:
+    """Whether ``path`` is the chief's working folder (``fleet_config_dir``).
+
+    The whole path decides, never its last segment: the folder is ``copilot/``
+    by default, a name that says nothing, and any other repo may have one.
+    Windows paths compare case-insensitively with either slash.
+    """
+    text, wanted = str(path or "").strip(), str(chief_dir or "").strip()
+    if not text or not wanted:
+        return False
+    return os.path.normcase(os.path.normpath(text)) == os.path.normcase(
+        os.path.normpath(wanted)
+    )
 
 
 def live_title_names_chief(sess: Dict[str, Any]) -> bool:
@@ -50,7 +62,9 @@ def live_title_names_chief(sess: Dict[str, Any]) -> bool:
     return title.split()[-1].strip().lower() == CHIEF_TITLE
 
 
-def reconcile_chief_label(sess: Dict[str, Any], shared_name: Any) -> Dict[str, Any]:
+def reconcile_chief_label(
+    sess: Dict[str, Any], shared_name: Any, chief_dir: str
+) -> Dict[str, Any]:
     """Self-heal ``label`` for a chief PTY spawned outside ``ensure``.
 
     ``ensure_chief`` is spawn-if-absent, but it is not the only way a chief
@@ -90,18 +104,18 @@ def reconcile_chief_label(sess: Dict[str, Any], shared_name: Any) -> Dict[str, A
       but it needs a hook to have fired at least once, which is exactly the
       window ``live_title`` above closes.
 
-    All three are scoped to a live PTY cwd'd in the fleet-config checkout — a
-    directory name alone proves nothing (the dead ``name == "chief"``
-    fallback below learned that the hard way: it reads the *launcher's*
-    session name, which is the project name ("fleet-config") for a
-    Resume-launched session, never "chief").
+    All three are scoped to a live PTY cwd'd in ``chief_dir`` (the chief's
+    working folder, :func:`is_chief_dir`) — a session name alone proves
+    nothing (the dead ``name == "chief"`` fallback below learned that the
+    hard way: it reads the *launcher's* session name, which is the project
+    name for a Resume-launched session, never "chief").
 
     Read-only: never mutates the session-host's own record, only the dict
     this process just fetched from it.
     """
     if sess.get("label") or sess.get("kind") != "pty":
         return sess
-    if Path(str(sess.get("project_dir") or "")).name != CHIEF_PROJECT_DIR_NAME:
+    if not is_chief_dir(sess.get("project_dir"), chief_dir):
         return sess
     prompt_title = str(sess.get("prompt_title") or "").strip()
     shared_name_norm = str(shared_name or "").strip().lower()
@@ -119,7 +133,7 @@ def reconcile_chief_label(sess: Dict[str, Any], shared_name: Any) -> Dict[str, A
 
 
 def reconcile_chief_labels(
-    live: List[Dict[str, Any]], state_rows: Dict[str, Any]
+    live: List[Dict[str, Any]], state_rows: Dict[str, Any], chief_dir: str
 ) -> List[Dict[str, Any]]:
     """Apply :func:`reconcile_chief_label` across a live session list.
 
@@ -131,7 +145,9 @@ def reconcile_chief_labels(
         str(item.get("session_id")): item.get("shared_name") for item in named
     }
     return [
-        reconcile_chief_label(sess, shared_names.get(str(sess.get("session_id"))))
+        reconcile_chief_label(
+            sess, shared_names.get(str(sess.get("session_id"))), chief_dir
+        )
         for sess in live
     ]
 

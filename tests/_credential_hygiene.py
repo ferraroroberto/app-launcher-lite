@@ -128,10 +128,9 @@ HOST_STATE_KEYS = {
     "chief_plan_file": "hooks-state/chief-plan.json",
     "chief_managed_file": "hooks-state/chief-managed.json",
     "chief_inbox_dir": "hooks-state/chief-inbox",
-    # Never created: an absent folder reads as "no fleet". The default is the
-    # owner's real sibling fleet-config-lite, whose repo list the Board's
-    # owner-check list would walk, putting real repo names on the disposable
-    # Board.
+    # Never created: an absent folder reads as "no fleet". The default is this
+    # repo's real copilot/ tree, whose owner-check CLI would query the owner's
+    # real GitLab and put real repo names on the disposable Board.
     "fleet_config_dir": "fleet-config-lite",
 }
 

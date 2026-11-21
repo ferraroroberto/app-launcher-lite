@@ -194,7 +194,9 @@ async def observe(cfg: Any) -> Observation:
     )
     if host_error is not None:
         return Observation(pending=pending, blocked=f"session-host unreadable: {host_error}")
-    live = board_chief._reconcile_chief_labels(live, state["rows"])
+    live = board_chief._reconcile_chief_labels(
+        live, state["rows"], cfg.fleet_config_dir
+    )
     chief = board_chief._find_chief(live)
     if not chief:
         return Observation(pending=pending, blocked="no live chief")
