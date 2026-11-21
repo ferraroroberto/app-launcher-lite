@@ -171,6 +171,44 @@ def test_copilot_fold_reads_edit_and_create_keys_probed_from_the_cli(tmp_path):
     assert found["counts"] == _chat_edit_sum(path, "copilot")
 
 
+def test_copilot_fold_reads_an_apply_patch_call_whose_arguments_are_the_patch_text(tmp_path):
+    """GPT-family Copilot sessions edit through ``apply_patch`` with a *string*
+    ``arguments`` (probed from a real session that created ``tmp/test.txt``
+    and edited a tracked file): both files must list, the new one as added,
+    its relative path resolved against the project folder."""
+    project = tmp_path / "proj"
+    (project / "tmp").mkdir(parents=True)
+    (project / "a.txt").write_text("goodbye\n", encoding="utf-8")      # a file gone from disk reads as deleted
+    (project / "tmp" / "test.txt").write_text("hi\n", encoding="utf-8")
+    patch = ("*** Begin Patch\n*** Update File: a.txt\n@@\n-hello\n+goodbye\n"
+             "*** Add File: tmp/test.txt\n+hi\n*** End Patch\n")
+    path = _write_jsonl(tmp_path / "events.jsonl", [
+        _cop("tool.execution_start", {"toolCallId": "p1", "toolName": "apply_patch", "arguments": patch}),
+        _cop("tool.execution_complete", {"toolCallId": "p1", "success": True, "result": {"content": "Added 1 file(s)"}}),
+    ])
+    found = changed_files(path, str(project), "copilot")
+    by = _rows(found)
+    assert sorted(by) == ["a.txt", "tmp/test.txt"]
+    assert (by["a.txt"]["status"], by["a.txt"]["additions"], by["a.txt"]["deletions"]) == ("M", 1, 1)
+    assert (by["tmp/test.txt"]["status"], by["tmp/test.txt"]["additions"]) == ("A", 1)
+    assert found["counts"] == _chat_edit_sum(path, "copilot")
+    steps = file_steps(path, str(project / "tmp" / "test.txt"), flavor="copilot", project_dir=str(project))
+    assert steps is not None and steps["steps"][0]["created"] is True
+
+
+def test_copilot_fold_skips_a_rejected_apply_patch(tmp_path):
+    """A patch Copilot rejects (``success: false``) changed nothing."""
+    project = tmp_path / "proj"
+    project.mkdir()
+    patch = "*** Begin Patch\n*** Update File: a.txt\n@@\n-x\n+y\n*** End Patch\n"
+    path = _write_jsonl(tmp_path / "events.jsonl", [
+        _cop("tool.execution_start", {"toolCallId": "p1", "toolName": "apply_patch", "arguments": patch}),
+        _cop("tool.execution_complete", {"toolCallId": "p1", "success": False,
+                                         "error": {"message": "Failed to apply patch", "code": "failure"}}),
+    ])
+    assert changed_files(path, str(project), "copilot")["files"] == []
+
+
 # -------------------------------------------------------------------- Codex
 
 _PATCH = (
