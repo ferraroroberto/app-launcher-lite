@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "powershell": "& '{{PYTHON}}' '{{REPO}}/hooks/chief_guard.py' sessionStart",
+        "timeoutSec": 30
+      }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "powershell": "& '{{PYTHON}}' '{{REPO}}/hooks/chief_guard.py' userPromptSubmitted",
+        "timeoutSec": 30
+      }
+    ],
+    "agentStop": [
+      {
+        "type": "command",
+        "powershell": "& '{{PYTHON}}' '{{REPO}}/hooks/chief_guard.py' agentStop",
+        "timeoutSec": 90
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "powershell": "& '{{PYTHON}}' '{{REPO}}/hooks/chief_guard.py' preToolUse",
+        "timeoutSec": 30
+      }
+    ]
+  }
+}

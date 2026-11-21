@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "powershell": "& '{{PYTHON}}' '{{REPO}}/hooks/session_state.py' sessionStart{{SCOPE}}",
+        "timeoutSec": 10
+      }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "powershell": "& '{{PYTHON}}' '{{REPO}}/hooks/session_state.py' userPromptSubmitted{{SCOPE}}",
+        "timeoutSec": 10
+      }
+    ],
+    "agentStop": [
+      {
+        "type": "command",
+        "powershell": "& '{{PYTHON}}' '{{REPO}}/hooks/session_state.py' agentStop{{SCOPE}}",
+        "timeoutSec": 10
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "powershell": "& '{{PYTHON}}' '{{REPO}}/hooks/session_state.py' sessionEnd{{SCOPE}}",
+        "timeoutSec": 10
+      }
+    ]
+  }
+}

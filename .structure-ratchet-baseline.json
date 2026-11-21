@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "band": {"files": 9, "functions": 38},
-  "root_extras": [],
+  "band": {"files": 10, "functions": 39},
+  "root_extras": ["copilot"],
   "shape_contract": {
     "root_files": [],
     "redundant": [],

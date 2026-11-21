@@ -77,6 +77,13 @@ app-launcher-lite/
 │   ├── run_named_tunnel.py     # the Cloudflare named-tunnel runner
 │   ├── probe_endpoint_timing.py # GET-only endpoint timing at a phone's poll spacing
 │
+├── copilot/                    # the Copilot side: hooks, chief helpers, lane skills, their unittest suite (see below)
+│   ├── hooks/                  # session-state, chief-inbox and chief-guard hooks and their templates
+│   ├── skills/                 # issue-*, e2e, quick and the shared skills/_lib/ (chief_ops.py and friends)
+│   ├── .github/skills/chief/   # the chief skill
+│   ├── tests/                  # the copied stdlib unittest suite, run by tests/unit/copilot/
+│   └── provenance.json         # source commit plus a hash or a reason for every file
+│
 ├── tests/                      # pytest suite; shared helpers and the root conftest sit here, every test module in a folder below
 │   ├── unit/                   # unit tests by domain (board, chief, clients, core, desktop, jobs, launching, pty, session_host, ...)
 │   ├── api/                    # API tests by router (board, chief, config, documents, jobs, screen, webapp, nonblocking)
@@ -127,7 +134,8 @@ app-launcher-lite/
 
 - **Where new code goes:** a view's browser code in `app/webapp/static/`, its API in `app/webapp/routers/`, logic with no UI import in `src/`, tests under `tests/unit/<domain>/` (logic), `tests/api/<router>/` (routers) or `tests/e2e/<tab>/` (browser), never loose in `tests/` or `tests/e2e/`, which hold only shared helpers and the conftests. A new module in a full directory goes in a subpackage (`src/notify/`, `src/jobs_kinds/` and `src/transcript_flavors/` are the pattern), never loose in the directory.
 - **Second HTTP surface:** the session-host is `app/webapp/session_host/`, the shape's home for a separately bound listener: it has its own `server.py` and entry point (`launcher.py session-host`), and the webapp only reaches it over loopback HTTP through `src/clients/session.py`.
-- **Declared shape:** `webapp-tray`, with `webapp/` as the one extra root. It is the tray's runtime-state folder, and almost all of it is gitignored. The preset itself lists `assets/` and `config/`.
+- **Declared shape:** `webapp-tray`, with `webapp/` and `copilot/` as extra roots. `webapp/` is the tray's runtime-state folder, and almost all of it is gitignored. The preset itself lists `assets/` and `config/`.
+- **`copilot/` is the agent side, not the app.** It holds what the Copilot CLI runs (hooks, skills, the chief's helpers), so one clone carries both the launcher and its chief. It is copied from fleet-config-lite and keeps that repo's own layout, so every relative path and `parents[N]` lookup in it works unchanged. `copilot/provenance.json` records the source commit and, for each file, either its hash (byte-identical) or why it differs; `tests/unit/copilot/test_copilot_tree.py` fails on drift and runs the copied suite in a child interpreter. Nothing in `src/` or `app/` imports from it. The ratchets scan it like any other code, so its existing findings are baselined, never fixed in the copy.
 - **Flat directories:** `src/` is under the limit because its domains sit in subpackages; a new module goes in its domain's package, not loose in `src/`. `app/webapp/static/` is under the limit because its views' modules sit in the subfolders above; a new module goes in its view's folder, not loose beside `main.js`.
 - **The e2e conftest is a registrar.** `tests/e2e/conftest.py` holds the pytest hooks, the `_autoboot_server` session fixture and the fixtures it re-exports; the code behind them is in `tests/e2e/fixtures/`: `env.py` (paths, env-var names, run state), `waits.py` (waiting helpers and timeout budgets), `ui.py` (page-driving helpers), `processes.py` (spawning and leak scans), `autoboot.py` (the disposable servers' boot and isolation checks), `launch_target.py`, `sessions.py` and `pages.py`.
 - **Oversized files and functions:** every one over the limits is in the baseline at its current size. Splitting them is separate work, and a split lowers its entry.

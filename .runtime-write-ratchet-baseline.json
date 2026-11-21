@@ -1,4 +1,6 @@
 {
   "version": 1,
-  "entries": []
+  "entries": [
+    {"key": "copilot/hooks/session_state.py", "counts": {"unresolved": 1}}
+  ]
 }
