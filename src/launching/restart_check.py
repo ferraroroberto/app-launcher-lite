@@ -15,6 +15,10 @@ Run from the repo root, around the restart::
     tray.bat --restart          # from PowerShell, not ``cmd.exe /c`` in Git Bash
     python -m src.launching.restart_check verify
 
+``session-host`` is the wait ``scripts/restart-session-host.ps1`` runs after the
+restart: it polls the webapp's ``/api/version`` ``session_host`` block and ends in one of three
+distinct states (live, answering but not provably on the merged code, not answering).
+
 Every step appends a line to ``webapp/restart.log``.
 """
 
@@ -27,7 +31,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import requests
 
@@ -41,6 +45,13 @@ _WEBAPP_DIR = Path(__file__).resolve().parent.parent.parent / "webapp"
 RESTART_LOG = _WEBAPP_DIR / "restart.log"
 BASELINE_FILE = _WEBAPP_DIR / "restart-baseline.json"
 DEFAULT_VERIFY_TIMEOUT_S = 60.0
+# A cold session-host answers /healthz about 2.3 s after its spawn (measured on this box); the
+# webapp then reports it only from its /api/version snapshot, which can be up to 15 s old
+# (3 x VERSION_TICK_S), and the tray restart before the poll adds its own start-up. 45 s covers
+# that chain with margin without hiding a host that never comes up.
+SESSION_HOST_WAIT_S = 45.0
+# `freshness` values that mean the host runs the merged session-host code.
+_LIVE_FRESHNESS = ("fresh", "stale-irrelevant")
 _PROBE_TIMEOUT_S = 3.0
 _POLL_INTERVAL_S = 1.0
 
@@ -129,11 +140,73 @@ def verify(port: int, timeout_s: float = DEFAULT_VERIFY_TIMEOUT_S) -> int:
     return 1
 
 
+def classify_session_host(body: Optional[Dict[str, Any]]) -> Tuple[str, str]:
+    """``(state, detail)`` for one ``/api/version`` answer.
+
+    ``state`` is ``live`` (fresh, or stale only in files the host never loads),
+    ``unconfirmed`` (the host answers but ``freshness`` is not a pass: it may run older
+    session-host code, or the verdict could not be resolved), ``host-silent`` (the webapp
+    answers and reports the session-host unreachable) or ``webapp-silent`` (no webapp
+    answer at all). Only ``live`` is a success.
+    """
+    if body is None:
+        return "webapp-silent", "no webapp answering"
+    host = body.get("session_host")
+    if not isinstance(host, dict) or host.get("reachable") is not True:
+        return "host-silent", "the webapp answers but reports the session-host unreachable"
+    detail = (
+        f"git_sha={host.get('git_sha')} started_at={host.get('started_at')} "
+        f"stale={host.get('stale')} stale_relevant={host.get('stale_relevant')} "
+        f"freshness={host.get('freshness')}"
+    )
+    if host.get("freshness") in _LIVE_FRESHNESS:
+        return "live", detail
+    return "unconfirmed", detail
+
+
+def wait_session_host(
+    port: int,
+    timeout_s: float = SESSION_HOST_WAIT_S,
+    *,
+    fetch: Callable[[int], Optional[Dict[str, Any]]] = fetch_version,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> int:
+    """Poll until the session-host is live; ``0`` when it is, ``1`` otherwise.
+
+    A success is reported the moment it is seen, however long the cold start took. A
+    failure names what the last answer showed and how long was waited, so "answering on
+    an older build" and "never answered" are not the same message.
+    """
+    started = clock()
+    deadline = started + timeout_s
+    while True:
+        state, detail = classify_session_host(fetch(port))
+        elapsed = clock() - started
+        if state == "live":
+            _log_line(f"session-host live :{port} after {elapsed:.1f}s {detail}")
+            return 0
+        if clock() >= deadline:
+            break
+        sleep(_POLL_INTERVAL_S)
+    waited = f"after waiting {clock() - started:.0f}s"
+    if state == "unconfirmed":
+        _log_line(
+            f"session-host NOT CONFIRMED :{port} {waited}: it answers but is not provably running "
+            f"the merged session-host code ({detail}); check it by hand"
+        )
+    elif state == "host-silent":
+        _log_line(f"session-host NOT ANSWERING :{port} {waited}: {detail}; check it by hand")
+    else:
+        _log_line(f"session-host NOT CONFIRMED :{port} {waited}: {detail}, so the host was not read")
+    return 1
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m src.launching.restart_check", description=__doc__)
-    parser.add_argument("action", choices=("snapshot", "verify"))
+    parser.add_argument("action", choices=("snapshot", "verify", "session-host"))
     parser.add_argument("--port", type=int, default=None, help="webapp port (default: the configured one)")
-    parser.add_argument("--timeout", type=float, default=DEFAULT_VERIFY_TIMEOUT_S)
+    parser.add_argument("--timeout", type=float, default=None)
     args = parser.parse_args(argv)
     port = args.port
     if port is None:
@@ -142,7 +215,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         port = resolve_webapp_port()
     if args.action == "snapshot":
         return snapshot(port)
-    return verify(port, args.timeout)
+    if args.action == "session-host":
+        return wait_session_host(port, SESSION_HOST_WAIT_S if args.timeout is None else args.timeout)
+    return verify(port, DEFAULT_VERIFY_TIMEOUT_S if args.timeout is None else args.timeout)
 
 
 if __name__ == "__main__":
