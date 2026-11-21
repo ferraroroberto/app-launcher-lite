@@ -20,6 +20,7 @@ from src.transcript_flavors._shared import (
     _tool_summary,
     _with_action,
 )
+from src.transcript_flavors.codex import _PATCH_FAILED, parse_apply_patch
 
 # Copilot's own bookkeeping event families, none of which carry conversation
 # the reader should render. `model.*` is the worst of them: `model.message`,
@@ -129,6 +130,9 @@ def copilot_entries(lines: List[Line], *, uncapped: bool = False) -> List[Entry]
     * A ``task_complete`` call's ``arguments.summary`` is the agent's reply
       to the user (autopilot's turn-end), so it is an ``assistant`` entry at
       the call's offset and neither the call nor its result gets a tool row.
+    * ``apply_patch`` (the edit tool GPT-family models get) takes the patch
+      text itself as ``arguments``; each file section becomes its own step
+      after the call, sharing the call's result, as in the Codex flavour.
     * ``data.reasoningText`` is readable thinking and folds as ``thinking``
       (14 of 68 assistant messages here). Its neighbours
       ``reasoningOpaque``, ``encryptedContent`` and ``reasoningBlocks``
@@ -169,13 +173,14 @@ def copilot_entries(lines: List[Line], *, uncapped: bool = False) -> List[Entry]
     user_cap = NO_CAP if uncapped else _shared.USER_TEXT_CAP
     entries: List[Entry] = []
     open_calls: Dict[str, Entry] = {}
+    patch_steps: Dict[str, List[Entry]] = {}    # call id → the per-file steps of its patch
     for offset, raw in lines:
         obj = _loads(raw)
         if obj is None:
             continue
         data = obj.get("data") if isinstance(obj.get("data"), dict) else {}
-        _copilot_event(entries, open_calls, obj.get("type"), data, offset, obj.get("timestamp"),
-                       assistant_cap, user_cap)
+        _copilot_event(entries, open_calls, patch_steps, obj.get("type"), data, offset,
+                       obj.get("timestamp"), assistant_cap, user_cap)
     return entries
 
 
@@ -194,7 +199,8 @@ def _turn_last_assistant_text(entries: List[Entry]) -> Optional[str]:
 
 
 def _copilot_event(
-    entries: List[Entry], open_calls: Dict[str, Entry], kind: Any, data: Dict[str, Any],
+    entries: List[Entry], open_calls: Dict[str, Entry], patch_steps: Dict[str, List[Entry]],
+    kind: Any, data: Dict[str, Any],
     offset: int, ts: Any, assistant_cap: int, user_cap: int,
 ) -> None:
     """Append what one event contributes; plumbing events add nothing."""
@@ -244,6 +250,10 @@ def _copilot_event(
         entries.append(entry)
         if call_id:
             open_calls[call_id] = entry
+        siblings = _patch_siblings(data, offset, ts)
+        entries.extend(siblings)
+        if siblings and call_id:
+            patch_steps[call_id] = siblings
         return
 
     if kind == "tool.execution_complete":
@@ -252,6 +262,7 @@ def _copilot_event(
             entries, open_calls, data.get("toolCallId"),
             text, offset, ts, False, error=failed,
         )
+        _finish_patch_steps(patch_steps.pop(str(data.get("toolCallId") or ""), []), text, failed)
         return
 
     if kind == "session.error":
@@ -260,6 +271,36 @@ def _copilot_event(
             entries.append(_text_entry(
                 "system", offset, ts, text, SYSTEM_TEXT_CAP,
                 label=str(data.get("errorType") or "error"), sidechain=False))
+
+
+def _patch_siblings(data: Dict[str, Any], offset: int, ts: Any) -> List[Entry]:
+    """One step per file an ``apply_patch`` call touches, after the call's own
+    row. Copilot hands GPT-family models a patch tool whose ``arguments`` is
+    the patch text itself (``*** Begin Patch`` ...), not an object like its
+    ``create`` / ``edit`` tools, so :func:`_tool_action` reads nothing from it
+    and the session's Changed files would stay empty."""
+    args = data.get("arguments")
+    if data.get("toolName") != "apply_patch" or not isinstance(args, str):
+        return []
+    return [
+        _with_action(_entry(
+            "tool_call", offset, ts, name="apply_patch", summary=str(a["path"]),
+            result=None, result_truncated=False, sidechain=False,
+        ), a)
+        for a in parse_apply_patch(args)
+    ]
+
+
+def _finish_patch_steps(steps: List[Entry], text: str, failed: bool) -> None:
+    """Give a patch's file steps the call's result. A rejected patch changed
+    nothing, so its steps are errors with no diff: Copilot flags it with
+    ``success: false``, and states a verification failure in the text too."""
+    rejected = failed or _PATCH_FAILED in text
+    for step in steps:
+        step["result"], step["result_truncated"] = _shared._cap(text.strip(), _shared.TOOL_RESULT_CAP)
+        if rejected:
+            step["error"] = True
+            step["action"].pop("diff", None)
 
 
 def copilot_line_key(raw: str) -> Optional[str]:
