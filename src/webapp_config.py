@@ -385,7 +385,8 @@ def _apply_configured_ports(cfg: WebappConfig) -> WebappConfig:
     The tray, the ``.bat``/``.ps1`` launchers and the restart check read the
     same file, so a leftover ``port`` or ``session_host_port`` in
     ``webapp_config.json`` can never make two readers disagree about where a
-    service lives.
+    service lives. A linked worktree is the one case that reads its own
+    ``port`` (see ``resolve_webapp_port``).
     """
     cfg.port = resolve_webapp_port()
     cfg.session_host_port = resolve_session_host_port()

@@ -31,7 +31,7 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `host` | `0.0.0.0` | Webapp bind address. The webapp *port* is `config.json`'s `webapp.port`; a leftover `port` key in an older file is ignored. |
+| `host` | `0.0.0.0` | Webapp bind address. The webapp *port* is `config.json`'s `webapp.port`; a leftover `port` key in an older file is ignored, except in a linked git worktree, where the `port` that worktree setup writes here wins so a worktree webapp never binds the primary's port. |
 
 ### Coding, Apps and Team OS
 

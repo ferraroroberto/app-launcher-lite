@@ -96,6 +96,48 @@ class TestEveryReaderFollowsConfigJson:
         assert resolve_webapp_port() == _FREE_WEBAPP
 
 
+class TestWorktreePort:
+    """A linked worktree serves on the port its setup wrote, never the primary's."""
+
+    @staticmethod
+    def _checkout(root: Path, *, linked: bool, own_port: int = 18849) -> Path:
+        (root / "config").mkdir()
+        config = root / "config" / "config.json"
+        config.write_text(json.dumps({"webapp": {"port": _FREE_WEBAPP}}), encoding="utf-8")
+        (root / "config" / "webapp_config.json").write_text(
+            json.dumps({"port": own_port}), encoding="utf-8"
+        )
+        if linked:
+            (root / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+        else:
+            (root / ".git").mkdir()
+        return config
+
+    def test_a_linked_worktree_uses_its_own_port(self, tmp_path):
+        config = self._checkout(tmp_path, linked=True)
+        assert resolve_webapp_port(config) == 18849
+
+    def test_the_default_config_path_follows_the_same_rule(self, tmp_path, monkeypatch):
+        config = self._checkout(tmp_path, linked=True)
+        monkeypatch.setattr(app_config, "DEFAULT_CONFIG_PATH", config)
+        assert resolve_webapp_port() == 18849
+        assert webapp_config.load_webapp_config(config.parent / "webapp_config.json").port == 18849
+
+    def test_a_primary_checkout_ignores_a_port_in_webapp_config(self, tmp_path):
+        config = self._checkout(tmp_path, linked=False)
+        assert resolve_webapp_port(config) == _FREE_WEBAPP
+
+    @pytest.mark.parametrize("bad", ["abc", 0, 70000, None])
+    def test_an_unusable_worktree_port_falls_back_to_config_json(self, tmp_path, bad):
+        config = self._checkout(tmp_path, linked=True, own_port=bad)
+        assert resolve_webapp_port(config) == _FREE_WEBAPP
+
+    def test_a_worktree_without_a_port_key_falls_back_to_config_json(self, tmp_path):
+        config = self._checkout(tmp_path, linked=True)
+        (tmp_path / "config" / "webapp_config.json").write_text("{}", encoding="utf-8")
+        assert resolve_webapp_port(config) == _FREE_WEBAPP
+
+
 class TestNoScriptActsOnADefaultPort:
     """The scripts that reclaim or probe a port take it from the resolver, never a literal."""
 
