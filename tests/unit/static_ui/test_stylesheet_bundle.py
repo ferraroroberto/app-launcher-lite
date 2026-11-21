@@ -6,7 +6,12 @@ import re
 from pathlib import Path
 
 from src.static_versioning import compute_asset_hashes
-from src.stylesheet_bundle import build_bundle, link_bundle, linked_stylesheets, trim_css
+from src.stylesheet_bundle import (
+    build_bundle,
+    link_bundle,
+    linked_stylesheets,
+    trim_css,
+)
 from tests._css import STATIC
 
 _INDEX = (
