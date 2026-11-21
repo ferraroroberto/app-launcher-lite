@@ -26,15 +26,14 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 
 **The chief works** from this repo's `copilot/` folder (`fleet_config_dir`, shown as the Copilot folder in Settings): it holds the chief helpers (`chief_ops.py`, the chief skill, the plan, journal and mailbox files, the guard hooks), and the chief session runs in it. The hooks that write the Board's session state are installed from there too, by `copilot/install.ps1`. The chief is one long-lived Copilot session that reads the Board, writes its plan and journal, dispatches lanes, opens plain sessions, stops them and raises questions for the owner; the Board shows its card, plan and answer sheet. Turn on Settings > Chief > Doorbell to have a lane's news wake an idle chief (verified on Copilot CLI 1.0.114); with it off, only the owner's own messages wake it. A lane builds in a worktree and needs `git` to reach GitLab without a prompt, which the installer does not check (it checks `glab` only), so run one lane end to end on a new computer before relying on it. See [docs/board.md](docs/board.md#the-chief).
 
-**Port steps done** (now in `copilot/`): the probe script; plan and journal; the mailbox; `chief_ops` and the chief settings; the chief skill; the guard hooks; compaction verbs; the merge verb (`glab mr merge --auto-merge`, unit-tested and `unknown` live); worktrees, claims and sweep; drain and owner checks.
+**Port steps done** (now in `copilot/`): the probe script; plan and journal; the mailbox; `chief_ops` and the chief settings; the chief skill; the guard hooks; compaction verbs; the merge verb (`glab mr merge --auto-merge`, unit-tested and `unknown` live); worktrees, claims and sweep; drain and owner checks; Jobs feeding the chief (a failed run's mailbox event and the `rerun_safe` re-run).
 
 **Port steps still open** (each independently shippable):
 
 1. Copilot transcript flavor and context percentage.
 2. A queued `/compact` on Copilot's composer (`unknown`).
-3. Jobs feeding the chief.
-4. `ui_proof`, the remote-control toggle and the Chat view.
-5. A fresh-machine install checklist.
+3. `ui_proof`, the remote-control toggle and the Chat view.
+4. A fresh-machine install checklist.
 
 **Dropped from the full app** (not documented, not planned): Telegram (no job alerts; only the login lock-out alert can send through it), Life OS, inspiration, OCR/TTS, usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board (GitLab pipelines have their own row), screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
 
