@@ -34,7 +34,8 @@ def _launch(script: Path, args: list[str], policy: str) -> subprocess.CompletedP
     env = {**os.environ, "PSExecutionPolicyPreference": policy, "PYTHONUTF8": "1", "PYTHONPATH": str(REPO_ROOT)}
     return subprocess.run(
         [sys.executable, "-m", "src.launching.ps_script", str(script), *args],
-        capture_output=True, text=True, timeout=120, cwd=REPO_ROOT, env=env, creationflags=NO_WINDOW,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=120, cwd=REPO_ROOT, env=env, creationflags=NO_WINDOW,
     )
 
 
