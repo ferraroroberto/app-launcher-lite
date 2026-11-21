@@ -161,15 +161,17 @@ def _request(
 GLAB_TIMEOUT = 30.0
 
 
-def run_glab(args: List[str], timeout: float = GLAB_TIMEOUT) -> subprocess.CompletedProcess:
-    """`glab <args>`, UTF-8 decoded, no console window, stdin closed.
+def run_glab(args: List[str], timeout: float = GLAB_TIMEOUT, host: str = "") -> subprocess.CompletedProcess:
+    """`glab <args>` against `host` (`GITLAB_HOST`), UTF-8 decoded, no console window, stdin closed.
 
-    Raises `FileNotFoundError` when glab is not installed: the callers report
-    that as its own state, never as an empty answer.
+    glab sends a bare `group/project` to its default host, so every call names the host
+    it means; `host` empty is gitlab.com. Raises `FileNotFoundError` when glab is not
+    installed: the callers report that as its own state, never as an empty answer.
     """
     return subprocess.run(  # noqa: S603 -- fixed executable, argv built by the callers
         ["glab", *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=timeout, creationflags=NO_WINDOW, stdin=subprocess.DEVNULL,
+        env=gitlab_namespace.glab_env(host),
     )
 
 
@@ -205,14 +207,16 @@ def fetch_issue_state(repo: str, number: int, owner: Optional[str] = None) -> Di
     owner, why = resolve_owner(repo, owner)
     if owner is None:
         return {"repo": repo, "number": number, "error": f"{OWNER_UNKNOWN} ({why})"}
+    host = gitlab_namespace.resolve_host(REPOS_ROOT / repo)
     try:
-        res = run_glab(["issue", "view", str(number), "--repo", f"{owner}/{repo}", "--output", "json"])
+        res = run_glab(["issue", "view", str(number), "--repo", f"{owner}/{repo}", "--output", "json"], host=host)
     except FileNotFoundError:
         return {"repo": repo, "number": number, "error": "glab not installed"}
     except subprocess.TimeoutExpired:
         return {"repo": repo, "number": number, "error": f"glab timed out after {GLAB_TIMEOUT:g}s"}
     if res.returncode != 0:
-        return {"repo": repo, "number": number, "error": res.stderr.strip() or "glab error"}
+        detail = res.stderr.strip() or "glab error"
+        return {"repo": repo, "number": number, "error": detail + gitlab_namespace.tried(host, f"{owner}/{repo}")}
     try:
         data = json.loads(res.stdout)
     except ValueError:

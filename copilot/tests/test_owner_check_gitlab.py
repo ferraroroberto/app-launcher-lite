@@ -30,9 +30,10 @@ from owner_check import github as forge  # noqa: E402
 
 def setUpModule() -> None:
     """The namespace comes from the live launcher; pin it so no test reads the real one."""
-    patcher = mock.patch.object(gitlab_namespace, "from_config", return_value=("ferraroroberto", ""))
-    patcher.start()
-    unittest.addModuleCleanup(patcher.stop)
+    for patcher in (mock.patch.object(gitlab_namespace, "from_config", return_value=("ferraroroberto", "")),
+                    mock.patch.object(gitlab_namespace, "resolve_host", return_value="gitlab.com")):
+        patcher.start()
+        unittest.addModuleCleanup(patcher.stop)
 
 
 class FakeGlab:
