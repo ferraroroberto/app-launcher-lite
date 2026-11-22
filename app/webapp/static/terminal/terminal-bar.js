@@ -6,7 +6,7 @@
  * scrolling.
  *
  *   ⋮ menu — Rename · Copy link · Changed files · [Hide/Show steps · Reload, Chat mode
- *   only] · Stop and kill. Copy link copies this launcher's tailnet-only
+ *   only] · Compact (a Copilot session, either mode) · Stop and kill. Copy link copies this launcher's tailnet-only
  *   ?session= link. Built once on the vendored row-menu component
  *   (the same one as the sessions-list gear); the chat-only rows are
  *   declared with function-valued `hidden`, so the menu re-evaluates them
@@ -22,7 +22,8 @@
 import { els, state } from '../state.js';
 import { apiFailToast, toast } from '../api.js';
 import {
-  openSessionRename, sessionTitle, stopSession,
+  detachedSendRefused, openSessionRename, sendOutcome, sendSessionMessage,
+  sessionTitle, stopSession,
 } from '../sessions.js';
 import { openSessionChanges } from '../changes/changes-overlay.js';
 import { openLinks } from '../links/links-sheet.js';
@@ -82,6 +83,18 @@ function notInChat() {
 // fold reads.
 function hasChangedFiles(s) {
   return !!s && hasTranscriptReader(s);
+}
+
+// Agents whose composer runs /compact when it arrives as a message; any other
+// agent would take it as a prompt. Probed live on Copilot CLI 1.0.114: idle, and
+// mid-turn (it ran once the turn ended). An absent agent field reads as Copilot.
+const COMPACT_AGENTS = ['copilot'];
+
+// Whether ⋮ Compact applies: an agent known to run /compact, whose input route
+// is open (a detached agent never probed for console input is not).
+function canCompact(s) {
+  if (!s || detachedSendRefused(s)) return false;
+  return COMPACT_AGENTS.indexOf(String(s.agent || 'copilot').toLowerCase()) !== -1;
 }
 
 // Links: every artifact and URL the transcript mentioned, in both modes.
@@ -163,6 +176,15 @@ export function wireTerminalMenu() {
       hidden: notInChat,
       onTap: reloadNewest,
     },
+    // Compact: /compact through the verified /input route Chat's Send uses, in
+    // either mode, so the toast names the host's verdict instead of assuming
+    // the send landed.
+    {
+      dataset: { item: 'overlay-compact-btn', track: 'session.compact' },
+      glyph: 'chevrons-down-up', label: 'Compact', ariaLabel: 'Compact conversation',
+      hidden: function () { return !canCompact(currentSession()); },
+      onTap: compactCurrentSession,
+    },
     {
       dataset: { item: 'action-stop-close' }, glyph: 'x', danger: true,
       label: 'Stop and kill', ariaLabel: 'Stop and kill session',
@@ -210,6 +232,19 @@ function renameCurrentSession() {
       setTerminalTitleText(s);
     }
   });
+}
+
+// The menu's Compact.
+function compactCurrentSession() {
+  const s = currentSession();
+  if (!canCompact(s)) return;
+  sendSessionMessage(s.session_id, '/compact').then(
+    function (verdict) {
+      const outcome = sendOutcome(verdict);
+      toast('Compact: ' + outcome.text, outcome.kind, { icon: 'chevrons-down-up' });
+    },
+    function (exc) { apiFailToast('Compact failed', exc); }
+  );
 }
 
 // The menu's Copy link.
