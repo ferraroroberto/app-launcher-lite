@@ -420,8 +420,10 @@ time_budget_s         = 1200
 # shares no setup with an existing node (it mocks /api/progress and drives the
 # page clock for the refresh poll). 299: the first-load test holds every
 # non-essential source unanswered and pauses the page clock before boot, so it
-# can share no page with another node.
-test_budget = 299
+# can share no page with another node. 300: the Full screen switch and the
+# Install as app row share one node because the whole check is one Settings
+# page load; it carries the iphone marker, which Chromium-only runs ignore.
+test_budget = 300
 
 # --- static assets under the webapp's static dir -> Chromium smoke ----------
 [[e2e.rule]]

@@ -62,7 +62,25 @@
             <button type="button" class="segmented-item" data-textsize="large" data-track="text-size.large" aria-pressed="false">Large</button>
           </div>
         </div>
+        <!-- Full screen: fullscreen.js hides the browser's address bar and
+             toolbar and re-enters on the first tap after a reload. -->
+        <div class="settings-row settings-row--inline">
+          <svg class="icon settings-row-icon" aria-hidden="true" focusable="false"><use href="#i-smartphone"></use></svg>
+          <span class="settings-row-label">Full screen</span>
+          <button type="button" id="fullscreenToggle" data-track="settings.fullscreen" class="toggle" role="switch" aria-checked="false" aria-label="Full screen" aria-describedby="fullscreenHelp fullscreenStatus"><span class="knob"></span><span class="toggle-label">OFF</span></button>
+        </div>
+        <!-- Install as app: install-readiness.js reports what the browser
+             will do, and why not, never a silent no. -->
+        <div id="installReadinessRow" class="settings-row settings-row--inline" data-install-state="">
+          <svg class="icon settings-row-icon" aria-hidden="true" focusable="false"><use href="#i-download"></use></svg>
+          <span class="settings-row-label">Install as app</span>
+          <span id="installReadinessValue" class="settings-row-value"></span>
+        </div>
       </div>
+
+      <p id="fullscreenHelp" class="field-help settings-footnote">Full screen hides the browser's address bar and toolbar. It is remembered on this device; after a reload, tap anywhere to go full screen again. Turn it off here, or use the back gesture, to leave.</p>
+      <p id="fullscreenStatus" class="field-help settings-footnote" role="status" aria-live="polite" hidden></p>
+      <p id="installReadinessStatus" class="field-help settings-footnote" role="status" aria-live="polite"></p>
 
       <h2 class="settings-overline">Agents</h2>
       <div class="card settings-group">

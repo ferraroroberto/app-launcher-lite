@@ -1456,12 +1456,15 @@ surfaces:
     reach:
       - the Settings pane
     holds:
-      - Appearance - a Text size choice of Small, Default and Large
+      - Appearance - a Text size choice of Small, Default and Large; a Full screen switch with a help line; an Install as app row that says whether this browser can install Lite and why not
       - Sessions - the switches Open in a new window and Open in Chat, with a help line that explains both
       - This PC - the switches Start at log on and Awake with lid closed, each with a help line
     does:
       - a switch saves when tapped and shows ON or OFF
+      - Full screen hides the browser's address bar and toolbar, is remembered on this device, and comes back on the first tap after a reload; the back gesture or the switch leaves it
     states:
+      - Full screen is disabled with a reason in a browser that has no full screen for web pages
+      - Install as app shows Installed, Ready, Blocked, Not offered or Unavailable, with a sentence under the group
       - Awake with lid closed is hidden on a machine that cannot set it, and shows its own status line
 
   - id: settings.document
