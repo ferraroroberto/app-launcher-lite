@@ -1,7 +1,9 @@
 """A session's Links: URLs folded out of a transcript, grouped and
 deduplicated, with anything credential-shaped removed.
 
-Every id, host and line of content here is synthetic.
+Every id, host and line of content here is synthetic. The prompts and replies are
+Copilot events; the Artifact tool calls are Claude-shaped lines, which the
+artifact reader takes whatever the agent.
 """
 
 from __future__ import annotations
@@ -15,6 +17,8 @@ import pytest
 from src.session_view import link_titles as lt
 from src.session_view import links as lk
 from tests.unit.transcript import test_background_tasks as bt
+from tests.unit.transcript._support import _event, _tool_use
+from tests.unit.transcript._support import _tool_result as _cop_result
 
 
 @pytest.fixture(autouse=True)
@@ -31,8 +35,7 @@ def _write(path: Path, rows: List[Dict[str, Any]]) -> Path:
 
 
 def _text(ts: str, text: str, role: str = "assistant") -> Dict[str, Any]:
-    return {"type": role, "timestamp": ts, "message": {"role": role, "content": [
-        {"type": "text", "text": text}]}}
+    return _event(f"{role}.message", {"content": text}, ts)
 
 
 def _by_group(result: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
@@ -100,27 +103,19 @@ def _tool_result(ts: str, tool_id: str, text: str) -> Dict[str, Any]:
 def test_only_prompts_and_replies_are_listed_not_tool_noise(tmp_path):
     path = _write(tmp_path / "s.jsonl", [
         _text("2026-10-01T10:00:00Z", "please open http://localhost:3000/mine", role="user"),
-        {"type": "assistant", "timestamp": "2026-10-01T10:00:01Z", "message": {"id": "m1", "content": [
-            {"type": "thinking", "thinking": "maybe https://thinking.example/x"},
-            {"type": "tool_use", "id": "r1", "name": "Read",
-             "input": {"file_path": "/x/notes.md", "note": "https://input.example/y"}}]}},
-        _tool_result("2026-10-01T10:00:02Z", "r1", "docs at https://noise.example/readme"),
-        {"type": "assistant", "timestamp": "2026-10-01T10:00:03Z", "message": {"id": "m2", "content": [
-            {"type": "tool_use", "id": "b1", "name": "Bash", "input": {"command": "curl https://cmd.example/z"}}]}},
-        _tool_result("2026-10-01T10:00:04Z", "b1", "HTTP/1.1 301 Location: https://log.example/out"),
+        _event("assistant.message", {"reasoningText": "maybe https://thinking.example/x"},
+               "2026-10-01T10:00:01Z"),
+        _tool_use("view", {"path": "/x/notes.md", "note": "https://input.example/y"}, "r1",
+                  "2026-10-01T10:00:01Z"),
+        _cop_result("r1", "docs at https://noise.example/readme", "2026-10-01T10:00:02Z"),
+        _tool_use("powershell", {"command": "curl https://cmd.example/z"}, "b1", "2026-10-01T10:00:03Z"),
+        _cop_result("b1", "HTTP/1.1 301 Location: https://log.example/out", "2026-10-01T10:00:04Z"),
         _text("2026-10-01T10:00:05Z", "Done, see https://example.org/guide"),
     ])
     result = lk.fold_links(path)
     urls = sorted(x["url"] for group in result["groups"] for x in group["links"])
     assert urls == ["http://localhost:3000/mine", "https://example.org/guide"]
     assert result["total"] == 2
-
-
-def test_a_sub_agents_replies_are_not_listed(tmp_path):
-    side = _text("2026-10-01T10:00:00Z", "worker found https://sub.example/a")
-    side["isSidechain"] = True
-    path = _write(tmp_path / "s.jsonl", [side, _text("2026-10-01T10:00:01Z", "ok https://main.example/b")])
-    assert [x["url"] for x in _by_group(lk.fold_links(path))["other"]] == ["https://main.example/b"]
 
 
 def test_a_published_artifact_is_listed_only_from_the_artifact_result(tmp_path):
@@ -141,39 +136,6 @@ def test_a_published_artifact_is_listed_only_from_the_artifact_result(tmp_path):
         ("https://claude.ai/artifact/ZzYyXxWw987654", "Quarterly View")]
 
 
-def test_codex_shaped_rollout_lists_messages_not_tool_output(tmp_path):
-    def item(ts, payload):
-        return {"type": "response_item", "timestamp": ts, "payload": payload}
-    path = _write(tmp_path / "s.jsonl", [
-        item("2026-10-01T10:00:00Z", {"type": "message", "role": "user", "content": [
-            {"type": "input_text", "text": "check http://127.0.0.1:8080/"}]}),
-        item("2026-10-01T10:00:01Z", {"type": "function_call", "call_id": "c1", "name": "shell",
-                                      "arguments": "{\"command\": [\"curl\", \"https://cmd.example/q\"]}"}),
-        item("2026-10-01T10:00:02Z", {"type": "function_call_output", "call_id": "c1",
-                                      "output": "fetched https://noise.example/page"}),
-        item("2026-10-01T10:00:03Z", {"type": "message", "role": "assistant", "content": [
-            {"type": "output_text", "text": "PR is https://github.com/acme/widgets/pull/7"}]}),
-    ])
-    groups = _by_group(lk.fold_links(path, "codex"))
-    assert sorted(groups) == ["github", "servers"]
-    assert groups["servers"][0]["label"] == "127.0.0.1:8080"
-
-
-def test_pi_shaped_history_lists_messages_not_tool_results(tmp_path):
-    def msg(ts, message):
-        return {"type": "message", "timestamp": ts, "message": message}
-    path = _write(tmp_path / "s.jsonl", [
-        msg("2026-10-01T10:00:00Z", {"role": "user", "content": [
-            {"type": "text", "text": "look at https://example.org/start"}]}),
-        msg("2026-10-01T10:00:01Z", {"role": "toolResult", "toolCallId": "t1", "isError": False,
-                                     "content": [{"type": "text", "text": "log https://noise.example/l"}]}),
-        msg("2026-10-01T10:00:02Z", {"role": "assistant", "content": [
-            {"type": "text", "text": "got it: https://example.org/answer"}]}),
-    ])
-    urls = [x["url"] for x in _by_group(lk.fold_links(path, "pi"))["other"]]
-    assert urls == ["https://example.org/answer", "https://example.org/start"]
-
-
 def test_empty_transcript_lists_nothing(tmp_path):
     path = _write(tmp_path / "s.jsonl", [])
     assert lk.fold_links(path) == {
@@ -184,7 +146,8 @@ _ROUTE = "/api/claude-code/sessions/s1/links"
 
 
 _bypass_gate = bt._bypass_gate
-_serve = bt._serve
+def _serve(overrides, monkeypatch, path: Path) -> None:
+    bt._serve(overrides, monkeypatch, path, agent="copilot")
 
 
 def test_route_is_passkey_and_refused_off_tailnet(webapp_client):

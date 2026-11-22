@@ -275,46 +275,8 @@ def test_route_is_classified_passkey_and_refused_off_tailnet(webapp_client):
     assert client.get(_ROUTE).status_code == 403
 
 
-class TestBackgroundTasksRoute:
-
-    def test_lists_then_reads_one_output(self, webapp_client, _bypass_gate, monkeypatch, tmp_path, caplog):
-        import logging
-        import tempfile
-        client, _, overrides = webapp_client
-        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "temp"))
-        out = _output(tmp_path / "temp", body="secret-output-text\n")
-        path = _write(tmp_path / (SID + ".jsonl"), [
-            _launch("tu1", description="Serve"), _launched("tu1", "bAAA", out)])
-        _serve(overrides, monkeypatch, path)
-        with caplog.at_level(logging.INFO):
-            body = client.get(_ROUTE).json()
-            tail = client.get(_ROUTE, params={"task": "bAAA"}).json()
-        assert body["available"] is True and [t["id"] for t in body["running"]] == ["bAAA"]
-        assert body["running"][0]["has_output"] is True
-        assert tail["available"] is True and tail["text"] == "secret-output-text\n"
-        joined = "\n".join(r.getMessage() for r in caplog.records if "background task" in r.getMessage())
-        assert "background tasks s1" in joined and "secret-output-text" not in joined
-
-    def test_a_task_the_session_never_ran_has_no_output(self, webapp_client, _bypass_gate, monkeypatch, tmp_path):
-        client, _, overrides = webapp_client
-        _serve(overrides, monkeypatch, _write(tmp_path / (SID + ".jsonl"), []))
-        body = client.get(_ROUTE, params={"task": "bOTHER"}).json()
-        assert body["available"] is False and body["reason"] == "output_not_found"
-
-    def test_only_claude_has_background_tasks(self, webapp_client, _bypass_gate, monkeypatch, tmp_path):
-        client, _, overrides = webapp_client
-        _serve(overrides, monkeypatch, _write(tmp_path / (SID + ".jsonl"), []), agent="codex")
-        body = client.get(_ROUTE).json()
-        assert body["available"] is False and body["reason"] == "unsupported_agent"
-
-    def test_no_transcript_is_said(self, webapp_client, _bypass_gate, monkeypatch, tmp_path):
-        client, _, overrides = webapp_client
-        _serve(overrides, monkeypatch, tmp_path / "missing.jsonl")
-        body = client.get(_ROUTE).json()
-        assert body["available"] is False and body["reason"] == "no_transcript"
-
-    def test_an_empty_session_lists_nothing(self, webapp_client, _bypass_gate, monkeypatch, tmp_path):
-        client, _, overrides = webapp_client
-        _serve(overrides, monkeypatch, _write(tmp_path / (SID + ".jsonl"), []))
-        body = client.get(_ROUTE).json()
-        assert body["available"] is True and body["running"] == [] and body["finished_total"] == 0
+def test_a_copilot_session_has_no_background_tasks(webapp_client, _bypass_gate, monkeypatch, tmp_path):
+    client, _, overrides = webapp_client
+    _serve(overrides, monkeypatch, _write(tmp_path / (SID + ".jsonl"), []), agent="copilot")
+    body = client.get(_ROUTE).json()
+    assert body["available"] is False and body["reason"] == "unsupported_agent"

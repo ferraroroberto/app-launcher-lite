@@ -8,10 +8,6 @@ its caption, an HTML document in a sandbox that runs no script, or as a
 download-only card (zip, gz, tgz, 7z). Copying at post time means what the owner sees is what the
 agent sent, whatever happens to the source afterwards.
 
-Claude's own ``SendUserFile`` tool call reaches the same chat through the
-transcript instead (``/transcript/file``); its listed paths go through
-:func:`read_source`, the same guards, read live from disk.
-
 **Guards**, each refusing with its own :class:`OutboxRefusal` reason:
 
 * ``out_of_root`` — the path, fully resolved (``..``, symlinks and

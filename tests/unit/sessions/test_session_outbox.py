@@ -1,5 +1,5 @@
 """Files an agent sends to the chat view (#1530): the outbox's guards, its
-store, its routes, and Claude ``SendUserFile`` parity.
+store and its routes.
 
 Every path here is invented under ``tmp_path``. The guard tests are written
 to fail on the naive implementation: a string-prefix root check admits a
@@ -20,7 +20,6 @@ from typing import Any, Dict, List
 
 import pytest
 
-from src import board
 from src.session_view import outbox as session_outbox
 from src.session_view.outbox import OutboxRefusal
 from src.webapp_config import WebappConfig
@@ -404,62 +403,6 @@ def test_entry_file_refuses_an_id_that_is_not_listed(proj: Path):
     assert session_outbox.entry_file("s1", "0" * 32) is None
 
 
-# --------------------------------------------------- Claude SendUserFile
-
-
-def _jsonl(path: Path, rows: List[Dict[str, Any]]) -> Path:
-    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
-    return path
-
-
-def _send_call(files: Any, caption: str = "", tid: str = "t1", cwd: str = "", ts: str = "2026-10-12T10:00:01Z") -> Dict[str, Any]:
-    inputs: Dict[str, Any] = {"files": files, "status": "normal"}
-    if caption:
-        inputs["caption"] = caption
-    row: Dict[str, Any] = {
-        "type": "assistant", "timestamp": ts,
-        "message": {"id": "m-" + tid, "role": "assistant",
-                    "content": [{"type": "tool_use", "id": tid, "name": "SendUserFile", "input": inputs}]},
-    }
-    if cwd:
-        row["cwd"] = cwd
-    return row
-
-
-def _prompt(text: str = "show me the chart") -> Dict[str, Any]:
-    return {"type": "user", "timestamp": "2026-10-12T10:00:00Z",
-            "message": {"role": "user", "content": text}}
-
-
-def test_send_user_file_becomes_refs_without_the_path(tmp_path: Path):
-    from src.session_view import transcript as st
-
-    path = _jsonl(tmp_path / "t.jsonl", [
-        _prompt(),
-        _send_call(["C:/invented/place/chart.png", "notes.md", "logo.svg"], caption="before vs after"),
-    ])
-    entries = st.transcript_page(path, flavor="claude")["entries"]
-    call = next(e for e in entries if e["kind"] == "tool_call")
-    offset = call["sent_files"][0]["offset"]
-    assert [(f["n"], f["name"], f["kind"]) for f in call["sent_files"]] == [
-        (0, "chart.png", "image"), (1, "notes.md", "markdown"), (2, "logo.svg", None),
-    ]
-    assert call["caption"] == "before vs after"
-    assert "invented/place" not in json.dumps(call["sent_files"])
-    assert st.transcript_sent_file(path, offset, 1, "claude") == ("notes.md", None)
-    assert st.transcript_sent_file(path, offset, 3, "claude") is None
-    assert st.transcript_sent_file(path, offset, 0, "codex") is None
-    assert st.transcript_sent_file(path, offset + 1, 0, "claude") is None
-
-
-def test_a_sent_file_name_loses_its_bidi_override(tmp_path: Path):
-    from src.session_view import transcript as st
-
-    path = _jsonl(tmp_path / "t.jsonl", [_prompt(), _send_call(["C:/invented/report\u202egnp.txt"])])
-    call = next(e for e in st.transcript_page(path, flavor="claude")["entries"] if e["kind"] == "tool_call")
-    assert call["sent_files"][0]["name"] == "reportgnp.txt"
-
-
 # ------------------------------------------------------------------ routes
 
 
@@ -472,7 +415,7 @@ def _bypass_gate(monkeypatch):
     )
 
 
-def _live(proj: Path, sid: str = "s1", agent: str = "claude") -> Dict[str, Any]:
+def _live(proj: Path, sid: str = "s1", agent: str = "copilot") -> Dict[str, Any]:
     return {"session_id": sid, "kind": "pty", "agent": agent, "alive": True,
             "project_dir": str(proj), "started_at": 1_789_000_000}
 
@@ -483,7 +426,6 @@ def test_every_outbox_path_is_passkey_gated():
     for path in (
         "/api/claude-code/sessions/s1/outbox",
         "/api/claude-code/sessions/s1/outbox/abc123",
-        "/api/claude-code/sessions/s1/transcript/file",
     ):
         assert _terminal_guard_level(path) == "passkey", path
 
@@ -650,18 +592,18 @@ def test_transcript_responses_carry_the_outbox_until_the_client_has_its_rev(
     webapp_client, _bypass_gate, monkeypatch, proj: Path, tmp_path: Path
 ):
     client, _, overrides = webapp_client
-    overrides["session"].list_sessions.return_value = [_live(proj, agent="codex")]
+    overrides["session"].list_sessions.return_value = [_live(proj)]
     from app.webapp.routers import session_transcript as router_mod
 
-    rollout = _jsonl(tmp_path / "rollout.jsonl", [{
-        "timestamp": "2026-10-12T10:00:00Z", "type": "response_item",
-        "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]},
-    }])
-    monkeypatch.setattr(router_mod, "find_codex_transcript", lambda session: rollout)
+    events = tmp_path / "events.jsonl"
+    events.write_text(json.dumps({
+        "timestamp": "2026-10-12T10:00:00Z", "type": "user.message", "data": {"content": "hi"},
+    }) + "\n", encoding="utf-8")
+    monkeypatch.setattr(router_mod, "find_copilot_transcript", lambda session: events)
     page = client.get("/api/claude-code/sessions/s1/transcript").json()
     assert page["available"] is True and page["outbox_rev"] == 0 and page["outbox"] == []
 
-    (proj / "a.txt").write_text("from codex", encoding="utf-8")
+    (proj / "a.txt").write_text("from copilot", encoding="utf-8")
     entry = client.post("/api/claude-code/sessions/s1/outbox", json={"path": "a.txt"}).json()["entry"]
     tail_q = f"after={page['tail']}&size={page['size']}"
     moved = client.get(f"/api/claude-code/sessions/s1/transcript?{tail_q}&ob=0").json()
@@ -670,41 +612,6 @@ def test_transcript_responses_carry_the_outbox_until_the_client_has_its_rev(
     assert held["outbox_rev"] == 1 and "outbox" not in held
     older = client.get("/api/claude-code/sessions/s1/transcript?before=1").json()
     assert "outbox" not in older
-
-
-def test_send_user_file_is_served_through_the_same_guards(
-    webapp_client, _bypass_gate, monkeypatch, tmp_path: Path, proj: Path
-):
-    client, _, overrides = webapp_client
-    overrides["session"].list_sessions.return_value = [_live(proj)]
-    (proj / "chart.png").write_bytes(PNG)
-    (proj / "logo.svg").write_text("<svg/>", encoding="utf-8")
-    (proj / "page.html").write_text(HTML, encoding="utf-8")
-    (tmp_path / "elsewhere.png").write_bytes(PNG)
-    path = _jsonl(tmp_path / "t.jsonl", [
-        _prompt(),
-        _send_call(["chart.png", str(tmp_path / "elsewhere.png"), "logo.svg", "page.html"], cwd=str(proj)),
-    ])
-    monkeypatch.setattr(board, "state_row_for_session", lambda live, rows, sid: {"transcript_path": str(path)})
-    entries = client.get("/api/claude-code/sessions/s1/transcript").json()["entries"]
-    refs = next(e for e in entries if e["kind"] == "tool_call")["sent_files"]
-
-    def fetch(ref):
-        return client.get(f"/api/claude-code/sessions/s1/transcript/file?offset={ref['offset']}&n={ref['n']}")
-
-    ok = fetch(refs[0])
-    assert ok.status_code == 200 and ok.content == PNG
-    assert ok.headers["content-type"] == "image/png" and ok.headers["x-content-type-options"] == "nosniff"
-    out = fetch(refs[1])
-    assert out.status_code == 403 and out.json()["detail"]["reason"] == "out_of_root"
-    typed = fetch(refs[2])
-    assert typed.status_code == 415 and typed.json()["detail"]["reason"] == "type_not_allowed"
-    _assert_sandboxed_html(fetch(refs[3]))
-    # An offset past anything seek() takes is a validation error, not a 500.
-    huge = client.get(f"/api/claude-code/sessions/s1/transcript/file?offset={2**63}&n=0")
-    assert huge.status_code == 422
-    missing = client.get(f"/api/claude-code/sessions/s1/transcript/file?offset={refs[0]['offset']}&n=7")
-    assert missing.status_code == 404 and missing.json()["detail"]["reason"] == "file_not_found"
 
 
 # ------------------------------------------------- send folders (#1748)

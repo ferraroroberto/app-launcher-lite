@@ -5,30 +5,13 @@ one entry's uncapped text.
 entries (``user`` / ``assistant`` / ``tool_call`` / ``tool_result`` /
 ``thinking`` / ``system``) from the session's *native* history, newest-last,
 plus a byte-offset cursor for the next older page. Source resolution is the
-same as the Board drawer's ``/exchange``: the history file the
-Board's claim walk assigns to this session-host id — Claude Code's hook
-JSONL, or Grok Build's ``updates.jsonl``, both carried on the state
-row; a Pi session JSONL, named by the claimed row's own *key*;
-else, for a session whose harness writes the launcher nothing at all, a
-file correlated from the filesystem — a Codex rollout by cwd + launch
-time, an Antigravity conversation by its newest-per-folder cache,
-a Copilot event log by cwd + launch time against its own per-session
-``workspace.yaml``.
-Claude has a filesystem fallback too: the hook deletes its row on
-``/resume`` and ``/clear`` and only the next prompt writes it back, so a
-live session can be rowless for as long as the user is reading rather than
-typing — the newest conversation in that cwd's own project folder covers
-it, refused when a second live Claude session shares the folder or when
-nothing was written there since this session started. Where it refuses, a
-``--resume <id>`` launch or a Remote Control link (its bridge
-id names the session's own Claude process in Claude Code's per-pid registry,
-which is how a Telegram channel session with no hook row reads its chat in a
-folder shared by its siblings) still names the file exactly.
-A session no source can name answers ``no_transcript`` rather than
-guessing a neighbour's file, so a harness that keeps one session folder per
-working directory (Grok does, including for directories that no longer
-exist) can never show another session's text. None of them read the
-launcher's PTY capture, so detached rows are served the same way.
+same as the Board drawer's ``/exchange``: the hook row names a Copilot
+``events.jsonl`` when it can, else the file is correlated from the filesystem
+by cwd + launch time against Copilot's own per-session ``workspace.yaml``.
+A session no source can name answers ``no_transcript`` rather than guessing a
+neighbour's file, and an agent this fork cannot launch answers
+``unsupported_agent``. None of them read the launcher's PTY capture, so
+detached rows are served the same way.
 Terminal-grade content, so it sits behind the Tailscale + passkey gate like
 ``/exchange`` — and so does its sibling below (``middleware``'s
 ``_TERMINAL_GUARD_RULES`` needs its own row per path shape; ``/transcript``'s
@@ -64,24 +47,21 @@ import functools
 import logging
 import os
 import time
-from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any, Awaitable, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.webapp.hot_poll import BuildSteps, run_on_default_executor, session_poll
 from app.webapp.routers import session_outbox_routes
-from app.webapp.routers._helpers import attach_provider_web_urls, maybe_json
+from app.webapp.routers._helpers import maybe_json
 from app.webapp.routers.board_spawn import SESSION_HOST_UNREACHABLE, _read_live_sessions
 from src import board, instance_role
-from src.board.transcript import _pty_output_is_fresh, live_title_is_busy
 from src.launching.vscode_workspace import is_vscode_installed, open_file
 from src.middleware import is_pc_itself
 from src.session_view import background_tasks as session_tasks
 from src.session_view import link_titles as session_link_titles
 from src.session_view import links as session_links
-from src.session_view import outbox as session_outbox
 from src.session_view.automatic_turns import mark_automatic
 from src.session_view.changes import (
     FileRefusal,
@@ -98,18 +78,10 @@ from src.session_view.transcript import (
     entry_diff,
     entry_full_text,
     transcript_activity,
-    transcript_image,
     transcript_page,
-    transcript_sent_file,
     transcript_tail,
 )
-from src.session_view.transcript_locate import (
-    find_antigravity_transcript,
-    find_codex_transcript,
-    find_copilot_transcript,
-    find_pi_transcript,
-    resolve_claude_transcript,
-)
+from src.session_view.transcript_locate import find_copilot_transcript
 from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
@@ -121,16 +93,13 @@ router.include_router(session_outbox_routes.router)
 
 # Agents whose native history this reader understands. The values are the
 # line grammars in `src.session_view.transcript.FLAVORS`; the client's own
-# availability list (`session-transcript.js`'s `TRANSCRIPT_AGENTS`) mirrors
-# the keys, so Chat mode is offered for exactly these agents.
+# availability list (`session-modes.js`'s `TRANSCRIPT_AGENTS`) mirrors the
+# keys, so Chat mode is offered for exactly these agents.
 # A byte offset no transcript reaches. A larger one overflows `seek` with an
 # OverflowError, which the read routes' OSError handling would not catch.
 MAX_OFFSET = 2 ** 62
 
-_FLAVOR_BY_AGENT = {
-    "claude": "claude", "codex": "codex", "grok": "grok", "pi": "pi",
-    "antigravity": "antigravity", "copilot": "copilot",
-}
+_FLAVOR_BY_AGENT = {"copilot": "copilot"}
 
 
 def _unavailable(sid: str, reason: str) -> Dict[str, Any]:
@@ -156,64 +125,15 @@ async def _read_or_unavailable(
         return None, _unavailable(sid, "read_failed")
 
 
-def _resolve_path(
-    session: Dict[str, Any],
-    row: Optional[Dict[str, Any]],
-    state_sid: Optional[str],
-    flavor: str,
-    live: List[Dict[str, Any]],
-) -> Tuple[Optional[Path], str]:
-    """The history file for this session (None when none is known), and how.
-
-    The second element is ``""`` for every flavour but Claude, whose
-    filesystem fallback says which source answered or which guard refused,
-    for the ``no_transcript`` log line.
-
-    Six shapes, in decreasing directness: the row carries the path
-    (Claude, Grok); the row's own *key* is the harness's session id and
-    names the file (Pi); or nothing on the row helps at all and the
-    file has to be correlated from the filesystem — by cwd + launch time
-    (Codex), by the harness's own newest-conversation-per-folder cache,
-    which needs ``live`` to refuse a folder hosting two sessions at once
-    (Antigravity), by cwd + launch time against the harness's own
-    per-session ``workspace.yaml`` sidecar (Copilot), or by newest
-    conversation in the cwd's own project folder (Claude).
-
-    Claude is the one flavour with two: the row is exact and stays first,
-    and the filesystem fallback covers the window where the hook has
-    deleted the row out from under a still-live session — ``SessionEnd``
-    fires on ``/resume`` and ``/clear``, not just on exit, and only the
-    next prompt writes the row back. A ``--resume <id>`` launch adds a third,
-    for when the fallback's guards refuse: the id names the file. A
-    Remote Control link adds a fourth: its bridge id names the file through
-    Claude Code's per-pid registry.
-    """
-    if flavor == "codex":
-        return find_codex_transcript(session), ""
-    if flavor == "pi":
-        return find_pi_transcript(str(state_sid or "")), ""
-    if flavor == "antigravity":
-        return find_antigravity_transcript(session, live), ""
-    if flavor == "copilot":
-        return find_copilot_transcript(session), ""
+def _resolve_path(session: Dict[str, Any], row: Optional[Dict[str, Any]]) -> Optional[Path]:
+    """The history file for this session (None when none is known): the path
+    the row carries, else the Copilot event log correlated from the
+    filesystem by cwd + launch time against its own per-session
+    ``workspace.yaml``."""
     raw = (row or {}).get("transcript_path")
     if raw:
-        return Path(str(raw)), "row"
-    if flavor != "claude":
-        return None, ""
-    path, why = resolve_claude_transcript(session, live)
-    if path is not None or session.get("web_url"):
-        return path, why
-    # Nothing cheaper named the file. The session-host's row carries no Remote
-    # Control link (the Coding tab and the Board attach it from the PTY
-    # capture), so read it the same way and let its bridge id answer:
-    # only on a refusal, since the capture read is the dearer step. On a
-    # copy, so the caller's row stays as the host reported it.
-    linked = dict(session)
-    attach_provider_web_urls([linked])
-    if not linked.get("web_url"):
-        return path, why
-    return resolve_claude_transcript(linked, live)
+        return Path(str(raw))
+    return find_copilot_transcript(session)
 
 
 async def _resolve_source(
@@ -224,8 +144,8 @@ async def _resolve_source(
     Returns ``(reason, flavor, path, agent, why, session)`` — ``reason`` is
     set (and ``flavor``/``path`` are ``None``) exactly when the caller must
     respond ``_unavailable(sid, reason)`` instead of reading the source.
-    ``why`` is how the path was resolved or, for ``no_transcript``, which
-    guard refused (``""`` where a flavour has nothing to add). ``session``
+    ``why`` is always ``""`` while Copilot is the only flavour: it has no
+    refusal guard to explain, but the callers still unpack the slot. ``session``
     is the session-host's row, ``None`` only for ``session_not_found`` and
     ``session_host_unreachable`` (the list could not be read: not the
     same fact as "the session is not in it").
@@ -253,21 +173,16 @@ async def _resolve_source(
 
     flavor = _FLAVOR_BY_AGENT[agent]
     row = board.state_row_for_session(live, state["rows"], sid)
-    # Pi's row identifies its history file by its own key rather than by a
-    # `transcript_path`, so that flavour alone needs the second lookup —
-    # the same in-memory claim walk, resolved to the same row.
-    state_sid = (
-        board.state_sid_for_session(live, state["rows"], sid) if flavor == "pi" else None
-    )
-    def resolve() -> Tuple[Optional[Path], str]:
-        # The existence check is a stat too, so it stays off the loop.
-        found, how = _resolve_path(session, row, state_sid, flavor, live)
-        return (found if found is not None and found.is_file() else None), how
 
-    path, why = await run("resolve_path", resolve)
+    def resolve() -> Optional[Path]:
+        # The existence check is a stat too, so it stays off the loop.
+        found = _resolve_path(session, row)
+        return found if found is not None and found.is_file() else None
+
+    path = await run("resolve_path", resolve)
     if path is None:
-        return "no_transcript", None, None, agent, why, session
-    return None, flavor, path, agent, why, session
+        return "no_transcript", None, None, agent, "", session
+    return None, flavor, path, agent, "", session
 
 
 @router.get("/api/claude-code/sessions/{sid}/transcript")
@@ -370,16 +285,14 @@ async def _build_transcript(
     )
     body = {
         "available": True,
-        # Claude's own hook JSONL kept its historical name; every other
-        # flavour reports itself, so a third one isn't mislabelled as Codex.
-        "source": "native" if flavor == "claude" else flavor,
+        "source": flavor,
         "reason": None,
         "session_id": sid,
         **page,
     }
     if before is None:
         # The newest page is the chat's first read: its activity line starts here.
-        body["activity"] = await _activity(session, flavor, path, steps)
+        body["activity"] = await _activity(flavor, path, steps)
         body["pending_input"] = _pending_input(session)
         body.update(await steps.run("outbox_fields", session_outbox_routes.outbox_fields, sid, ob))
     return body
@@ -417,11 +330,11 @@ async def _tail_response(
         )
     return {
         "available": True,
-        "source": "native" if flavor == "claude" else flavor,
+        "source": flavor,
         "reason": None,
         "session_id": sid,
         **tail,
-        "activity": await _activity(session, flavor, path, steps),
+        "activity": await _activity(flavor, path, steps),
         "pending_input": _pending_input(session),
     }
 
@@ -436,25 +349,16 @@ def _pending_input(session: Optional[Dict[str, Any]]) -> Optional[List[Dict[str,
     return pending if isinstance(pending, list) else None
 
 
-async def _activity(
-    session: Optional[Dict[str, Any]], flavor: str, path: Path, steps: BuildSteps
-) -> Optional[Dict[str, Any]]:
+async def _activity(flavor: str, path: Path, steps: BuildSteps) -> Optional[Dict[str, Any]]:
     """The chat strip's one-line summary of the turn in progress:
     ``since`` / ``actions`` / ``last`` / ``working``, or ``None`` when the
     transcript cannot say. Rides the page and tail responses — no route or
     poll of its own — and costs a ``stat`` while the file is unchanged.
 
-    Claude's busy signal is its animated title glyph on a PTY that is still
-    producing output, the same evidence the Board's status uses; the other
-    harnesses have none, so theirs is read off the transcript alone.
+    Copilot has no harness busy signal, so the turn is read off the
+    transcript alone.
     """
-    busy = (
-        flavor == "claude"
-        and session is not None
-        and live_title_is_busy(session.get("live_title"))
-        and _pty_output_is_fresh(session.get("last_output_at"), datetime.now(timezone.utc))
-    )
-    return await steps.run("transcript_activity", transcript_activity, path, flavor=flavor, busy=busy)
+    return await steps.run("transcript_activity", transcript_activity, path, flavor=flavor)
 
 
 @router.get("/api/claude-code/sessions/{sid}/transcript/entry")
@@ -600,7 +504,7 @@ async def session_links_list(
         return _unavailable(sid, reason)
     found, refusal = await _read_or_unavailable(
         sid, agent, "session links",
-        asyncio.to_thread(_folded_links_with_titles, path, flavor or "claude", before),
+        asyncio.to_thread(_folded_links_with_titles, path, flavor or "copilot", before),
     )
     if refusal is not None:
         return refusal
@@ -808,92 +712,3 @@ async def session_changed_file_open(
             raise HTTPException(status_code=503, detail="could not open the file on the PC") from exc2
     logger.info("ℹ️ changed file open %s (%s): opened with %s", sid[:8], agent, opener)
     return {"available": True, "reason": None, "session_id": sid, "opened": True, "with": opener}
-
-
-@router.get("/api/claude-code/sessions/{sid}/transcript/image")
-async def session_transcript_image(
-    sid: str,
-    request: Request,
-    offset: int = Query(ge=0, le=MAX_OFFSET),
-    n: int = Query(ge=0, le=999),
-) -> Response:
-    """One transcript image's bytes, decoded on demand (Tailscale + passkey).
-
-    ``offset`` and ``n`` are an entry's ``images``/``result_images`` ref:
-    the line the image lives on and its index among that line's images. The
-    page never carries image bytes; the thumbnails fetch this, lazily. A
-    session's images can be private captures, so nothing may store them:
-    ``no-store``, and the type is sniffed from the bytes, never taken from
-    the block. 404 covers a bad ref, a file that moved on, and a block that
-    isn't an allowlisted image alike: the client's answer (no thumbnail) is
-    the same.
-    """
-    cfg: WebappConfig = request.app.state.webapp_config
-    reason, flavor, path, agent, _why, _session = await _resolve_source(sid, cfg)
-    if reason == SESSION_HOST_UNREACHABLE:
-        raise HTTPException(status_code=503, detail=reason)
-    if reason is not None:
-        raise HTTPException(status_code=404, detail=reason)
-    found, refusal = await _read_or_unavailable(
-        sid, agent, "transcript image", asyncio.to_thread(transcript_image, path, offset, n, flavor),
-    )
-    if refusal is not None:
-        raise HTTPException(status_code=404, detail="read_failed")
-    if found is None:
-        logger.info("ℹ️ transcript image %s (%s) unavailable at %d/%d", sid[:8], agent, offset, n)
-        raise HTTPException(status_code=404, detail="image_not_found")
-    data, media = found
-    return Response(
-        content=data, media_type=media,
-        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
-    )
-
-
-@router.get("/api/claude-code/sessions/{sid}/transcript/file")
-async def session_transcript_file(
-    sid: str,
-    request: Request,
-    offset: int = Query(ge=0, le=MAX_OFFSET),
-    n: int = Query(ge=0, le=999),
-) -> Response:
-    """One file a Claude ``SendUserFile`` call sent (Tailscale + passkey).
-
-    ``offset`` and ``n`` are a ``sent_files`` ref off a page's tool call. The
-    path comes from the transcript line, never from the request, and goes
-    through the outbox's guards (:func:`src.session_view.outbox.read_source`): a
-    path outside the session's folder and its declared scratch roots, a type
-    off the allowlist, or an oversize file is refused with its own reason,
-    exactly as a post to the outbox would be.
-    """
-    cfg: WebappConfig = request.app.state.webapp_config
-    reason, flavor, path, agent, _why, session = await _resolve_source(sid, cfg)
-    if reason == SESSION_HOST_UNREACHABLE:
-        raise HTTPException(
-            status_code=503, detail={"reason": reason, "message": "the session-host is not answering"},
-        )
-    if reason is not None:
-        raise HTTPException(status_code=404, detail={"reason": reason, "message": "no transcript to read"})
-    found, refusal = await _read_or_unavailable(
-        sid, agent, "transcript file", asyncio.to_thread(transcript_sent_file, path, offset, n, flavor),
-    )
-    if refusal is not None:
-        raise HTTPException(
-            status_code=404, detail={"reason": "read_failed", "message": "the transcript could not be read"},
-        )
-    if found is None:
-        logger.info("ℹ️ transcript file %s (%s) unavailable at %d/%d", sid[:8], agent, offset, n)
-        raise HTTPException(status_code=404, detail={"reason": "file_not_found", "message": "no sent file there"})
-    sent, line_cwd = found
-    project_dir = str((session or {}).get("project_dir") or "") or None
-    roots = session_outbox.allowed_roots(project_dir, cfg.outbox_scratch_roots)
-    try:
-        resolved, data, _kind, media = await asyncio.to_thread(
-            session_outbox.read_source, sent, line_cwd or project_dir, roots,
-        )
-    except session_outbox.OutboxRefusal as exc:
-        logger.info("ℹ️ transcript file %s (%s) refused: %s", sid[:8], agent, exc.reason)
-        raise session_outbox_routes.refusal_error(exc) from None
-    return Response(
-        content=data, media_type=media,
-        headers=session_outbox_routes.file_headers(resolved.name, media),
-    )

@@ -497,22 +497,12 @@ async def file_issue(request: Request) -> Dict[str, Any]:
 async def session_exchange(sid: str, request: Request) -> Dict[str, Any]:
     """Last user↔assistant exchange for a live session (Tailscale + passkey).
 
-    Structured Claude/Codex/Copilot history wins when it correlates safely
-    (a Copilot session's ``events.jsonl`` reports ``native``). A Claude
-    session whose state row names no transcript — the rowless window a
-    ``/resume`` or ``/clear`` opens — has its conversation
-    correlated from the filesystem instead, reported as ``native_scan``
-    because that match is inferred rather than exact. An unsupported agent,
-    or a scan that refuses, falls back to the launcher's exact-id PTY
+    Structured history wins when it correlates safely (a Copilot session's
+    ``events.jsonl`` reports ``native``). An unsupported agent, or a session
+    whose history cannot be read, falls back to the launcher's exact-id PTY
     capture + input audit, parsed on demand (never on the Board poll).
     Distinct unavailable reasons let the client separate true-empty from
     source error.
-
-    A consulted scan also reports ``title_check``: the PTY window
-    title can *disprove* a scanned conversation — refusing it in favour of
-    the capture when the two name different conversations — and says
-    ``unknown`` when it cannot settle the question rather than passing for
-    agreement. See ``transcript_locate._disprove_by_live_title``.
 
     Built through a per-session :class:`app.webapp.hot_poll.HotPoll`:
     past its deadline the answer is the last good one, with
@@ -546,18 +536,8 @@ async def _build_exchange(cfg: WebappConfig, sid: str, steps: BuildSteps) -> Dic
         transcript,
         audit.transcript_path(sid),
         audit.session_log_path(sid),
-        live,
     )
-    if result.get("source") == "native_scan":
-        # The row named no transcript and the conversation was correlated
-        # from the filesystem instead — an inferred match, so it
-        # leaves its own breadcrumb rather than passing for an exact one.
-        logger.info(
-            "ℹ️ Board exchange %s (%s) used a scanned native transcript; "
-            "no state row named one",
-            sid[:8], session.get("agent") or "copilot",
-        )
-    elif result.get("source") == "launcher":
+    if result.get("source") == "launcher":
         logger.info(
             "ℹ️ Board exchange %s (%s) used exact-id launcher capture; "
             "native transcript unavailable",

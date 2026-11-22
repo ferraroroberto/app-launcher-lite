@@ -65,7 +65,12 @@ def _stall_transcript(monkeypatch, tmp_path) -> _Stall:
 
     native = tmp_path / "native.jsonl"
     native.write_text("", encoding="utf-8")
-    monkeypatch.setattr(session_transcript, "_resolve_path", lambda *a: (native, "row"))
+    monkeypatch.setattr(session_transcript, "_resolve_path", lambda *a: native)
+    # The transcript reader only serves Copilot; the other endpoints here read a Claude row.
+    monkeypatch.setattr(
+        session_transcript, "_read_live_sessions",
+        lambda _port: ([{**_LIVE, "agent": "copilot"}], None),
+    )
     stall = _Stall({"entries": [], "reset": False, "size": 0})
     monkeypatch.setattr(session_transcript, "transcript_tail", stall)
     return stall

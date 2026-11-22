@@ -56,7 +56,7 @@ app-launcher-lite/
 │   ├── board/                  # Board backend: column assembly, session-state join, drawer exchange, proof reports, owner checks
 │   ├── chief/                  # the chief's plan, journal, answers and dispatch briefs
 │   ├── session_view/           # a live session's views: transcript pages, changed files, the Chat outbox, plan and resume pickers
-│   ├── transcript_flavors/     # transcript-line grammars (copilot.py is the one in use)
+│   ├── transcript_flavors/     # the Copilot transcript-line grammar (copilot.py, apply_patch.py)
 │   ├── desktop/                # the Screen view's PC side: capture, input, cursor, clipboard
 │   ├── notify/                 # vendored provider package behind notifications.py (failure alerts)
 │   ├── jobs/, jobs_kinds/      # Jobs backend: config, scheduling, trigger, queue, reap, history, stats, coverage, webhooks,
