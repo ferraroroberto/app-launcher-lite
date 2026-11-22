@@ -21,7 +21,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from app.webapp.hot_poll import run_on_default_executor
 from app.webapp.routers._helpers import audit_off_loop
-from app.webapp.routers.board_spawn import SESSION_HOST_UNREACHABLE, _read_live_sessions
+from app.webapp.routers.board_spawn import SESSION_HOST_UNREACHABLE, read_live_sessions
 from app.webapp.routers.session_screen import (
     _PartialAnswer,
     _refuse_if_host_unreachable,
@@ -47,7 +47,7 @@ async def _folder_trust_prompt(
     """``(session, prompt)`` for ``sid``: the session as the host lists it
     (``None`` when it is gone) and the dialog it shows now (``None``: none)."""
     live, host_error = await run_on_default_executor(
-        "read_live_sessions", _read_live_sessions, cfg.session_host_port
+        "read_live_sessions", read_live_sessions, cfg.session_host_port
     )
     _refuse_if_host_unreachable(SESSION_HOST_UNREACHABLE if host_error else None)
     session = next((s for s in live if str(s.get("session_id")) == str(sid)), None)

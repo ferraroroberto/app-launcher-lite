@@ -74,12 +74,12 @@ from app.webapp.routers._helpers import (
 )
 from app.webapp.routers.board_spawn import (
     SESSION_HOST_UNREACHABLE,
-    _read_live_sessions,
     _resolve_repo_entry,
     applied_context,
     applied_effort,
     dispatch_context,
     dispatch_effort,
+    read_live_sessions,
 )
 from src import agents, audit, board
 from src.board import (
@@ -239,7 +239,7 @@ async def _build_board_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[str
     # No quota here: both tabs' usage meters read ``/api/rate-limits``,
     # one endpoint, so the two can never show different readings.
     live_read, state, active_issues, job_cards = await asyncio.gather(
-        steps.run("read_live_sessions", _read_live_sessions, cfg.session_host_port),
+        steps.run("read_live_sessions", read_live_sessions, cfg.session_host_port),
         steps.run("read_sessions_state", board.read_sessions_state, Path(cfg.sessions_state_file)),
         steps.run("read_active_issues", board.read_active_issues, active_issues_file),
         steps.run("jobs_attention", board.jobs_attention),
@@ -515,7 +515,7 @@ async def session_exchange(sid: str, request: Request) -> Dict[str, Any]:
 
 async def _build_exchange(cfg: WebappConfig, sid: str, steps: BuildSteps) -> Dict[str, Any]:
     (live, host_error), state = await asyncio.gather(
-        steps.run("read_live_sessions", _read_live_sessions, cfg.session_host_port),
+        steps.run("read_live_sessions", read_live_sessions, cfg.session_host_port),
         steps.run("read_sessions_state", board.read_sessions_state, Path(cfg.sessions_state_file)),
     )
     session = next(
