@@ -104,6 +104,7 @@ import { syncEditedCards, syncFileChips } from './chat-turn-cards.js';
 import { closePendingSheet, syncPendingChip, wirePendingChip } from './chat-pending.js';
 import { automaticDefault, rememberAutomatic, syncAutomatic } from './automatic-fold.js';
 import { isChiefSession } from '../shared/session-kinds.js';
+import { reasonCopy } from './transcript-reasons.js';
 
 
 // Conversation turns (user + assistant entries) per page — ~20 exchanges.
@@ -155,18 +156,6 @@ const PULL_PX = 64;
 // The chat pane's composer handle (composer.js), mounted once by
 // wireChatPane() and re-bound to the open session by openChatPane().
 export let chatComposer = null;
-
-// One line per server-side reason, so "nothing there" never reads like
-// "couldn't read it" (and vice versa).
-const REASON_COPY = {
-  session_not_found: 'This session is no longer running',
-  // Not an ending: the session list could not be read, so nothing is
-  // known about the session; the live tick keeps asking, backed off.
-  session_host_unreachable: 'Can’t reach the session host — retrying',
-  unsupported_agent: 'Transcript not supported for this agent yet',
-  no_transcript: 'No transcript found for this session',
-  read_failed: 'Couldn’t read the transcript',
-};
 
 // null when the pane is closed, else the session it shows plus the cursor
 // for the next older page. `seq` guards a slow response from a previous
@@ -488,8 +477,8 @@ export function syncLiveRefresh() {
 // and recover without the reader having to tap Reload. Treating a transient
 // unknown as an ending would be the same mistake in reverse as treating an
 // unresolved check as a pass.
-function liveUnavailable(reason) {
-  showState(REASON_COPY[reason] || 'Transcript unavailable');
+function liveUnavailable(reason, missing) {
+  showState(reasonCopy(reason, missing));
   view.reasonShown = true;
   if (reason === 'session_not_found' || reason === 'unsupported_agent') {
     view.ended = true;   // the list stays on screen: what was read is still worth reading
@@ -565,7 +554,7 @@ async function readForward(target, manual) {
   if (view !== target || view.seq !== seq) return 'stale';
   target.backoff = 0;
   if (!body.available) {
-    liveUnavailable(body.reason);
+    liveUnavailable(body.reason, body.missing);
     return 'unavailable';
   }
   // Read before anything lands: a card that appears at the end of the turn
@@ -660,7 +649,7 @@ async function loadNewest() {
     // launch sits here from the start, with no transcript yet and the resume
     // picker on its screen, so the screen is asked about now rather than
     // after the first backed-off tick.
-    liveUnavailable(body.reason);
+    liveUnavailable(body.reason, body.missing);
     pollPicker();
     return;
   }
@@ -773,7 +762,7 @@ export async function loadOlder() {
       els.transcriptOlder.disabled = false;
     }
   }
-  if (unavailable) toast(REASON_COPY[unavailable] || 'Transcript unavailable', 'error');
+  if (unavailable) toast(reasonCopy(unavailable), 'error');
   const files = releaseHeld(cursor == null ? -Infinity : oldestTime(older));
   if (older.length || files.length) {
     const frag = document.createDocumentFragment();

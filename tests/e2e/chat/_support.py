@@ -190,6 +190,8 @@ class _Transcript:
         # rowless window. Distinct from `dead` on purpose: one latches
         # refresh off, the other must not.
         self.unavailable: str | None = None
+        # The failed link a `no_transcript` answer names, when it names one.
+        self.missing: str | None = None
         # The `activity` the server rides on every page/tail answer (#1387).
         self.activity: dict | None = None
         # The session's messages the agent has not taken yet, ridden the same way.
@@ -223,6 +225,7 @@ class _Transcript:
                 body=_json.dumps({
                     "available": False, "reason": reason,
                     "entries": [], "next_cursor": None, "session_id": _SID,
+                    **({"missing": self.missing} if self.missing else {}),
                 }),
             )
             return

@@ -5,11 +5,13 @@ one entry's uncapped text.
 entries (``user`` / ``assistant`` / ``tool_call`` / ``tool_result`` /
 ``thinking`` / ``system``) from the session's *native* history, newest-last,
 plus a byte-offset cursor for the next older page. Source resolution is the
-same as the Board drawer's ``/exchange``: the hook row names a Copilot
-``events.jsonl`` when it can, else the file is correlated from the filesystem
-by cwd + launch time against Copilot's own per-session ``workspace.yaml``.
-A session no source can name answers ``no_transcript`` rather than guessing a
-neighbour's file, and an agent this fork cannot launch answers
+the hook row's recorded ``events.jsonl`` when that file exists, else the
+folder the row's key (the Copilot session id) names, else the file correlated
+from the filesystem by cwd + launch time against Copilot's own per-session
+``workspace.yaml`` (or, for a resumed folder, the ``session.resume`` its log
+records at the launch). A session no source can name answers
+``no_transcript`` with a ``missing`` field naming the failed link, rather
+than guessing a neighbour's file, and an agent this fork cannot launch answers
 ``unsupported_agent``. None of them read the launcher's PTY capture, so
 detached rows are served the same way.
 Terminal-grade content, so it sits behind the Tailscale + passkey gate like
@@ -81,7 +83,10 @@ from src.session_view.transcript import (
     transcript_page,
     transcript_tail,
 )
-from src.session_view.transcript_locate import find_copilot_transcript
+from src.session_view.transcript_locate import (
+    copilot_events_for_id,
+    find_copilot_transcript,
+)
 from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
@@ -125,15 +130,26 @@ async def _read_or_unavailable(
         return None, _unavailable(sid, "read_failed")
 
 
-def _resolve_path(session: Dict[str, Any], row: Optional[Dict[str, Any]]) -> Optional[Path]:
-    """The history file for this session (None when none is known): the path
-    the row carries, else the Copilot event log correlated from the
-    filesystem by cwd + launch time against its own per-session
-    ``workspace.yaml``."""
+def _resolve_path(
+    session: Dict[str, Any], row: Optional[Dict[str, Any]], row_sid: Optional[str] = None,
+) -> Optional[Path]:
+    """The existing history file for this session, or None: the path the row
+    records, else the folder its Copilot session id names, else the Copilot
+    event log correlated from the filesystem by cwd + launch time (or by the
+    resume a reopened folder records). Each link is tried in turn because
+    any one can be missing: only agentStop records a path, a recorded file
+    can move, and a resumed folder predates the launch window."""
     raw = (row or {}).get("transcript_path")
-    if raw:
+    if raw and Path(str(raw)).is_file():
         return Path(str(raw))
-    return find_copilot_transcript(session)
+    return copilot_events_for_id(row_sid) or find_copilot_transcript(session)
+
+
+def _missing_link(row: Optional[Dict[str, Any]], row_sid: Optional[str]) -> str:
+    """Which link failed for an unresolved session, for the reader and the log."""
+    if (row or {}).get("transcript_path"):
+        return "recorded_file_gone"
+    return "no_path_recorded" if row_sid else "no_hook_row"
 
 
 async def resolve_source(
@@ -144,8 +160,8 @@ async def resolve_source(
     Returns ``(reason, flavor, path, agent, why, session)`` — ``reason`` is
     set (and ``flavor``/``path`` are ``None``) exactly when the caller must
     respond ``_unavailable(sid, reason)`` instead of reading the source.
-    ``why`` is always ``""`` while Copilot is the only flavour: it has no
-    refusal guard to explain, but the callers still unpack the slot. ``session``
+    ``why`` names the missing link (:func:`_missing_link`) when ``reason``
+    is ``no_transcript``, else ``""``. ``session``
     is the session-host's row, ``None`` only for ``session_not_found`` and
     ``session_host_unreachable`` (the list could not be read: not the
     same fact as "the session is not in it").
@@ -173,15 +189,17 @@ async def resolve_source(
 
     flavor = _FLAVOR_BY_AGENT[agent]
     row = board.state_row_for_session(live, state["rows"], sid)
+    # The row's key is the Copilot session id, which names its log's folder.
+    row_sid = board.state_sid_for_session(live, state["rows"], sid)
 
     def resolve() -> Optional[Path]:
-        # The existence check is a stat too, so it stays off the loop.
-        found = _resolve_path(session, row)
+        # The existence checks are stats too, so they stay off the loop.
+        found = _resolve_path(session, row, row_sid)
         return found if found is not None and found.is_file() else None
 
     path = await run("resolve_path", resolve)
     if path is None:
-        return "no_transcript", None, None, agent, "", session
+        return "no_transcript", None, None, agent, _missing_link(row, row_sid), session
     return None, flavor, path, agent, "", session
 
 
@@ -259,10 +277,14 @@ async def _build_transcript(
         # few seconds: the unreachable one is already latched by the list read.
         if reason not in ("session_not_found", SESSION_HOST_UNREACHABLE):
             logger.info(
-                "ℹ️ transcript %s (%s) unavailable: %s%s",
-                sid[:8], agent, reason, f" (refused: {why})" if why else "",
+                "ℹ️ transcript %s (%s) unavailable: %s%s", sid[:8], agent, reason,
+                f" (missing: {why}; tried recorded path, Copilot id folder,"
+                " cwd + launch or resume match)" if why else "",
             )
-        return _unavailable(sid, reason)
+        refusal = _unavailable(sid, reason)
+        if why:
+            refusal["missing"] = why
+        return refusal
     if after is not None:
         tail = await _tail_response(sid, agent, flavor, path, after, size, session, steps)
         if tail.get("available"):

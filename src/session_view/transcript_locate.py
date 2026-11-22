@@ -71,6 +71,13 @@ _COPILOT_WORKSPACE_CACHE_MAX = 8192
 # only change that can make a match ambiguous or point it elsewhere.
 _COPILOT_MATCH_CACHE: Dict[Tuple[str, str, float, float], Tuple[int, Path]] = {}
 _COPILOT_MATCH_CACHE_MAX = 256
+# Copilot session ids are UUIDs; a folder name is only built from one.
+_COPILOT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,127}$")
+# Per event log: the byte offset scanned so far and the resume instants seen.
+_COPILOT_RESUME_CACHE: Dict[Path, Tuple[int, List[float]]] = {}
+# A cheap byte filter; the parsed record's own ``type`` decides.
+_COPILOT_RESUME_MARK = b'"session.resume"'
+_COPILOT_RESUME_CHUNK_BYTES = 1024 * 1024
 _CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 # Claude Code names a project folder after its cwd with every non-alphanumeric
 # character replaced by `-`. Measured across the 107 folders on this box whose
@@ -151,6 +158,9 @@ def find_copilot_transcript(session: Dict[str, Any]) -> Optional[Path]:
     construction and both refuse; being *outside* each other's window is
     what makes the ordinary case unambiguous, not a tie-break.
 
+    No folder in the window → :func:`_scan_resumed_workspaces` looks for
+    the older folder a ``--resume`` launch reopened.
+
     A qualifying folder whose ``events.jsonl`` does not exist yet also
     answers ``None`` — Copilot creates that file at the first prompt, so a
     session nobody has typed into genuinely has no transcript. Older
@@ -181,6 +191,8 @@ def find_copilot_transcript(session: Dict[str, Any]) -> Optional[Path]:
     if hit is not None and hit[0] == listing_sig and hit[1].is_file():
         return hit[1]
     found = _scan_copilot_workspaces(project_dir, started, early_slop)
+    if found is None:
+        found = _scan_resumed_workspaces(project_dir, started, early_slop)
     if found is not None:
         if len(_COPILOT_MATCH_CACHE) >= _COPILOT_MATCH_CACHE_MAX:
             _COPILOT_MATCH_CACHE.clear()
@@ -210,6 +222,113 @@ def _scan_copilot_workspaces(
     if len(matches) != 1 or not matches[0].is_file():
         return None
     return matches[0]
+
+
+def copilot_events_for_id(copilot_session_id: Optional[str]) -> Optional[Path]:
+    """The event log Copilot keeps for one of its own session ids, or None.
+
+    Copilot names each session folder after its session id, which is also
+    the key the Copilot hooks write the sessions-state row under, so a row
+    names its log exactly even before agentStop records a path, and even
+    for a resumed launch whose folder predates the launch window. Anything
+    that is not a plain id is refused rather than joined onto the path.
+    """
+    if not copilot_session_id or not _COPILOT_ID_RE.match(copilot_session_id):
+        return None
+    path = _COPILOT_STATE_DIR / copilot_session_id / "events.jsonl"
+    return path if path.is_file() else None
+
+
+def _scan_resumed_workspaces(
+    project_dir: str, started: float, early_slop: float
+) -> Optional[Path]:
+    """The folder a resumed launch reopened, when the launch-window match
+    found none.
+
+    ``--resume`` reopens a folder Copilot created long before this launch,
+    so its ``created_at`` never falls in the window; what marks it is the
+    ``session.resume`` event Copilot appends at the launch. A folder
+    qualifies when its ``cwd`` is this session's and its log records a
+    resume inside the same window; only logs written since the launch are
+    read. The same fail-safe holds: anything but exactly one is None.
+    """
+    try:
+        workspaces = list(_COPILOT_STATE_DIR.glob("*/workspace.yaml"))
+    except OSError:
+        return None
+    earliest = started - early_slop
+    matches: List[Path] = []
+    for workspace in workspaces:
+        cwd, created = _copilot_workspace(workspace)
+        if created is None or cwd != project_dir or created >= earliest:
+            continue
+        events = workspace.parent / "events.jsonl"
+        try:
+            if events.stat().st_mtime < earliest:
+                continue
+        except OSError:
+            continue
+        if any(earliest <= t <= started + _COPILOT_START_SLOP_SECONDS
+               for t in _copilot_resume_times(events)):
+            matches.append(events)
+        if len(matches) > 1:
+            return None
+    return matches[0] if len(matches) == 1 else None
+
+
+def _copilot_resume_times(events: Path) -> List[float]:
+    """Every ``session.resume`` instant in one event log, as epoch seconds.
+
+    The log only grows, so each file is read once from the offset the last
+    call reached: the live tick asks on every poll while a session stays
+    unresolved, and a long session's log runs to hundreds of MB. A shrunk
+    file was replaced and is read again from the start.
+    """
+    try:
+        size = events.stat().st_size
+    except OSError:
+        return []
+    offset, times = _COPILOT_RESUME_CACHE.get(events, (0, []))
+    if size < offset:
+        offset, times = 0, []
+    times = list(times)
+    try:
+        with events.open("rb") as fh:
+            fh.seek(offset)
+            carry = b""
+            while True:
+                chunk = fh.read(_COPILOT_RESUME_CHUNK_BYTES)
+                if not chunk:
+                    break
+                lines = (carry + chunk).split(b"\n")
+                carry = lines.pop()
+                offset += len(chunk)
+                for line in lines:
+                    if _COPILOT_RESUME_MARK in line:
+                        stamp = _resume_instant(line)
+                        if stamp is not None:
+                            times.append(stamp)
+            # An unfinished last line is read again once it is complete.
+            offset -= len(carry)
+    except OSError:
+        return times
+    if len(_COPILOT_RESUME_CACHE) >= _COPILOT_MATCH_CACHE_MAX:
+        _COPILOT_RESUME_CACHE.clear()
+    _COPILOT_RESUME_CACHE[events] = (offset, times)
+    return times
+
+
+def _resume_instant(line: bytes) -> Optional[float]:
+    """One ``session.resume`` line's timestamp as epoch seconds, or None."""
+    try:
+        record = json.loads(line)
+        if record.get("type") != "session.resume":
+            return None
+        return datetime.fromisoformat(
+            str(record["timestamp"]).replace("Z", "+00:00")
+        ).timestamp()
+    except (ValueError, KeyError, TypeError, AttributeError, OSError):
+        return None
 
 
 def _claude_project_folders(project_dir: str) -> Optional[List[Path]]:

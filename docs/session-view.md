@@ -131,7 +131,7 @@ The ⋮ menu's pencil opens **Rename**. A Board session whose issue title is kno
 | --- | --- | --- |
 | GitHub Copilot CLI | `events.jsonl` | some — a tool that could not run is recorded; a shell command that merely exits non-zero is not |
 
-An opened card whose call is unmarked says the outcome was never recorded. A session with no history file and one whose file cannot be read say so in different words (*No transcript found* versus *Couldn't read the transcript*).
+An opened card whose call is unmarked says the outcome was never recorded. A session with no history file and one whose file cannot be read say so in different words (*No transcript found* versus *Couldn't read the transcript*). A live Copilot session's log is found through, in turn, the path its hook row records, the folder its Copilot session id names (the row's key), and the folder whose `workspace.yaml` matches its directory and start time, or, for a resumed launch whose folder predates the launch, whose log records a `session.resume` at that start. When none holds, the line names the link that failed: the recorded file is gone, no log is linked yet, or no folder matches; the webapp log records the same at info level.
 
 ## Not ported yet
 
