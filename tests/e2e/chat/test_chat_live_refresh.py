@@ -573,6 +573,12 @@ def test_overlapping_reads_append_once_a_transient_source_recovers_and_an_ended_
     expect(page.locator("#transcriptState")).to_contain_text(
         "No transcript found", timeout=OVERLAY_OPEN_MS
     )
+    # A live session's answer can name the link that failed.
+    tr.missing = "recorded_file_gone"
+    _tick(page, tr)
+    expect(page.locator("#transcriptState")).to_contain_text(
+        "the recorded log file is gone", timeout=OVERLAY_OPEN_MS
+    )
     # It is still trying, unlike the ended case below.
     settled = tr.tail_calls()
     _tick(page, tr)
