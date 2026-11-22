@@ -27,7 +27,7 @@ import os
 from dataclasses import MISSING, asdict, dataclass, field, replace
 from dataclasses import fields as dataclass_fields
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlencode, urlparse, urlunparse
 
 from src._json_io import atomic_write_json
@@ -37,7 +37,7 @@ from src.app_config import resolve_session_host_port, resolve_webapp_port
 # isort: off
 # Grid layout: one name per line would push this module past the structure ratchet's file-size cap.
 from src.launching.presets import load_launch_presets
-from src import runtime_files
+from src import request_timing, runtime_files
 from src.webapp_settings.values import (  # noqa: F401 — re-exported for webapp_config.<name> callers
     CREDENTIAL_KEYS,
     DEFAULT_CHIEF_AUTO_COMPACT_THRESHOLD, DEFAULT_CHIEF_MODEL, DEFAULT_CHIEF_WORKER_CAP,
@@ -293,6 +293,11 @@ class WebappConfig:
     # Logs per-keystroke terminal timings and event-loop lag over 100 ms to
     # webapp/slow-requests.log. Off by default: a diagnostics switch, read live.
     terminal_timing_log: bool = False
+    # Per-request-class time budgets, {class: [soft_s, hard_s]}, laid over the
+    # defaults in src/request_timing.py. A request past soft is logged "over
+    # budget", past hard a "budget breach". Absent classes keep their default;
+    # read live.
+    request_budgets: Dict[str, List[float]] = field(default_factory=dict)
     # Large-file attach limit in MB, Settings-tab configurable.
     # See DEFAULT_LARGE_UPLOAD_MAX_MB.
     large_upload_max_mb: int = DEFAULT_LARGE_UPLOAD_MAX_MB
@@ -447,6 +452,14 @@ def _load_documents(raw: dict) -> list:
     ]
 
 
+def _load_request_budgets(raw: dict) -> Dict[str, List[float]]:
+    """``request_budgets`` — only the usable classes; a dropped one is logged, never fatal."""
+    kept, dropped = request_timing.clean_overrides(raw.get("request_budgets"))
+    for reason in dropped:
+        logger.warning(f"⚠️  request_budgets ignored: {reason}")
+    return kept
+
+
 #: Fields whose on-disk shape can't be derived from the annotation alone.
 #: Everything else is handled by the generic loop in
 #: :func:`load_webapp_config`, so a new setting is declared once — on
@@ -456,6 +469,7 @@ _CUSTOM_LOADERS: Dict[str, Callable[[dict], Any]] = {
     "api_tokens": _load_api_tokens,
     "documents": _load_documents,
     "launch_presets": load_launch_presets,
+    "request_budgets": _load_request_budgets,
 }
 
 

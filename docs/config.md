@@ -93,6 +93,7 @@ The `.sample` file carries a `copilot_models` default list; a per-launch model (
 | `desktop_browser` | `chrome` | Where a link tapped in Chat opens when the page runs on the PC itself: `chrome` (falls back to the Windows default) or `system`. |
 | `terminal_history_lines` | `10000` | Scrollback the session-host replays on (re)connect, 200–50000. |
 | `terminal_timing_log` | `false` | Diagnostics: logs each terminal keystroke's stage timings and any event-loop stall over 100 ms to `webapp/slow-requests.log`. Read live. |
+| `request_budgets` | `{}` | Per-request-class time budgets, `{class: [soft_s, hard_s]}`, laid over the defaults in [diagnostics](diagnostics.md#request-timings-and-budgets). Read live. |
 | `large_upload_max_mb` | `2048` | Limit for the composer's **Attach large file (not read)**, 1–10240 MB; the ordinary attach keeps its fixed 12 MB. |
 | `outbox_scratch_roots` | `["%TEMP%/claude"]` | Folders, besides a session's own, an agent may send a file to Chat from. `%VAR%` and `~` expand; Settings › Folders validates each on save. |
 | `documents` | `[]` | Files the reading sheet may show, each `{id, title, repo, path}` ([Documents](documents.md)). |

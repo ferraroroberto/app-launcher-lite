@@ -189,7 +189,7 @@ class Entry:
     lines: List[str]
 
 
-def _tail_lines(path: Path, max_bytes: int = MAX_TAIL_BYTES) -> List[str]:
+def tail_lines(path: Path, max_bytes: int = MAX_TAIL_BYTES) -> List[str]:
     with open(path, "rb") as fh:
         fh.seek(0, os.SEEK_END)
         size = fh.tell()
@@ -213,7 +213,7 @@ def read_entries(path: Path, start: datetime, end: datetime) -> List[Entry]:
         mtime = datetime.fromtimestamp(path.stat().st_mtime)
         if mtime < start:
             return []
-        lines = _tail_lines(path)
+        lines = tail_lines(path)
     except OSError as exc:
         return [Entry(end, source_tag(path), [f"(unreadable: {exc})"])]
     tag = source_tag(path)

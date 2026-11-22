@@ -43,6 +43,8 @@ app-launcher-lite/
 │   ├── vt_snapshot.py          # headless VT mirror per fullscreen session (reconnect snapshot)
 │   ├── audit.py                # terminal audit + per-session logs; session_retention.py is its daily sweep
 │   ├── diagnostics.py          # log ring buffer + port-owner introspection
+│   ├── request_timing.py       # per-request queue/worker time, the budget table, in-flight peaks
+│   ├── health_snapshot.py      # the read-only `launcher.py health` report
 │   ├── static_versioning.py    # content-hash query strings for asset cache-busting
 │   ├── stylesheet_bundle.py    # the linked stylesheets concatenated into the one /static/bundle.css
 │   ├── subprocess_flags.py     # the NO_WINDOW spawn-flag convention (single source)
@@ -78,6 +80,7 @@ app-launcher-lite/
 │   ├── webapp_port.py          # resolves the webapp port for the .bat files
 │   ├── run_named_tunnel.py     # the Cloudflare named-tunnel runner
 │   ├── probe_endpoint_timing.py # GET-only endpoint timing at a phone's poll spacing
+│   ├── bench_requests.py       # p50/p95 benchmark of the slow-feeling requests + max in-flight
 │
 ├── copilot/                    # the Copilot side: hooks, chief helpers, lane skills, their unittest suite (see below)
 │   ├── hooks/                  # session-state, chief-inbox and chief-guard hooks and their templates

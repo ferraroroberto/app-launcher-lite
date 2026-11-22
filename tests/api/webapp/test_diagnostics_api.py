@@ -65,6 +65,22 @@ def test_only_the_offered_windows_and_saved_names_are_accepted(diag_client):
     assert client.get("/api/diagnostics/..%2Fconfig.json").status_code == 404
 
 
+def test_request_stats_reports_the_table_and_the_cache_age_without_scanning(diag_client):
+    client, _ = diag_client
+    app = client.app
+    app.state.webapp_config.request_budgets = {"board": [2.0, 4.0]}
+    res = client.get("/api/request-stats", params={"window_s": 60})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["budgets"]["board"] == {"soft_s": 2.0, "hard_s": 4.0}
+    assert body["budgets"]["send"] == {"soft_s": 5.0, "hard_s": 10.0}
+    assert body["window_s"] == 60
+    assert body["max_inflight"] >= 1  # this very request
+    assert body["git_status_age_s"] is None  # no scan has run, and asking started none
+    assert getattr(app.state, "git_status_cache", None) in (None, {})
+    assert client.get("/api/request-stats", params={"window_s": 0}).status_code == 422
+
+
 def test_both_routes_are_passkey_gated():
     assert terminal_guard_level("/api/diagnostics") == "passkey"
     assert terminal_guard_level("/api/diagnostics/diagnostics-20990101-000000.txt") == "passkey"
