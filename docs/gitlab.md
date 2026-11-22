@@ -28,7 +28,8 @@ The client in `src/clients/gitlab.py` ran against gitlab.com with `glab` 1.131 (
 | `projects/<id>/pipelines/latest?ref=<default>` on a project with no pipeline | `403 Forbidden`; not used |
 | Reading a pipeline's row shape and `status` values (`id`, `iid`, `sha`, `ref`, `status`, `source`, `created_at`, `web_url`) | verified against a public project's pipelines (`success` and `failed`); not yet against a pipeline of the group |
 | A red or green pipeline of the group itself, `cancelled`/`skipped` rows, a project with CI switched off, a self-hosted host | `unknown` |
-| Labels, `glab mr merge` | `unknown` (not read or written by the client today) |
+| `glab mr merge --auto-merge` through the chief's merge verb | verified on a GitLab test project through the companion repo's copy of the verb: one request merged and read back clean, two conflicting requests refused with GitLab's reason; this tree's copy is unit-tested and not re-run live from here |
+| Labels | `unknown` (not read or written by the client today) |
 | The two-remote mirror and `scripts/sync_gitlab_mirror.py` | verified (push, level re-run); see below |
 | An Android Git client | `unknown` |
 
@@ -74,7 +75,7 @@ The owner-check feature (shipped work to validate, steps owed before a start) is
 
 ## Merging
 
-The Board merges nothing. The chief's merge verb in `copilot/` runs `glab mr merge --auto-merge`; its flags are unit-tested and `unknown` against a live GitLab (see [Status](../README.md#status)).
+The Board merges nothing. The chief's merge verb in `copilot/` runs `glab mr merge --auto-merge`. On a GitLab test project the companion repo's copy of the verb merged one request and read it back clean, and refused two conflicting requests with GitLab's own reason; this tree's copy carries the same reason handling and is unit-tested, but has not been re-run live from here. A self-hosted host is `unknown` (see [Status](../README.md#status)).
 
 ## Two remotes for this repo
 
