@@ -1,6 +1,7 @@
 """Settings > Diagnostics: save the last N minutes of every Lite log to one file.
 
 ``POST /api/diagnostics``          ``{minutes}`` -> ``{name, path, records, bytes}``
+``GET  /api/request-stats``        in-flight peak, budget verdicts per class, git-status cache age
 ``GET  /api/diagnostics/{name}``   -> that saved file, as plain text
 
 The file is written on this PC by :mod:`src.diagnostics_bundle`, redacted
@@ -13,13 +14,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict
+import time
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from src import diagnostics_bundle
+from src import diagnostics_bundle, request_timing
 from src.build_info import build_identity
 from src.webapp_config import WebappConfig
 
@@ -32,6 +34,40 @@ _SERVED_SHA = build_identity().get("git_sha", "unknown")
 
 class SaveRequest(BaseModel):
     minutes: int = 60
+
+
+def _git_status_age_s(request: Request) -> Optional[float]:
+    """Seconds since the last git-status scan began, or ``None`` when none has run.
+
+    Reads the cache the git-status route keeps on ``app.state`` and never
+    scans: asking must not start the work it reports on.
+    """
+    cfg: WebappConfig = request.app.state.webapp_config
+    cache = getattr(request.app.state, "git_status_cache", None) or {}
+    cached = cache.get((str(cfg.projects_dir), tuple(cfg.projects_ignore)))
+    return None if cached is None else round(time.monotonic() - cached[0], 1)
+
+
+@router.get("/api/request-stats")
+async def request_stats(
+    request: Request, window_s: float = Query(default=300.0, gt=0, le=900)
+) -> Dict[str, Any]:
+    """Read-only request health: what the timing middleware has seen since boot.
+
+    ``max_inflight`` is the highest in-flight count in the last ``window_s``
+    seconds, the number a benchmark reports beside its latencies. ``budgets``
+    is the table in force, defaults with the config's ``request_budgets``
+    laid over them.
+    """
+    cfg: WebappConfig = request.app.state.webapp_config
+    budgets = request_timing.resolve_budgets(cfg.request_budgets)
+    return {
+        **request_timing.STATS.snapshot(window_s),
+        "budgets": {
+            name: {"soft_s": b.soft_s, "hard_s": b.hard_s} for name, b in budgets.items()
+        },
+        "git_status_age_s": _git_status_age_s(request),
+    }
 
 
 @router.post("/api/diagnostics")

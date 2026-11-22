@@ -2,6 +2,7 @@
 
 from .base import BaseCommand
 from .diagnostics_cmd import DiagnosticsCommand
+from .health_cmd import HealthCommand
 from .run_job_cmd import RunJobCommand
 from .scan_cmd import ScanCommand
 from .session_host_cmd import SessionHostCommand
@@ -15,6 +16,7 @@ COMMANDS = {
     "session-host": SessionHostCommand,
     "run-job": RunJobCommand,
     "diagnostics": DiagnosticsCommand,
+    "health": HealthCommand,
 }
 
 
