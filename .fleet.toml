@@ -929,16 +929,6 @@ detail = "editor-modal(s) with no max-height + internal scroll — a tall form j
 reason = "#screenView is the full-viewport Screen viewer (inset 0, 100dvh), not an editor modal: its one field is the hidden key-capture input, so no conditional rows can make it jump"
 record = "https://github.com/ferraroroberto/app-launcher/issues/1634"
 
-# design-lint contract finding (/design-sync, #2349) examined and accepted: the Inspiration
-# sheet is a Settings sub-sheet whose header already carries the back chevron and the
-# square x close; its three Cancel buttons belong to the inline add-source forms in the body.
-[[design.accepted]]
-check  = "modal-header"
-target = "app/webapp/static/views/inspiration-sheet.html"
-detail = "editor-modal header contract violated (design.md modal wants a heading-lg title + square x close, never a footer Cancel): app/webapp/static/views/inspiration-sheet.html:4 footer Cancel button in its place"
-reason = "the sheet's header carries the square x close; the Cancel buttons are inline add-source form controls in the body, not a footer standing in for the close"
-record = "https://github.com/ferraroroberto/app-launcher/issues/2349"
-
 # Declared state machines: the state rules never report a module listed here.
 [[state_machines]]
 name   = "board-card-status"
