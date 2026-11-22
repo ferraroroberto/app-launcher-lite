@@ -34,13 +34,18 @@
  *
  * Split off a single-file module (`/codebase-audit`), the way
  * `jobs.js` and `terminal.js` already were: the lane toolbar's project
- * filter, the Backlog's "Start with" model combo and the fleet chief's
- * lifecycle live in `board-dispatch.js`; the drill-down drawer in
+ * filter and the Backlog's "Start with" model combo live in
+ * `board-dispatch.js`; the fleet chief's lifecycle in
+ * `board/chief-actions.js`; the drill-down drawer in
  * `board/drawer.js`; the Chief's plan card in `board/chief-plan.js`. This
  * module keeps card rendering, one-tap issue-start, the lanes and the poll,
  * and calls into those for the rest. The Board has no chief card:
  * the chief lives in its row under Code › Sessions, and here only as its
  * session row in Bot's turn.
+ *
+ * This module and everything under board/ load on the first Board visit
+ * (lazy-views.js), never with the page: every caller outside the Board goes
+ * through lazy-views.js.
  */
 
 import { els, state } from './state.js';
@@ -938,36 +943,24 @@ async function refreshGithub({ quiet = false } = {}) {
   }
 }
 
-// --------------------------------------------------------- column sections
-
-export const DESKTOP_BOARD = '(min-width: 700px) and (pointer: fine)';
-
-// The desktop grid is a kanban at a glance, so all five sections start open
-// there; the phone keeps the markup's default (the two live columns open).
-// Boot only — after that a section's open state is the user's.
-function openDesktopColumns() {
-  if (!window.matchMedia || !window.matchMedia(DESKTOP_BOARD).matches) return;
-  COLUMNS.forEach(function (col) {
-    const section = els[col.section];
-    if (section) section.open = true;
-  });
-}
-
 // ------------------------------------------------------------------ wire
+
+// A visit to the tab. lazy-views.js calls it too, for the visit that loaded
+// this module and so came before the listener below existed.
+export function openBoardTab() {
+  syncDispatchBar();
+  fetchBoard().then(function () {
+    // Opening the tab with a stale (or never-filled) glab cache refreshes
+    // it once; while the tab just sits open only the free poll runs.
+    if (ghStale(state.board)) refreshGithub().catch(function () {});
+  }).catch(function () {});
+}
 
 export function wireBoard() {
   if (!els.tabBoard) return;
-  els.tabBoard.addEventListener('click', function () {
-    syncDispatchBar();
-    fetchBoard().then(function () {
-      // Opening the tab with a stale (or never-filled) glab cache refreshes
-      // it once; while the tab just sits open only the free poll runs.
-      if (ghStale(state.board)) refreshGithub().catch(function () {});
-    }).catch(function () {});
-  });
+  els.tabBoard.addEventListener('click', openBoardTab);
   wireDispatch();
   wireJournal();
-  openDesktopColumns();
   wireFoldAll(els.boardFoldAll, els.boardColumns);
   // Back in the foreground: an aged cache refreshes now, not on the next poll.
   document.addEventListener('visibilitychange', function () {

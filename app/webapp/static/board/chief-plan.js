@@ -12,7 +12,8 @@ import { openChiefAnswers, openOwnerAnswers, syncChiefAnswers } from '../lazy-vi
 import { agoText, newestDateFirst, plural, shortDate } from '../shared/format.js';
 import { answeredKeys, itemKey } from './chief-keys.js';
 import { boardRepoFilter, isChiefCard, matchesRepoFilter } from './board-dispatch.js';
-import { DESKTOP_BOARD, renderBoard, setLaneException } from '../board.js';
+import { renderBoard, setLaneException } from '../board.js';
+import { DESKTOP_BOARD } from './board-columns.js';
 import { clearMergedButton, mergedCount } from './plan-prune.js';
 import { CLOSED, NOT_LOADED, bucketIndex, bucketName, groupPlanRows } from './plan-buckets.js';
 import { openPlanNoteSheet } from './plan-note-sheet.js';

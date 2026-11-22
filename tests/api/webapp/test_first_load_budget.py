@@ -6,7 +6,7 @@ pair (the page and its stylesheet) and the whole first load each stay under a
 budget with a little headroom over what they weigh now. The page and the
 stylesheet are sent without their comments; a change that sends them again
 fails here. The views a tap opens (chat, terminal, changes, links, Screen,
-Progress, the Jobs tab, the Board's answer sheet and the shared composer) load
+Progress, the Jobs and Board tabs and the shared composer) load
 on that tap (lazy-views.js); a static import that pulls one back into the
 first load fails here too.
 """
@@ -20,8 +20,8 @@ from typing import Dict, List
 MAX_RESPONSE_BYTES = 100 * 1024
 # The page and its one stylesheet block the first paint (55 KB together, gzipped).
 RENDER_BLOCKING_BYTES = 70 * 1024
-# Page, stylesheet and every module main.js reaches statically (202 KB now).
-FIRST_LOAD_BYTES = 220 * 1024
+# Page, stylesheet and every module main.js reaches statically (158 KB now).
+FIRST_LOAD_BYTES = 175 * 1024
 # Loaded on first open, never by the first load.
 LAZY_VIEWS = (
     "/static/terminal.js",
@@ -32,7 +32,10 @@ LAZY_VIEWS = (
     "/static/screen/screen-view.js",
     "/static/progress/progress-sheet.js",
     "/static/jobs.js",
+    "/static/board.js",
     "/static/board/board-answers.js",
+    "/static/board/board-dispatch.js",
+    "/static/board/drawer.js",
     "/static/composer.js",
     "/static/voice.js",
 )
@@ -90,3 +93,40 @@ def test_the_views_a_tap_opens_stay_out_of_the_first_load(webapp_client):
     loaded = {url.split("?")[0] for url in _first_load(client)}
     assert "/static/lazy-views.js" in loaded, "the walk never reached the lazy loader"
     assert not loaded.intersection(LAZY_VIEWS), sorted(loaded.intersection(LAZY_VIEWS))
+
+
+_TEMPLATE_RE = r'<template id="{}">(.*?)</template>'
+_PRELOAD_RE = re.compile(r'<link rel="modulepreload" href="([^"]+)">')
+_BOARD_IMPORT_RE = re.compile(r"""import\(\s*['"]\./board\.js(\?v=[^'"]*)?['"]""")
+
+
+def _preloads(page: str, template_id: str) -> List[str]:
+    match = re.search(_TEMPLATE_RE.format(template_id), page, re.S)
+    assert match, f"no <template id={template_id!r}> in the page"
+    return _PRELOAD_RE.findall(match.group(1))
+
+
+def test_the_page_preloads_exactly_the_first_load_modules(webapp_client):
+    """The whole static graph is asked for at once; a preload URL that differs
+    from the import's (another ?v=) would fetch a second, unused copy."""
+    client, _, _ = webapp_client
+    page = client.get("/").text
+    preloads = _preloads(page, "modulePreload")
+    modules = [url for url in _first_load(client) if ".js" in url]
+    assert len(preloads) == len(set(preloads))
+    assert sorted(preloads) == sorted(modules)
+
+
+def test_a_board_first_boot_preloads_the_instance_lazy_views_imports(webapp_client):
+    """The Board's own modules, none of the first load's, starting with the
+    board.js URL lazy-views.js imports, or the Board would load twice as two
+    module instances."""
+    client, _, _ = webapp_client
+    page = client.get("/").text
+    board = _preloads(page, "boardPreload")
+    first = set(_preloads(page, "modulePreload"))
+    assert board and not first.intersection(board)
+    stamps = _BOARD_IMPORT_RE.findall(client.get("/static/lazy-views.js").text)
+    assert stamps, "lazy-views.js no longer imports the Board"
+    assert board[0] == "/static/board.js" + stamps[0]
+    assert "/static/board/drawer.js" + stamps[0] in board

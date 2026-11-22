@@ -1,13 +1,13 @@
 /* The views a tap opens load on that first tap, not with the page.
  *
  * The chat, terminal, changes, links, Screen and Progress code, the Jobs
- * tab, the Board's answer sheet and the shared composer are most of the
- * app's JavaScript, and none of it draws the shell, the session list or the
- * Board. A phone with an empty cache (a first visit, or any visit after
- * a deploy, since one hash stamps every module URL) downloaded all of it
- * before either could draw. Each group below loads and wires its listeners
- * once: on the first call that needs it, or from prefetchViews() once the
- * page has drawn, so a later first open finds it already parsed.
+ * and Board tabs and the shared composer are most of the app's JavaScript,
+ * and none of it draws the shell or the session list. A phone with an empty
+ * cache (a first visit, or any visit after a deploy, since one hash stamps
+ * every module URL) downloaded all of it before either could draw. Each
+ * group below loads and wires its listeners once: on the first call that
+ * needs it, or from prefetchViews() once the page has drawn, so a later
+ * first open finds it already parsed.
  *
  * Nothing in the first-load graph imports these modules statically; every
  * caller goes through the functions here.
@@ -19,7 +19,7 @@ import { fetchSessions } from './sessions.js';
 
 // A group loads once; a failed load (a dropped connection) is retried by
 // the next call instead of staying failed.
-function group(load) {
+function group(load, adoptWire) {
   let pending = null;
   let loaded = null;
   const get = function () {
@@ -35,6 +35,13 @@ function group(load) {
     return pending;
   };
   get.loaded = function () { return loaded; };
+  // A module the caller already evaluated: wire it now, with no import()
+  // hop, whose resolution waits behind the boot's other tasks.
+  get.adopt = function (mod) {
+    if (pending) return;
+    loaded = adoptWire(mod);
+    pending = Promise.resolve(loaded);
+  };
   return get;
 }
 
@@ -77,6 +84,20 @@ const jobsTab = group(function () {
     return m;
   });
 });
+
+// The Board tab loads on its first visit, or once the phone goes idle; a
+// boot that reopens on it, or lands on a ?board= link, hands over the module
+// main.js evaluated (adoptBoard). Text typed into its project filter before
+// it landed is replayed, as Jobs' search is.
+function wireBoardModule(m) {
+  m.wireBoard();
+  const repo = document.getElementById('boardDispatchRepoInput');
+  if (repo && repo.value) repo.dispatchEvent(new Event('input'));
+  return m;
+}
+const boardTab = group(function () {
+  return import('./board.js').then(wireBoardModule);
+}, wireBoardModule);
 
 // The Board's answer sheet. The poll's last chief run state is replayed on
 // load, so a sheet opened later gates Done on it as before.
@@ -174,6 +195,30 @@ export function fetchJobs() {
   return use(jobsTab, function (m) { return m.fetchJobs(); });
 }
 
+// Self-gated to the Board tab like fetchJobs above: only a visit loads it.
+export function fetchBoard() {
+  const board = boardTab.loaded();
+  if (board) return board.fetchBoard();
+  if (state.tab !== 'board') return Promise.resolve();
+  return use(boardTab, function (m) { return m.fetchBoard(); });
+}
+
+// Nothing is drawn before the Board's code has loaded.
+export function renderBoard() {
+  const board = boardTab.loaded();
+  if (board) board.renderBoard();
+}
+
+// The ?board=<sid> deep link (main.js).
+export function openBoardCard(sid) {
+  return use(boardTab, function (m) { return m.openBoardCard(sid); });
+}
+
+// main.js's Board-first boot, once the tabs are wired.
+export function adoptBoard(mod) {
+  boardTab.adopt(mod);
+}
+
 export function openChiefAnswers(plan, run, shown, startAt) {
   return use(answerSheet, function (m) { return m.openChiefAnswers(plan, run, shown, startAt); });
 }
@@ -199,27 +244,36 @@ export function openScreenWindow() {
   return use(screenView, function (m) { return m.openScreenWindow(); });
 }
 
+// A tab's pane draws before its code lands, so a tap that beats the code is
+// held and replayed once it has, never dropped. Held in the capture phase,
+// it reaches the usage log once: as the replay. The page head's buttons
+// (theme, Settings, load) are wired at boot and pass straight on.
+function holdPaneTaps(paneId, get) {
+  const pane = document.getElementById(paneId);
+  if (!pane) return;
+  pane.addEventListener('click', function (ev) {
+    if (get.loaded()) return;
+    const control = ev.target.closest('button, a[href], summary, [role="button"], [role="tab"]');
+    if (!control || control.closest('.page-head')) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    use(get, function () { control.click(); });
+  }, true);
+}
+
 // The openers that sit outside their own view: Progress's History button,
-// the PC load sheet's Screen row, and a first visit to the Jobs tab.
+// the PC load sheet's Screen row, and a first visit to the Jobs or Board tab.
 export function wireViewOpeners() {
   document.addEventListener('launcher:tab', function (ev) {
-    if (ev.detail && ev.detail.tab === 'jobs' && !jobsTab.loaded()) fetchJobs();
+    const tab = ev.detail && ev.detail.tab;
+    if (tab === 'jobs' && !jobsTab.loaded()) fetchJobs();
+    // Once loaded, board.js's own tab listener runs the visit.
+    if (tab === 'board' && !boardTab.loaded()) {
+      use(boardTab, function (m) { m.openBoardTab(); });
+    }
   });
-  // The Jobs pane draws before its code lands, so a tap that beats the code
-  // is held and replayed once it has, never dropped. Held in the capture
-  // phase, it reaches the usage log once: as the replay. The page head's
-  // buttons (theme, Settings, load) are wired at boot and pass straight on.
-  const jobsPane = document.getElementById('paneJobs');
-  if (jobsPane) {
-    jobsPane.addEventListener('click', function (ev) {
-      if (jobsTab.loaded()) return;
-      const control = ev.target.closest('button, a[href], summary, [role="button"], [role="tab"]');
-      if (!control || control.closest('.page-head')) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      use(jobsTab, function () { control.click(); });
-    }, true);
-  }
+  holdPaneTaps('paneJobs', jobsTab);
+  holdPaneTaps('paneBoard', boardTab);
   const history = document.getElementById('historyOpen');
   if (history && document.getElementById('progressSheet')) {
     history.addEventListener('click', function () {
@@ -245,17 +299,20 @@ export function startSessionViews() {
 // as fast as it did when they loaded with the page. A session row is the tap
 // that comes first, so its views start at once; the rest wait for the phone
 // to go idle. Safari has no requestIdleCallback; a short timer stands in.
+// On the Board the open tab's own code comes first: the list can draw before
+// it lands, and the session views would share the link with it.
 const PREFETCH_IDLE_TIMEOUT_MS = 3000;
 const PREFETCH_FALLBACK_MS = 300;
 
 function prefetch(get) {
-  get().catch(function () { /* the first open retries and reports it */ });
+  return get().catch(function () { /* the first open retries and reports it */ });
 }
 
 export function prefetchViews() {
-  prefetch(sessionViews);
+  const first = state.tab === 'board' ? prefetch(boardTab) : Promise.resolve();
+  first.then(function () { prefetch(sessionViews); });
   const run = function () {
-    [composerKit, answerSheet, jobsTab, screenView, progressSheet].forEach(prefetch);
+    [boardTab, composerKit, answerSheet, jobsTab, screenView, progressSheet].forEach(prefetch);
   };
   if (typeof window.requestIdleCallback === 'function') {
     window.requestIdleCallback(run, { timeout: PREFETCH_IDLE_TIMEOUT_MS });

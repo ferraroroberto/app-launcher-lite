@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.webapp.demand_cache import DemandCache
+from app.webapp.module_preload import expand_preloads
 from app.webapp.routers._helpers import PROJECT_ROOT, STATIC_DIR, maybe_json
 from app.webapp.shell_html import assemble_shell, shell_stat_key, trim_shell
 from src import instance_role, system_load
@@ -63,7 +64,8 @@ def _stamped_index(app: Any) -> Tuple[str, str]:
     asset_hashes. The rendered body is cached on the app, keyed on
     the mtime and size of index.html and its view fragments, so an edit on
     disk is still picked up on the next load without a restart; the asset
-    hashes are fixed per process.
+    hashes are fixed per process, and so are the module-preload links, which
+    follow the JS import graph as it was at the first render after a restart.
     """
     index_path = STATIC_DIR / "index.html"
     try:
@@ -71,7 +73,7 @@ def _stamped_index(app: Any) -> Tuple[str, str]:
         cached = getattr(app.state, "index_cache", None)
         if cached is not None and cached[0] == key:
             return cached[1], cached[2]
-        shell = assemble_shell(index_path)
+        shell = expand_preloads(assemble_shell(index_path), STATIC_DIR)
     except (OSError, ValueError):
         _log.exception("❌ could not assemble index.html")
         raise HTTPException(status_code=500, detail="index.html missing")

@@ -42,13 +42,10 @@ import { confirmDialog } from './confirm-dialog.js';
 import { attentionChip, chip, sessionRowBody, sessionStatusParts } from './glance.js';
 import { createRowMenu } from './_vendored/row-menu/row-menu.js';
 import { icon } from './_vendored/icons/icons.js';
-// runChiefAction (and the ensureChief it wraps) lives in board-dispatch.js
-// (split off board.js), exported
-// for this cross-tab use, as is the chief settings dialog; board.js already imports
-// stopSession/sessionTitle/openSessionRename from this module, so this
-// mirrors the existing sessions.js<->terminal.js circular-import pattern
-// rather than introducing a new risk.
-import { runChiefAction } from './board/board-dispatch.js';
+// The chief row's Start, Resume and Restart share the Board's lifecycle
+// helper, which imports nothing of the Board, so the list stays drawable
+// before the Board's code has loaded.
+import { runChiefAction } from './board/chief-actions.js';
 import { openSettingsAt } from './tabs.js';
 
 // Kept as a named re-export (apps.js, jobs.js, jobs-row.js, and this

@@ -100,6 +100,49 @@
   <link rel="stylesheet" href="/static/styles/code.css">
   <link rel="stylesheet" href="/static/styles/apps.css">
   <link rel="stylesheet" href="/static/styles/progress.css">
+  <!-- Every module the first load runs is asked for at once instead of one
+       import level per round trip (app/webapp/module_preload.py). This script
+       waits for the stylesheets above, so the modules never compete with the
+       first paint for the link. The Board's code loads on its first visit
+       (lazy-views.js); a boot that reopens on the Board, or lands on a ?board=
+       link, asks for its modules too, and main.js evaluates them before its
+       wiring. The links are inert inside the templates. A build this browser
+       has loaded before is in its cache, where the first load's preloads only
+       cost a warm load parse time, so they are added once per ?v= stamp. The
+       Board's are added on every Board-first boot: main.js asks for the Board
+       only once its own graph has run, so without them a warm load reads the
+       Board's modules one level after another. -->
+  <template id="modulePreload">
+  <!-- @modulepreload main.js -->
+  </template>
+  <template id="boardPreload">
+  <!-- @modulepreload board.js -main.js -->
+  </template>
+  <script>
+    (function () {
+      function add(id, once) {
+        var links = document.getElementById(id);
+        var first = links && links.content && links.content.querySelector('link');
+        if (!first) return;
+        if (once) {
+          var key = 'app-launcher.preloaded.' + id;
+          var stamp = first.getAttribute('href').split('?v=')[1] || '';
+          try {
+            if (stamp && localStorage.getItem(key) === stamp) return;
+            localStorage.setItem(key, stamp);
+          } catch (e) {}
+        }
+        document.head.appendChild(links.content.cloneNode(true));
+      }
+      var params = new URLSearchParams(window.location.search);
+      if (params.has('screen')) return;
+      add('modulePreload', true);
+      if (params.has('terminal') || params.has('session')) return;
+      var tab = null;
+      try { tab = localStorage.getItem('app-launcher.tab'); } catch (e) {}
+      if (tab === 'board' || params.has('board')) add('boardPreload', false);
+    })();
+  </script>
   <title>App Launcher Lite</title>
 </head>
 <body>
