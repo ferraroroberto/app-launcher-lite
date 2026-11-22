@@ -1001,7 +1001,7 @@ derive = "usageState"
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "2457905104ef10f0dbaaa2f305780fb05970b9d3"
+synced_sha = "dc8885d7826ff5aa4ce827240ffe7cd51fb67c35"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
@@ -1066,3 +1066,7 @@ reason = "already present: the PC load sheet's IP row with its Copy action exist
 [[upstream.skipped]]
 sha = "814dcd6553e08fdb22a628d5e0e7fc728162d5b8"
 reason = "already present: the private-network switches for terminal routes exist here"
+
+[[upstream.skipped]]
+sha = "b4389499e919b941ea23e54ac806d263bf80823b"
+reason = "already present: the PC sheet's IP Copy already has the clipboard fallback and its toast"

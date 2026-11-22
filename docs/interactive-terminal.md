@@ -35,7 +35,7 @@ curl -k -X POST https://127.0.0.1:8465/api/claude-code/sessions/$APP_LAUNCHER_SE
 
 - A separate long-lived **session-host** process (loopback only, port `8466`) owns every `copilot` ConPTY. The tray starts and owns it. Because it is its own process, restarting the webapp does not kill running sessions (a PC reboot still does).
 - The webapp proxies a WebSocket from the phone to the session-host and is the single auth choke point.
-- `xterm.js` renders the terminal in the SPA with no build step, vendored under `app/webapp/static/vendor/`. It loads on the first terminal open, not at boot. The core and its WebGL addon must be re-vendored together, since a mismatched addon throws inside `loadAddon`.
+- `xterm.js` renders the terminal in the SPA with no build step, vendored under `app/webapp/static/vendor/`. It and its addons and stylesheet stay out of the boot (`terminal/xterm-loader.js`). Once every boot fetch has settled, the scripts load in idle time and the stylesheet is fetched into the cache, so the first terminal open does not wait on the download. The stylesheet is applied only on that open, because inserting it restyles the page and WebKit then resets a scrolled list. An origin that cannot reach the terminal loads none of it. The core and its WebGL addon must be re-vendored together, since a mismatched addon throws inside `loadAddon`.
 - Copilot is a full-screen differential TUI, so on (re)connect the session-host does **not** replay the raw scrollback ring (it would dump stale cursor deltas into a fresh xterm and re-answer the agent's startup terminal queries) but forces a clean repaint. `terminal_history_lines` bounds the scrollback it keeps.
 
 ## Security model — the terminal is not the same as the launcher
