@@ -44,14 +44,16 @@ pytestmark = pytest.mark.smoke
 _GROUPS = ["Appearance", "Agents", "Sessions", "Board", "Connections", "This PC"]
 _SHEETS = [
     "copilotSheet", "chiefSheet", "gitlabSheet", "speechSheet", "tokensSheet", "foldersSheet",
-    "passkeysSheet", "terminalSheet",
+    "passkeysSheet", "terminalSheet", "diagnosticsSheet",
 ]
 # The design inventory's name for each sheet (surface() wants lowercase).
 _SURFACE_NAMES = {
     "copilotSheet": "copilot", "chiefSheet": "chief", "gitlabSheet": "gitlab",
     "speechSheet": "speech", "tokensSheet": "tokens", "foldersSheet": "folders",
-    "passkeysSheet": "passkeys", "terminalSheet": "terminal",
+    "passkeysSheet": "passkeys", "terminalSheet": "terminal", "diagnosticsSheet": "diagnostics",
 }
+# A sheet whose one primary action is its own job rather than Done.
+_PRIMARY_LABELS = {"diagnosticsSheet": "Save diagnostics"}
 
 
 def _config(base_url: str, auth_token: str) -> dict:
@@ -117,7 +119,8 @@ def test_every_sheet_opens_and_closes(authed_page: Page, base_url: str, auth_tok
         sheet = authed_page.locator(f"#{sheet_id}")
         # Modal contract (#545): a header ✕ and one full-width primary.
         expect(sheet.locator(".detail-actions button")).to_have_count(1)
-        expect(sheet.locator(".detail-actions .button-primary.detail-save-btn")).to_have_text("Done")
+        expect(sheet.locator(".detail-actions .button-primary.detail-save-btn")).to_have_text(
+            _PRIMARY_LABELS.get(sheet_id, "Done"))
         open_settings_sheet(authed_page, sheet_id)
         surface(authed_page, f"settings.{_SURFACE_NAMES[sheet_id]}")
         sheet.locator("[data-sheet-back]").click()

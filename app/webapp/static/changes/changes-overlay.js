@@ -40,6 +40,7 @@ import { previewKind, renderFileView, windowsPath } from './file-view.js';
 import { openTextPreview } from '../lightbox.js';
 import { mergeOlder, olderLine, sessionTail } from './changes-merge.js';
 import { onThePc } from '../chat/transcript-render.js';
+import { saveAs } from '../shared/save-as.js';
 
 // Why a session's Changed files could not be read, in the panel's words.
 const SESSION_REASON = {
@@ -321,20 +322,6 @@ function diffText(pane) {
     if (txt) lines.push(txt.textContent);
   });
   return lines.join('\n');
-}
-
-// A file saved under its own name. octet-stream, so Safari saves the blob
-// instead of rendering a text blob inline.
-function saveAs(name, text) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/octet-stream' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.hidden = true;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
 }
 
 // Preview: an HTML or Markdown file rendered in the sent-file viewer. The

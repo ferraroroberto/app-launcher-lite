@@ -49,6 +49,10 @@ _DOORBELL_LOG_PATH = (
     Path(__file__).resolve().parent.parent.parent / "webapp" / "chief-doorbell.log"
 )
 
+_CHIEF_EVENTS_LOG_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "webapp" / "chief-events.log"
+)
+
 _WARNINGS_LOG_PATH = (
     Path(__file__).resolve().parent.parent.parent / "webapp" / "webapp-warnings.log"
 )
@@ -137,6 +141,22 @@ def ensure_doorbell_log_handler(target: logging.Logger) -> None:
     ``webapp/chief-doorbell.log`` at INFO, for the same reason as the
     autostart log: under the tray's ``pythonw`` they would otherwise vanish."""
     ensure_file_log_handler(_DOORBELL_LOG_PATH, target)
+
+
+def ensure_chief_events_log_handler() -> None:
+    """Send the mailbox events the webapp publishes for the chief (job
+    failed, cap raised, script missing, a lane's missed turn end) and their
+    skip reasons, and the lane marks a Board dispatch writes, to
+    ``webapp/chief-events.log`` at INFO. Those loggers have no
+    file handler of their own, so under the tray's ``pythonw`` their INFO
+    lines would vanish, and Save diagnostics could not show them."""
+    ensure_file_log_handler(
+        _CHIEF_EVENTS_LOG_PATH,
+        logging.getLogger("src.chief"),
+        logging.getLogger("src.chief_session_end"),
+        logging.getLogger("app.webapp.routers.board_chief"),
+        fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
 
 
 def ensure_warning_log_handler() -> None:

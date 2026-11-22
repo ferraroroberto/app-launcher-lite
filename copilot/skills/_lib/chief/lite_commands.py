@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 
+from fleet_core import hooks_state
+
 from . import launcher, mailbox, rails
 
 
@@ -24,6 +26,12 @@ def cmd_inbox(args: argparse.Namespace) -> int:
             return 1
         return 0
     events, reoffered, dropped = mailbox.claim_mailbox(inbox, stale_after=args.stale_after)
+    if events or reoffered or dropped:
+        claimed = " ".join(str(e.get("id")) for e in events)
+        hooks_state.note_decision(
+            inbox.parent, "mailbox",
+            f"claimed {len(events)} [{claimed}] reoffered {len(reoffered)} [{' '.join(reoffered)}] "
+            f"dropped {dropped}")
     print(mailbox.format_mailbox_batch(events, reoffered, dropped, stale_after=args.stale_after))
     # The context check rides the path the chief runs every wake; it is silent
     # unless due or unknown, and only for the live chief itself.
@@ -41,7 +49,12 @@ def cmd_inbox(args: argparse.Namespace) -> int:
 
 def cmd_ack(args: argparse.Namespace) -> int:
     """Retire handled events by id; exit 1 when an id has no file."""
-    acked, missing = mailbox.ack_events(mailbox.chief_inbox_dir(), args.ids)
+    inbox = mailbox.chief_inbox_dir()
+    acked, missing = mailbox.ack_events(inbox, args.ids)
+    if args.ids:
+        hooks_state.note_decision(
+            inbox.parent, "mailbox",
+            f"acked {len(acked)} [{' '.join(acked)}] missing {len(missing)} [{' '.join(missing)}]")
     print(f"ACKED={len(acked)}")
     for event_id in missing:
         print(f"ACK_MISSING={event_id}")

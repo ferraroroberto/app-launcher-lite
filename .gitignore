@@ -52,6 +52,8 @@ webapp/briefs/
 # Files agents sent to their session's Chat (issue #1530) — launcher-written, TTL-pruned
 webapp/outbox/
 webapp/jobs/
+# Save diagnostics output: redacted log bundles, local to this PC, never committed
+webapp/diagnostics/
 # durable chief-conversation pointer (issue #675) — machine-written state
 webapp/chief-pointer.json
 webapp/restart-baseline.json

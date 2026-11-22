@@ -449,3 +449,33 @@
         </div>
       </div>
     </dialog>
+
+    <!-- Diagnostics: diagnostics.js saves the recent logs to one redacted
+         file on the PC and offers it for download. -->
+    <dialog id="diagnosticsSheet" data-surface="settings.diagnostics" class="detail-dialog settings-sheet" data-track-view="sheet.diagnostics" aria-labelledby="diagnosticsSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="diagnostics.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="diagnosticsSheetTitle" tabindex="-1" autofocus>Diagnostics</h2>
+          <button data-track="diagnostics.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <div class="opt-row">
+            <span class="opt-name">Window</span>
+            <select data-track="diagnostics.window" id="diagnosticsWindow" class="select-native" aria-label="How far back to collect" aria-describedby="diagnosticsHelp">
+              <option value="15">Last 15 minutes</option>
+              <option value="60" selected>Last hour</option>
+              <option value="180">Last 3 hours</option>
+            </select>
+          </div>
+          <p id="diagnosticsHelp" class="field-help">Saves what every part of App Launcher Lite logged in that window to one text file on this PC, in time order: the webapp, session-host and tray logs, the chief's mailbox, doorbell and lane decisions, and the sessions. Tokens, keys, passwords and cookies are removed first. Nothing is uploaded.</p>
+          <p id="diagnosticsResult" class="muted small" role="status" aria-live="polite" hidden></p>
+          <button data-track="diagnostics.download" id="diagnosticsDownload" type="button" class="button-tint" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-download"></use></svg> Download the file</button>
+        </div>
+        <div class="detail-actions">
+          <button data-track="diagnostics.save" id="diagnosticsSave" type="button" class="button-primary detail-save-btn">Save diagnostics</button>
+        </div>
+      </div>
+    </dialog>

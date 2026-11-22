@@ -1445,6 +1445,8 @@ surfaces:
         via: Passkeys
       - to: settings.terminal
         via: Terminal
+      - to: settings.diagnostics
+        via: Diagnostics
 
   - id: settings.groups
     area: settings
@@ -1636,6 +1638,20 @@ surfaces:
       - a switch saves through the passkey unlock and works only on the PC itself or over Tailscale
     states:
       - the screen switch is off and dimmed while the private-network switch is off, and turns off with it
+
+  - id: settings.diagnostics
+    area: settings
+    title: Diagnostics sheet
+    root: data-surface
+    reach:
+      - Diagnostics in This PC
+    holds:
+      - a Window choice of Last 15 minutes, Last hour and Last 3 hours, with a help line naming what is collected and that secrets are removed
+      - Save diagnostics
+    does:
+      - Save diagnostics writes one redacted text file of every Lite log in the window on the PC and shows its record count, size and path
+      - Download the file appears once a file is saved and hands it to the browser
+      - both go through the passkey unlock
 
   # -------------------------------------------------------------------- keys
   - id: keys.swipe-row
