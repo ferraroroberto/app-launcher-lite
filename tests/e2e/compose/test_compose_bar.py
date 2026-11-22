@@ -36,6 +36,7 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e.fixtures.ui import set_terminal_status
 from tests.e2e.fixtures.waits import OVERLAY_OPEN_MS, stable_read
 from tests.e2e.settings._speech import set_speech
 
@@ -61,23 +62,6 @@ SEND = f"{COMPOSER} .composer-send"
 ATTACH_INPUT = f"{COMPOSER} .composer-attach-input"
 
 pytestmark = [pytest.mark.smoke, pytest.mark.iphone]
-
-# Drive the page's OWN setTerminalStatus (#1219) — the live module instance,
-# resolved from the resource timeline (the module's stamped URL), so the
-# status goes through the real code path rather than a hand-rolled DOM write.
-# Even the unstamped fallback shares the live `els`: the server stamps every
-# served module's imports, so it imports the same `state.js?v=` instance the
-# page already holds.
-_SET_STATUS_JS = r"""
-async (message) => {
-  const url = performance.getEntriesByType('resource')
-    .map((r) => r.name)
-    .find((n) => n.includes('/static/terminal/terminal-connection.js?v='))
-    || '/static/terminal/terminal-connection.js';
-  const { setTerminalStatus } = await import(url);
-  setTerminalStatus(message, message ? { icon: 'lock' } : undefined);
-}
-"""
 
 # The home-indicator inset of a Face ID iPhone in portrait, in CSS px (the
 # ~34px the #1099 note in .fleet.toml measures), and a probe of what
@@ -333,7 +317,7 @@ def _assert_status_message_keeps_layout(authed_page: Page, send, attach, send_af
         f"the bottom status strip is not reserving its row while idle: {idle}"
     )
 
-    authed_page.evaluate(_SET_STATUS_JS, "Passkey unlock required")
+    set_terminal_status(authed_page, "Passkey unlock required")
     shown = stable_read(lambda: authed_page.evaluate(_STATUS_STRIP_JS))
     send_status = stable_read(send.bounding_box)
     attach_status = stable_read(attach.bounding_box)
@@ -355,7 +339,7 @@ def _assert_status_message_keeps_layout(authed_page: Page, send, attach, send_af
         f"{right_gap:.1f}px right ({shown})"
     )
 
-    authed_page.evaluate(_SET_STATUS_JS, None)
+    set_terminal_status(authed_page, None)
     cleared = stable_read(lambda: authed_page.evaluate(_STATUS_STRIP_JS))
     send_cleared = stable_read(send.bounding_box)
     assert cleared and cleared["hidden"] is True and cleared["text"] == "", cleared

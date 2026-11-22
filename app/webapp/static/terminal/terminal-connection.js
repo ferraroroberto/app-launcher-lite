@@ -221,11 +221,9 @@ export function setTerminalStatus(message, opts) {
   if (!els.terminalStatus) return;
   if (message) {
     const iconName = opts && opts.icon;
-    if (iconName) {
-      els.terminalStatus.innerHTML = icon(iconName) + ' ' + escapeHtml(message);
-    } else {
-      els.terminalStatus.textContent = message;
-    }
+    // The text rides in its own span so the CSS can trim its box to the glyphs.
+    const text = '<span class="terminal-status-text">' + escapeHtml(message) + '</span>';
+    els.terminalStatus.innerHTML = (iconName ? icon(iconName) + ' ' : '') + text;
     els.terminalStatus.hidden = false;
   } else {
     els.terminalStatus.hidden = true;

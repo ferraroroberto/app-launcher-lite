@@ -204,3 +204,27 @@ class HeldUploads:
         self.routes[index].fulfill(
             status=400, content_type="application/json", body=json.dumps({"detail": detail}),
         )
+
+
+# --------------------------------------------------- the connection status
+#
+# The page's OWN setTerminalStatus: the live module instance, resolved from the
+# resource timeline (the module's stamped URL), so the status goes through the
+# real code path rather than a hand-rolled DOM write. Even the unstamped
+# fallback shares the live `els`: the server stamps every served module's
+# imports, so it imports the same `state.js?v=` instance the page already holds.
+_SET_STATUS_JS = r"""
+async (message) => {
+  const url = performance.getEntriesByType('resource')
+    .map((r) => r.name)
+    .find((n) => n.includes('/static/terminal/terminal-connection.js?v='))
+    || '/static/terminal/terminal-connection.js';
+  const { setTerminalStatus } = await import(url);
+  setTerminalStatus(message, message ? { icon: 'lock' } : undefined);
+}
+"""
+
+
+def set_terminal_status(page: Page, message: str | None) -> None:
+    """Show ``message`` (None clears it) through the page's own ``setTerminalStatus``, with its leading icon."""
+    page.evaluate(_SET_STATUS_JS, message)
