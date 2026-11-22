@@ -241,6 +241,11 @@ async function boot() {
   armPolls({ lists, listeners, running, webauthn, load, git });
   // The views a tap opens load once the list has drawn (lazy-views.js).
   lists.then(prefetchViews);
+  // The Usage card's code too: it is no part of the first load, and its read
+  // is answered from server memory, so it can never hold up the list.
+  lists.then(function () { return import('./copilot-usage.js'); })
+    .then(function (mod) { mod.wireCopilotUsage(); })
+    .catch(function (exc) { console.warn('usage card did not load', exc); });
 
   if (deepLinkSid) {
     await Promise.all([lists, status, webauthn]);

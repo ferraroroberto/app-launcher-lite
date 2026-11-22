@@ -218,10 +218,13 @@ surfaces:
       - the page's default tab
     holds:
       - the tab header
+      - the Usage card
       - the Sessions card
       - the Projects card
     desktop: the list sits left of the docked session view
     links:
+      - to: code.usage
+        via: Usage
       - to: code.sessions
         via: Sessions
       - to: code.projects
@@ -229,12 +232,29 @@ surfaces:
       - to: chrome.home-head
         via: header
 
+  - id: code.usage
+    area: code
+    title: Usage
+    root: data-surface
+    reach:
+      - the first card on the Code tab
+    holds:
+      - the pace words beside the title, under pace or ahead of pace in their tone
+      - one Copilot · Month row with a bar filled to the share of the monthly allowance used, a tick at the share of the month gone, the percent and the reset date
+      - a footnote with today's credits on this machine, or the reason the usage log could not be read
+    does:
+      - the bar is accent on or under pace, attention ahead of it and danger at 90% or more
+      - an unreadable usage log reads unknown with its reason, never 0%
+      - the row's tooltip names the source, the Copilot CLI usage log on this machine, and its scope
+      - reads every 60 s while the Code tab is on screen, never during page load
+    why: one glance says whether the month's Copilot allowance will last
+
   - id: code.sessions
     area: code
     title: Sessions
     root: data-surface
     reach:
-      - the first card on the Code tab, open by default
+      - the second card on the Code tab, open by default
     holds:
       - the chief's row first, running or stopped
       - one row per session this launcher started, with an avatar, a one-line title and a status line
@@ -1462,6 +1482,7 @@ surfaces:
       - the sign-in instruction
       - Models offered, one id per line
       - a line with an Add button when the saved list lacks a default model
+      - Usage card, the monthly allowance in AI credits the Code tab's Usage card measures against, with a line naming its source and scope
       - Launch presets, the saved list with a kebab on each row and one form (name, model from the list above, effort the model offers, context tier) that adds a preset or, from Edit, changes one
       - Done
     does:

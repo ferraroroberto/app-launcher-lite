@@ -37,10 +37,12 @@ from src.session_view import outbox as session_outbox
 from src.webapp_config import (
     MAX_CHIEF_AUTO_COMPACT_THRESHOLD,
     MAX_CHIEF_WORKER_CAP,
+    MAX_COPILOT_MONTHLY_CREDITS,
     MAX_LARGE_UPLOAD_MAX_MB,
     MAX_TERMINAL_HISTORY_LINES,
     MIN_CHIEF_AUTO_COMPACT_THRESHOLD,
     MIN_CHIEF_WORKER_CAP,
+    MIN_COPILOT_MONTHLY_CREDITS,
     MIN_LARGE_UPLOAD_MAX_MB,
     MIN_TERMINAL_HISTORY_LINES,
     VALID_COPILOT_CONTEXTS,
@@ -154,6 +156,10 @@ def copilot_payload(cfg: WebappConfig) -> Dict[str, Any]:
         "effort": cfg.copilot_effort,
         "efforts_available": list(VALID_COPILOT_EFFORTS),
         "computed_flags": build_copilot_flags(cfg),
+        # The Usage card's monthly allowance, in AI credits.
+        "monthly_credits": cfg.copilot_monthly_credits,
+        "monthly_credits_min": MIN_COPILOT_MONTHLY_CREDITS,
+        "monthly_credits_max": MAX_COPILOT_MONTHLY_CREDITS,
     }
 
 
@@ -249,6 +255,7 @@ _PATCH_KEYS = frozenset({
     "copilot_remote_session",
     "copilot_context",
     "copilot_effort",
+    "copilot_monthly_credits",
 })
 
 
@@ -322,6 +329,7 @@ async def patch_config(request: Request) -> Any:
             patch[key] = str(patch[key] or "").strip()
     _checked_whole_number(patch, "chief_auto_compact_threshold", "an integer percent")
     _checked_whole_number(patch, "large_upload_max_mb", "a whole number of MB")
+    _checked_whole_number(patch, "copilot_monthly_credits", "a whole number of AI credits")
     for key in _SWITCH_KEYS:
         if key in patch and not isinstance(patch[key], bool):
             raise HTTPException(

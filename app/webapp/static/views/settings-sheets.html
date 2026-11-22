@@ -51,6 +51,14 @@
             </div>
           </div>
           <div class="opt-group">
+            <h3 class="opt-group-title">Usage card</h3>
+            <label class="stacked">
+              <span>Monthly allowance (AI credits)</span>
+              <input id="copilotMonthlyCredits" type="number" class="input-native" aria-describedby="copilotMonthlyCreditsHelp" step="1" inputmode="numeric">
+            </label>
+            <p id="copilotMonthlyCreditsHelp" class="field-help">What the Code tab's Usage card measures against; 300 is the published Pro and Business allowance. The card counts the AI credits this PC's Copilot CLI billed since the 1st at 00:00 UTC, read from its usage log in <code>~/.copilot</code>. VS Code chat and other machines spend from the same allowance but are not counted.</p>
+          </div>
+          <div class="opt-group">
             <h3 class="opt-group-title">Launch presets</h3>
             <p class="opt-hint">A named model with the effort and context it runs at. The Coding launch dropdown offers each one beside Default; picking one launches with its model, effort and context. A preset whose model leaves the list above is hidden there until the model returns.</p>
             <ul id="launchPresetList" class="card-list launch-presets" aria-label="Launch presets"></ul>

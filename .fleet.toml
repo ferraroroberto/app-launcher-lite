@@ -1004,3 +1004,9 @@ name   = "send-submit-state-ui"
 module = "app/webapp/static/chat/submit-state.js"
 type   = "SubmitState"
 derive = "submitState"
+
+[[state_machines]]
+name   = "copilot-usage-state-ui"
+module = "app/webapp/static/copilot-usage.js"
+type   = "UsageState"
+derive = "usageState"

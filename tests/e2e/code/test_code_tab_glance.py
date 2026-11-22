@@ -7,10 +7,13 @@ Your turn shows an attention "needs you" chip, a stalled one a danger
 "stalled" chip. An unknown placement (``null``) shows no chip: unknown is
 never turned into "needs you". The page header follows the header rule:
 only the exceptions, each in its tone, else the plain session count, and
-never the running-apps or git counts.
+never the running-apps or git counts. The Usage card above the list draws
+the Copilot month from ``/api/copilot-usage`` (bar, pace tick, percent,
+reset date and pace words in their tone), and an unreadable usage log reads
+"unknown" with its reason, never 0%.
 
-Hermetic: the session list is route-mocked before ``goto()`` (#510), with
-fictional sessions.
+Hermetic: the session list and the usage read are route-mocked before
+``goto()`` (#510), with fictional sessions and numbers.
 """
 
 from __future__ import annotations
@@ -34,15 +37,23 @@ _STALLED = _session("s-stall", "your_turn", "stalled")
 _WORKING = _session("s-work", "claude_turn", "working")
 _UNKNOWN = _session("s-unknown", None, None)
 
+_USAGE = {"allowance": 300, "pace_pct": 40.0, "cycle_start": "2026-11-01T00:00:00+00:00",
+          "reset_at": "2026-12-01T00:00:00+00:00", "source": "a fictional log", "scope": "this machine"}
+_USAGE_AHEAD = {**_USAGE, "state": "ok", "used_credits": 180.0, "today_credits": 4.0,
+                "used_pct": 60.0, "reason": ""}
+_USAGE_UNKNOWN = {**_USAGE, "state": "unknown", "used_credits": None, "today_credits": None,
+                  "used_pct": None, "reason": "no Copilot usage log on this machine"}
 
-def _mock(page: Page, sessions: list[dict]) -> None:
-    """Route-mock the list; the sessions route reads ``sessions`` per request,
-    so a test swaps its contents and reloads to show another list."""
+
+def _mock(page: Page, sessions: list[dict], usage: dict = _USAGE_AHEAD) -> None:
+    """Route-mock the list and the usage read; each route reads its body per
+    request, so a test swaps the contents and reloads to show another one."""
     def json_route(pattern: str, body: dict) -> None:
         page.route(re.compile(pattern), lambda route: route.fulfill(
             status=200, content_type="application/json", body=_json.dumps(body)))
     json_route(r".*/api/claude-code/sessions$", {"sessions": sessions})
     json_route(r".*/api/claude-code/git-status$", {"projects": []})
+    json_route(r".*/api/copilot-usage$", usage)
 
 
 def _row(page: Page, sid: str):
@@ -53,8 +64,19 @@ def test_rows_carry_the_boards_chips_and_the_header_falls_back_to_the_plain_coun
     authed_page: Page, base_url: str
 ) -> None:
     sessions = [_CHIEF, _WAITING, _STALLED, _WORKING, _UNKNOWN]
-    _mock(authed_page, sessions)
+    usage = dict(_USAGE_AHEAD)
+    _mock(authed_page, sessions, usage)
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
+
+    # The Usage card: 60% used with 40% of the month gone is ahead of pace.
+    meter = authed_page.locator("#codingUsage .um-row")
+    expect(meter.locator(".um-pct")).to_have_text("60%")
+    expect(meter).to_have_attribute("data-tone", "attention")
+    expect(meter.locator(".um-reset")).to_have_text("resets Dec 1")
+    expect(meter.locator(".um-fill")).to_have_attribute("style", re.compile(r"width: 60%"))
+    expect(meter.locator(".um-tick")).to_have_attribute("style", re.compile(r"left: 40%"))
+    expect(authed_page.locator("#codingUsageMeta")).to_have_text("ahead of pace")
+    expect(authed_page.locator("#codingUsageFooter")).to_have_text("4 credits today on this machine.")
 
     waiting = _row(authed_page, "s-wait").locator(".session-attention")
     expect(waiting).to_have_text("needs you")
@@ -77,8 +99,16 @@ def test_rows_carry_the_boards_chips_and_the_header_falls_back_to_the_plain_coun
 
     # Nothing waits on the user (one row's placement unknown): the plain
     # count, with no running-apps or git part (#1434).
+    # The same reload finds the usage log unreadable: unknown, never 0%.
     sessions[:] = [_CHIEF, _WORKING, _UNKNOWN]
+    usage.clear()
+    usage.update(_USAGE_UNKNOWN)
     authed_page.reload(wait_until="domcontentloaded")
+    expect(meter.locator(".um-pct")).to_have_text("unknown")
+    expect(meter).to_have_attribute("data-tone", "none")
+    expect(meter.locator(".um-fill")).to_have_count(0)
+    expect(authed_page.locator("#codingUsageFooter")).to_have_text(
+        "Unknown: no Copilot usage log on this machine.")
     expect(head).to_have_text("3 sessions")
     expect(head.locator(".head-exception")).to_have_count(0)
     expect(head).not_to_contain_text("running")

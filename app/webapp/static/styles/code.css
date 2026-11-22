@@ -54,3 +54,55 @@
 }
 
 
+
+/* Usage: the Copilot month as one row (label, bar, percent, reset date).
+   Colour follows pace: accent on or under it, attention ahead of it, danger
+   at 90%+; with nothing measured the percent reads as a word in muted text. */
+.usage-card-meta { font-size: var(--font-body-sm); margin-left: auto; }
+.usage-card-meta[data-tone="accent"] { color: var(--accent-text); }
+.usage-card-meta[data-tone="attention"] { color: var(--attention-text); }
+.usage-card-meta[data-tone="danger"] { color: var(--danger-text); }
+.usage-meter { margin: 12px 0 0; padding: 8px 0; font-size: var(--font-body-sm); }
+.usage-meter .um-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.usage-meter .um-label,
+.usage-meter .um-reset { color: var(--muted); white-space: nowrap; }
+.usage-meter .um-reset { font-size: var(--font-caption); }
+.usage-meter .um-pct { min-width: 3ch; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.usage-meter [data-tone="attention"] > .um-pct { color: var(--attention-text); }
+.usage-meter [data-tone="danger"] > .um-pct { color: var(--danger-text); }
+.usage-meter [data-tone="none"] > .um-pct { color: var(--muted); }
+/* The bar: a neutral track, a tone fill, and the month's 2px pace tick. */
+.usage-meter .um-bar {
+  position: relative;
+  min-width: 0;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--neutral-soft);
+}
+.usage-meter .um-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.usage-meter .um-fill[data-tone="attention"] { background: var(--attention); }
+.usage-meter .um-fill[data-tone="danger"] { background: var(--danger); }
+.usage-meter .um-tick {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 12px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--fg);
+}
+.usage-card-footer {
+  margin: 10px 0 0;
+  font-size: var(--font-body-sm);
+  color: var(--muted);
+}

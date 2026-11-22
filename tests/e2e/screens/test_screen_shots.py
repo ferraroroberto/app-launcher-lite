@@ -116,6 +116,10 @@ _MOCKS = {
     r"/api/board/chief-plan": {"state": "empty"},
     r"/api/board/github/refresh": {"fetched_at": STAMP, "error": None},
     r"/api/usage/events": {},
+    r"/api/copilot-usage": {"state": "ok", "used_credits": 120.0, "today_credits": 6.0, "used_pct": 40.0,
+                            "allowance": 300, "pace_pct": 70.0, "cycle_start": "2026-01-01T00:00:00+00:00",
+                            "reset_at": "2026-02-01T00:00:00+00:00", "source": "a fictional log",
+                            "scope": "this machine", "reason": ""},
 }
 
 #: tab button -> the first row that proves the tab rendered its fixture.

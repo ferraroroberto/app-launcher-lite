@@ -71,6 +71,14 @@ DEFAULT_LARGE_UPLOAD_MAX_MB = 2048
 MIN_LARGE_UPLOAD_MAX_MB = 1
 MAX_LARGE_UPLOAD_MAX_MB = 10240
 
+# The Usage card's monthly Copilot allowance, in AI credits. The account's
+# plan cannot be read from this machine, so the size is a setting; 300 is the
+# published Pro and Business monthly allowance. The ceiling only keeps a typo
+# from making every month read as 0%.
+DEFAULT_COPILOT_MONTHLY_CREDITS = 300
+MIN_COPILOT_MONTHLY_CREDITS = 1
+MAX_COPILOT_MONTHLY_CREDITS = 100_000
+
 # --- Fleet chief ---------------------------------------
 # The standing conversational orchestrator the Board's chat mode talks to.
 # `chief_model` must be a dispatchable Claude tier; the worker cap is read

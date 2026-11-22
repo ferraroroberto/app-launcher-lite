@@ -35,7 +35,7 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 3. `ui_proof`, the remote-control toggle and the Chat view.
 4. A fresh-machine install checklist.
 
-**Dropped from the full app** (not documented, not planned): Telegram (no job alerts; only the login lock-out alert can send through it), Life OS, inspiration, OCR/TTS, usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board (GitLab pipelines have their own row), screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
+**Dropped from the full app** (not documented, not planned): Telegram (no job alerts; only the login lock-out alert can send through it), Life OS, inspiration, OCR/TTS, the other agents' usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board (GitLab pipelines have their own row), screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
 
 ## Quick start
 
@@ -67,6 +67,8 @@ Lists every child directory of `projects_dir` (no marker files needed; `projects
 The clock button in the Projects card opens **History**, a dashboard of what the projects shipped: lines added and removed from each project's local `git log`, and merge requests merged and issues opened and closed from GitLab, by day, week or month. It answers from a cache and re-reads only when asked: [docs/history.md](docs/history.md).
 
 A small **CPU reading** in the Coding header answers "is the PC loaded?": muted at rest, amber after about 30 s at or above 70%, red at or above 90%, and `–` when the server could not sample. Tapping it lists the busiest process groups by name and cores used, never paths or command lines, and shows the PC's private IP at the top with a Copy button (`src/private_network.py`; `Unknown` when it cannot be read). One shared sampler (`src/system_load.py`) feeds it, only while a page is asking.
+
+The **Usage** card at the top of the Coding tab shows the Copilot allowance used this month: a bar for the share of the monthly allowance (Settings > Coding agent > **Monthly allowance**, default 300 AI credits), a tick for the share of the month gone, under or ahead of pace, and the reset date (the 1st, 00:00 UTC). It counts the credits this PC's Copilot CLI billed, from the CLI's own usage log (`~/.copilot/session-store.db`), so VS Code chat and other machines are not counted, and shows `unknown` with the reason when that log cannot be read. The server answers from memory and reads the log in the background (`src/copilot_usage.py`), so the card never slows the page.
 
 ### Apps
 

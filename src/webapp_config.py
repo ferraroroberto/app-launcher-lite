@@ -42,11 +42,12 @@ from src.webapp_settings.values import (  # noqa: F401 — re-exported for webap
     CREDENTIAL_KEYS,
     DEFAULT_CHIEF_AUTO_COMPACT_THRESHOLD, DEFAULT_CHIEF_MODEL, DEFAULT_CHIEF_WORKER_CAP,
     DEFAULT_CHIEF_WORKER_CAP_SCOPE, DEFAULT_COPILOT_CONTEXT, DEFAULT_COPILOT_EFFORT,
-    DEFAULT_COPILOT_MODEL, DEFAULT_COPILOT_MODELS, DEFAULT_HOST, DEFAULT_LARGE_UPLOAD_MAX_MB,
+    DEFAULT_COPILOT_MODEL, DEFAULT_COPILOT_MODELS, DEFAULT_COPILOT_MONTHLY_CREDITS, DEFAULT_HOST, DEFAULT_LARGE_UPLOAD_MAX_MB,
     DEFAULT_PORT, DEFAULT_SESSION_HOST_PORT, DEFAULT_TERMINAL_HISTORY_LINES,
-    MAX_CHIEF_AUTO_COMPACT_THRESHOLD, MAX_CHIEF_WORKER_CAP, MAX_LARGE_UPLOAD_MAX_MB,
+    MAX_CHIEF_AUTO_COMPACT_THRESHOLD, MAX_CHIEF_WORKER_CAP, MAX_COPILOT_MONTHLY_CREDITS,
+    MAX_LARGE_UPLOAD_MAX_MB,
     MAX_TERMINAL_HISTORY_LINES, MIN_CHIEF_AUTO_COMPACT_THRESHOLD, MIN_CHIEF_WORKER_CAP,
-    MIN_LARGE_UPLOAD_MAX_MB, MIN_TERMINAL_HISTORY_LINES, SESSION_HOST_PORT_ENV,
+    MIN_COPILOT_MONTHLY_CREDITS, MIN_LARGE_UPLOAD_MAX_MB, MIN_TERMINAL_HISTORY_LINES, SESSION_HOST_PORT_ENV,
     VALID_CHIEF_WORKER_CAP_SCOPES, VALID_COPILOT_CONTEXTS, VALID_COPILOT_EFFORTS,
     WEBAPP_CONFIG_PATH_ENV,
 )
@@ -191,6 +192,8 @@ class WebappConfig:
     copilot_remote_session: bool = True
     copilot_context: str = DEFAULT_COPILOT_CONTEXT
     copilot_effort: str = DEFAULT_COPILOT_EFFORT
+    # The Usage card's monthly allowance in AI credits (`src.copilot_usage`).
+    copilot_monthly_credits: int = DEFAULT_COPILOT_MONTHLY_CREDITS
     # --- Fleet chief ----------------------------------------
     # Settings for the standing conversational orchestrator (Board chat
     # mode). Editable from the Board's chief-settings dialog; the worker
@@ -687,6 +690,11 @@ def _validate(cfg: WebappConfig) -> None:
         raise ValueError(
             f"large_upload_max_mb must be between {MIN_LARGE_UPLOAD_MAX_MB} "
             f"and {MAX_LARGE_UPLOAD_MAX_MB}; got {cfg.large_upload_max_mb}"
+        )
+    if not (MIN_COPILOT_MONTHLY_CREDITS <= cfg.copilot_monthly_credits <= MAX_COPILOT_MONTHLY_CREDITS):
+        raise ValueError(
+            f"copilot_monthly_credits must be between {MIN_COPILOT_MONTHLY_CREDITS} "
+            f"and {MAX_COPILOT_MONTHLY_CREDITS}; got {cfg.copilot_monthly_credits}"
         )
     if cfg.speech_base_url:
         parsed = urlparse(cfg.speech_base_url)

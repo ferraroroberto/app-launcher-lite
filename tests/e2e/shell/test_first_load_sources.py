@@ -5,7 +5,8 @@ for the whole test, and the GitLab refresh fails. The page clock is paused, so
 no poll can fire: whatever the page shows came from the boot reads alone. A
 reload on the Board still draws its lanes (its first read used to wait for the
 5 s poll), with the plan card saying it is still reading instead of blocking
-them, and the Coding tab still lists its sessions.
+them, and the Coding tab still lists its sessions while the Usage card's own
+read is still held.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ pytestmark = pytest.mark.smoke
 # Sources neither the session list nor the Board lanes need.
 _HUNG = re.compile(
     r".*/api/(claude-code/git-status|ports/probe|apps/running|system/load|system/health"
-    r"|team-os/skills|webauthn/status|status|terminal-themes|board/chief-plan"
+    r"|team-os/skills|copilot-usage|webauthn/status|status|terminal-themes|board/chief-plan"
     r"|board/chief-journal)(\?.*)?$"
 )
 _FAILING = re.compile(r".*/api/board/github/refresh$")
@@ -52,6 +53,8 @@ def test_a_hung_or_failing_source_never_holds_up_the_list_or_the_board(
               return !!list && (list.children.length > 0 || (empty && !empty.hidden));
             }"""
         )
+        # The Usage card's read is held too: the card keeps its placeholder.
+        expect(page.locator("#codingUsage")).to_have_attribute("data-pending", "true")
     finally:
         for route in held:
             try:

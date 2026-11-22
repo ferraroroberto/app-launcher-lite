@@ -23,6 +23,26 @@
         </button>
       </div>
 
+      <!-- Usage: the Copilot allowance used this month against the month's
+           pace. The placeholder is the meter's own structure with dashes, so
+           the card is its final height before copilot-usage.js runs; that
+           module loads after the session list has drawn and fills it in place. -->
+      <section id="codingUsageCard" class="card usage-card" data-surface="code.usage" aria-labelledby="codingUsageTitle">
+        <div class="card-head">
+          <h3 id="codingUsageTitle" class="card-title">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-gauge"></use></svg>
+            Usage
+          </h3>
+          <span id="codingUsageMeta" class="card-head-meta usage-card-meta"></span>
+        </div>
+        <div id="codingUsage" class="usage-meter" data-pending="true">
+          <span class="um-row" data-tone="none">
+            <span class="um-label">Copilot · Month</span><span class="um-bar"></span><span class="um-pct">–</span><span class="um-reset"></span>
+          </span>
+        </div>
+        <p id="codingUsageFooter" class="usage-card-footer">–</p>
+      </section>
+
       <!-- Sessions (#1434): "what is running?". The chief's row first, then
            then the shared session rows (#1433). Card controls never sit in the
            <summary> (#1132). -->
