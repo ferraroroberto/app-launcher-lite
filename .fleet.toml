@@ -1001,7 +1001,7 @@ derive = "usageState"
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "dc8885d7826ff5aa4ce827240ffe7cd51fb67c35"
+synced_sha = "151cd1f27a5e71e715dc6458452ed51a53be807a"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
@@ -1070,3 +1070,11 @@ reason = "already present: the private-network switches for terminal routes exis
 [[upstream.skipped]]
 sha = "b4389499e919b941ea23e54ac806d263bf80823b"
 reason = "already present: the PC sheet's IP Copy already has the clipboard fallback and its toast"
+
+[[upstream.skipped]]
+sha = "7a3c1467fdf75dcd7b2d4bf314c53a58713d065a"
+reason = "already present in its own form: Lite carries its own first-load work (early reads started by an inline script, a Board that draws before the chief plan, and the size and hung-read tests); the upstream snapshot layer sits on a different boot and Board structure"
+
+[[upstream.skipped]]
+sha = "e23b9181759050dd48609242ae5cba4e8a36005e"
+reason = "held: it edits the session-host server, which is on the session-host path list; it is ported with an owner-run session-host restart, not here"
