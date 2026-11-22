@@ -83,7 +83,10 @@ from src.session_view.transcript import (
     transcript_page,
     transcript_tail,
 )
-from src.session_view.transcript_locate import copilot_events_for_id, find_copilot_transcript
+from src.session_view.transcript_locate import (
+    copilot_events_for_id,
+    find_copilot_transcript,
+)
 from src.webapp_config import WebappConfig
 
 logger = logging.getLogger(__name__)
