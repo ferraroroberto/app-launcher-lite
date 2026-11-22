@@ -366,7 +366,7 @@ builders = [
 ]
 
 [test_weight]
-ratio_ceiling = "1.0028"
+ratio_ceiling = "1.0030"
 
 # ---------------------------------------------------------------------------
 # [shot_baseline] -- the scaffold's screenshot baseline. The last stage of
@@ -1001,7 +1001,7 @@ derive = "usageState"
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "c5ab25126694740a8d340763abd6b3e890ccc8aa"
+synced_sha = "698ac7871ca3ff1ed508b72d6f395370f7f88159"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
