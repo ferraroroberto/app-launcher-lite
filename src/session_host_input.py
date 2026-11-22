@@ -102,16 +102,29 @@ _ECHO_SCAN_CHARS = 65536
 # payload so one mangled fragment doesn't hide the whole match.
 _ECHO_FRAGMENT_CHARS = 24
 _ECHO_SAMPLES = 4
-# Claude Code's collapsed-paste chip, normalized (see _normalize_echo) —
-# positive ingest evidence for a payload that is never echoed verbatim.
-_PASTE_CHIP_MARKER = "[pastedtext#"
+# The collapsed-paste chips, normalized (see _normalize_echo) — positive
+# ingest evidence for a payload that is never echoed verbatim. Claude Code
+# paints "[Pasted text #<n> +53 lines]" ("[pastedtext#<n>+53lines]"); Copilot
+# CLI paints "[Paste #<n> - 16 lines]" ("[paste#<n>-16lines]") for any
+# multi-line paste, however short, and never echoes the text itself.
+_PASTE_CHIP_MARKERS = ("[pastedtext#", "[paste#")
 # The chip's *number*, which is what makes a chip ours rather than any chip.
-# Claude Code renders "[Pasted text #<n> +53 lines]", which normalizes
-# to "[pastedtext#<n>+53lines]" — _normalize_echo strips whitespace and
-# box-drawing but keeps brackets, "#" and digits, so the number is free to
-# read. Pastes are numbered monotonically within a session. An image chip
-# is pinned the same way: "[Image #<n>]" normalizes to "[image#<n>]".
-_CHIP_ID_RE = re.compile(r"(\[(?:pastedtext|image)#)(\d+)")
+# _normalize_echo strips whitespace and box-drawing but keeps brackets, "#"
+# and digits, so the number is free to read. Pastes are numbered
+# monotonically within a session. An image chip is pinned the same way:
+# "[Image #<n>]" normalizes to "[image#<n>]".
+_CHIP_ID_RE = re.compile(r"(\[(?:pastedtext|paste|image)#)(\d+)")
+
+# Post-Enter confirmation for a collapsed paste on a full-screen agent. A
+# settled stream says the paste finished ingesting, not that the Enter after
+# it submitted: Copilot CLI can keep the "[Paste #N - M lines]" chip on its
+# input line with the Enter gone. Its transcript shows the expanded text,
+# never the chip, so the pinned chip leaving the live screen (the headless VT
+# mirror, which only a full-screen agent has) is the proof the Enter took.
+# Still there at the deadline → one more Enter, what a person at the keyboard
+# does, then the verdict says it did not take. Held under ``_write_lock``, so
+# the bound stays short: a live Copilot clears it in well under a second.
+_SUBMIT_CONFIRM_MS = 1500
 
 # Idle at the prompt while background agents run. When the main
 # agent ends its turn with background sub-agents still working, Claude Code
@@ -184,6 +197,7 @@ INPUT_UNVERIFIED = "unverified"        # short payload: submitted un-verified
 INPUT_NOT_INGESTED = "not_ingested"    # written, never echoed → not delivered
 INPUT_DROPPED = "dropped"              # a write never reached the PTY
 INPUT_NOOP = "noop"                    # nothing was asked for
+INPUT_SUBMIT_UNTAKEN = "submit_untaken"  # Enter sent twice, chip still on screen
 # Deferred-submit reasons. INPUT_DEFERRED is what the /input
 # call itself returns once the watcher is armed; the others are the
 # watcher's own terminal verdicts, recorded onto ``last_input`` when it
@@ -219,7 +233,7 @@ DELIVERED_UNCONFIRMED = "unconfirmed"
 SUBMIT_CONFIRMED = "confirmed"          # CR sent after a verified settle
 SUBMIT_UNCONFIRMED = "unconfirmed"      # CR sent, nothing verified it landed
 SUBMIT_PENDING = "pending"              # CR is with the deferred watcher
-SUBMIT_NOT_SUBMITTED = "not_submitted"  # asked for, and no CR was ever sent
+SUBMIT_NOT_SUBMITTED = "not_submitted"  # asked for, and the agent never took it
 SUBMIT_NOT_REQUESTED = "not_requested"  # the call did not ask for a submit
 
 
@@ -257,7 +271,10 @@ class InputOutcome:
     def submit_state(self) -> str:
         """The submit's fate as one of the ``SUBMIT_*`` values."""
         if self.submitted:
-            return SUBMIT_CONFIRMED if self.submit_confirmed is True else SUBMIT_UNCONFIRMED
+            if self.submit_confirmed is True:
+                return SUBMIT_CONFIRMED
+            # A CR the screen shows did not take is no submit at all.
+            return SUBMIT_NOT_SUBMITTED if self.submit_confirmed is False else SUBMIT_UNCONFIRMED
         if not self.submit_requested:
             return SUBMIT_NOT_REQUESTED
         if self.reason == INPUT_DEFERRED:
@@ -371,7 +388,8 @@ def attach_converting(normalized: str) -> bool:
 
 def _chip_id_in(normalized: str, image: bool = False) -> Optional[str]:
     """The newest chip in ``normalized`` terminal output, as its
-    normalized token — ``"[pastedtext#<n>"``, or ``"[image#<n>"`` when ``image``.
+    normalized token — ``"[pastedtext#<n>"`` or ``"[paste#<n>"``, or
+    ``"[image#<n>"`` when ``image``.
 
     Highest rather than last-in-paint-order: a composer holding several chips
     repaints them in ascending order, and Claude Code numbers pastes
@@ -386,9 +404,12 @@ def _chip_id_in(normalized: str, image: bool = False) -> Optional[str]:
     caller then falls back to the payload's own echo, which is the only
     evidence there is.
     """
-    marker = _IMAGE_CHIP_MARKER if image else _PASTE_CHIP_MARKER
-    ids = [num for prefix, num in _CHIP_ID_RE.findall(normalized) if prefix == marker]
-    return marker + max(ids, key=int) if ids else None
+    markers = (_IMAGE_CHIP_MARKER,) if image else _PASTE_CHIP_MARKERS
+    chips = [(int(num), prefix) for prefix, num in _CHIP_ID_RE.findall(normalized) if prefix in markers]
+    if not chips:
+        return None
+    num, prefix = max(chips)
+    return f"{prefix}{num}"
 
 
 def _scan_turn_state(chunk: str) -> Optional[bool]:
@@ -473,13 +494,13 @@ class InputProtocol:
         """Does ``normalized`` terminal output show this payload?
 
         Evidence is either the payload itself coming back (normalized, so
-        wrapping and box-drawing don't hide it) or Claude Code's
-        collapsed-paste chip, which replaces the echo for a bulk paste. For a
+        wrapping and box-drawing don't hide it) or a collapsed-paste chip
+        (Claude Code's or Copilot CLI's), which replaces the echo. For a
         payload carrying an image path (``image``) the "[Image #N]"
         chip counts too: Claude Code replaces the path with it, so the path
         itself is never echoed.
         """
-        if _PASTE_CHIP_MARKER in normalized:
+        if any(marker in normalized for marker in _PASTE_CHIP_MARKERS):
             return True
         if image and _IMAGE_CHIP_MARKER in normalized:
             return True
@@ -559,7 +580,11 @@ class InputProtocol:
                 else self._submit_input_locked(data, submit),
                 submit_requested=submit,
             )
-            if clean_before and outcome.submitted and self._composer is not None:
+            if (
+                clean_before
+                and outcome.submit_state in (SUBMIT_CONFIRMED, SUBMIT_UNCONFIRMED)
+                and self._composer is not None
+            ):
                 # The tracker reads a lone slash command or an @/# token
                 # followed by Enter as a possible completion popup taking
                 # the key. Here the host wrote the whole payload into a
@@ -698,14 +723,80 @@ class InputProtocol:
                 deferred=True,
                 waited_ms=waited_ms,
             )
+        return self._submit_after_settle(mark, image, waited_ms)
+
+    def _submit_after_settle(self, mark: int, image: bool, waited_ms: int) -> "InputOutcome":
+        """Write the CR a settled, ingested payload is waiting for, and
+        confirm it off the live screen when there is a chip to watch."""
+        chip_id = self._chip_on_screen_now(mark, image)
         if not self._write_locked("\r"):
             return InputOutcome(
                 reason=INPUT_DROPPED, ingested=True, waited_ms=waited_ms
             )
+        if chip_id is not None:
+            return self._confirm_chip_submit(chip_id, waited_ms)
         return InputOutcome(
             reason=INPUT_OK,
             ingested=True,
             submitted=True,
             submit_confirmed=True,
+            waited_ms=waited_ms,
+        )
+
+    def _chip_on_screen_now(self, mark: int, image: bool) -> Optional[str]:
+        """The paste chip our write at ``mark`` created, when the live screen
+        shows it; ``None`` when there is no screen to read (not a full-screen
+        agent), no chip, or the chip is not on screen, which leaves the
+        settle as the only evidence."""
+        if self._vt is None or image:
+            return None
+        chip_id = _chip_id_in(self._normalized_since(mark))
+        if chip_id is None or not self._chip_showing(chip_id):
+            return None
+        return chip_id
+
+    def _chip_showing(self, chip_id: str) -> bool:
+        return chip_visible(_normalize_echo(self._vt.screen_text()), chip_id)
+
+    def _await_chip_cleared(self, chip_id: str) -> bool:
+        deadline = time.time() + _SUBMIT_CONFIRM_MS / 1000
+        while self._chip_showing(chip_id):
+            if self._exited or time.time() >= deadline:
+                return False
+            time.sleep(BULK_POLL_S)
+        return True
+
+    def _confirm_chip_submit(self, chip_id: str, waited_ms: int) -> "InputOutcome":
+        """Read the live screen after the CR: the chip gone is a confirmed
+        submit; still there gets one more CR, then an honest
+        ``submit_untaken``. See ``_SUBMIT_CONFIRM_MS``."""
+        for attempt in range(2):
+            if attempt:
+                logger.info(
+                    f"ℹ️ PTY {self.session_id[:8]} paste chip {chip_id} still on "
+                    f"the input line after Enter, pressing it once more"
+                )
+                if not self._write_locked("\r"):
+                    return InputOutcome(
+                        reason=INPUT_DROPPED, ingested=True, submitted=True,
+                        waited_ms=waited_ms,
+                    )
+            if self._await_chip_cleared(chip_id):
+                return InputOutcome(
+                    reason=INPUT_OK,
+                    ingested=True,
+                    submitted=True,
+                    submit_confirmed=True,
+                    waited_ms=waited_ms,
+                )
+        logger.info(
+            f"⚠️ PTY {self.session_id[:8]} paste chip {chip_id} still on the "
+            f"input line after two Enters: not submitted"
+        )
+        return InputOutcome(
+            reason=INPUT_SUBMIT_UNTAKEN,
+            ingested=True,
+            submitted=True,
+            submit_confirmed=False,
             waited_ms=waited_ms,
         )

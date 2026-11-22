@@ -71,7 +71,7 @@ _DEFER_QUIET_MS = 1500
 # DeferredSubmit._payload_still_visible. Every other guard the watcher applies
 # (supersession, the quiet window, the dialog scan) is evaluated at fire time,
 # so none of them cares how long the wait was. The one hazard that genuinely
-# scaled with the window was _PASTE_CHIP_MARKER matching on the marker alone,
+# scaled with the window was a paste-chip marker matching on the marker alone,
 # which let a chip somebody else put in the composer stand in for ours — and a
 # human typing into the session deliberately does not supersede the watcher
 # (see PtySession._defer_seq). It no longer does.

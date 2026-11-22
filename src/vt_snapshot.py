@@ -153,6 +153,11 @@ class VtSnapshot:
         with self._lock:
             self._screen.resize(rows, cols)
 
+    def screen_text(self) -> str:
+        """The current frame as plain text, no history: what is on screen now."""
+        with self._lock:
+            return "\n".join(self._screen.display)
+
     def render(self) -> str:
         """Render the reconnect payload: bounded scrollback history
         as plain scrolling text, followed by the current frame as ANSI
