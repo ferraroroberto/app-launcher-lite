@@ -599,7 +599,7 @@ def test_transcript_responses_carry_the_outbox_until_the_client_has_its_rev(
     events.write_text(json.dumps({
         "timestamp": "2026-10-12T10:00:00Z", "type": "user.message", "data": {"content": "hi"},
     }) + "\n", encoding="utf-8")
-    monkeypatch.setattr(router_mod, "find_copilot_transcript", lambda session: events)
+    monkeypatch.setattr(router_mod, "find_copilot_transcript", lambda session, **_k: events)
     page = client.get("/api/claude-code/sessions/s1/transcript").json()
     assert page["available"] is True and page["outbox_rev"] == 0 and page["outbox"] == []
 

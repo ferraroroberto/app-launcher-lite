@@ -16,12 +16,22 @@ neighbouring session's text.
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.board.transcript import _read_tail_bytes
+
+logger = logging.getLogger(__name__)
+# The request-timing log (webapp/slow-requests.log): a scan slow enough to
+# matter lands next to the request it slowed.
+slow_logger = logging.getLogger("launcher.slowreq")
+_SLOW_SCAN_S = 0.5
 
 # How far back to look for the naming records a scanned Claude conversation
 # declares about itself, read with the same bounded-tail discipline as
@@ -66,11 +76,22 @@ _COPILOT_CREATED_RE = re.compile(r"^created_at:[ \t]*(\S+?)[ \t\r]*$", re.M)
 # next scan simply re-reads.
 _COPILOT_WORKSPACE_CACHE: Dict[Path, Tuple[str, float]] = {}
 _COPILOT_WORKSPACE_CACHE_MAX = 8192
-# A session's resolved event log, valid while the state folder's own mtime is
-# unchanged: adding or removing a session folder moves it, and that is the
-# only change that can make a match ambiguous or point it elsewhere.
-_COPILOT_MATCH_CACHE: Dict[Tuple[str, str, float, float], Tuple[int, Path]] = {}
+# A session's correlation, found or not: ``(listing mtime, found log, the one
+# in-window folder's log still waiting for its first prompt, scan instant)``.
+# Adding or removing a session folder moves the listing's mtime, the only
+# change that can make a match ambiguous or point it elsewhere.
+_MatchKey = Tuple[str, str, float, float]
+_COPILOT_MATCH_CACHE: Dict[_MatchKey, Tuple[int, Optional[Path], Optional[Path], float]] = {}
 _COPILOT_MATCH_CACHE_MAX = 256
+# A miss is looked at again after this long even while the listing holds: a
+# resumed folder's ``session.resume`` line lands inside an existing folder,
+# which moves no listing mtime. Owner-tunable as
+# ``transcript_resolve_miss_ttl_s`` in webapp_config.json.
+DEFAULT_MISS_TTL_S = 10.0
+# One lock per correlation, so the Chat pane's concurrent reads of one
+# session run a single scan and the rest read its result.
+_COPILOT_SCAN_LOCKS: Dict[_MatchKey, threading.Lock] = {}
+_COPILOT_SCAN_LOCKS_GUARD = threading.Lock()
 # Copilot session ids are UUIDs; a folder name is only built from one.
 _COPILOT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,127}$")
 # Per event log: the byte offset scanned so far and the resume instants seen.
@@ -136,7 +157,9 @@ def _copilot_workspace(path: Path) -> Tuple[str, Optional[float]]:
     return parsed
 
 
-def find_copilot_transcript(session: Dict[str, Any]) -> Optional[Path]:
+def find_copilot_transcript(
+    session: Dict[str, Any], *, miss_ttl_s: Optional[float] = None
+) -> Optional[Path]:
     """The Copilot CLI event log for a live session.
 
     Copilot writes the launcher nothing: its hooks don't fire in the
@@ -168,10 +191,11 @@ def find_copilot_transcript(session: Dict[str, Any]) -> Optional[Path]:
     refused by the same check.
 
     Cost: the Chat pane's open and live tick and the Board's poll all call
-    this, and the state folder holds hundreds of sessions, so it is cached
-    twice. A found log is reused while the state folder's mtime holds (one
-    ``stat``), and each sidecar is parsed once in its life; only a folder
-    added or removed makes the next call list the folder again.
+    this, the state folder holds hundreds of sessions, and every lane's
+    launch moves its mtime. So a result, found or not, is cached
+    (:func:`_cached_match` says when it still holds), each sidecar is parsed
+    once in its life, and concurrent callers for one session share a scan.
+    ``miss_ttl_s`` overrides :data:`DEFAULT_MISS_TTL_S`.
     """
     project_dir = _normalize_dir(session.get("project_dir"))
     started = _started_epoch(session)
@@ -182,32 +206,83 @@ def find_copilot_transcript(session: Dict[str, Any]) -> Optional[Path]:
         if session.get("kind") == "remote"
         else _COPILOT_CLOCK_SKEW_SECONDS
     )
-    try:
-        listing_sig = _COPILOT_STATE_DIR.stat().st_mtime_ns
-    except OSError:
-        return None
+    ttl = DEFAULT_MISS_TTL_S if miss_ttl_s is None else max(0.0, float(miss_ttl_s))
     key = (str(_COPILOT_STATE_DIR), project_dir, started, early_slop)
-    hit = _COPILOT_MATCH_CACHE.get(key)
-    if hit is not None and hit[0] == listing_sig and hit[1].is_file():
-        return hit[1]
-    found = _scan_copilot_workspaces(project_dir, started, early_slop)
-    if found is None:
-        found = _scan_resumed_workspaces(project_dir, started, early_slop)
-    if found is not None:
+    with _scan_lock(key):
+        try:
+            listing_sig = _COPILOT_STATE_DIR.stat().st_mtime_ns
+        except OSError:
+            return None
+        now = time.time()
+        hit = _COPILOT_MATCH_CACHE.get(key)
+        if hit is not None:
+            held, found = _cached_match(hit, listing_sig, started, now, ttl)
+            if held:
+                return found
+        scan_started = time.monotonic()
+        found, candidate, folders = _scan_copilot_workspaces(project_dir, started, early_slop)
+        if found is None:
+            found = _scan_resumed_workspaces(project_dir, started, early_slop)
+        _log_scan(folders, time.monotonic() - scan_started, found, candidate)
         if len(_COPILOT_MATCH_CACHE) >= _COPILOT_MATCH_CACHE_MAX:
             _COPILOT_MATCH_CACHE.clear()
-        _COPILOT_MATCH_CACHE[key] = (listing_sig, found)
-    return found
+        _COPILOT_MATCH_CACHE[key] = (listing_sig, found, candidate, now)
+        return found
+
+
+def _scan_lock(key: _MatchKey) -> threading.Lock:
+    with _COPILOT_SCAN_LOCKS_GUARD:
+        if len(_COPILOT_SCAN_LOCKS) >= _COPILOT_MATCH_CACHE_MAX and key not in _COPILOT_SCAN_LOCKS:
+            _COPILOT_SCAN_LOCKS.clear()
+        return _COPILOT_SCAN_LOCKS.setdefault(key, threading.Lock())
+
+
+def _cached_match(
+    hit: Tuple[int, Optional[Path], Optional[Path], float],
+    listing_sig: int, started: float, now: float, ttl: float,
+) -> Tuple[bool, Optional[Path]]:
+    """``(still holds, log)`` for a cached correlation.
+
+    A found log holds while the file exists and either the listing is
+    unchanged or the scan ran after the launch window closed: every folder
+    that can qualify existed by then, and a later folder's ``created_at``
+    falls neither inside the window nor before ``started`` (the resume
+    match), so no later launch can make the match ambiguous. A miss holds
+    while the listing is unchanged and the miss is younger than ``ttl``; an
+    in-window folder that was only waiting for its first prompt is answered
+    with one ``stat`` of its log.
+    """
+    sig, found, candidate, scanned = hit
+    unchanged = sig == listing_sig
+    if found is not None:
+        closed = scanned > started + _COPILOT_START_SLOP_SECONDS + _COPILOT_CLOCK_SKEW_SECONDS
+        return (unchanged or closed) and found.is_file(), found
+    if not unchanged or now - scanned >= ttl:
+        return False, None
+    if candidate is not None and candidate.is_file():
+        return True, candidate
+    return True, None
+
+
+def _log_scan(folders: int, took: float, found: Optional[Path], candidate: Optional[Path]) -> None:
+    """The machine factors that tell a slow box from a code regression."""
+    outcome = "found" if found is not None else ("awaiting first prompt" if candidate else "none")
+    line = "⏱️ copilot session-state scan: %d folders in %.2fs (%s, cpus=%s)"
+    if took >= _SLOW_SCAN_S:
+        slow_logger.info(line, folders, took, outcome, os.cpu_count())
+    else:
+        logger.debug(line, folders, took, outcome, os.cpu_count())
 
 
 def _scan_copilot_workspaces(
     project_dir: str, started: float, early_slop: float
-) -> Optional[Path]:
-    """:func:`find_copilot_transcript`'s uncached walk of every sidecar."""
+) -> Tuple[Optional[Path], Optional[Path], int]:
+    """:func:`find_copilot_transcript`'s uncached walk of every sidecar:
+    ``(log, the in-window folder's log not written yet, folders listed)``."""
     try:
         workspaces = list(_COPILOT_STATE_DIR.glob("*/workspace.yaml"))
     except OSError:
-        return None
+        return None, None, 0
 
     matches: List[Path] = []
     for workspace in workspaces:
@@ -218,10 +293,12 @@ def _scan_copilot_workspaces(
         if -early_slop <= delta <= _COPILOT_START_SLOP_SECONDS:
             matches.append(workspace.parent / "events.jsonl")
         if len(matches) > 1:
-            return None
-    if len(matches) != 1 or not matches[0].is_file():
-        return None
-    return matches[0]
+            return None, None, len(workspaces)
+    if len(matches) != 1:
+        return None, None, len(workspaces)
+    if not matches[0].is_file():
+        return None, matches[0], len(workspaces)
+    return matches[0], None, len(workspaces)
 
 
 def copilot_events_for_id(copilot_session_id: Optional[str]) -> Optional[Path]:

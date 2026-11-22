@@ -41,6 +41,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from src.session_view import page_cache
 from src.transcript_flavors._shared import (
     Entry,
     EntryBuilder,
@@ -833,6 +834,7 @@ def transcript_page(
     before: Optional[int] = None,
     limit: int = DEFAULT_LIMIT,
     flavor: str = "copilot",
+    cache_size: int = page_cache.DEFAULT_PAGE_CACHE_SIZE,
 ) -> Dict[str, Any]:
     """One page of typed entries from ``path``, newest-last.
 
@@ -842,14 +844,27 @@ def transcript_page(
     ``flavor`` picks the line grammar — see :data:`FLAVORS`. Raises
     ``OSError`` when the file can't be read — a distinct condition from "no
     transcript", which the caller establishes *before* calling.
+
+    A page is parsed once per ``(size, mtime)`` of the file: the chat's
+    opening read and every reopen of an unchanged session are answered from
+    the newest ``cache_size`` pages (``0`` turns the cache off).
     """
     build, line_key, tool_errors = _flavor(flavor)
+    p = Path(str(path))
+    st = p.stat()
+    # Taken before the read: the log only grows, so a write landing during
+    # the read leaves this page under a signature that never recurs.
+    key = (str(p), st.st_size, st.st_mtime_ns, before, limit, flavor)
+    hit = page_cache.cached_page(key, cache_size)
+    if hit is not None:
+        return hit
     with parse_memo():
-        page = _page(Path(str(path)), before, limit, build, line_key, fit_budget=True)
+        page = _page(p, before, limit, build, line_key, fit_budget=True)
     # A property of the harness, not of the page — but it travels with the
     # page because that is what the client has in hand when it decides
     # whether an unmarked tool call means "succeeded" or "nobody can tell".
     page["tool_errors"] = tool_errors
+    page_cache.store_page(key, page, cache_size)
     return page
 
 
