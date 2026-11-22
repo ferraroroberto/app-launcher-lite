@@ -996,11 +996,12 @@ derive = "usageState"
 # last commit of it whose work is in this tree (`synced_sha`); /upstream-sync and
 # /downstream-sync read exactly these keys and treat a table missing one as
 # invalid. The rebuild matched app-launcher's main at this commit; a port moves it.
+
 [upstream]
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "080990588e7b97e241ad1b3f5256b6a8e0544244"
+synced_sha = "727fbcfb432d0071d2230d96b2aab7cac032a3e7"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
