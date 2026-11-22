@@ -41,6 +41,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from src.session_view import page_cache
 from src.transcript_flavors._shared import (
     Entry,
     EntryBuilder,
@@ -48,7 +49,6 @@ from src.transcript_flavors._shared import (
     cap_diff,
     parse_memo,
 )
-from src.session_view import page_cache
 from src.transcript_flavors.copilot import copilot_entries, copilot_line_key
 
 # One backwards read step. 256 KB is the same window the Board's
