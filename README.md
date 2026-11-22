@@ -24,7 +24,7 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 - On Copilot CLI (last probed on 1.0.105; the installed CLI is 1.0.114): a queued `/compact` running at turn end, `/remote on` typed from the launcher, a background shell finishing waking the agent, and `ask_user` blocking under autopilot.
 - An Android Git client (MGit) clone, push and PC-side fetch, see [docs/gitlab.md](docs/gitlab.md#working-from-an-android-git-client). The Android Chrome device checks (install, safe areas, gesture bar, keyboard) passed on the owner's phone; versions were not given ([docs/android.md](docs/android.md)).
 
-**The chief works** from this repo's `copilot/` folder (`fleet_config_dir`, shown as the Copilot folder in Settings): it holds the chief helpers (`chief_ops.py`, the chief skill, the plan, journal and mailbox files, the guard hooks), and the chief session runs in it. The hooks that write the Board's session state are installed from there too, by `copilot/install.ps1`. The chief is one long-lived Copilot session that reads the Board, writes its plan and journal, dispatches lanes, opens plain sessions, stops them and raises questions for the owner; the Board shows its card, plan and answer sheet. Turn on Settings > Chief > Doorbell to have a lane's news wake an idle chief (verified on Copilot CLI 1.0.114); with it off, only the owner's own messages wake it. A lane builds in a worktree and needs `git` to reach GitLab without a prompt, which the installer does not check (it checks `glab` only), so run one lane end to end on a new computer before relying on it. See [docs/board.md](docs/board.md#the-chief).
+**The chief works** from this repo's `copilot/` folder (`fleet_config_dir`, shown as the Copilot folder in Settings): it holds the chief helpers (`chief_ops.py`, the chief skill, the plan, journal and mailbox files, the guard hooks), and the chief session runs in it. The hooks that write the Board's session state are installed from there too, by `copilot/install.ps1`. The chief is one long-lived Copilot session that reads the Board, writes its plan and journal, dispatches lanes, opens plain sessions, stops them and raises questions for the owner; the Board shows its card, plan and answer sheet. Turn on Settings > Chief > Doorbell to have a lane's news wake an idle chief (verified on Copilot CLI 1.0.114); with it off, only the owner's own messages wake it. A lane builds in a worktree and needs `git` to reach GitLab without a prompt; the installer's checklist asks git itself and reports `ok`, `missing` or `unknown`. Run one lane end to end on a new computer before relying on it ([docs/fresh-machine-checklist.md](docs/fresh-machine-checklist.md)). See [docs/board.md](docs/board.md#the-chief).
 
 **Port steps done** (now in `copilot/`): the probe script; plan and journal; the mailbox; `chief_ops` and the chief settings; the chief skill; the guard hooks; compaction verbs; the merge verb (`glab mr merge --auto-merge`, unit-tested and `unknown` live); worktrees, claims and sweep; drain and owner checks; Jobs feeding the chief (a failed run's mailbox event and the `rerun_safe` re-run).
 
@@ -33,7 +33,7 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 1. Copilot transcript flavor and context percentage.
 2. A queued `/compact` on Copilot's composer (`unknown`).
 3. `ui_proof`, the remote-control toggle and the Chat view.
-4. A fresh-machine install checklist.
+4. Run the fresh-machine checklist on a machine that has none of the setup; the checklist itself is written ([docs/fresh-machine-checklist.md](docs/fresh-machine-checklist.md)).
 
 **Dropped from the full app** (not documented, not planned): Telegram (no job alerts; only the login lock-out alert can send through it), Life OS, inspiration, OCR/TTS, the other agents' usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board (GitLab pipelines have their own row), screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
 
@@ -46,7 +46,7 @@ setup.bat        REM creates .venv + installs requirements (icons are committed)
 tray.bat         REM tray icon -> webapp :8465 + session-host :8466
 ```
 
-First-run configuration, in order (CLI install steps: [docs/installing-agent-clis.md](docs/installing-agent-clis.md)):
+First-run configuration, in order (the whole path with a proof command per step: [docs/fresh-machine-checklist.md](docs/fresh-machine-checklist.md); CLI install steps: [docs/installing-agent-clis.md](docs/installing-agent-clis.md)):
 
 1. **Copilot CLI** — install GitHub's `copilot` CLI and log in (`/login` inside a session). The Coding tab disables its launch button until `copilot` resolves on `PATH`.
 2. **glab** — install [glab](https://gitlab.com/gitlab-org/cli) and run `glab auth login` against your GitLab host. The Board's issue columns shell out to `glab api` on demand.
@@ -171,6 +171,8 @@ Either way, the public Cloudflare tunnel stays terminal-refused; the live termin
 
 This repo alone installs on any Windows machine. The GitLab steps are verified on gitlab.com only.
 
+The ordered checklist, each step with its proof command: [docs/fresh-machine-checklist.md](docs/fresh-machine-checklist.md). The notes below are what to verify on the new host.
+
 1. **Clone and install.** Run `setup.bat` (venv and deps) and answer `y` to the Copilot install, or run `copilot\install.ps1` yourself through `src.launching.ps_script` as in [Quick start](#quick-start) (it renders the Copilot hook config into `~/.copilot/hooks/` and junctions the skills into `~/.copilot/skills/`). Restart any open Copilot session afterwards; hook configs load at CLI startup only. An update is `git pull --ff-only` here: the hooks and skills are junctions and paths into this checkout, so no second repo is involved.
 2. **glab against your GitLab host.** `glab auth login`, set `gitlab_host` and `gitlab_group` in Settings, then validate one real response shape: `glab api "groups/<group>/issues?state=opened&per_page=1"`, comparing fields with the fixtures in `tests/unit/board/test_gitlab_client.py`. If the instance returns a different shape, fix the fixtures and `src/clients/gitlab.py` together. See [docs/gitlab.md](docs/gitlab.md).
 3. **Copilot login and model gate.** Log the `copilot` CLI in, then check which ids of `copilot_models` the account offers and trim the list to the real set. If none is available, set `copilot_model` to `""` (auto).
@@ -194,6 +196,7 @@ app-launcher keeps growing. This repo tracks it through the `[upstream]` waterma
 | [docs/history.md](docs/history.md) | The History sheet: the two sources, the cache, the honest states. |
 | [docs/jobs-tab.md](docs/jobs-tab.md) | Jobs tab: schema, kinds, schedules, webhooks, alerting, coverage, watchdog. |
 | [docs/android.md](docs/android.md) | Android Chrome as the primary phone: install, HTTPS, what to check. |
+| [docs/fresh-machine-checklist.md](docs/fresh-machine-checklist.md) | A new Windows machine from nothing to a lane run end to end, one proof command per step. |
 | [docs/installing-agent-clis.md](docs/installing-agent-clis.md) | Installing and signing in to the Copilot CLI and `glab`. |
 | [copilot/docs/install.md](copilot/docs/install.md) | Installing the Copilot side: a fresh machine, migrating, a machine with its own skills repo (`skills_dir`), uninstall, and what each installer line means. |
 | [docs/migrating-from-fleet-config-lite.md](docs/migrating-from-fleet-config-lite.md) | Moving a machine from the old two-repo install to `copilot/install.ps1`: what moves, the order, uninstall. |
