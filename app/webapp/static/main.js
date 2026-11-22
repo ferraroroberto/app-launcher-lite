@@ -236,9 +236,12 @@ async function boot() {
   // The terminal deep link reads both: reachability and the passkey gate.
   const status = safe(fetchStatus);
   const webauthn = safe(fetchWebauthnStatus);
-  // Git flags fill without a tap: one fetch at boot, then the slow
-  // poll below keeps them current while a git-reading tab is visible.
-  const git = safe(function () { return refreshGitStatus({ quiet: true }); });
+  // Git flags fill without a tap: one fetch at boot when the Coding tab (the
+  // only view that shows them) is the one open, then the slow poll below keeps
+  // them current while it is. Any other tab asks nothing; opening Coding does.
+  const git = safe(function () {
+    return state.tab === 'claude' ? refreshGitStatus({ quiet: true }) : Promise.resolve();
+  });
   const listeners = safe(fetchListeners);
   const running = safe(fetchRunningApps);
   const load = safe(fetchSystemLoad);
@@ -356,6 +359,13 @@ function armPolls(first) {
       if (state.tab !== 'claude') return;
       return refreshGitStatus({ quiet: true });
     }, GIT_STATUS_POLL_MS, HIDDEN_POLICY);
+    // Coming back to Coding reads at once: the server answers from its cache
+    // (stale or fresh, labelled) and refreshes it, so the tab never waits on git.
+    document.addEventListener('launcher:tab', function (ev) {
+      if (ev.detail && ev.detail.tab === 'claude' && !document.hidden) {
+        refreshGitStatus({ quiet: true });
+      }
+    });
   });
   // No boot fetch of their own: both self-gate to their tab.
   startPoll(function () { return fetchJobs(); }, JOBS_POLL_MS, HIDDEN_POLICY);

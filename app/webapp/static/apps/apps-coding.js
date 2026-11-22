@@ -289,7 +289,10 @@ function renderGitSummary(items) {
   }
   if (footer) {
     footer.hidden = !(known && state.gitStatusAt);
-    if (!footer.hidden) footer.textContent = 'Git checked ' + checkedAgo(state.gitStatusAt);
+    if (!footer.hidden) {
+      footer.textContent = 'Git checked ' + checkedAgo(state.gitStatusAt) +
+        (state.gitStatusStale ? ' · refreshing' : '');
+    }
   }
 }
 
@@ -315,6 +318,7 @@ export async function refreshGitStatus(options) {
     (body.projects || []).forEach(function (p) { map[p.id] = p; });
     state.gitStatus = map;
     state.gitStatusAt = Date.now() - (Number(body.age_seconds) || 0) * 1000;
+    state.gitStatusStale = body.freshness === 'stale';
     renderApps();
   } catch (exc) {
     if (!quiet) throw exc;

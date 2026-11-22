@@ -12,13 +12,14 @@ import functools
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Request
 
 from app.webapp.hot_poll import start_or_join
 from app.webapp.routers._helpers import maybe_json
-from src import git_upstream
+from src import board, git_upstream
+from src.board.sessions import normalize_repo_name
 from src.launching.vscode_workspace import (
     ensure_workspace_file,
     is_vscode_installed,
@@ -169,7 +170,10 @@ async def open_project_folder(project_id: str, request: Request) -> Dict[str, An
 # The git-status fan-out's own threads. One git_status per repo on the
 # loop's default executor filled it, so every other to_thread caller
 # (/api/version, sessions, config writes) queued behind a fleet-wide scan.
-# Bounded: a large fleet takes a little longer, and nothing else waits on it.
+# One thread runs one repo's git commands one after another, so the pool size
+# is the number of git processes alive at once: two by default, because a
+# wider fan-out costs a slow PC about 70 CPU-seconds beside the session polls.
+# Settings > Performance owns the number.
 _GIT_STATUS_POOL = TimedExecutor(
     "git-status",
     max_workers=performance.default("pool_git_status"),
@@ -199,6 +203,10 @@ _GIT_STATUS_NEXT: Dict[Tuple[str, Tuple[str, ...]], "asyncio.Future[Dict[str, An
 # spawning git. 120 s is several polls, so a phone that keeps polling never
 # meets a blocking scan.
 GIT_STATUS_STALE_MAX_S = 120.0
+# ``freshness`` on every answer: ``fresh`` inside the TTL window or just scanned,
+# ``stale`` when it is served as it was while a scan refreshes it.
+FRESH = "fresh"
+STALE = "stale"
 # A scan this slow leaves a breadcrumb in slow-requests.log (the live app's
 # INFO logs for app.webapp.* are dropped, that file persists).
 _SLOW_SCAN_S = 1.0
@@ -236,13 +244,35 @@ def _runs_an_app(project_dir: Path, app_dirs: Tuple[str, ...]) -> bool:
     return any(d == root or d.startswith(root + "\\") or d.startswith(root + "/") for d in app_dirs)
 
 
+def lane_first(projects: List[ProjectDir], lane_repos: "frozenset[str]") -> List[ProjectDir]:
+    """``projects`` with the repos that hold a live lane first, each group keeping its order.
+
+    The pool takes work in submission order, so the repos a person is working
+    in are read before the rest of the fleet.
+    """
+    lanes = [p for p in projects if normalize_repo_name(p.name) in lane_repos]
+    rest = [p for p in projects if normalize_repo_name(p.name) not in lane_repos]
+    return lanes + rest
+
+
+def _lane_repos(active_issues_file: Optional[Path]) -> "frozenset[str]":
+    """Repos carrying a live active-issue marker; none when the file is unset or unreadable."""
+    if active_issues_file is None:
+        return frozenset()
+    return board.active_issue_repos(board.read_active_issues(active_issues_file)["rows"])
+
+
 async def _scan_git_status(
-    projects_dir: str, ignore: Tuple[str, ...], cache: _GitStatusCache
+    projects_dir: str,
+    ignore: Tuple[str, ...],
+    cache: _GitStatusCache,
+    active_issues_file: Optional[Path] = None,
 ) -> Dict[str, Any]:
     started_at = time.monotonic()
     projects = scan_project_dirs(Path(projects_dir), list(ignore))
     loop = asyncio.get_running_loop()
     app_dirs = await asyncio.to_thread(_registered_app_dirs)
+    projects = lane_first(projects, await asyncio.to_thread(_lane_repos, active_issues_file))
     timed = await asyncio.gather(
         *(loop.run_in_executor(_GIT_STATUS_POOL, _timed_git_status, p.project_dir, app_dirs) for p in projects)
     )
@@ -302,17 +332,20 @@ async def claude_git_status(request: Request, fresh: bool = False) -> Dict[str, 
     cfg: WebappConfig = request.app.state.webapp_config
     key = (str(cfg.projects_dir), tuple(cfg.projects_ignore))
     cache = _git_status_cache(request)
-    scan = functools.partial(_scan_git_status, *key, cache)
+    state_file = cfg.sessions_state_file
+    active_issues_file = Path(state_file).with_name("active-issues.json") if state_file else None
+    scan = functools.partial(_scan_git_status, *key, cache, active_issues_file)
     cached = None if fresh else cache.get(key)
     if cached is not None:
         age = time.monotonic() - cached[0]
         if age < GIT_STATUS_STALE_MAX_S:
             running = _GIT_STATUS_RUNNING.get(key)
-            if age >= cfg.git_status_ttl_s and (running is None or running.done()):
+            past_ttl = age >= cfg.git_status_ttl_s
+            if past_ttl and (running is None or running.done()):
                 start_or_join(key, _GIT_STATUS_RUNNING, _GIT_STATUS_NEXT, scan).add_done_callback(_consume)
-            return {**cached[1], "age_seconds": round(age, 1)}
+            return {**cached[1], "age_seconds": round(age, 1), "freshness": STALE if past_ttl else FRESH}
     future = start_or_join(key, _GIT_STATUS_RUNNING, _GIT_STATUS_NEXT, scan)
-    return {**await asyncio.shield(future), "age_seconds": 0.0}
+    return {**await asyncio.shield(future), "age_seconds": 0.0, "freshness": FRESH}
 
 
 # ------------------------------------------------------------- fetch and sync

@@ -59,7 +59,7 @@ def walk_performance_sheet(page: Page, base_url: str, auth_token: str) -> None:
     _preset(page, "light").click()
     expect(_preset(page, "light")).to_have_attribute("aria-pressed", "true")
     expect(_field(page, "poll_board_s")).to_have_value("15")
-    expect(_field(page, "pool_git_status")).to_have_value("2")
+    expect(_field(page, "pool_git_status")).to_have_value("1")
     assert _config_values(base_url, auth_token)["pool_hot_poll"] == 4
 
     # The hidden-tab pause is a switch like the others, and flipping it makes the set Custom.

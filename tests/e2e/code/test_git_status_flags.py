@@ -27,6 +27,8 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e.fixtures.waits import flush_requests, wait_until
+
 pytestmark = pytest.mark.smoke
 
 _BRANCH = "feat/regress-115"
@@ -79,14 +81,13 @@ def test_git_status_auto_annotates_tiles_without_tap(
 
     # Install the intercept BEFORE goto — the boot fetch (#496) must consume
     # it.
-    authed_page.route(
-        "**/api/claude-code/git-status",
-        lambda route: route.fulfill(
-            status=200,
-            content_type="application/json",
-            body=json.dumps(canned),
-        ),
-    )
+    asked: list[str] = []
+
+    def answer(route) -> None:
+        asked.append(route.request.url)
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(canned))
+
+    authed_page.route("**/api/claude-code/git-status", answer)
     # Boot's panel fetches run concurrently (#1258): one that never answers
     # (the ports probe, held open for the whole test) must not hold back the
     # git flags, which used to wait behind every fetch ahead of them.
@@ -132,3 +133,15 @@ def test_git_status_auto_annotates_tiles_without_tap(
     expect(head).not_to_contain_text("dirty")
     expect(head).not_to_contain_text("off-main")
     expect(head).not_to_contain_text("uncommitted")
+
+    # Git state is scanned only while the Coding tab, the one view that shows
+    # it, is open: a page restored onto another tab asks the server for none,
+    # and opening Coding asks once.
+    authed_page.evaluate("() => localStorage.setItem('app-launcher.tab', 'jobs')")
+    before = len(asked)
+    authed_page.reload(wait_until="domcontentloaded")
+    expect(authed_page.locator("#tabJobs")).to_have_attribute("aria-selected", "true")
+    flush_requests(authed_page)
+    assert len(asked) == before, f"git status was requested with the Jobs tab open: {asked[before:]}"
+    authed_page.locator("#tabClaude").click()
+    wait_until(authed_page, lambda: len(asked) == before + 1, "the Coding tab's first git-status request")
