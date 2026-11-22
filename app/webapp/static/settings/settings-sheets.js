@@ -33,6 +33,7 @@ import { ACTION_ROW_MENU } from '../action-rows.js';
 import { createRowMenu } from '../_vendored/row-menu/row-menu.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { speechValue, wireSpeech } from './speech-settings.js';
+import { performanceRowValue } from './performance.js';
 
 // ------------------------------------------------------------ navigation
 // The open sheets, the shown one last.
@@ -139,6 +140,7 @@ export function renderSettingsValues() {
   if (!cfg) return;
   setValue('copilot', copilotValue(cfg.copilot));
   setValue('speech', speechValue(cfg.speech));
+  setValue('performance', performanceRowValue(cfg));
   setValue('gitlab', cfg.gitlab_group
     ? joined([cfg.gitlab_group, cfg.gitlab_host || ''])
     : 'Not set');

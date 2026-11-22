@@ -38,14 +38,21 @@ export function singleFlight(read) {
 }
 
 // Poll `read` every `ms` after it settles, paused while the page is hidden.
-export function startPoll(read, ms) {
+// `ms` is a number or a function returning one, asked at each re-arm so a
+// Settings > Performance change reaches a running poll. `opts.pauseHidden`
+// is a function returning false to keep a hidden tab polling (default: pause).
+export function startPoll(read, ms, opts) {
+  const spacing = typeof ms === 'function' ? ms : function () { return ms; };
+  const pauses = (opts && opts.pauseHidden) || function () { return true; };
   let timer = null;
   let running = false;
+
+  function asleep() { return document.hidden && pauses(); }
 
   async function tick() {
     window.clearTimeout(timer);
     timer = null;
-    if (document.hidden) return;
+    if (asleep()) return;
     running = true;
     try {
       await read();
@@ -55,18 +62,20 @@ export function startPoll(read, ms) {
       running = false;
     }
     // Hidden mid-read: arm nothing; the return to the foreground reads.
-    if (!document.hidden) timer = window.setTimeout(tick, ms);
+    if (!asleep()) timer = window.setTimeout(tick, spacing());
   }
   // The e2e fake clock names a poll by the read it runs.
   tick.pollSource = String(read);
 
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
-      window.clearTimeout(timer);
-      timer = null;
+      if (pauses()) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
     } else if (!running) {
       tick();
     }
   });
-  timer = window.setTimeout(tick, ms);
+  timer = window.setTimeout(tick, spacing());
 }

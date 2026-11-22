@@ -34,6 +34,7 @@ from src.session_view.git_changes import (
     open_folder,
 )
 from src.webapp_config import WebappConfig, update_webapp_config
+from src.webapp_settings import performance
 
 router = APIRouter()
 slow_logger = logging.getLogger("launcher.slowreq")
@@ -169,7 +170,16 @@ async def open_project_folder(project_id: str, request: Request) -> Dict[str, An
 # loop's default executor filled it, so every other to_thread caller
 # (/api/version, sessions, config writes) queued behind a fleet-wide scan.
 # Bounded: a large fleet takes a little longer, and nothing else waits on it.
-_GIT_STATUS_POOL = TimedExecutor("git-status", max_workers=8)
+_GIT_STATUS_POOL = TimedExecutor(
+    "git-status",
+    max_workers=performance.default("pool_git_status"),
+    ceiling=performance.maximum("pool_git_status"),
+)
+
+
+def resize_git_status_pool(size: int) -> None:
+    """Apply the Settings > Performance git-status pool size, live."""
+    _GIT_STATUS_POOL.resize(size)
 
 
 # Overlapping calls share scans, and never a stale one: a call that
@@ -184,10 +194,10 @@ _GIT_STATUS_RUNNING: Dict[Tuple[str, Tuple[str, ...]], "asyncio.Future[Dict[str,
 _GIT_STATUS_NEXT: Dict[Tuple[str, Tuple[str, ...]], "asyncio.Future[Dict[str, Any]]"] = {}
 
 
-# Served from memory while younger than this; the SPA's ~45 s poll and every
-# page-load boot read it without spawning git. 120 s is several polls, so a
-# phone that keeps polling never meets a blocking scan.
-GIT_STATUS_FRESH_S = 10.0
+# Served from memory while younger than the config's ``git_status_ttl_s``
+# (default 10 s); the SPA's ~45 s poll and every page-load boot read it without
+# spawning git. 120 s is several polls, so a phone that keeps polling never
+# meets a blocking scan.
 GIT_STATUS_STALE_MAX_S = 120.0
 # A scan this slow leaves a breadcrumb in slow-requests.log (the live app's
 # INFO logs for app.webapp.* are dropped, that file persists).
@@ -275,7 +285,7 @@ async def claude_git_status(request: Request, fresh: bool = False) -> Dict[str, 
     Runs ``git`` once per project (branch + clean/dirty + default
     branch) — fanned out across worker threads. That is ~700 ms of process
     spawns for a fleet of repos, so the last scan is kept in memory: younger
-    than :data:`GIT_STATUS_FRESH_S` it is served as is; up to
+    than the config's ``git_status_ttl_s`` it is served as is; up to
     :data:`GIT_STATUS_STALE_MAX_S` it is served at once while one scan
     refreshes it behind the response; older (or none yet) the call waits for
     a scan. Every answer carries ``age_seconds``, so the SPA states how old
@@ -298,7 +308,7 @@ async def claude_git_status(request: Request, fresh: bool = False) -> Dict[str, 
         age = time.monotonic() - cached[0]
         if age < GIT_STATUS_STALE_MAX_S:
             running = _GIT_STATUS_RUNNING.get(key)
-            if age >= GIT_STATUS_FRESH_S and (running is None or running.done()):
+            if age >= cfg.git_status_ttl_s and (running is None or running.done()):
                 start_or_join(key, _GIT_STATUS_RUNNING, _GIT_STATUS_NEXT, scan).add_done_callback(_consume)
             return {**cached[1], "age_seconds": round(age, 1)}
     future = start_or_join(key, _GIT_STATUS_RUNNING, _GIT_STATUS_NEXT, scan)

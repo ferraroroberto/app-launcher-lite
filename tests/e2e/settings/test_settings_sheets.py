@@ -36,19 +36,20 @@ from tests.e2e.fixtures.ui import (
     open_settings_sheet,
 )
 from tests.e2e.settings._launch_presets import walk_launch_presets
+from tests.e2e.settings._performance import walk_performance_sheet
 from tests.e2e.settings._private_network import walk_private_network_switches
 from tests.e2e.settings._speech import walk_speech_sheet
 
 pytestmark = pytest.mark.smoke
 
-_GROUPS = ["Appearance", "Agents", "Sessions", "Board", "Connections", "This PC"]
+_GROUPS = ["Appearance", "Agents", "Sessions", "Board", "Performance", "Connections", "This PC"]
 _SHEETS = [
-    "copilotSheet", "chiefSheet", "gitlabSheet", "speechSheet", "tokensSheet", "foldersSheet",
+    "copilotSheet", "chiefSheet", "gitlabSheet", "performanceSheet", "speechSheet", "tokensSheet", "foldersSheet",
     "passkeysSheet", "terminalSheet", "diagnosticsSheet",
 ]
 # The design inventory's name for each sheet (surface() wants lowercase).
 _SURFACE_NAMES = {
-    "copilotSheet": "copilot", "chiefSheet": "chief", "gitlabSheet": "gitlab",
+    "copilotSheet": "copilot", "chiefSheet": "chief", "gitlabSheet": "gitlab", "performanceSheet": "performance",
     "speechSheet": "speech", "tokensSheet": "tokens", "foldersSheet": "folders",
     "passkeysSheet": "passkeys", "terminalSheet": "terminal", "diagnosticsSheet": "diagnostics",
 }
@@ -137,6 +138,7 @@ def test_every_sheet_opens_and_closes(authed_page: Page, base_url: str, auth_tok
     expect(authed_page.locator("#paneSettings")).to_be_visible()
 
     walk_speech_sheet(authed_page, base_url, auth_token)
+    walk_performance_sheet(authed_page, base_url, auth_token)
 
 
 def test_copilot_sheet_saves_a_model_and_shows_the_flags(

@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope
 
-from app.webapp import chief_doorbell, loop_lag
+from app.webapp import chief_doorbell, loop_lag, perf_apply
 from app.webapp.observability import (
     SlowRequestLogMiddleware,
     ensure_autostart_log_handler,
@@ -450,8 +450,15 @@ async def _lifespan(app: FastAPI):
 
 
 def _budget_overrides(app: FastAPI):
-    """The config's ``request_budgets``, read per request so a save applies live."""
-    return lambda: getattr(getattr(app.state, "webapp_config", None), "request_budgets", None)
+    """The config's ``request_budgets`` times ``request_budget_scale``, read per request so a save applies live."""
+
+    def read():
+        cfg = getattr(app.state, "webapp_config", None)
+        if cfg is None:
+            return None
+        return request_timing.scaled_overrides(cfg.request_budgets, cfg.request_budget_scale)
+
+    return read
 
 
 def create_app() -> FastAPI:
@@ -484,6 +491,9 @@ def create_app() -> FastAPI:
 
     app.state.app_config = app_config
     app.state.webapp_config = webapp_cfg
+    # The thread pools are built at import; size them to the saved limits now,
+    # and again on every Settings > Performance save.
+    perf_apply.apply(webapp_cfg)
     app.state.webauthn_gate = WebAuthnGate()
     app.state.login_lockout = auth.build_login_lockout(lambda: app.state.webapp_config)
     # The PC load sheet's IP row. A daemon thread, so the lookup neither

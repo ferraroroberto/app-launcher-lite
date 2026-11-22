@@ -27,6 +27,7 @@ import { wireLidKeepAwake } from './settings/lid-keep-awake.js';
 import { wireFullscreen } from './settings/fullscreen.js';
 import { renderInstallReadiness } from './settings/install-readiness.js';
 import { wireDiagnostics } from './settings/diagnostics.js';
+import { wirePerformance } from './settings/performance.js';
 import { wireQuoteCopy } from './quote-copy.js';
 import { adoptBoard, fetchBoard, fetchJobs, markMirrorWindowEarly, openBoardCard, openScreenWindow, openTerminal, prefetchViews, renderBoard, startSessionViews, wireViewOpeners } from './lazy-views.js';
 import { loadXtermScripts } from './terminal/xterm-loader.js';
@@ -37,6 +38,7 @@ import { isWideLayout } from './layout.js';
 import { openDesktopColumns } from './board/board-columns.js';
 import { icon } from './_vendored/icons/icons.js';
 import { startPoll } from './shared/poll.js';
+import { pauseWhenHidden, pollMs } from './shared/perf-config.js';
 
 // --------------------------------------------------------- settings panel
 // No Edit mode: Add, Edit and Remove are always one tap away, so there is
@@ -75,6 +77,7 @@ function wireSettings() {
   wireFullscreen();
   renderInstallReadiness();
   wireDiagnostics();
+  wirePerformance();
   // Every other Settings field saves as it changes: settings-sheets.js.
   wireSettingsSheets();
 }
@@ -315,11 +318,13 @@ function consumeSessionParams() {
 // still running must not hold back the Jobs poll. A second boot (a sign-in
 // after a 401) arms nothing more: the polls already running carry on.
 let pollsArmed = false;
+// Whether a hidden tab stops every page poll: the Settings > Performance switch.
+const HIDDEN_POLICY = { pauseHidden: pauseWhenHidden };
 function armPolls(first) {
   if (pollsArmed) return;
   pollsArmed = true;
   first.lists.then(function () {
-    startPoll(function () { return fetchApps(); }, TUNNEL_POLL_MS);
+    startPoll(function () { return fetchApps(); }, TUNNEL_POLL_MS, HIDDEN_POLICY);
     startPoll(function () {
       // Pause the session poll while the session overlay is open (either
       // mode) — it would re-render the list under the overlay for no
@@ -328,21 +333,21 @@ function armPolls(first) {
       // so the list is on screen and must keep updating — a session
       // that ends there would otherwise keep its card until a reload.
       if (!state.sessionView || isWideLayout()) return fetchSessions();
-    }, SESSIONS_POLL_MS);
+    }, pollMs('poll_sessions_s', SESSIONS_POLL_MS), HIDDEN_POLICY);
   });
   first.listeners.then(function () {
-    startPoll(function () { return fetchListeners(); }, LISTENERS_POLL_MS);
+    startPoll(function () { return fetchListeners(); }, LISTENERS_POLL_MS, HIDDEN_POLICY);
   });
   first.running.then(function () {
     // fetchRunningApps() self-gates: it no-ops unless the Apps tab is up.
-    startPoll(function () { return fetchRunningApps(); }, RUNNING_APPS_POLL_MS);
+    startPoll(function () { return fetchRunningApps(); }, RUNNING_APPS_POLL_MS, HIDDEN_POLICY);
   });
   first.webauthn.then(function () {
-    startPoll(function () { return fetchWebauthnStatus(); }, WEBAUTHN_POLL_MS);
+    startPoll(function () { return fetchWebauthnStatus(); }, WEBAUTHN_POLL_MS, HIDDEN_POLICY);
   });
   first.load.then(function () {
     // Every tab's header shows it.
-    startPoll(function () { return fetchSystemLoad(); }, SYSTEM_LOAD_POLL_MS);
+    startPoll(function () { return fetchSystemLoad(); }, SYSTEM_LOAD_POLL_MS, HIDDEN_POLICY);
   });
   first.git.then(function () {
     startPoll(function () {
@@ -350,11 +355,11 @@ function armPolls(first) {
       // them (Code; the Board's Backlog doesn't draw them) is up.
       if (state.tab !== 'claude') return;
       return refreshGitStatus({ quiet: true });
-    }, GIT_STATUS_POLL_MS);
+    }, GIT_STATUS_POLL_MS, HIDDEN_POLICY);
   });
   // No boot fetch of their own: both self-gate to their tab.
-  startPoll(function () { return fetchJobs(); }, JOBS_POLL_MS);
-  startPoll(function () { return fetchBoard(); }, BOARD_POLL_MS);
+  startPoll(function () { return fetchJobs(); }, JOBS_POLL_MS, HIDDEN_POLICY);
+  startPoll(function () { return fetchBoard(); }, pollMs('poll_board_s', BOARD_POLL_MS), HIDDEN_POLICY);
 }
 
 // --------------------------------------------------------- wire + go

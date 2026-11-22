@@ -300,7 +300,7 @@ def test_route_a_stale_cache_answers_at_once_and_refreshes_behind_it(webapp_clie
 
     _, app, _ = webapp_client
     scanned, repo = _git_status_scan_counter(monkeypatch)
-    monkeypatch.setattr(claude_code, "GIT_STATUS_FRESH_S", 0.0)
+    app.state.webapp_config.git_status_ttl_s = 0
 
     async def run():
         transport = httpx.ASGITransport(app=app)
@@ -310,7 +310,7 @@ def test_route_a_stale_cache_answers_at_once_and_refreshes_behind_it(webapp_clie
             stale = await client.get("/api/claude-code/git-status")
             while claude_code._GIT_STATUS_RUNNING:
                 await asyncio.sleep(0.01)
-            monkeypatch.setattr(claude_code, "GIT_STATUS_FRESH_S", 10.0)
+            app.state.webapp_config.git_status_ttl_s = 10
             refreshed = await client.get("/api/claude-code/git-status")
             return stale.json(), refreshed.json()
 

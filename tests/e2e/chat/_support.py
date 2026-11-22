@@ -321,7 +321,7 @@ def _boot(page: Page, base_url: str, alive: bool = True) -> _Transcript:
     return tr
 
 
-# session-transcript.js: LIVE_POLL_MS is 3 s, and a failing or unavailable
+# session-transcript.js: the default livePollMs() is 3 s, and a failing or unavailable
 # source backs off up to LIVE_BACKOFF_MAX_MS.
 _POLL_MS = 3_000
 

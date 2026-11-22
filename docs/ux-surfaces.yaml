@@ -1419,7 +1419,7 @@ surfaces:
     reach:
       - the gear in any tab header
     holds:
-      - Documents, Appearance, Agents, Sessions, Board, Connections and This PC groups
+      - Documents, Appearance, Agents, Sessions, Board, Performance, Connections and This PC groups
     does:
       - a tab switch leaves it
     states:
@@ -1435,6 +1435,8 @@ surfaces:
         via: Chief
       - to: settings.gitlab
         via: GitLab
+      - to: settings.performance
+        via: Speed limits
       - to: settings.speech
         via: Speech to text
       - to: settings.tokens
@@ -1641,6 +1643,24 @@ surfaces:
       - a switch saves through the passkey unlock and works only on the PC itself or over Tailscale
     states:
       - the screen switch is off and dimmed while the private-network switch is off, and turns off with it
+
+  - id: settings.performance
+    area: settings
+    title: Performance sheet
+    root: data-surface
+    reach:
+      - Speed limits in Performance
+    holds:
+      - a Machine preset choice of Standard, Light machine and Custom, with a help line
+      - a read-only health line with CPU, free memory, requests in flight, agent processes and lanes against the worker cap
+      - a field for each speed limit, each with its default and range in a help line - the Board, session list and open chat refresh in seconds, a switch to pause while the tab is hidden, the thread pools for session and Board reads, transcript reads, sends and git status, the git status cache, the transcript page cache, the missing-log wait and the request budget scale
+      - Done
+    does:
+      - each field saves when it is left and a value the server refuses stays in the field with the reason under it
+      - choosing a preset saves every limit at once; nothing needs a restart
+    states:
+      - Custom is dimmed until the values match neither preset; choosing it does nothing, since it names a state
+      - a health figure that could not be read says unknown with the reason, never zero
 
   - id: settings.diagnostics
     area: settings

@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from app.webapp import perf_apply
 from app.webapp.routers._helpers import (
     PROJECT_ROOT,
     cert_present,
@@ -50,6 +51,7 @@ from src.webapp_config import (
     WebappConfig,
     update_webapp_config,
 )
+from src.webapp_settings import performance
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +98,9 @@ async def get_config(request: Request) -> Dict[str, Any]:
             "model": cfg.speech_model,
             "api_key_set": bool(cfg.speech_api_key),
         },
+        # Settings > Performance: each speed limit with its range, the two
+        # presets and which one the stored values equal.
+        "performance": performance.payload(cfg),
         "terminal_history_lines": cfg.terminal_history_lines,
         "terminal_history_lines_min": MIN_TERMINAL_HISTORY_LINES,
         "terminal_history_lines_max": MAX_TERMINAL_HISTORY_LINES,
@@ -256,6 +261,7 @@ _PATCH_KEYS = frozenset({
     "copilot_context",
     "copilot_effort",
     "copilot_monthly_credits",
+    *performance.KEYS,
 })
 
 
@@ -330,6 +336,10 @@ async def patch_config(request: Request) -> Any:
     _checked_whole_number(patch, "chief_auto_compact_threshold", "an integer percent")
     _checked_whole_number(patch, "large_upload_max_mb", "a whole number of MB")
     _checked_whole_number(patch, "copilot_monthly_credits", "a whole number of AI credits")
+    for key in performance.KEYS:
+        problem = performance.type_problem(key, patch[key]) if key in patch else None
+        if problem:
+            raise HTTPException(status_code=400, detail=problem)
     for key in _SWITCH_KEYS:
         if key in patch and not isinstance(patch[key], bool):
             raise HTTPException(
@@ -353,6 +363,8 @@ async def patch_config(request: Request) -> Any:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     request.app.state.webapp_config = new_cfg
+    if any(key in patch for key in performance.KEYS):
+        perf_apply.apply(new_cfg)
     return {"ok": True, "copilot": copilot_payload(new_cfg)}
 
 

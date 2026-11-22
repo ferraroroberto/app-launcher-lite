@@ -44,7 +44,7 @@ pytestmark = pytest.mark.smoke
 
 _SID = "sid-edited-card-1477"
 _ROOT = "E:/automation/modeproj"   # _session_row's project_dir
-_POLL_MS = 3_000                    # session-transcript.js LIVE_POLL_MS
+_POLL_MS = 3_000                    # session-transcript.js livePollMs() default
 
 
 def _diff(lines):

@@ -40,7 +40,7 @@ from tests.e2e.session.test_session_mode_toggle import (
 pytestmark = pytest.mark.smoke
 
 _SID = "sid-step-card-1532"
-# session-transcript.js LIVE_POLL_MS.
+# session-transcript.js livePollMs() default.
 _POLL_MS = 3_000
 
 _SCRIPT_CMD = (

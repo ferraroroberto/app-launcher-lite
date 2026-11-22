@@ -38,6 +38,7 @@ from src.app_config import resolve_session_host_port, resolve_webapp_port
 # Grid layout: one name per line would push this module past the structure ratchet's file-size cap.
 from src.launching.presets import load_launch_presets
 from src import request_timing, runtime_files
+from src.webapp_settings import performance
 from src.webapp_settings.values import (  # noqa: F401 — re-exported for webapp_config.<name> callers
     CREDENTIAL_KEYS,
     DEFAULT_CHIEF_AUTO_COMPACT_THRESHOLD, DEFAULT_CHIEF_MODEL, DEFAULT_CHIEF_WORKER_CAP,
@@ -298,12 +299,23 @@ class WebappConfig:
     # budget", past hard a "budget breach". Absent classes keep their default;
     # read live.
     request_budgets: Dict[str, List[float]] = field(default_factory=dict)
-    # Parsed transcript pages kept for unchanged files (0 turns the cache
-    # off), and how long a Copilot session whose log could not be found is
-    # answered "not found" before the session-state folder is scanned again.
-    # Defaults: src.session_view.page_cache / transcript_locate.
-    transcript_page_cache_size: int = 32
-    transcript_resolve_miss_ttl_s: float = 10.0
+    # Settings > Performance: every speed limit, its default and its hard range
+    # declared once in src/webapp_settings/performance.py. All are read live, so
+    # a save applies without a restart. Poll spacings are in seconds; the
+    # pools are thread counts (pool_sends 0 = pick from the CPU count); the
+    # transcript cache is in pages and its miss wait in seconds.
+    poll_board_s: int = performance.default("poll_board_s")
+    poll_sessions_s: int = performance.default("poll_sessions_s")
+    poll_transcript_s: int = performance.default("poll_transcript_s")
+    poll_pause_hidden: bool = performance.default("poll_pause_hidden")
+    pool_hot_poll: int = performance.default("pool_hot_poll")
+    pool_session_reads: int = performance.default("pool_session_reads")
+    pool_sends: int = performance.default("pool_sends")
+    pool_git_status: int = performance.default("pool_git_status")
+    git_status_ttl_s: int = performance.default("git_status_ttl_s")
+    transcript_page_cache_size: int = performance.default("transcript_page_cache_size")
+    transcript_resolve_miss_ttl_s: float = performance.default("transcript_resolve_miss_ttl_s")
+    request_budget_scale: float = performance.default("request_budget_scale")
     # Large-file attach limit in MB, Settings-tab configurable.
     # See DEFAULT_LARGE_UPLOAD_MAX_MB.
     large_upload_max_mb: int = DEFAULT_LARGE_UPLOAD_MAX_MB
@@ -504,6 +516,11 @@ def _coerce(value: Any, annotation: Any, default: Any) -> Any:
             return int(value)
         except (TypeError, ValueError):
             return default
+    if annotation in (float, "float"):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
     if annotation in (list, "list"):
         return [str(item) for item in value]
     return value
@@ -636,6 +653,9 @@ def load_webapp_config(
             for spec in dataclass_fields(WebappConfig)
         }
     )
+    # A hand-edited speed limit out of range is put back to its default (and
+    # logged) rather than refusing to start; a Settings save is refused instead.
+    performance.repair(cfg)
     return _finish_load(cfg, apply_env_override, validate=True)
 
 
@@ -726,6 +746,8 @@ def _validate(cfg: WebappConfig) -> None:
                 "speech_base_url must be an http(s) URL with a host, "
                 f"e.g. http://127.0.0.1:8000/v1; got {cfg.speech_base_url!r}"
             )
+    for problem in performance.problems(performance.values_of(cfg)):
+        raise ValueError(problem)
     for field_name, allowed in _ENUM_VALIDATIONS:
         value = getattr(cfg, field_name)
         if value not in allowed:

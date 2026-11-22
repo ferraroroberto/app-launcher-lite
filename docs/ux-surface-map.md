@@ -21,7 +21,7 @@ Walked 2026-11-18 against build `52a7d40`, at widths 390, 1280, themes light, da
 | [Jobs](#jobs) | 10 |
 | [Team OS](#team-os) | 7 |
 | [Board](#board) | 15 |
-| [Settings](#settings) | 15 |
+| [Settings](#settings) | 16 |
 | [Keys and gestures](#keys-and-gestures) | 4 |
 
 ## Chrome
@@ -439,7 +439,7 @@ flowchart LR
   s19(["Changes overlay · Code"])
   s6(["Confirm dialog · Chrome"])
   s79(["Session drawer · Board"])
-  s102(["Composer keys · Keys and gestures"])
+  s103(["Composer keys · Keys and gestures"])
   s11 -->|"row tap"| s21
   s12 -->|"Links"| s27
   s12 -->|"Rename"| s26
@@ -456,7 +456,7 @@ flowchart LR
   s23 -->|"Changed files"| s19
   s23 -->|"Stop and kill"| s6
   s79 -->|"Terminal"| s21
-  s102 -->|"keys button"| s28
+  s103 -->|"keys button"| s28
 ```
 
 ### `terminal.overlay` Session overlay
@@ -685,12 +685,12 @@ flowchart LR
   s38["Quality sheet"]
   s39["Readout"]
   s2(["PC load sheet · Chrome"])
-  s101(["Screen view keys · Keys and gestures"])
+  s102(["Screen view keys · Keys and gestures"])
   s2 -->|"Screen View live"| s36
   s36 -->|"Quality"| s38
   s36 -->|"Paste to PC"| s37
   s36 -->|"readout switch"| s39
-  s101 -->|"Screen view"| s36
+  s102 -->|"Screen view"| s36
 ```
 
 ### `screen.view` Screen view
@@ -1359,7 +1359,8 @@ flowchart LR
   s95["Chat folder menu"]
   s96["Passkeys sheet"]
   s97["Terminal sheet"]
-  s98["Diagnostics sheet"]
+  s98["Performance sheet"]
+  s99["Diagnostics sheet"]
   s1(["Tab header · Chrome"])
   s12(["Session menu · Code"])
   s13(["Stopped chief menu · Code"])
@@ -1375,12 +1376,13 @@ flowchart LR
   s84 -->|"Coding agent"| s87
   s84 -->|"Chief"| s88
   s84 -->|"GitLab"| s90
+  s84 -->|"Speed limits"| s98
   s84 -->|"Speech to text"| s91
   s84 -->|"API tokens"| s93
   s84 -->|"Folders"| s94
   s84 -->|"Passkeys"| s96
   s84 -->|"Terminal"| s97
-  s84 -->|"Diagnostics"| s98
+  s84 -->|"Diagnostics"| s99
   s87 -->|"preset kebab"| s92
   s88 -->|"model"| s89
   s94 -->|"a folder's kebab"| s95
@@ -1390,7 +1392,7 @@ flowchart LR
 
 - **Root:** `data-surface`
 - **Reach:** the gear in any tab header
-- **Holds:** Documents, Appearance, Agents, Sessions, Board, Connections and This PC groups
+- **Holds:** Documents, Appearance, Agents, Sessions, Board, Performance, Connections and This PC groups
 - **Does:** a tab switch leaves it
 - **States:** the Documents group is hidden until the server lists documents; an unreadable list shows Couldn't read the documents list with Retry
 - **Leads to:**
@@ -1399,6 +1401,7 @@ flowchart LR
   - [GitHub Copilot sheet](#settingscopilot-github-copilot-sheet) (Coding agent)
   - [Chief sheet](#settingschief-chief-sheet) (Chief)
   - [GitLab sheet](#settingsgitlab-gitlab-sheet) (GitLab)
+  - [Performance sheet](#settingsperformance-performance-sheet) (Speed limits)
   - [Speech to text sheet](#settingsspeech-speech-to-text-sheet) (Speech to text)
   - [API tokens sheet](#settingstokens-api-tokens-sheet) (API tokens)
   - [Folders sheet](#settingsfolders-folders-sheet) (Folders)
@@ -1562,6 +1565,22 @@ flowchart LR
   - a switch saves through the passkey unlock and works only on the PC itself or over Tailscale
 - **States:** the screen switch is off and dimmed while the private-network switch is off, and turns off with it
 
+### `settings.performance` Performance sheet
+
+- **Root:** `data-surface`
+- **Reach:** Speed limits in Performance
+- **Holds:**
+  - a Machine preset choice of Standard, Light machine and Custom, with a help line
+  - a read-only health line with CPU, free memory, requests in flight, agent processes and lanes against the worker cap
+  - a field for each speed limit, each with its default and range in a help line - the Board, session list and open chat refresh in seconds, a switch to pause while the tab is hidden, the thread pools for session and Board reads, transcript reads, sends and git status, the git status cache, the transcript page cache, the missing-log wait and the request budget scale
+  - Done
+- **Does:**
+  - each field saves when it is left and a value the server refuses stays in the field with the reason under it
+  - choosing a preset saves every limit at once; nothing needs a restart
+- **States:**
+  - Custom is dimmed until the values match neither preset; choosing it does nothing, since it names a state
+  - a health figure that could not be read says unknown with the reason, never zero
+
 ### `settings.diagnostics` Diagnostics sheet
 
 - **Root:** `data-surface`
@@ -1580,14 +1599,14 @@ Inputs that are not elements.
 
 ```mermaid
 flowchart LR
-  s99["Swipe a row"]
-  s100["Long-press hint"]
-  s101["Screen view keys"]
-  s102["Composer keys"]
+  s100["Swipe a row"]
+  s101["Long-press hint"]
+  s102["Screen view keys"]
+  s103["Composer keys"]
   s36(["Screen view · Screen"])
   s28(["On-screen keys · Terminal"])
-  s101 -->|"Screen view"| s36
-  s102 -->|"keys button"| s28
+  s102 -->|"Screen view"| s36
+  s103 -->|"keys button"| s28
 ```
 
 ### `keys.swipe-row` Swipe a row
@@ -1737,6 +1756,7 @@ flowchart LR
 | [Settings](#settingspane-settings) | Coding agent | [GitHub Copilot sheet](#settingscopilot-github-copilot-sheet) |
 | [Settings](#settingspane-settings) | Chief | [Chief sheet](#settingschief-chief-sheet) |
 | [Settings](#settingspane-settings) | GitLab | [GitLab sheet](#settingsgitlab-gitlab-sheet) |
+| [Settings](#settingspane-settings) | Speed limits | [Performance sheet](#settingsperformance-performance-sheet) |
 | [Settings](#settingspane-settings) | Speech to text | [Speech to text sheet](#settingsspeech-speech-to-text-sheet) |
 | [Settings](#settingspane-settings) | API tokens | [API tokens sheet](#settingstokens-api-tokens-sheet) |
 | [Settings](#settingspane-settings) | Folders | [Folders sheet](#settingsfolders-folders-sheet) |

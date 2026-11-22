@@ -2,6 +2,7 @@
 
 ``POST /api/diagnostics``          ``{minutes}`` -> ``{name, path, records, bytes}``
 ``GET  /api/request-stats``        in-flight peak, budget verdicts per class, git-status cache age
+``GET  /api/performance/health``   CPU, free memory, in-flight, agent processes, lanes against the worker cap
 ``GET  /api/diagnostics/{name}``   -> that saved file, as plain text
 
 The file is written on this PC by :mod:`src.diagnostics_bundle`, redacted
@@ -22,6 +23,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from src import diagnostics_bundle, request_timing
+from src import performance_health as performance_health_module
 from src.build_info import build_identity
 from src.webapp_config import WebappConfig
 
@@ -60,7 +62,9 @@ async def request_stats(
     laid over them.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    budgets = request_timing.resolve_budgets(cfg.request_budgets)
+    budgets = request_timing.resolve_budgets(
+        request_timing.scaled_overrides(cfg.request_budgets, cfg.request_budget_scale)
+    )
     return {
         **request_timing.STATS.snapshot(window_s),
         "budgets": {
@@ -68,6 +72,19 @@ async def request_stats(
         },
         "git_status_age_s": _git_status_age_s(request),
     }
+
+
+@router.get("/api/performance/health")
+async def performance_health(request: Request) -> Dict[str, Any]:
+    """The read-only health line under Settings > Performance.
+
+    CPU, free memory, requests in flight, agent processes and the live lane
+    count against the worker cap. Off the event loop: the agent count walks the
+    process list. A figure that could not be read is ``null`` with its reason
+    under ``unknown``, never zero.
+    """
+    cfg: WebappConfig = request.app.state.webapp_config
+    return await asyncio.to_thread(performance_health_module.read, cfg)
 
 
 @router.post("/api/diagnostics")

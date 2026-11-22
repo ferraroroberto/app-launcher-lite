@@ -19,6 +19,7 @@ app-launcher-lite/
 │       ├── module_preload.py  # expands index.html's modulepreload markers into one link per module of an entry's import graph
 │       ├── demand_cache.py    # a slow read kept in memory and rebuilt in the background while it is polled
 │       ├── hot_poll.py        # bounded builds for the polls that read live transcripts
+│       ├── perf_apply.py      # resizes the thread pools to the Settings > Performance limits after a save and at boot
 │       ├── session_host/      # loopback PTY host on :8466: owns every agent ConPTY; a second HTTP
 │       │                      #   surface with its own server.py, so the webapp mounts nothing from it
 │       ├── routers/           # split API routers: config, sessions, session_transcript, apps, jobs*, board*,
@@ -33,7 +34,7 @@ app-launcher-lite/
 ├── src/                        # logic layer (no UI imports); flat modules first, then one subpackage per domain
 │   ├── app_config.py           # log level, webapp embed section, the webapp port
 │   ├── webapp_config.py        # host / scan paths / agent settings / secrets / terminal knobs
-│   ├── webapp_settings/        # the defaults and value sets every webapp_config field validates against
+│   ├── webapp_settings/        # the defaults and value sets every webapp_config field validates against; performance.py is the speed-limit table and presets
 │   ├── agents.py               # coding-agent registry (Copilot CLI only) + PATH detection
 │   ├── registry.py             # apps registry (load / save / scan)
 │   ├── scanner.py              # bat classifier + project-dir + team-os skill discovery
@@ -45,6 +46,7 @@ app-launcher-lite/
 │   ├── diagnostics.py          # log ring buffer + port-owner introspection
 │   ├── request_timing.py       # per-request queue/worker time, the budget table, in-flight peaks
 │   ├── health_snapshot.py      # the read-only `launcher.py health` report
+│   ├── performance_health.py   # the read-only health line under Settings > Performance
 │   ├── static_versioning.py    # content-hash query strings for asset cache-busting
 │   ├── stylesheet_bundle.py    # the linked stylesheets concatenated into the one /static/bundle.css
 │   ├── subprocess_flags.py     # the NO_WINDOW spawn-flag convention (single source)

@@ -52,6 +52,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from starlette.datastructures import State
 
 from src.request_timing import TimedExecutor
+from src.webapp_settings import performance
 
 slow_logger = logging.getLogger("launcher.slowreq")
 
@@ -62,13 +63,25 @@ SLOW_STEP_S = 2.0
 
 # A build runs at most four steps at once (the Board's gather), one build per
 # endpoint, plus a stuck build's steps that are still running.
-_POOL = TimedExecutor("hot-poll", max_workers=8)
+_POOL = TimedExecutor(
+    "hot-poll", max_workers=performance.default("pool_hot_poll"), ceiling=performance.maximum("pool_hot_poll")
+)
 
 # The per-session polls' pool. A stalled build holds one thread per
 # poll key (single-flight), so this leaves room for a few stuck keys while
 # every other session's Chat still reads; a full pool queues here, never on
 # the default executor.
-SESSION_READS_POOL = TimedExecutor("session-reads", max_workers=12)
+SESSION_READS_POOL = TimedExecutor(
+    "session-reads",
+    max_workers=performance.default("pool_session_reads"),
+    ceiling=performance.maximum("pool_session_reads"),
+)
+
+
+def resize_pools(hot_poll: int, session_reads: int) -> None:
+    """Apply the Settings > Performance sizes to both polls' pools, live."""
+    _POOL.resize(hot_poll)
+    SESSION_READS_POOL.resize(session_reads)
 
 # Per-session polls kept at once. A transcript's forward cursor is part of the
 # key, so keys come and go with every tick; idle ones are dropped past this.
