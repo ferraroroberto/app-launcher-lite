@@ -1572,7 +1572,7 @@ flowchart LR
 - **Holds:**
   - a Machine preset choice of Standard, Light machine and Custom, with a help line
   - a read-only health line with CPU, free memory, requests in flight, agent processes and lanes against the worker cap
-  - a field for each speed limit, each with its default and range in a help line - the Board, session list and open chat refresh in seconds, a switch to pause while the tab is hidden, the thread pools for session and Board reads, transcript reads, sends and git status, the git status cache, the transcript page cache, the missing-log wait and the request budget scale
+  - a field for each speed limit, each with its default and range in a help line - the Board, session list and open chat refresh in seconds, a switch to pause while the tab is hidden, the thread pools for session and Board reads, transcript reads, sends and git status, the git status cache, the transcript page cache, the transcript tail cache, the missing-log wait and the request budget scale
   - Done
 - **Does:**
   - each field saves when it is left and a value the server refuses stays in the field with the reason under it

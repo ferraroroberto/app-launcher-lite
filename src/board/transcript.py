@@ -33,6 +33,7 @@ from typing import AbstractSet, Any, Dict, List, Optional, Tuple
 
 from src._log_once import log_once
 from src.board import card_status as cs
+from src.board import tail_cache
 from src.board.dispatch_ids import (
     _launched_background_ids,
     _launched_bash_dispatch_ids,
@@ -221,18 +222,12 @@ def _read_tail_bytes(path: Any, n_bytes: int) -> bytes:
     """Read the last ``n_bytes`` of ``path`` as raw bytes.
 
     Best-effort: any OSError (missing file, read failure) returns ``b""`` —
-    callers degrade to "no signal" the same way a parse failure would.
+    callers degrade to "no signal" the same way a parse failure would. An
+    unchanged file answers from :mod:`src.board.tail_cache` without a read.
     Shared with :func:`src.board.exchange._read_tail`, which differs only in
     decoding the result to ``str`` instead of splitting it into lines.
     """
-    try:
-        with Path(str(path)).open("rb") as fh:
-            fh.seek(0, 2)
-            size = fh.tell()
-            fh.seek(max(0, size - n_bytes))
-            return fh.read()
-    except OSError:
-        return b""
+    return tail_cache.read_tail(path, n_bytes)
 
 
 def _tail_lines(path: Any, n_bytes: int) -> Tuple[List[str], bool]:

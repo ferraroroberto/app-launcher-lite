@@ -215,3 +215,50 @@ def test_a_session_poll_builds_off_the_default_executor():
     body = asyncio.run(poll.get(build))
     assert body == {"thread": body["thread"]}, "a fresh answer carries no stale marker"
     assert body["thread"].startswith("session-reads")
+
+
+def test_mixed_concurrent_polls_exhaust_no_pool_and_answer_in_bound(
+    chat_app, monkeypatch, tmp_path
+):
+    """18 polls at once: three each of the Board, the session list and the four
+    Chat reads, every Chat read stalled. The Board and the session list still
+    answer, and a send and a plain to_thread call do not queue behind them."""
+    # Context and the plan picker share one screen read, so one stall each install.
+    installs = dict.fromkeys(install for _path, install in _ENDPOINTS.values())
+    stalls = [install(monkeypatch, tmp_path) for install in installs]
+    paths = [path for path, _install in _ENDPOINTS.values()]
+    paths += ["/api/board", "/api/claude-code/sessions"]
+
+    async def run():
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(ThreadPoolExecutor(max_workers=_DEFAULT_WORKERS))
+        transport = httpx.ASGITransport(app=chat_app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            started = time.perf_counter()
+            polls = {
+                path: [asyncio.create_task(client.get(path)) for _ in range(3)] for path in paths
+            }
+            try:
+                for stall in stalls:
+                    await _until(stall.entered.is_set)
+                hot = await asyncio.gather(
+                    *polls["/api/board"], *polls["/api/claude-code/sessions"]
+                )
+                hot_s = time.perf_counter() - started
+                started = time.perf_counter()
+                await asyncio.to_thread(lambda: None)
+                free_s = time.perf_counter() - started
+                sent = await client.post(
+                    "/api/claude-code/sessions/s1/input", json={"data": "hi", "submit": True}
+                )
+            finally:
+                for stall in stalls:
+                    stall.release.set()
+                await asyncio.gather(*(t for ts in polls.values() for t in ts), return_exceptions=True)
+        return [r.status_code for r in hot], hot_s, free_s, sent.status_code
+
+    hot_codes, hot_s, free_s, sent_status = asyncio.run(run())
+    assert hot_codes == [200] * 6
+    assert hot_s < _HANG_S / 2, f"the Board and session list took {hot_s:.1f}s behind stalled Chat reads"
+    assert free_s < _FREE_S, f"a to_thread call waited {free_s:.2f}s: a pool is exhausted"
+    assert sent_status == 200
