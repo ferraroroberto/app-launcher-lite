@@ -19,14 +19,13 @@ import { fetchAgents, fetchApps, fetchRunningApps, wireApps } from './apps.js';
 import { refreshGitStatus } from './apps/apps-coding.js';
 import { fetchListeners } from './apps/apps-listeners.js';
 import { fetchSkills, wireTeamOs } from './team-os.js';
-import { fetchBoard, openBoardCard, renderBoard, wireBoard } from './board.js';
 import { wireHtmlViewer, wireImageLightbox } from './lightbox.js';
 import { wireTokens } from './settings/tokens.js';
 import { wireDocuments } from './settings/documents.js';
 import { wireSettingsSheets } from './settings/settings-sheets.js';
 import { wireLidKeepAwake } from './settings/lid-keep-awake.js';
 import { wireQuoteCopy } from './quote-copy.js';
-import { fetchJobs, markMirrorWindowEarly, openScreenWindow, openTerminal, prefetchViews, startSessionViews, wireViewOpeners } from './lazy-views.js';
+import { adoptBoard, fetchBoard, fetchJobs, markMirrorWindowEarly, openBoardCard, openScreenWindow, openTerminal, prefetchViews, renderBoard, startSessionViews, wireViewOpeners } from './lazy-views.js';
 import { fetchWebauthnStatus, wireWebauthn, writeTerminalToken } from './webauthn.js';
 import { renderSettingsHead } from './home-head.js';
 import { isWideLayout } from './layout.js';
@@ -341,6 +340,22 @@ function armPolls(first) {
 }
 
 // --------------------------------------------------------- wire + go
+// A boot that reopens on the Board, or lands on a ?board= link (the same
+// test as index.html's preload script, which already asked for its modules),
+// evaluates the Board's code before the wiring below and wires it where it
+// was wired when it was part of this graph: after wireTabs(), whose tab click
+// must run before the Board's. Drawing the Board waits for that code either
+// way, and handing the module over directly skips an import() whose
+// resolution would queue behind boot()'s other tasks.
+function opensOnBoard() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('screen') || params.has('terminal') || params.has('session')) return false;
+  if (params.has('board')) return true;
+  try { return localStorage.getItem('app-launcher.tab') === 'board'; } catch (e) { return false; }
+}
+// A failed load is retried, and reported, by the Board's first visit.
+const boardFirst = opensOnBoard() ? await import('./board.js').catch(function () { return null; }) : null;
+
 setSignInHandler(boot);
 wireUsageLog();
 wireTabs();
@@ -349,7 +364,7 @@ wireSessions();
 wireSystemLoad();
 wireApps();
 wireTeamOs();
-wireBoard();
+if (boardFirst) adoptBoard(boardFirst);
 wireImageLightbox();
 wireHtmlViewer();
 wireViewOpeners();

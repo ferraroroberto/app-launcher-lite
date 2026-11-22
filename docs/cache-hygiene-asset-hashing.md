@@ -39,21 +39,36 @@ iPhone PWA never serves a stale asset against fresh HTML, or vice versa.
   gzipped bytes and a quarter of the page's. `tests/api/webapp/test_first_load_budget.py`
   holds every first-load response under 100 KB on the wire, the page plus its
   stylesheet under 70 KB, and the whole first load (page, stylesheet and every
-  module `main.js` reaches statically) under 220 KB.
+  module `main.js` reaches statically) under 175 KB.
 - The views a tap opens load on that tap, not with the page
   (`app/webapp/static/lazy-views.js`): Chat, the terminal, the changes overlay,
-  Links, Screen, Progress, the Jobs tab, the Board's answer sheet and the
-  shared composer were about half of the first load's JavaScript, and none of
-  them draws the shell, the session list or the Board. Every caller goes
-  through `lazy-views.js`, which loads and wires each group once. Once the
-  session list has drawn, the session views load straight away and the rest
-  when the phone goes idle, so a later first open finds them parsed. A tap on
-  the Jobs pane that beats its code is held and replayed, and a deep link
-  (`?terminal=`, `?session=`, `?screen=1`) starts its view's load at boot. The
-  predicates the session list draws from (which modes a session offers, the
-  one it opens in) live in `session-modes.js`, apart from the views.
+  Links, Screen, Progress, the Jobs and Board tabs and the shared composer
+  were about two thirds of the first load's JavaScript, and none of them draws
+  the shell or the session list. Every caller goes through `lazy-views.js`,
+  which loads and wires each group once. Once the session list has drawn, the
+  session views load straight away and the rest when the phone goes idle, so a
+  later first open finds them parsed. A tap on the Jobs or Board pane that
+  beats its code is held and replayed, and a deep link (`?terminal=`,
+  `?session=`, `?screen=1`) starts its view's load at boot. The predicates the
+  session list draws from (which modes a session offers, the one it opens in)
+  live in `session-modes.js`, and the chief row's Start, Resume and Restart in
+  `board/chief-actions.js`, apart from the views.
   `tests/api/webapp/test_first_load_budget.py` fails when a static import pulls
   one of these views back into the first load.
+- The page asks for the whole first-load module graph at once. A browser finds
+  a module's imports only when the module arrives, so the graph's import depth
+  cost one round trip per level on a phone link. `app/webapp/module_preload.py`
+  expands `index.html`'s `<!-- @modulepreload main.js -->` marker into one
+  `<link rel="modulepreload">` per module `main.js` reaches statically, and
+  `rewrite_index_html` stamps them with the imports' `?v=`. The links sit inert
+  in a `<template>`; an inline script after the stylesheets adds them, so they
+  never compete with the first paint. It adds them once per `?v=` stamp: a build
+  the browser has loaded before is in its cache, where preloading only costs
+  the warm load parse time. A boot that reopens on the Board, or lands on a
+  `?board=` link, also adds the Board's own modules (the `board.js` marker
+  minus `main.js`'s), and `main.js` evaluates the Board before its wiring and
+  hands the module to `lazy-views.js`. The preloads follow the import graph as
+  it was at the first page render after a restart.
 - The page starts its first reads before the module graph has loaded. An
   inline script in `index.html` fetches `/api/config`, `/api/agents`,
   `/api/apps` and `/api/claude-code/sessions`, plus the restored tab's own read

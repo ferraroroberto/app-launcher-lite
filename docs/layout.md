@@ -16,6 +16,7 @@ app-launcher-lite/
 │       ├── serve.py           # the one launch entry: hypercorn (HTTP/2 over TLS) on the selector loop, uvicorn as the fallback
 │       ├── shell_html.py      # splices static/views/*.html into index.html where its include markers sit
 │       ├── static_trim.py     # strips comments from the JS modules the static mount serves
+│       ├── module_preload.py  # expands index.html's modulepreload markers into one link per module of an entry's import graph
 │       ├── demand_cache.py    # a slow read kept in memory and rebuilt in the background while it is polled
 │       ├── hot_poll.py        # bounded builds for the polls that read live transcripts
 │       ├── session_host/      # loopback PTY host on :8466: owns every agent ConPTY; a second HTTP

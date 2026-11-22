@@ -34,13 +34,18 @@
  *
  * Split off a single-file module (`/codebase-audit`), the way
  * `jobs.js` and `terminal.js` already were: the lane toolbar's project
- * filter, the Backlog's "Start with" model combo and the fleet chief's
- * lifecycle live in `board-dispatch.js`; the drill-down drawer in
+ * filter and the Backlog's "Start with" model combo live in
+ * `board-dispatch.js`; the fleet chief's lifecycle in
+ * `board/chief-actions.js`; the drill-down drawer in
  * `board/drawer.js`; the Chief's plan card in `board/chief-plan.js`. This
  * module keeps card rendering, one-tap issue-start, the lanes and the poll,
  * and calls into those for the rest. The Board has no chief card:
  * the chief lives in its row under Code › Sessions, and here only as its
  * session row in Bot's turn.
+ *
+ * This module and everything under board/ load on the first Board visit
+ * (lazy-views.js), never with the page: every caller outside the Board goes
+ * through lazy-views.js.
  */
 
 import { els, state } from './state.js';
@@ -955,16 +960,20 @@ function openDesktopColumns() {
 
 // ------------------------------------------------------------------ wire
 
+// A visit to the tab. lazy-views.js calls it too, for the visit that loaded
+// this module and so came before the listener below existed.
+export function openBoardTab() {
+  syncDispatchBar();
+  fetchBoard().then(function () {
+    // Opening the tab with a stale (or never-filled) glab cache refreshes
+    // it once; while the tab just sits open only the free poll runs.
+    if (ghStale(state.board)) refreshGithub().catch(function () {});
+  }).catch(function () {});
+}
+
 export function wireBoard() {
   if (!els.tabBoard) return;
-  els.tabBoard.addEventListener('click', function () {
-    syncDispatchBar();
-    fetchBoard().then(function () {
-      // Opening the tab with a stale (or never-filled) glab cache refreshes
-      // it once; while the tab just sits open only the free poll runs.
-      if (ghStale(state.board)) refreshGithub().catch(function () {});
-    }).catch(function () {});
-  });
+  els.tabBoard.addEventListener('click', openBoardTab);
   wireDispatch();
   wireJournal();
   openDesktopColumns();
