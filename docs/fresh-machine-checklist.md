@@ -100,7 +100,7 @@ On the Board, send a message in the chief's chat (or tap Start). Settings > Chie
 
 Tap **▶ Start** on a small Backlog issue of a project under `projects_dir` (or ask the chief to dispatch it).
 
-**Proof:** the lane's session opens, cuts a branch in a worktree, fetches and pushes with no password prompt, and reaches a merge request. The merge step (`glab mr merge --auto-merge`) is `unknown` live; see [gitlab.md](gitlab.md#verified-live-and-not).
+**Proof:** the lane's session opens, cuts a branch in a worktree, fetches and pushes with no password prompt, and reaches a merge request. The merge step (`glab mr merge --auto-merge`) was run live on a GitLab test project, not on a machine set up from this checklist; see [gitlab.md](gitlab.md#verified-live-and-not).
 
 ## What has been proven
 

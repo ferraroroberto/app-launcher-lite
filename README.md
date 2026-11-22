@@ -20,20 +20,19 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 
 **Unknown (not yet verified live):**
 
-- GitLab, in part: group issue reads, issue create and note, and the two-remote mirror are verified live on gitlab.com; the merge-request rows, pipelines, labels, merge and a self-hosted host are `unknown`. See [docs/gitlab.md](docs/gitlab.md).
+- GitLab, in part: group issue reads, issue create and note, and the two-remote mirror are verified live on gitlab.com, and the merge verb on a GitLab test project; the merge-request row shape, the group's own pipelines, labels and a self-hosted host are `unknown`. See [docs/gitlab.md](docs/gitlab.md).
 - On Copilot CLI (last probed on 1.0.105; the installed CLI is 1.0.114): a queued `/compact` running at turn end, `/remote on` typed from the launcher, a background shell finishing waking the agent, and `ask_user` blocking under autopilot.
 - An Android Git client (MGit) clone, push and PC-side fetch, see [docs/gitlab.md](docs/gitlab.md#working-from-an-android-git-client). The Android Chrome device checks (install, safe areas, gesture bar, keyboard) passed on the owner's phone; versions were not given ([docs/android.md](docs/android.md)).
 
 **The chief works** from this repo's `copilot/` folder (`fleet_config_dir`, shown as the Copilot folder in Settings): it holds the chief helpers (`chief_ops.py`, the chief skill, the plan, journal and mailbox files, the guard hooks), and the chief session runs in it. The hooks that write the Board's session state are installed from there too, by `copilot/install.ps1`. The chief is one long-lived Copilot session that reads the Board, writes its plan and journal, dispatches lanes, opens plain sessions, stops them and raises questions for the owner; the Board shows its card, plan and answer sheet. Turn on Settings > Chief > Doorbell to have a lane's news wake an idle chief (verified on Copilot CLI 1.0.114); with it off, only the owner's own messages wake it. A lane builds in a worktree and needs `git` to reach GitLab without a prompt; the installer's checklist asks git itself and reports `ok`, `missing` or `unknown`. Run one lane end to end on a new computer before relying on it ([docs/fresh-machine-checklist.md](docs/fresh-machine-checklist.md)). See [docs/board.md](docs/board.md#the-chief).
 
-**Port steps done** (now in `copilot/`): the probe script; plan and journal; the mailbox; `chief_ops` and the chief settings; the chief skill; the guard hooks; compaction verbs; the merge verb (`glab mr merge --auto-merge`, unit-tested and `unknown` live); worktrees, claims and sweep; drain and owner checks; Jobs feeding the chief (a failed run's mailbox event and the `rerun_safe` re-run).
+**Port steps done** (now in `copilot/`): the probe script; plan and journal; the mailbox; `chief_ops` and the chief settings; the chief skill; the guard hooks; compaction verbs; the merge verb (`glab mr merge --auto-merge`, [run live on a GitLab test project](docs/gitlab.md#merging)); worktrees, claims and sweep; drain and owner checks; Jobs feeding the chief (a failed run's mailbox event and the `rerun_safe` re-run).
 
 **Port steps still open** (each independently shippable):
 
-1. Copilot transcript flavor and context percentage.
-2. A queued `/compact` on Copilot's composer (`unknown`).
-3. `ui_proof`, the remote-control toggle and the Chat view.
-4. Run the fresh-machine checklist on a machine that has none of the setup; the checklist itself is written ([docs/fresh-machine-checklist.md](docs/fresh-machine-checklist.md)).
+1. A queued `/compact` on Copilot's composer (`unknown`).
+2. A writer for the Board's `.proof/` visual-proof reports (the Board only reads them), and a remote-view link the launcher captures and shows (Copilot CLI 1.0.114 prints an environment id, not a link). The Chat view, its Copilot transcript reader and context ring, and the Remote session setting have shipped.
+3. Run the fresh-machine checklist on a machine that has none of the setup; the checklist itself is written ([docs/fresh-machine-checklist.md](docs/fresh-machine-checklist.md)).
 
 **Dropped from the full app** (not documented, not planned): Telegram (no job alerts; only the login lock-out alert can send through it), Life OS, inspiration, OCR/TTS, the other agents' usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board (GitLab pipelines have their own row), screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
 
