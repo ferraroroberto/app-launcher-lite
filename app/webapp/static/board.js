@@ -60,6 +60,7 @@ import { icon } from './_vendored/icons/icons.js';
 import { terminalJsonApi } from './webauthn.js';
 import { brandIconEl } from './dom-utils.js';
 import { isOffBoard } from './shared/session-kinds.js';
+import { singleFlight } from './shared/poll.js';
 import { agoText, fmtCardStamp, fmtDuration, plural } from './shared/format.js';
 import { avatar, chip, sessionStatusMeta, sessionStatusParts } from './glance.js';
 import { shouldAutoRefreshGithub } from './board/github-refresh.js';
@@ -436,7 +437,7 @@ async function dismissAlert(btn, path, opts, isSame) {
       state.board.columns.other = other.filter(function (c) { return !isSame(c); });
       renderBoard();
     }
-    fetchBoard().catch(function () {});
+    fetchBoard.fresh().catch(function () {});
   } catch (exc) {
     apiFailToast('Could not dismiss the alert', exc);
     btn.disabled = false;
@@ -796,7 +797,10 @@ export function renderBoard() {
 
 // ----------------------------------------------------------------- fetch
 
-export async function fetchBoard() {
+// One Board read in flight per page: the poll, a visit and a retry share it.
+export const fetchBoard = singleFlight(readBoard);
+
+async function readBoard() {
   // Self-gate: costs nothing while another tab is up (pattern: fetchJobs).
   // No drawer gate: the chief chat keeps a drawer open for hours, and
   // pausing on it froze the whole Board silently. renderBoard() keeps the
@@ -939,7 +943,7 @@ async function refreshGithub({ quiet = false } = {}) {
     if (github && github.error && !quiet) {
       toast('GitLab refresh failed: ' + github.error, 'error');
     }
-    await fetchBoard();
+    await fetchBoard.fresh();
   } finally {
     refreshInFlight = false;
     setRefreshBusy(false);
@@ -965,10 +969,6 @@ export function wireBoard() {
   wireDispatch();
   wireJournal();
   wireFoldAll(els.boardFoldAll, els.boardColumns);
-  // Back in the foreground: an aged cache refreshes now, not on the next poll.
-  document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) fetchBoard().catch(function () {});
-  });
   els.boardRefresh.addEventListener('click', function () {
     refreshGithub().catch(function (exc) {
       apiFailToast('GitLab refresh failed', exc);

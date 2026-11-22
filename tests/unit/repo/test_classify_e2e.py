@@ -269,6 +269,7 @@ _BOARD_TARGETS = (
     "tests/e2e/session/test_session_row_glance.py tests/e2e/code/test_code_row_status_age.py "
     "tests/e2e/settings/test_settings_sheets.py"
     " tests/e2e/shell/test_action_row_variants.py tests/e2e/shell/test_async_list_states.py tests/e2e/screens/test_screen_shots.py"
+    " tests/e2e/shell/test_poll_single_flight.py"
 )
 # What an e2e test says when it exercises a surface's modules: the module file,
 # its API prefix, its tab/pane ids, or its DOM id/class prefix. Any test module

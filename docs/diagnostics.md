@@ -90,6 +90,10 @@ Past soft, the log gets a `⏱️ over budget` line; past hard, a `🚨 budget b
 
 `.\.venv\Scripts\python.exe -m scripts.bench_requests` times the Board, the session list, a transcript open, a live transcript tick and git status against a running webapp (`--base http://127.0.0.1:8465` by default, `-n` samples each) and reports p50, p95 and max, the median queue and worker time the server reported, and the highest in-flight count during the run. It sends GETs only, one at a time. Send writes into a session, so it is measured only with `--send-session <sid>` on a throwaway session. Each run is saved as JSON under `webapp/bench/`, so a run before and a run after a change compare directly. A webapp that predates `/api/request-stats` reports the in-flight figure as unknown.
 
+## How the page polls
+
+One open page asks for each read once at a time. The polls in `app/webapp/static/shared/poll.js` schedule the next tick when the last read has settled, so a slow server stretches the gap instead of stacking requests, and a caller that asks while a read is still out (a tab tap, a poll tick, a return to the foreground) shares it. A hidden tab or a locked phone arms no tick; coming back reads each shape once, then resumes the normal spacing. The session list and the Board poll every 5 s, the open Chat transcript every 3 s, and the `/context` ring and the plan picker only while the session view that shows them is open. `tests/e2e/shell/test_poll_single_flight.py` holds each read open at the route and checks that no second one starts.
+
 ## Health snapshot
 
 `.\.venv\Scripts\python.exe launcher.py health` writes `webapp/health/health-<date>-<time>.txt`: the webapp, session-host and tray processes, available memory, the top CPU processes over one second, the running agent processes, the lane marks and session rows, requests in flight and verdicts per class, the git-status cache age and the last 20 lines of the slow-request log, redacted like the diagnostics file. It changes nothing: no process is signalled and no scan is started. A part it cannot establish (the webapp down, no psutil) reads `unknown (<why>)`, never an idle or zero figure.
