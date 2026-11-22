@@ -26,6 +26,8 @@ import { wireSettingsSheets } from './settings/settings-sheets.js';
 import { wireLidKeepAwake } from './settings/lid-keep-awake.js';
 import { wireQuoteCopy } from './quote-copy.js';
 import { adoptBoard, fetchBoard, fetchJobs, markMirrorWindowEarly, openBoardCard, openScreenWindow, openTerminal, prefetchViews, renderBoard, startSessionViews, wireViewOpeners } from './lazy-views.js';
+import { loadXtermScripts } from './terminal/xterm-loader.js';
+import { warmTimeFormat } from './chat/transcript-text.js';
 import { fetchWebauthnStatus, wireWebauthn, writeTerminalToken } from './webauthn.js';
 import { renderSettingsHead } from './home-head.js';
 import { isWideLayout } from './layout.js';
@@ -257,6 +259,23 @@ async function boot() {
   // safe() never rejects, so neither does this: boot() resolves once every
   // boot fetch has settled.
   await Promise.all([lists, skills, status, webauthn, git, listeners, running, load].concat(others));
+  warmSessionOpen();
+}
+
+// Once boot has settled, pay in idle time for what opening a session would
+// otherwise pay for on the tap: the chat's time formatter and the terminal
+// scripts (~95 KB gzipped, ~200 ms on a phone link, plus their parse). A terminal
+// this origin cannot reach never opens, so it gets no stack. A failed load is
+// left for the terminal open to retry.
+function warmSessionOpen() {
+  const unreachable = !!(state.status && state.status.terminal &&
+    state.status.terminal.reachable === false);
+  const run = function () {
+    warmTimeFormat();
+    if (!unreachable) loadXtermScripts().catch(function () {});
+  };
+  if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 5000 });
+  else window.setTimeout(run, 1000);
 }
 
 // Cache the URL's tokens and read its session links: ?terminal=<sid> (the
