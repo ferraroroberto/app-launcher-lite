@@ -42,6 +42,11 @@ LAUNCH_TIMEOUT = 60.0
 # How long a launch that outlived LAUNCH_TIMEOUT is polled before it is reported unknown.
 LAUNCH_POLL_WINDOW = 60.0
 LAUNCH_POLL_INTERVAL = 2.0
+# The launcher's launch-record states, as `src/launching/launch_requests.py` sends them;
+# restated because this helper runs outside the webapp and never imports it.
+LAUNCH_PENDING = "pending"
+LAUNCH_DONE = "done"
+LAUNCH_FAILED = "failed"
 
 # The first input waits on the launcher's hold for a just-spawned TUI (`_READY_WAIT_S`,
 # 15 s) and then the host's input call (`_INPUT_TIMEOUT`, 15 s): its budget covers both,
@@ -200,10 +205,10 @@ def _post_open_launch(args: argparse.Namespace, project: Dict[str, Any],
         sid = (result.get("session") or {}).get("session_id")
         if sid:
             return Launch(str(sid), resumed=bool(result.get("resumed")))
-        if result.get("state") != "pending":
+        if result.get("state") != LAUNCH_PENDING:
             return Launch(None, reason="the launcher answered without a session id")
         # A 202 answers only a repeat whose first call is still spawning.
-        reason, resumed = "pending", True
+        reason, resumed = LAUNCH_PENDING, True
     return _poll_launch(args, project, request_id, reason, resumed)
 
 
@@ -227,14 +232,14 @@ def _poll_launch(args: argparse.Namespace, project: Dict[str, Any], request_id: 
         else:
             state = record.get("state")
             sid = (record.get("session") or {}).get("session_id")
-            if state == "done" and sid:
+            if state == LAUNCH_DONE and sid:
                 return Launch(str(sid), resumed=resumed)
-            if state == "failed" and (record.get("status") or 500) < 500:
+            if state == LAUNCH_FAILED and (record.get("status") or 500) < 500:
                 print(f"REFUSED=the launcher refused the launch (HTTP {record.get('status')}): "
                       f"{record.get('detail')}")
                 return None
             last = f"launch {state or 'record unreadable'}"
-            if state == "failed":
+            if state == LAUNCH_FAILED:
                 last += f": {record.get('detail')}"
         if time.monotonic() >= deadline:
             return Launch(None, resumed, f"{reason}; then {last} after {LAUNCH_POLL_WINDOW:g}s of polling")
