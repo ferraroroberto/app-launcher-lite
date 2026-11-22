@@ -546,11 +546,22 @@ and ⋮, which always fit beside a shrinking title. Only the Life OS
 }
 /* The text is the part that ellipsizes (an ellipsis needs a block box, not the
    flex row); the timer icon is the vendored glyph, in the line's own
-   muted colour and centred on the text by the row's align-items. */
+   muted colour and centred on the text by the row's align-items.
+
+   A font's line box is split around its ascent and descent, which are not
+   equal (Segoe UI carries more above the baseline), so centring the line box
+   leaves the glyphs ~1.5px low. `text-box` trims the box to the x-height
+   above the baseline, so the row centres what is drawn, whatever the
+   platform font. The padding gives the clip back the room the trim took, so
+   an ascender, a digit or a descender is not cut off by the ellipsis's
+   overflow; it is symmetric, so it moves nothing. A browser without
+   `text-box` keeps the plain line box. */
 .terminal-activity-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-box: trim-both ex alphabetic;
+  padding-block: 0.3em;
 }
 .terminal-activity[hidden],
 .terminal-status:not([hidden]) ~ .terminal-activity { display: none; }
