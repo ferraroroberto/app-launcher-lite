@@ -48,6 +48,12 @@ LAUNCH_PENDING = "pending"
 LAUNCH_DONE = "done"
 LAUNCH_FAILED = "failed"
 
+# Seconds an acknowledged write may postdate the user turn that answers it. The host stamps
+# `written_at` before writing and the agent records its turn after taking the submit, on the
+# same clock, so the turn is never earlier; the slack only absorbs the transcript's
+# millisecond rounding. A fresh session has no earlier turn this close to the write.
+ACK_CLOCK_SLACK = 1.0
+
 # The first input waits on the launcher's hold for a just-spawned TUI (`_READY_WAIT_S`,
 # 15 s) and then the host's input call (`_INPUT_TIMEOUT`, 15 s): its budget covers both,
 # so a silent launcher past it really is unanswered, not just slower than the caller.
@@ -98,21 +104,44 @@ def _find_coding_project(base_url: str, repo: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _await_first_turn(args: argparse.Namespace, sid: str, message: str) -> Fact:
-    """`exchange-confirmed` once the session's transcript shows `message` as a user turn, or the
-    timeout passes. The Copilot exchange endpoint cannot be read yet, so the transcript is the
-    only evidence: unreadable means `unknown`, readable-but-absent means `no`."""
+def _acked_turn(args: argparse.Namespace, sid: str, ack: Optional[Tuple[str, float]]) -> Optional[bool]:
+    """Whether the exchange's newest user turn answers the acknowledged write `ack`
+    (`(input_id, written_at)`), or None when that cannot be told: no acknowledgment from the
+    host, or an exchange read that is unreadable or too old to report the turn's time."""
+    if ack is None:
+        return None
+    supported, at = launcher.fetch_latest_user_turn(args.base_url, sid)
+    if not supported:
+        return None
+    return at is not None and at >= ack[1] - ACK_CLOCK_SLACK
+
+
+def _await_first_turn(args: argparse.Namespace, sid: str, message: str,
+                      ack: Optional[Tuple[str, float]] = None) -> Fact:
+    """`exchange-confirmed` once the agent shows the first message as a user turn, or the
+    timeout passes.
+
+    With the host's acknowledgment (`ack`) and an exchange read that reports its newest user
+    turn, a turn recorded after the acknowledged write is the proof: identity and time, not
+    text. Where either side cannot say (an older host or launcher), the transcript's text
+    match stands in. Unreadable throughout means `unknown`, readable-but-absent means `no`."""
     deadline = time.monotonic() + args.timeout
     readable = False
     while True:
-        try:
-            transcript = launcher._request(args.base_url, f"/api/claude-code/sessions/{sid}/transcript")
-        except (urllib.error.URLError, ValueError, TimeoutError):
-            pass
-        else:
+        matched = _acked_turn(args, sid, ack)
+        if matched:
+            return Fact(YES, f"the newest user turn follows acknowledged input {ack[0][:8]}")
+        if matched is not None:
             readable = True
-            if _transcript_has_user_turn(transcript, message):
-                return Fact(YES)
+        else:
+            try:
+                transcript = launcher._request(args.base_url, f"/api/claude-code/sessions/{sid}/transcript")
+            except (urllib.error.URLError, ValueError, TimeoutError):
+                pass
+            else:
+                readable = True
+                if _transcript_has_user_turn(transcript, message):
+                    return Fact(YES)
         if time.monotonic() >= deadline:
             break
         time.sleep(args.poll_interval)
@@ -141,8 +170,13 @@ def _deliver_first_message(args: argparse.Namespace, sid: str, message: str,
     else:
         time.sleep(args.settle)
     posted = launcher.post_session_input(args.base_url, sid, message, timeout=INPUT_TIMEOUT)
+    ack = None
     if posted["ok"]:
-        prompt = Fact(YES, f"the launcher accepted the input ({posted.get('reason') or 'no reason given'})")
+        how = posted.get("reason") or "no reason given"
+        if posted.get("input_id") and isinstance(posted.get("written_at"), (int, float)):
+            ack = (str(posted["input_id"]), float(posted["written_at"]))
+            how += f", input {ack[0][:8]}"
+        prompt = Fact(YES, f"the launcher accepted the input ({how})")
     elif posted.get("reason") in INPUT_NEGATIVE_REASONS:
         return (Fact(NO, f"the launcher refused the input ({posted['error']})"),
                 Fact(NO, "the input was refused, so there is no turn to confirm"))
@@ -152,7 +186,7 @@ def _deliver_first_message(args: argparse.Namespace, sid: str, message: str,
     else:
         prompt = Fact(UNKNOWN, f"send not answered within {INPUT_TIMEOUT:g}s ({posted['error']}); "
                                f"a write may have landed, not resent")
-    exchange = _await_first_turn(args, sid, message)
+    exchange = _await_first_turn(args, sid, message, ack)
     if exchange.state == YES and prompt.state != YES:
         prompt = Fact(YES, "confirmed by the transcript")
     return prompt, exchange

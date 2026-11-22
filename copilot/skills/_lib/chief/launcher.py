@@ -317,6 +317,9 @@ def post_session_input(base_url: str, sid: str, text: str, timeout: float = REQU
     Success bodies are returned as-is; `reason` (not the HTTP status) is the
     documented contract for `deferred`/202, per app-launcher's
     `src/session_client.py:159-163`.
+
+    A success also carries the session-host's delivery acknowledgment,
+    `input_id` and `written_at`, each None on a host too old to send one.
     """
     try:
         result = _request(
@@ -346,8 +349,25 @@ def post_session_input(base_url: str, sid: str, text: str, timeout: float = REQU
         return {"ok": False, "reason": None, "http_status": None,
                 "transport": transient_failure(exc), "error": str(exc)[:300]}
     if not isinstance(result, dict):
-        return {"ok": True, "reason": None, "http_status": None, "transport": None, "error": None}
-    return {"ok": True, "reason": result.get("reason"), "http_status": None, "transport": None, "error": None}
+        result = {}
+    return {"ok": True, "reason": result.get("reason"), "http_status": None, "transport": None,
+            "error": None, "input_id": result.get("input_id"), "written_at": result.get("written_at")}
+
+
+def fetch_latest_user_turn(base_url: str, sid: str) -> Tuple[bool, Optional[float]]:
+    """`(supported, at)`: whether `sid`'s exchange read reports its newest user turn, and that
+    turn's time in epoch seconds (None when there is none yet).
+
+    `supported` is False for an unreadable read and for a launcher too old to send
+    `latest_user`, so a caller falls back to another check instead of reading "no turn"."""
+    try:
+        result = _request(base_url, f"/api/board/sessions/{sid}/exchange")
+    except (OSError, ValueError):
+        return False, None
+    if not isinstance(result, dict) or "latest_user" not in result:
+        return False, None
+    at = (result.get("latest_user") or {}).get("at")
+    return True, float(at) if isinstance(at, (int, float)) and not isinstance(at, bool) else None
 
 
 def fetch_session_card(base_url: str, sid: str) -> Dict[str, Any]:

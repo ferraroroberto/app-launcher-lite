@@ -156,6 +156,68 @@ class OpenAgainstASlowHostTests(SlowHostCase):
         self.assertIn("--request-id", out)
 
 
+class AcknowledgedInputTests(SlowHostCase):
+    """`open` against both host shapes: one whose input call answers with an input id and
+    write time, and an older one that sends neither."""
+
+    WRITTEN_AT = 1_700_000_000.0
+
+    def _ack_host(self, sid: str) -> None:
+        self.stub.routes[f"/api/claude-code/sessions/{sid}/input"] = (
+            200, {"delivered": True, "reason": "unverified", "input_id": "abcdef0123456789",
+                  "written_at": self.WRITTEN_AT})
+
+    def _exchange(self, sid: str, at: float | None) -> None:
+        latest = None if at is None else {"timestamp": "iso", "at": at}
+        self.stub.routes[f"/api/board/sessions/{sid}/exchange"] = (
+            200, {"available": False, "reason": "no_exchange", "latest_user": latest})
+
+    def test_a_turn_after_the_acknowledged_write_confirms_without_the_text(self) -> None:
+        self._project("demo", "s-1")
+        self._ack_host("s-1")
+        self._exchange("s-1", self.WRITTEN_AT + 2)
+        code, out = self._open("demo", "--request-id", "rid-1")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self._facts(out), {"LAUNCHED": "yes", "PROMPT_DELIVERED": "yes", "EXCHANGE_CONFIRMED": "yes"})
+        self.assertIn("follows acknowledged input abcdef01", out)
+        self.assertIn("input abcdef01", out.split("PROMPT_DELIVERED=")[1].splitlines()[0])
+
+    def test_an_identical_earlier_prompt_is_not_taken_for_the_acknowledged_one(self) -> None:
+        self._project("demo", "s-1")
+        self._ack_host("s-1")
+        self._exchange("s-1", self.WRITTEN_AT - 60)
+        self._transcript("s-1", "Say hello to the team.")
+        code, out = self._open("demo", "--request-id", "rid-1")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(self._facts(out)["EXCHANGE_CONFIRMED"], "no")
+
+    def test_an_older_host_is_still_confirmed_by_the_transcript_text(self) -> None:
+        self._project("demo", "s-1")
+        self._exchange("s-1", self.WRITTEN_AT + 2)
+        self._transcript("s-1", "Say hello to the team.")
+        code, out = self._open("demo", "--request-id", "rid-1")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self._facts(out)["EXCHANGE_CONFIRMED"], "yes")
+        self.assertNotIn("acknowledged input", out)
+
+    def test_an_older_host_with_no_text_match_never_reads_yes(self) -> None:
+        self._project("demo", "s-1")
+        self._exchange("s-1", self.WRITTEN_AT + 2)
+        self._transcript("s-1")
+        code, out = self._open("demo", "--request-id", "rid-1")
+        self.assertEqual(code, 1, out)
+        self.assertEqual(self._facts(out)["EXCHANGE_CONFIRMED"], "no")
+
+    def test_an_exchange_without_the_turn_time_falls_back_to_the_transcript(self) -> None:
+        self._project("demo", "s-1")
+        self._ack_host("s-1")
+        self.stub.routes["/api/board/sessions/s-1/exchange"] = (200, {"available": False, "reason": "no_exchange"})
+        self._transcript("s-1", "Say hello to the team.")
+        code, out = self._open("demo", "--request-id", "rid-1")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self._facts(out)["EXCHANGE_CONFIRMED"], "yes")
+
+
 class ResumeTests(SlowHostCase):
     def test_repeating_an_open_with_the_same_request_id_never_opens_a_second_session(self) -> None:
         fake = self._project("demo", "s-1", delay=SLOW)

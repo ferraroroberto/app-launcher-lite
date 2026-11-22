@@ -107,8 +107,10 @@ def test_success_verdict_is_unconfirmed_never_true(monkeypatch):
     # Same key set a PtySession verdict carries (plus units/error), so
     # every existing reader of last_input / the /input body keeps working.
     for key in ("delivered", "reason", "ingested", "submitted", "submit_confirmed",
-                "submit_state", "waited_ms", "deferred"):
+                "submit_state", "waited_ms", "deferred",
+                "input_id", "written_at", "submitted_at"):
         assert key in api
+    assert api["input_id"] and api["written_at"] <= api["submitted_at"]
     assert session.last_input == api
     assert session.to_api()["last_input"] == api
 
