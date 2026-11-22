@@ -356,6 +356,7 @@ export const els = {
   copilotRemote: document.getElementById('copilotRemote'),
   copilotRemoteState: document.getElementById('copilotRemoteState'),
   copilotModels: document.getElementById('copilotModels'),
+  copilotMonthlyCredits: document.getElementById('copilotMonthlyCredits'),
   copilotModelsNew: document.getElementById('copilotModelsNew'),
   copilotModelsNewText: document.getElementById('copilotModelsNewText'),
   copilotAddDefaultModels: document.getElementById('copilotAddDefaultModels'),

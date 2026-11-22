@@ -59,6 +59,8 @@
   "copilot_remote_session": true,
   "copilot_context": "long_context",
   "copilot_effort": "xhigh",
+  "_comment_copilot_monthly_credits": "The Code tab's Usage card: the monthly Copilot allowance in AI credits (300 is the published Pro and Business figure). The card reads the credits this machine's Copilot CLI billed from ~/.copilot/session-store.db, counts from the 1st at 00:00 UTC, and shows unknown when that log cannot be read.",
+  "copilot_monthly_credits": 300,
   "chief_model": "gpt-6-luna",
   "chief_context": "",
   "chief_effort": "",

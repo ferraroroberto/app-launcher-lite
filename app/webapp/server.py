@@ -81,6 +81,7 @@ from app.webapp.routers import (
     board,
     claude_code,
     config,
+    copilot_usage,
     desktop_screen,
     documents,
     jobs,
@@ -533,6 +534,7 @@ def create_app() -> FastAPI:
     app.include_router(misc.router)
     app.include_router(auth.router)
     app.include_router(config.router)
+    app.include_router(copilot_usage.router)
     app.include_router(documents.router)
     app.include_router(tokens.router)
     app.include_router(apps.router)

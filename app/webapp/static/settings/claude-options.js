@@ -166,6 +166,11 @@ export function renderClaudeOptions() {
   setSwitch(els.copilotRemote, !!c.remote_session);
   if (els.copilotRemoteState) els.copilotRemoteState.textContent = remoteStateText(c);
   setFieldValue(els.copilotModels, (c.models_available || []).join('\n'));
+  if (els.copilotMonthlyCredits) {
+    if (c.monthly_credits_min != null) els.copilotMonthlyCredits.min = c.monthly_credits_min;
+    if (c.monthly_credits_max != null) els.copilotMonthlyCredits.max = c.monthly_credits_max;
+    setFieldValue(els.copilotMonthlyCredits, c.monthly_credits || '');
+  }
   // A saved list replaces the code default, so a model added to the default
   // later is offered here instead of needing a JSON edit.
   const missing = c.models_missing_defaults || [];
