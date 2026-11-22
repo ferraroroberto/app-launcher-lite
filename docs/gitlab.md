@@ -95,7 +95,9 @@ gitlab.com's free tier has no pull mirroring, so `scripts/sync_gitlab_mirror.py`
 .\.venv\Scripts\python.exe scripts\sync_gitlab_mirror.py
 ```
 
-Run it on a schedule as a launcher Job (Jobs tab): kind `python`, script path the absolute path of `scripts/sync_gitlab_mirror.py` in this checkout, no arguments, an hourly or daily schedule. The push uses `glab`'s credential helper, so the Job must run as the user who signed in with `glab auth login`; a session-less Job (`session_less: true`) is not verified against the keyring. Creating the Job is the owner's step.
+It runs on a schedule as a launcher Job named `gitlab-mirror-sync` (Jobs tab): kind `python`, script path the absolute path of `scripts/sync_gitlab_mirror.py` in the checkout the tray serves, no arguments, hourly. The Job is in place on the owner's machine; on a new machine, add the same row to `config/jobs.json` (or through the Jobs tab). The push uses `glab`'s credential helper, so the Job must run as the user who signed in with `glab auth login`; a session-less Job (`session_less: true`) is not verified against the keyring.
+
+The Jobs tab reads any non-zero exit as a failed run (a red `failed` chip): the script is a plain Job with no `exit_outcomes`, so exit `1` and exit `2` both show red, never success. `tests/unit/repo/test_sync_gitlab_mirror.py` pins that reading. To see a run go red on purpose, give a throwaway copy of the Job the argument `--mirror no-such-remote`, which exits `2`.
 
 ## Working from an Android Git client
 

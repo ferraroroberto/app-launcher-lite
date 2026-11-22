@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 
 from scripts import sync_gitlab_mirror as mirror
+from src.jobs.outcome import OUTCOME_FAILED, run_outcome
+from src.jobs.run_status import RunStatus, finished_status
 from src.subprocess_flags import NO_WINDOW
 
 
@@ -104,6 +106,14 @@ def test_main_reports_the_refusal_as_exit_one(world):
     _commit(work, "only-on-gitlab")
     _git(work, "push", "-q", "gitlab", "side:main")
     assert mirror.main(["--repo", str(work)]) == mirror.EXIT_REFUSED
+
+
+@pytest.mark.parametrize("code", [mirror.EXIT_REFUSED, mirror.EXIT_UNKNOWN])
+def test_the_jobs_tab_reads_a_nonzero_mirror_exit_as_failed(code):
+    """The mirror is a plain Job: refused and not-established both end red, never success."""
+    assert finished_status(code) is RunStatus.FAILED
+    record = {"status": RunStatus.FAILED.value, "exit_code": code}
+    assert run_outcome(record, adapter_run=False) == (OUTCOME_FAILED, None)
 
 
 def test_an_unreachable_mirror_is_unknown_not_fine(world, tmp_path):
