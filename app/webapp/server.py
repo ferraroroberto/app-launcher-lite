@@ -57,6 +57,7 @@ from app.webapp.static_trim import trim_js
 from src import app_runtime, instance_role, private_network, request_timing, system_load
 from src.app_config import load_app_config
 from src.auth.webauthn_gate import WebAuthnGate
+from src.board import state_reconcile
 from src.chief import reconcile as chief_reconcile
 from src.clients import session as session_client
 from src.compression import StreamSafeGZipMiddleware
@@ -410,6 +411,11 @@ async def _lifespan(app: FastAPI):
         # A managed lane whose hook missed its turn end or exit still reaches
         # the mailbox. Canonical only: it writes the real chief inbox.
         tasks.append(asyncio.create_task(chief_reconcile.tick_forever(
+            lambda: getattr(app.state, "webapp_config", None)
+        )))
+        # Hook-state rows whose process is gone become history. Canonical only:
+        # it rewrites the real state file against the real session-host.
+        tasks.append(asyncio.create_task(state_reconcile.tick_forever(
             lambda: getattr(app.state, "webapp_config", None)
         )))
         # The Projects tiles' ahead/behind: a slow fetch round while a page

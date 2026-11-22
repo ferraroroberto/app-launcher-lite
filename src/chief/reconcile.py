@@ -202,7 +202,8 @@ def reconcile_from_config(cfg: Any) -> List[Path]:
     return reconcile(
         registry=Path(cfg.chief_managed_file),
         inbox=Path(cfg.chief_inbox_dir),
-        state_rows=state["rows"],
+        # An ended row still names the transcript that holds the lane's exit.
+        state_rows={**state["ended_rows"], **state["rows"]},
     )
 
 

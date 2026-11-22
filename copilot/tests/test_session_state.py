@@ -242,6 +242,17 @@ class SessionStatusMachineTests(unittest.TestCase):
         for event in ("sessionStart", "userPromptSubmitted", "agentStop", "sessionEnd", "preToolUse"):
             session_state.apply_event(_payload(), event)
 
+    def test_a_resumed_session_replaces_the_row_the_webapp_marked_ended(self):
+        # The webapp stamps a dead row `ended`; the session coming back must read as itself.
+        state_file = session_state.state_file()
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        ended = {"status": "ended", "cwd": "seed", "ended_at": "2099-01-01T00:00:00Z",
+                 "updated_at": "2099-01-01T00:00:00Z"}
+        state_file.write_text(json.dumps({"abc-123": ended}), encoding="utf-8")
+        session_state.apply_event(_payload(), "sessionStart")
+        self.assertEqual(self._row()["status"], "idle")
+        self.assertNotIn("ended_at", self._row())
+
     def _row(self):
         return json.loads(session_state.state_file().read_text(encoding="utf-8"))["abc-123"]
 
