@@ -21,15 +21,6 @@ owns       = ["launcher webapp", "Copilot sessions", "job scheduling", "Board"]
 not_owns   = ["agent config and skills", "app code it launches", "the forge"]
 depends_on = ["app-launcher", "fleet-config-lite"]
 
-# [upstream] -- the outside repo this one is built from (`url`, `branch`) and the
-# last commit of it whose work is in this tree (`synced_sha`); /upstream-sync and
-# /downstream-sync read exactly these keys and treat a table missing one as
-# invalid. The rebuild matched app-launcher's main at this commit; a port moves it.
-[upstream]
-url        = "https://github.com/ferraroroberto/app-launcher"
-branch     = "main"
-synced_sha = "c2d678b9ad1f0e7be72e5fee66012ce47c8fcce0"
-
 # ---------------------------------------------------------------------------
 # [worktree] -- gitignored paths fleet-config junctions from this primary
 # checkout into every fresh worktree it cuts (skills/_lib/worktree_claim.py's
@@ -1000,3 +991,57 @@ name   = "copilot-usage-state-ui"
 module = "app/webapp/static/copilot-usage.js"
 type   = "UsageState"
 derive = "usageState"
+
+# [upstream] -- the outside repo this one is built from (`url`, `branch`) and the
+# last commit of it whose work is in this tree (`synced_sha`); /upstream-sync and
+# /downstream-sync read exactly these keys and treat a table missing one as
+# invalid. The rebuild matched app-launcher's main at this commit; a port moves it.
+[upstream]
+# Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
+url = "https://github.com/ferraroroberto/app-launcher"
+branch = "main"
+synced_sha = "080990588e7b97e241ad1b3f5256b6a8e0544244"
+
+[[upstream.skipped]]
+sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
+reason = "already present: this vendored component is already at that scaffold revision"
+
+[[upstream.skipped]]
+sha = "d6cc4c37f5b520dbcb3ef61ddc45c0a15f689210"
+reason = "already present: the surface map, its ids and its ratchet are already adopted here in Lite's own terms"
+
+[[upstream.skipped]]
+sha = "e6d97a765f55d6ab50409e5d40c225d62a732fd9"
+reason = "already present: these vendored files are already at the same or a newer scaffold revision"
+
+[[upstream.skipped]]
+sha = "ebe248bee3ffd0ce7c52f726c96e2d25cb93a0d4"
+reason = "not carried: the tab it styles is not part of Lite"
+
+[[upstream.skipped]]
+sha = "f0f4cdc8b8318a16e78cc04c4926120f551206f5"
+reason = "already present: these vendored files are already at the same or a newer scaffold revision"
+
+[[upstream.skipped]]
+sha = "ad2311d752a6079e9f4a2688f27a02e1894ae1b4"
+reason = "already present: this vendored component is already at that scaffold revision"
+
+[[upstream.skipped]]
+sha = "f068e2986fd661464749bcf09efeaa8fca31a6ef"
+reason = "not applicable: Lite already carries its own nightly table"
+
+[[upstream.skipped]]
+sha = "c6140491ef16a744638a6d07bcdd048374ab2117"
+reason = "already present: the card status enum and its two state-machine proof tests exist here under Lite's own names"
+
+[[upstream.skipped]]
+sha = "55803414d93701e87d389b552377c3fa7c8f03af"
+reason = "already present: Lite carries the nightly table, the windows_only marker and the portable schtasks handling"
+
+[[upstream.skipped]]
+sha = "652bf689182dfc897d023d6fbdf726f69c6b1fb0"
+reason = "already present: a plan with only questions or lanes already reads as ok"
+
+[[upstream.skipped]]
+sha = "16c2da206c1950177b7e7285348aa3ea7f8b0b2a"
+reason = "not applicable: it adds a Codex context tier; Lite's presets already carry a Copilot context tier"
