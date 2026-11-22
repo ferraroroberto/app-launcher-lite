@@ -202,30 +202,44 @@ async function unlockTerminal() {
   return body.terminal_token;
 }
 
-export async function ensureTerminalToken() {
-  if (!state.webauthn || !state.webauthn.configured) return '';
+// The terminal token and where it came from: `none` (no gate applies here),
+// `cached` (still valid in localStorage) or `passkey` (a fresh ceremony).
+export async function acquireTerminalToken() {
+  if (!state.webauthn || !state.webauthn.configured) return { token: '', source: 'none' };
   // On the PC itself (loopback) the server bypasses the passkey gate —
   // and the iPhone's passkey isn't on this device anyway. Skip it.
   if (state.status && state.status.terminal &&
       state.status.terminal.reason === 'loopback') {
-    return '';
+    return { token: '', source: 'none' };
   }
   const existing = readTerminalToken();
-  if (existing) return existing;
-  return await unlockTerminal();
+  if (existing) return { token: existing, source: 'cached' };
+  return { token: await unlockTerminal(), source: 'passkey' };
+}
+
+export async function ensureTerminalToken() {
+  return (await acquireTerminalToken()).token;
 }
 
 // One terminal-grade JSON request: awaits the passkey token, sends it
 // with the bearer, and resolves jsonApi()'s parsed body or its thrown verdict.
 // `body`, when given, is JSON-encoded here; omit `method` for a GET.
-export async function terminalJsonApi(path, { method, body } = {}) {
-  const terminalToken = await ensureTerminalToken();
+// `timeToken` reports the token step to the server (its time and source) in
+// two headers, so a slow send's breadcrumb can tell a passkey ceremony from
+// a slow server.
+export async function terminalJsonApi(path, { method, body, timeToken } = {}) {
+  const started = performance.now();
+  const { token: terminalToken, source } = await acquireTerminalToken();
   const opts = {
     headers: authHeaders({
       terminalToken,
       contentType: body === undefined ? undefined : 'application/json',
     }),
   };
+  if (timeToken) {
+    opts.headers['X-Send-Token-Ms'] = String(Math.round(performance.now() - started));
+    opts.headers['X-Send-Token-Source'] = source;
+  }
   if (method) opts.method = method;
   if (body !== undefined) opts.body = JSON.stringify(body);
   return jsonApi(path, opts);

@@ -64,10 +64,12 @@ A slow answer is either slow work or fast work that waited for a free thread. Ev
 queue;dur=1.2;desc="default+hot-poll", worker;dur=31.5;desc="default+hot-poll", app;dur=63.3
 ```
 
-- `queue` is the time the request's work waited for a pool thread, `worker` the time it ran on one, `app` the server's whole time to the response headers (the request's `total_ms`), all in milliseconds. `desc` names the pool: `default` (the event loop's own), `hot-poll`, `session-reads`, `git-status`, `git-sync`, or `none` for a request that used no thread.
+- `queue` is the time the request's work waited for a pool thread, `worker` the time it ran on one, `app` the server's whole time to the response headers (the request's `total_ms`), all in milliseconds. `desc` names the pool: `default` (the event loop's own), `hot-poll`, `session-reads`, `input`, `git-status`, `git-sync`, or `none` for a request that used no thread.
 - Parallel steps add up, so `queue + worker` can exceed `app`. A shared single-flight build is charged to the request that started it. The header carries what had finished when the response began; the log lines below carry the final figures.
 
 `webapp/slow-requests.log` repeats the split as `queue_ms= worker_ms= total_ms= pool=` on every slow-request line (past `LAUNCHER_SLOW_REQUEST_S`, default 3 s) and on every budget line.
+
+Every message send also writes one `📨 send` line naming where its time went: the page's terminal-token step (`cached`, `passkey` for a fresh ceremony, `none` where no gate applies, with its milliseconds, reported by the page in the `X-Send-Token-Ms` and `X-Send-Token-Source` headers), the wait for an input thread, the readiness wait for a just-spawned agent, the session-host call, and inside that call the ingest window (the host's `waited_ms`) and the submit-confirm window (`submitted_at - written_at - waited_ms`). It ends with `reason/submit_state`, or `refused <status>`. A stage that could not be measured reads `unknown`, never zero.
 
 Each request class has a **soft** and a **hard** limit, in seconds:
 

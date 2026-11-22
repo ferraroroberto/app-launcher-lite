@@ -311,6 +311,7 @@ class WebappConfig:
     poll_pause_hidden: bool = performance.default("poll_pause_hidden")
     pool_hot_poll: int = performance.default("pool_hot_poll")
     pool_session_reads: int = performance.default("pool_session_reads")
+    pool_input: int = performance.default("pool_input")
     pool_sends: int = performance.default("pool_sends")
     pool_git_status: int = performance.default("pool_git_status")
     git_status_ttl_s: int = performance.default("git_status_ttl_s")

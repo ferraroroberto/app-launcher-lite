@@ -24,7 +24,8 @@ The table lives in `src/webapp_settings/performance.py`: the config defaults, th
 | `poll_pause_hidden` | on | on | on/off | A hidden tab or locked phone asks for nothing and reads once on return. Applies to every page poll. |
 | `pool_hot_poll` | 8 | 4 | 4–32 | Threads building the session list and the Board. |
 | `pool_session_reads` | 12 | 6 | 4–48 | Threads reading open chats. |
-| `pool_sends` | 0 (automatic) | 8 | 0 or 4–64 | Threads behind sending to a session and every route without its own pool; 0 is CPUs + 4, at most 32. |
+| `pool_input` | 4 | 2 | 1–16 | Threads that deliver a message to a session (`POST .../input`). Nothing else runs on them, so a send never waits behind page reads; each send holds one for the readiness wait and the session-host's write, ingest and confirm windows. |
+| `pool_sends` | 0 (automatic) | 8 | 0 or 4–64 | Shown as **Other requests**: threads behind every route without its own pool; 0 is CPUs + 4, at most 32. The key keeps its older name so saved configs still load. |
 | `pool_git_status` | 2 | 1 | 1–32 | Repos scanned in parallel, which is also the most git processes alive during a scan. |
 | `git_status_ttl_s` | 10 | 30 | 2–60 s | How long a git scan is served as it is; past it the next poll shows it at once and refreshes it behind the response. |
 | `transcript_page_cache_size` | 32 | 16 | 0–256 pages | Parsed chat pages kept for unchanged files; 0 turns the cache off. |

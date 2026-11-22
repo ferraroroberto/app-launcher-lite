@@ -30,7 +30,7 @@ from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect as ws_connect
 from websockets.exceptions import InvalidHandshake
 
-from app.webapp import chief_doorbell
+from app.webapp import chief_doorbell, input_pool
 from app.webapp.hot_poll import BuildSteps, hot_poll
 from app.webapp.routers._helpers import (
     PROJECT_ROOT,
@@ -544,25 +544,24 @@ async def session_input(sid: str, request: Request, response: Response) -> Dict[
     ``pending`` (with the watcher) / ``not_submitted`` / ``not_requested``.
     ``ok: true`` only means a live session accepted the request. Full table:
     ``docs/board.md``.
+
+    Every blocking step runs on the input pool (``app/webapp/input_pool.py``),
+    never the default executor the page's reads share, and each send logs
+    one breadcrumb naming its stages' times.
     """
     cfg: WebappConfig = request.app.state.webapp_config
+    started = time.monotonic()
+    stages: Dict[str, Any] = input_pool.client_token(request.headers)
     text, submit = _input_payload(await maybe_json(request))
     try:
-        result = await asyncio.to_thread(
-            session_client.send_input, cfg.session_host_port, sid, text, submit
+        result = await input_pool.run_input(
+            stages, session_client.send_input, cfg.session_host_port, sid, text, submit,
+            stages=stages,
         )
     except session_client.SessionHostError as exc:
-        raise await _input_refused(cfg, sid, exc, text, submit)
+        raise await _input_refused(cfg, sid, exc, text, submit, stages, started)
     verdict = result if isinstance(result, dict) else {}
-    # Audit the verdict, not just the byte count: the three stalled
-    # sessions' logs recorded `bytes=6637 submit=True` for steers that were
-    # never submitted, which made the incident invisible in hindsight.
-    await audit_off_loop(
-        audit.session_log, sid, "input", bytes=len(text), submit=submit,
-        reason=verdict.get("reason"),
-        submit_confirmed=verdict.get("submit_confirmed"),
-        preview=text[:120] or None,
-    )
+    await _input_delivered(sid, text, submit, verdict, stages, started)
     if verdict.get("reason") == session_client.INPUT_DEFERRED:
         # Mirror the session-host's 202: accepted, submit still in
         # flight with the watcher — not the completed delivery a 200 implies.
@@ -610,6 +609,28 @@ async def session_discard_pending_input(
     return {"ok": True, **body}
 
 
+async def _input_delivered(
+    sid: str, text: str, submit: bool, verdict: Dict[str, Any],
+    stages: Dict[str, Any], started: float,
+) -> None:
+    """Audit an answered input and log its stage breadcrumb."""
+    stages.update(input_pool.host_windows(verdict))
+    # Audit the verdict, not just the byte count: the three stalled
+    # sessions' logs recorded `bytes=6637 submit=True` for steers that were
+    # never submitted, which made the incident invisible in hindsight.
+    await audit_off_loop(
+        audit.session_log, sid, "input", bytes=len(text), submit=submit,
+        reason=verdict.get("reason"),
+        submit_confirmed=verdict.get("submit_confirmed"),
+        preview=text[:120] or None,
+        _pool=input_pool.INPUT_POOL,
+    )
+    input_pool.log_send(
+        sid, stages, time.monotonic() - started,
+        f"{verdict.get('reason', 'unknown')}/{verdict.get('submit_state', 'unknown')}",
+    )
+
+
 def _input_payload(body: Dict[str, Any]) -> Tuple[str, bool]:
     """``(text, submit)`` from an input body; blank text means a bare submit."""
     data = body.get("data")
@@ -624,12 +645,13 @@ def _input_payload(body: Dict[str, Any]) -> Tuple[str, bool]:
 
 async def _input_refused(
     cfg: WebappConfig, sid: str, exc: session_client.SessionHostError, text: str, submit: bool,
+    stages: Dict[str, Any], started: float,
 ) -> HTTPException:
-    """Audit a refused input and return the HTTP error to raise for it."""
+    """Audit a refused input, log its stage breadcrumb, and return the HTTP error to raise for it."""
     status, detail = exc.status, str(exc)
     if exc.status == 500:
-        status, detail = await asyncio.to_thread(
-            _classify_input_500, cfg.session_host_port, sid, detail
+        status, detail = await asyncio.get_running_loop().run_in_executor(
+            input_pool.INPUT_POOL, _classify_input_500, cfg.session_host_port, sid, detail
         )
     # Includes the 502 the host raises for a payload it wrote but never
     # saw echoed — audited too, since a *failed* steer is the
@@ -643,7 +665,9 @@ async def _input_refused(
             else "error"
         ),
         detail=detail[:200],
+        _pool=input_pool.INPUT_POOL,
     )
+    input_pool.log_send(sid, stages, time.monotonic() - started, f"refused {status}")
     return HTTPException(status_code=status, detail=detail)
 
 
