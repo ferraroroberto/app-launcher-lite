@@ -598,9 +598,8 @@ class InputProtocol:
         ingest wait extends the hold to at most ``_INGEST_CAP_MS``, and only
         on the failing path, so a keyboard writer is never blocked for long.
         """
-        input_id = new_input_id()
         with self._write_lock:
-            written_at = time.time()
+            ack = (new_input_id(), time.time())
             clean_before = self._composer_known_empty()
             mark = self._output_total
             # Refused before the write and its supersede: the watcher that
@@ -627,16 +626,14 @@ class InputProtocol:
             defer_args = self._defer_args
             self._defer_args = None
             self._track_pending(data, outcome, mark, clean_before)
-        outcome = acknowledge(outcome, input_id, written_at)
+        outcome = acknowledge(outcome, *ack)
         self._record_input(outcome, len(data), submit)
         # Armed only after the ``deferred`` verdict is already on the session,
         # so the watcher can never overwrite ``last_input`` with its own
-        # outcome before the call that created it has recorded one. The
-        # watcher's verdict carries this call's id: it finishes the same write.
+        # outcome before the call that created it has recorded one; it keeps
+        # this call's ``ack`` because it finishes the same write.
         if defer_args is not None:
-            self._arm_deferred_submit(
-                *defer_args, nbytes=len(data), ack=(input_id, written_at)
-            )
+            self._arm_deferred_submit(*defer_args, nbytes=len(data), ack=ack)
         return outcome
 
     def _await_bulk_settle(
