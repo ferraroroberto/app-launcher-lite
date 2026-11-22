@@ -301,7 +301,7 @@ class WebappConfig:
     # Parsed transcript pages kept for unchanged files (0 turns the cache
     # off), and how long a Copilot session whose log could not be found is
     # answered "not found" before the session-state folder is scanned again.
-    # Defaults: src.session_view.transcript / transcript_locate.
+    # Defaults: src.session_view.page_cache / transcript_locate.
     transcript_page_cache_size: int = 32
     transcript_resolve_miss_ttl_s: float = 10.0
     # Large-file attach limit in MB, Settings-tab configurable.
