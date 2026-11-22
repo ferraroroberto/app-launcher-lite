@@ -1,8 +1,10 @@
-"""``copilot/install.ps1``: install, ``-Uninstall`` and ``-Migrate`` against a temp profile.
+"""``copilot/install.py``: install, ``--uninstall`` and ``--migrate`` against a temp profile.
 
-Each case copies the installer, the hook templates, one fake skill and the ports
-reader into a temp checkout and points ``COPILOT_HOME`` and ``USERPROFILE`` at a
-temp folder, so nothing in the real user profile is read or written.
+Each case copies the installer, its PowerShell wrapper, the hook templates, one fake skill
+and the ports reader into a temp checkout and points ``COPILOT_HOME`` and ``USERPROFILE`` at
+a temp folder, so nothing in the real user profile is read or written. The cases run the
+Python entry point with no PowerShell at all, the path a machine that only allows signed
+scripts takes; one case checks that ``install.ps1`` only forwards to it.
 """
 
 from __future__ import annotations
@@ -18,12 +20,14 @@ from typing import Iterator, List, Optional
 
 import pytest
 
-from src.launching.ps_script import script_command
+if sys.platform == "win32":
+    import _winapi
+
 from src.subprocess_flags import NO_WINDOW
 
 pytestmark = [
     pytest.mark.windows_only,
-    pytest.mark.skipif(sys.platform != "win32", reason="the installer is PowerShell and the hazard is an NTFS junction"),
+    pytest.mark.skipif(sys.platform != "win32", reason="the installer writes NTFS junctions"),
 ]
 
 _COPILOT = Path(__file__).resolve().parents[3] / "copilot"
@@ -31,13 +35,6 @@ _POWERSHELL = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 _STATE_FILE = "sessions-state.json"
 _STATE_BODY = '{"rows": [{"sid": "keep-me"}]}'
 _ISSUE_SKILLS = ("issue-add", "issue-start", "issue-yolo", "issue-finish")
-
-
-def _ps(command: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        [_POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
-        capture_output=True, text=True, timeout=120, creationflags=NO_WINDOW,
-    )
 
 
 def _remove_links(root: Path) -> None:
@@ -91,7 +88,8 @@ class Lite:
         (self.copilot / "hooks").mkdir(parents=True)
         (self.copilot / "skills" / "_lib").mkdir(parents=True)
         (self.repo / "config").mkdir()
-        (self.copilot / "install.ps1").write_bytes((_COPILOT / "install.ps1").read_bytes())
+        for name in ("install.py", "install.ps1"):
+            (self.copilot / name).write_bytes((_COPILOT / name).read_bytes())
         for template in (_COPILOT / "hooks").glob("*.template.json"):
             (self.copilot / "hooks" / template.name).write_bytes(template.read_bytes())
         ports = _COPILOT / "skills" / "_lib" / "lite_ports.py"
@@ -113,8 +111,7 @@ class Lite:
     def run(self, *flags: str, answer: Optional[str] = None) -> subprocess.CompletedProcess:
         env = {**os.environ, "COPILOT_HOME": str(self.home), "USERPROFILE": str(self.profile)}
         return subprocess.run(
-            [_POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(self.copilot / "install.ps1"),
-             "-SkipChecklist", *flags],
+            [sys.executable, str(self.copilot / "install.py"), "--skip-checklist", *flags],
             capture_output=True, text=True, timeout=180, env=env, input=answer or "", creationflags=NO_WINDOW,
         )
 
@@ -126,8 +123,7 @@ class Lite:
     def junction(self, link: Path, target: Path) -> None:
         target.mkdir(parents=True, exist_ok=True)
         link.parent.mkdir(parents=True, exist_ok=True)
-        made = _ps(f"New-Item -ItemType Junction -Path '{link}' -Target '{target}' | Out-Null")
-        assert made.returncode == 0, made.stderr
+        _winapi.CreateJunction(str(target), str(link))
 
     def seed_state(self) -> Path:
         state = self.hooks / "state" / _STATE_FILE
@@ -213,7 +209,7 @@ def test_uninstall_removes_only_what_is_ours_and_is_idempotent(lite: Lite) -> No
     (other_target / "keep.txt").write_text("keep", encoding="utf-8")
 
     for _ in range(2):
-        lite.ok("-Uninstall")
+        lite.ok("--uninstall")
     assert not list(lite.hooks.glob("app-launcher-lite-*.json"))
     assert not (lite.skills / "demo").exists() and not (lite.skills / "_lib").exists()
     assert foreign_hook.exists() and (foreign_skill / "SKILL.md").read_text(encoding="utf-8") == "theirs"
@@ -226,7 +222,7 @@ def test_uninstall_leaves_a_hook_config_that_does_not_run_this_checkout(lite: Li
     lite.hooks.mkdir(parents=True)
     imposter = lite.hooks / "app-launcher-lite-chief-guard.json"
     imposter.write_text('{"powershell": "& python C:/other/hooks/chief_guard.py"}', encoding="utf-8")
-    out = lite.ok("-Uninstall")
+    out = lite.ok("--uninstall")
     assert imposter.exists() and "[skip] hook config is not ours" in out
 
 
@@ -236,7 +232,7 @@ def test_migrate_removes_the_old_install_installs_the_new_and_keeps_state(lite: 
     foreign = lite.root / "elsewhere" / "linked"
     lite.junction(lite.skills / "linked", foreign)
 
-    out = lite.ok("-Migrate", "-Yes")
+    out = lite.ok("--migrate", "--yes")
     assert not any(p.exists() for p in old_hooks)
     assert (lite.hooks / "app-launcher-lite-session-state.json").exists()
     assert (lite.skills / "demo").is_junction() and (lite.copilot / "skills" / "demo" / "SKILL.md").exists()
@@ -245,7 +241,7 @@ def test_migrate_removes_the_old_install_installs_the_new_and_keeps_state(lite: 
     assert state.read_text(encoding="utf-8") == _STATE_BODY
     assert "[ok] old hook config removed" in out
 
-    again = lite.ok("-Migrate", "-Yes")
+    again = lite.ok("--migrate", "--yes")
     assert "[ok] no fleet-config-lite hook config or skill link to remove" in again
     assert state.read_text(encoding="utf-8") == _STATE_BODY
 
@@ -253,7 +249,7 @@ def test_migrate_removes_the_old_install_installs_the_new_and_keeps_state(lite: 
 @pytest.mark.parametrize("answer", [None, "n\n", "\n"])
 def test_migrate_asks_first_and_no_answer_or_a_no_changes_nothing(lite: Lite, answer: Optional[str]) -> None:
     old_hooks = lite.seed_old_install()
-    proc = lite.run("-Migrate", answer=answer)  # None: stdin is closed, so there is nobody to answer
+    proc = lite.run("--migrate", answer=answer)  # None: stdin is closed, so there is nobody to answer
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "migration declined: nothing was changed" in proc.stdout
     assert all(p.exists() for p in old_hooks)
@@ -262,7 +258,7 @@ def test_migrate_asks_first_and_no_answer_or_a_no_changes_nothing(lite: Lite, an
 
 def test_migrate_goes_ahead_on_a_typed_yes(lite: Lite) -> None:
     old_hooks = lite.seed_old_install()
-    proc = lite.run("-Migrate", answer="y\n")
+    proc = lite.run("--migrate", answer="y\n")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert not any(p.exists() for p in old_hooks)
     assert (lite.hooks / "app-launcher-lite-chief-guard.json").exists()
@@ -279,7 +275,7 @@ def test_migrate_repoints_an_explicit_copilot_folder_through_the_settings_api_an
     server = lite.serve_settings(r"C:\old\fleet-config-lite")
     lite.set_config(r"C:\old\fleet-config-lite")
     try:
-        out = lite.ok("-Migrate", "-Yes")
+        out = lite.ok("--migrate", "--yes")
     finally:
         server.shutdown()
     assert server.posted == [{"fleet_config_dir": str(lite.copilot)}], "exactly one field is sent"  # type: ignore[attr-defined]
@@ -291,7 +287,7 @@ def test_migrate_leaves_an_empty_or_already_correct_copilot_folder_alone(lite: L
     server = lite.serve_settings("")
     lite.set_config(None if current is None else current.format(copilot=lite.copilot))
     try:
-        lite.ok("-Migrate", "-Yes")
+        lite.ok("--migrate", "--yes")
     finally:
         server.shutdown()
     assert server.posted == []  # type: ignore[attr-defined]
@@ -301,7 +297,7 @@ def test_migrate_reports_unknown_when_lite_is_not_running_and_never_edits_the_co
     lite.set_config(r"C:\old\fleet-config-lite")
     (lite.repo / "config" / "config.json").write_text('{"webapp": {"port": 9}}', encoding="utf-8")
     config = lite.repo / "config" / "webapp_config.json"
-    out = lite.ok("-Migrate", "-Yes")
+    out = lite.ok("--migrate", "--yes")
     assert "[unknown] Lite did not take the change" in out
     # The folder setting is never rewritten in the file; only the missing skills_dir key is added.
     assert json.loads(config.read_text(encoding="utf-8")) == {"skills_dir": "", "fleet_config_dir": r"C:\old\fleet-config-lite"}
@@ -321,18 +317,18 @@ def test_a_junctioned_skills_dir_is_never_written_or_removed_through(lite: Lite)
     (other / "theirs").mkdir(parents=True)
     lite.junction(lite.home / "skills", other)
     lite.ok()
-    lite.ok("-Uninstall")
+    lite.ok("--uninstall")
     assert [p.name for p in other.iterdir()] == ["theirs"]
 
 
-def test_install_and_migrate_run_under_allsigned_through_the_scriptblock_launcher(lite: Lite) -> None:
-    # An AllSigned machine refuses `-File` for this unsigned script; ps_script loads it as text instead,
-    # which also rewrites $PSScriptRoot and starts PowerShell -NonInteractive.
+def test_install_ps1_only_forwards_its_switches_to_install_py(lite: Lite) -> None:
     old_hooks = lite.seed_old_install()
-    argv, extra = script_command(lite.copilot / "install.ps1", ["-SkipChecklist", "-Migrate", "-Yes"], policy="allsigned")
-    env = {**os.environ, "COPILOT_HOME": str(lite.home), "USERPROFILE": str(lite.profile), **extra}
-    proc = subprocess.run(argv, capture_output=True, text=True, timeout=180, env=env, stdin=subprocess.DEVNULL,
-                          creationflags=NO_WINDOW)
+    env = {**os.environ, "COPILOT_HOME": str(lite.home), "USERPROFILE": str(lite.profile)}
+    proc = subprocess.run(
+        [_POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(lite.copilot / "install.ps1"),
+         "-SkipChecklist", "-Migrate", "-Yes"],
+        capture_output=True, text=True, timeout=180, env=env, stdin=subprocess.DEVNULL, creationflags=NO_WINDOW,
+    )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert not any(p.exists() for p in old_hooks)
     assert (lite.hooks / "app-launcher-lite-session-state.json").exists() and (lite.skills / "demo").is_junction()
@@ -441,7 +437,7 @@ def test_whatif_lists_every_change_and_makes_none(lite: Lite) -> None:
     lite.write_config({"gitlab_host": "git.example.test"})
     roots = (lite.profile, lite.repo / "config")
     before = _snapshot(*roots)
-    out = lite.ok("-WhatIf")
+    out = lite.ok("--what-if")
     assert _snapshot(*roots) == before
     for line in ("[whatif] hook config ->", "[whatif] skill junction ->", "[whatif] backup written ->",
                  "[whatif] key added to webapp_config.json: skills_dir", "WhatIf: nothing was changed"):
@@ -452,9 +448,9 @@ def test_whatif_lists_every_change_and_makes_none(lite: Lite) -> None:
     lite.ok()
     lite.write_config({"skills_dir": ""})
     before = _snapshot(*roots)
-    out = lite.ok("-WhatIf")
+    out = lite.ok("--what-if")
     assert "[whatif] skills_dir link removed ->" in out
-    out = lite.ok("-Uninstall", "-WhatIf")
+    out = lite.ok("--uninstall", "--what-if")
     assert "[whatif] hook config removed ->" in out and "[whatif] install record removed" in out
     assert _snapshot(*roots) == before
 
@@ -470,7 +466,7 @@ def test_uninstall_removes_only_its_own_skills_dir_links_and_keeps_everything_fo
     os.rmdir(lite.skills / "issue-yolo")
     lite.junction(lite.skills / "issue-yolo", elsewhere)
 
-    lite.ok("-Uninstall")
+    lite.ok("--uninstall")
     for name in ("issue-start", "issue-finish"):
         assert not (lite.skills / name).exists() and not (claude / name).exists(), name
     assert lite.target(lite.skills / "issue-yolo") == elsewhere.resolve()

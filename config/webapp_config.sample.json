@@ -31,7 +31,7 @@
   "apps_scan_root": "",
   "mini_apps_root": "",
   "fleet_config_dir": "",
-  "_comment_skills_dir": "Folder that holds the four issue skills a lane runs: issue-add, issue-start, issue-yolo and issue-finish, each a folder with a SKILL.md. Set it on a machine whose issue skills live in a repo of its own; copilot/install.ps1 then links those four into the agent's skills folder instead of Lite's bundled copies. Empty uses the skills bundled in the Copilot folder. Settings > Chief shows whether each one is found, and a lane start is refused while one is missing.",
+  "_comment_skills_dir": "Folder that holds the four issue skills a lane runs: issue-add, issue-start, issue-yolo and issue-finish, each a folder with a SKILL.md. Set it on a machine whose issue skills live in a repo of its own; copilot/install.py then links those four into the agent's skills folder instead of Lite's bundled copies. Empty uses the skills bundled in the Copilot folder. Settings > Chief shows whether each one is found, and a lane start is refused while one is missing.",
   "skills_dir": "",
   "_comment_team_os_dir": "Root of the team-os checkout the Team OS tab surfaces. Skills live at <team_os_dir>/.claude/skills (Copilot reads that folder too). Defaults to the sibling ../team-os; when the skills dir doesn't exist the tab shows disabled, the same way the Coding tab handles a missing projects_dir.",
   "team_os_dir": "",

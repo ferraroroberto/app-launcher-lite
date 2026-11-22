@@ -80,7 +80,7 @@ def session_host_url(path: Optional[Path] = None) -> str:
 
 
 def main(argv: Optional[list] = None) -> int:
-    """`webapp-url` / `session-host-url` / `webapp-port` / `session-host-port`: one value on stdout, for install.ps1."""
+    """`webapp-url` / `session-host-url` / `webapp-port` / `session-host-port`: one value on stdout, for install.py."""
     args =sys.argv[1:] if argv is None else argv
     values = {"webapp-url": webapp_url, "session-host-url": session_host_url,
               "webapp-port": webapp_port, "session-host-port": session_host_port}

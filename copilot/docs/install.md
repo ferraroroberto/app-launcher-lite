@@ -1,8 +1,8 @@
 # Installing the Copilot side
 
-`copilot/install.ps1` connects this checkout to GitHub Copilot CLI for the current Windows user. It writes the two hook configs (session state for the Board, and the chief's guard), links the skills, adds any missing Lite config key, and prints a checklist. It never edits `~/.claude/settings.json`, an agent's trust settings or git config, and it never reads, moves or deletes `~/.copilot/hooks/state/`, where the chief's handover, plan, journal and mailbox live.
+`copilot/install.py` connects this checkout to GitHub Copilot CLI for the current Windows user. It writes the two hook configs (session state for the Board, and the chief's guard), links the skills, adds any missing Lite config key, and prints a checklist. It never edits `~/.claude/settings.json`, an agent's trust settings or git config, and it never reads, moves or deletes `~/.copilot/hooks/state/`, where the chief's handover, plan, journal and mailbox live.
 
-There are four cases below. Pick the one that matches the machine. Run every command from the checkout's root in PowerShell. The `ps_script` form works under every execution policy, `AllSigned` included.
+There are four cases below. Pick the one that matches the machine. Run every command from the checkout's root in PowerShell. The installer is plain Python and runs no PowerShell script, so it works under every execution policy, `AllSigned` included, and never reads or changes it. `copilot\install.ps1` takes the same switches as `-Uninstall`, `-Migrate`, `-Yes` and `-WhatIf` and forwards them to it, for a machine where scripts may run.
 
 ## What the installer prints
 
@@ -12,7 +12,7 @@ Every line starts with one tag:
 |---|---|
 | `[ok]` | Done, or already right. `[ok] unchanged -> <path>` means a re-run found nothing to change. |
 | `[ok] kept (not Lite's) -> <path>` | Something that belongs to you or another tool sits there. It is left exactly as it is. When it is one of the four issue skills, the line adds `and it counts as <skill>`. |
-| `[whatif]` | Only with `-WhatIf`: a change it would make. Nothing is written. |
+| `[whatif]` | Only with `--what-if`: a change it would make. Nothing is written. |
 | `[skip]` | Deliberately not done, with the reason (for example, a skills folder that is a link into another repo). |
 | `[missing]` | Something to install or fix yourself; the line says what. |
 | `[unknown]` | The installer could not find out. It is never treated as fine. |
@@ -40,7 +40,7 @@ Settings > Chief > **Skills folder** holds the setting. The line under it report
    `setup.bat` creates `.venv`, installs the requirements and asks whether to run the Copilot install. Answer `y`, or run it yourself:
 
    ```powershell
-   .\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1
+   .\.venv\Scripts\python.exe copilot\install.py
    ```
 
    **Check:** two `[ok] hook config -> ...app-launcher-lite-*.json` lines, one `[ok] skill junction -> ...` per skill, and a checklist where Copilot CLI, glab, venv and git access read `[ok]`. Fix each `[missing]` line as it says, then run the install again. A second run reports `[ok] unchanged` for everything it already did.
@@ -64,8 +64,8 @@ The full order, including what moves and what does not: [migrating-from-fleet-co
 3. Preview, then migrate:
 
    ```powershell
-   .\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1 -Migrate -WhatIf
-   .\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1 -Migrate
+   .\.venv\Scripts\python.exe copilot\install.py --migrate --what-if
+   .\.venv\Scripts\python.exe copilot\install.py --migrate
    ```
 
    It lists the old fleet-config-lite hook configs and skill links, asks before removing them, then installs this checkout's hooks and skills. When Lite's Copilot folder setting still points at the old folder, it offers to repoint that one field through Lite's Settings API.
@@ -84,14 +84,14 @@ Use this when the machine keeps its own `issue-*` skills in a repo of its own, s
 3. **Preview** what the install would do:
 
    ```powershell
-   .\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1 -WhatIf
+   .\.venv\Scripts\python.exe copilot\install.py --what-if
    ```
 
    Read every `[whatif]` line. Your existing skills, hooks and links show as `[ok] kept (not Lite's)`. When `~/.copilot/skills` or `~/.claude/skills` is itself a link into another repo, the preview says so and Lite writes nothing inside it.
 4. **Install:**
 
    ```powershell
-   .\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1
+   .\.venv\Scripts\python.exe copilot\install.py
    ```
 
    **Check:** `[ok] issue skill linked -> ...` for each of the four that was not already there, and a run straight after reports `[ok] unchanged`. The links it makes into your skills repo are listed in `~/.copilot/app-launcher-lite-install.json`, which is how uninstall knows they are Lite's.
@@ -102,8 +102,8 @@ Clearing the Skills folder later and running the install again removes Lite's li
 ## 4. Uninstall
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1 -Uninstall -WhatIf
-.\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1 -Uninstall
+.\.venv\Scripts\python.exe copilot\install.py --uninstall --what-if
+.\.venv\Scripts\python.exe copilot\install.py --uninstall
 ```
 
 It removes only what is Lite's: the two `app-launcher-lite-*.json` hook configs that run this checkout's hooks, the skill links into this checkout, and the links into your skills folder that it recorded and that still point where it recorded them. It never deletes inside a linked folder, never touches `hooks/state`, and never edits a config file. Restart any open Copilot session afterwards.

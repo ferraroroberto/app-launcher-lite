@@ -20,7 +20,7 @@ Keep it current with:
 copilot update
 ```
 
-Hook configuration (this repo's `copilot/install.ps1`) loads at CLI startup only, so restart any open Copilot session after an install or an update, and re-run the hook check from the README's [deploy steps](../README.md#deploying-to-another-computer) after each update.
+Hook configuration (this repo's `copilot/install.py`) loads at CLI startup only, so restart any open Copilot session after an install or an update, and re-run the hook check from the README's [deploy steps](../README.md#deploying-to-another-computer) after each update.
 
 `copilot` is resolved against the **effective** `PATH` (the inherited environment plus the machine and user registry values), so installing it enables the launch button on the next detection poll without restarting anything. Only a change to `src/agents.py` itself needs a restart, and because the `:8466` session-host imports that module at its own start, that restart is the one described in [restart-and-liveness.md](restart-and-liveness.md).
 

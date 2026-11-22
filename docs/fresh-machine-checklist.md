@@ -72,8 +72,8 @@ Copy-Item config\jobs.sample.json config\jobs.json
 Preview, install, and read the checklist the installer prints:
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1 -WhatIf
-.\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1
+.\.venv\Scripts\python.exe copilot\install.py --what-if
+.\.venv\Scripts\python.exe copilot\install.py
 ```
 
 **Proof:** the second run prints two `[ok] hook config` lines, one `[ok] skill junction` line per skill (a machine that shares its skills folder prints `[skip]` lines instead), and a "Fresh-machine checklist" in which each of these reads `[ok]`: `Copilot CLI`, `glab signed in`, `git reaches GitLab without a prompt`, `venv`. A `[missing]` line says what to fix; fix it and run again, and a third run reads `[ok] unchanged` throughout. A `[unknown]` line is not a pass: `git access ... not confirmed` means no https GitLab remote was found to ask (run it from a checkout whose `origin` or `gitlab` remote is https), and `session-host not reachable` is expected until step 7.
