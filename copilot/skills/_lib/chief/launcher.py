@@ -294,7 +294,7 @@ def fetch_exchange_marker(base_url: str, sid: str) -> Dict[str, Any]:
     return {"available": True, "timestamp": assistant.get("timestamp")}
 
 
-def post_session_input(base_url: str, sid: str, text: str) -> Dict[str, Any]:
+def post_session_input(base_url: str, sid: str, text: str, timeout: float = REQUEST_TIMEOUT) -> Dict[str, Any]:
     """POST one steer into `sid`'s terminal. **Exactly one POST per call** —
     this helper never retries, and a caller may call it again for the same
     steer only after reading the session transcript for that exact text
@@ -321,7 +321,7 @@ def post_session_input(base_url: str, sid: str, text: str) -> Dict[str, Any]:
     try:
         result = _request(
             base_url, f"/api/claude-code/sessions/{sid}/input",
-            method="POST", body={"data": text, "submit": True},
+            method="POST", body={"data": text, "submit": True}, timeout=timeout,
         )
     except urllib.error.HTTPError as exc:
         detail = ""

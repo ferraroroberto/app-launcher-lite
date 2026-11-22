@@ -111,15 +111,38 @@ def cmd_board(args: argparse.Namespace) -> int:
     return 0
 
 
+# How long `sessions` gives the Board before answering from the session-host roster
+# instead: the Board joins transcript reads, which stall under load.
+ROSTER_BOARD_TIMEOUT = 5.0
+
+
+def _roster_columns(base_url: str) -> Tuple[Dict[str, Any], Optional[str]]:
+    """`(columns, None)` from the Board, or `(columns, why)` built from the bounded
+    `/api/claude-code/roster` probe when the Board did not answer in time; each roster
+    card's status is the host's lane state, `unknown` where the host cannot tell.
+    A roster that also fails raises, so `main` reports it as its own state."""
+    try:
+        board = launcher._request(base_url, "/api/board", timeout=ROSTER_BOARD_TIMEOUT)
+        return board.get("columns") or {}, None
+    except (OSError, ValueError) as exc:
+        why = (f"board did not answer within {ROSTER_BOARD_TIMEOUT:g}s" if launcher.is_timeout(exc)
+               else f"board unreadable ({type(exc).__name__})")
+    rows = launcher._request(base_url, "/api/claude-code/roster").get("sessions") or []
+    cards = [{**row, "alive": True, "status": row.get("state") or "unknown",
+              "age_seconds": row.get("quiet_seconds")} for row in rows if isinstance(row, dict)]
+    return {"claude_turn": cards, "your_turn": []}, why
+
+
 def cmd_sessions(args: argparse.Namespace) -> int:
-    board = launcher._request(args.base_url, "/api/board")
+    columns, fallback = _roster_columns(args.base_url)
     self_sid = rails.caller_session_id()
-    columns = board.get("columns") or {}
     chief_sid = rails.find_chief_session(columns)
     occupancy = rails.repo_occupancy(columns, exclude_sid=self_sid, hide_chief=True)
     if args.json:
         print(json.dumps(occupancy, indent=2))
     else:
+        if fallback:
+            print(f"SOURCE=session-host reason={fallback}")
         print(digest.format_occupancy(occupancy))
         # Never silently: this is the pre-dispatch "is the repo busy" read, so
         # it has to answer the same question `dispatch` will, and say which

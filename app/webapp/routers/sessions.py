@@ -44,7 +44,7 @@ from app.webapp.routers._helpers import (
 from app.webapp.session_credits import attach_ai_credits
 from app.webapp.terminal_input import KeystrokeTimer, audit_after_pending, audit_later
 from src import audit, board, instance_role
-from src.board import owner_checks
+from src.board import owner_checks, roster
 from src.chief import answers as chief_answers
 from src.clients import session as session_client
 from src.launching import launcher
@@ -159,6 +159,21 @@ async def claude_sessions(request: Request) -> Dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
     poll = hot_poll(request.app.state, "GET /api/claude-code/sessions")
     return await poll.get(functools.partial(_build_sessions_payload, cfg))
+
+
+@router.get("/api/claude-code/roster")
+async def claude_roster(request: Request) -> Dict[str, Any]:
+    """Each live session's lane state (``spawned``, ``working``,
+    ``awaiting-input`` or ``unknown``) from one bounded session-host list and
+    nothing else, so the chief's roster answers while transcript reads are slow.
+    503 when the host does not answer within its budget: unknown, never empty."""
+    cfg: WebappConfig = request.app.state.webapp_config
+    try:
+        sessions = await session_client.list_sessions_bounded(cfg.session_host_port)
+    except session_client.SessionHostError as exc:
+        logger.info(f"ℹ️ roster: session-host list failed ({exc})")
+        raise HTTPException(status_code=503, detail=f"session-host roster not confirmed: {exc}") from exc
+    return {"source": "session-host", "sessions": roster.roster_rows(sessions)}
 
 
 async def _build_sessions_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[str, Any]:
