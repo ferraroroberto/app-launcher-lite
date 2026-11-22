@@ -168,6 +168,19 @@ const REASON_COPY = {
   read_failed: 'Couldn’t read the transcript',
 };
 
+// Which link failed when `no_transcript` comes with a `missing` field, so a
+// live session that should have a log says where the trail broke.
+const MISSING_COPY = {
+  recorded_file_gone: 'No transcript found: the recorded log file is gone',
+  no_path_recorded: 'No transcript found: no log is linked to this session yet',
+  no_hook_row: 'No transcript found: no log matches this session’s folder and start time',
+};
+
+function reasonCopy(reason, missing) {
+  return (reason === 'no_transcript' && MISSING_COPY[missing])
+    || REASON_COPY[reason] || 'Transcript unavailable';
+}
+
 // null when the pane is closed, else the session it shows plus the cursor
 // for the next older page. `seq` guards a slow response from a previous
 // open/refresh landing in a newer view.
@@ -488,8 +501,8 @@ export function syncLiveRefresh() {
 // and recover without the reader having to tap Reload. Treating a transient
 // unknown as an ending would be the same mistake in reverse as treating an
 // unresolved check as a pass.
-function liveUnavailable(reason) {
-  showState(REASON_COPY[reason] || 'Transcript unavailable');
+function liveUnavailable(reason, missing) {
+  showState(reasonCopy(reason, missing));
   view.reasonShown = true;
   if (reason === 'session_not_found' || reason === 'unsupported_agent') {
     view.ended = true;   // the list stays on screen: what was read is still worth reading
@@ -565,7 +578,7 @@ async function readForward(target, manual) {
   if (view !== target || view.seq !== seq) return 'stale';
   target.backoff = 0;
   if (!body.available) {
-    liveUnavailable(body.reason);
+    liveUnavailable(body.reason, body.missing);
     return 'unavailable';
   }
   // Read before anything lands: a card that appears at the end of the turn
@@ -660,7 +673,7 @@ async function loadNewest() {
     // launch sits here from the start, with no transcript yet and the resume
     // picker on its screen, so the screen is asked about now rather than
     // after the first backed-off tick.
-    liveUnavailable(body.reason);
+    liveUnavailable(body.reason, body.missing);
     pollPicker();
     return;
   }
