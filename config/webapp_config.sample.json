@@ -77,6 +77,8 @@
   "claude_show_local_window": true,
   "desktop_browser": "chrome",
   "terminal_history_lines": 10000,
+  "_comment_terminal_timing_log": "Diagnostics switch: log each terminal keystroke's stage timings (webapp received, forwarded, first output; the browser's key-to-paint for a keystroke slower than 100 ms) and any event-loop stall over 100 ms to webapp/slow-requests.log. Default false; read live, no restart.",
+  "terminal_timing_log": false,
   "webauthn_rp_id": "",
   "webauthn_rp_name": "Launcher",
   "webauthn_origin": "",

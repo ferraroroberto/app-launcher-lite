@@ -290,6 +290,9 @@ class WebappConfig:
     # replays on a (re)connect. See DEFAULT_TERMINAL_HISTORY_LINES for the
     # real-session evidence behind the default.
     terminal_history_lines: int = DEFAULT_TERMINAL_HISTORY_LINES
+    # Logs per-keystroke terminal timings and event-loop lag over 100 ms to
+    # webapp/slow-requests.log. Off by default: a diagnostics switch, read live.
+    terminal_timing_log: bool = False
     # Large-file attach limit in MB, Settings-tab configurable.
     # See DEFAULT_LARGE_UPLOAD_MAX_MB.
     large_upload_max_mb: int = DEFAULT_LARGE_UPLOAD_MAX_MB

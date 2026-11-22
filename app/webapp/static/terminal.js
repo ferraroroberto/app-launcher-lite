@@ -56,6 +56,7 @@ import {
   clearTerminalReconnect,
   connectTerminalWs,
   flushRepaintBatch,
+  markKeystroke,
   routeFrame,
   setTerminalStatus,
 } from './terminal/terminal-connection.js';
@@ -356,6 +357,7 @@ export async function attachTerminalPane(session) {
     flushRepaintBatch(t);
     if (t.ws && t.ws.readyState === WebSocket.OPEN) {
       t.ws.send(JSON.stringify({ type: 'input', data: d }));
+      markKeystroke(t);
     }
   });
 
