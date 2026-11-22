@@ -9,10 +9,8 @@ import pytest
 
 from src import audit, board
 from src.session_view import automatic_turns as at
-from src.transcript_flavors.claude import claude_entries
 from tests.unit.transcript._support import (
     _assistant,
-    _lines_of,
     _live,
     _user,
     _write_jsonl,
@@ -149,33 +147,6 @@ class TestMarkAutomatic:
         assert entries[0]["auto"] == "compact-summary"
 
 
-# ----------------------------------------------- the claude line grammar
-
-
-def _built(rows: List[Dict[str, Any]], tmp_path: Path) -> List[Dict[str, Any]]:
-    return claude_entries(_lines_of(_write_jsonl(tmp_path / "t.jsonl", rows)))
-
-
-def test_a_compact_summary_is_automatic(tmp_path: Path):
-    entries = _built([
-        _user("This session is being continued from a previous conversation…",
-              isCompactSummary=True, isVisibleInTranscriptOnly=True),
-        _assistant([{"type": "text", "text": "Resuming."}], "m1"),
-    ], tmp_path)
-    assert [e.get("auto") for e in entries if e["kind"] == "user"] == ["compact-summary"]
-
-
-def test_a_typed_prompt_carries_no_origin(tmp_path: Path):
-    entries = _built([_user("Please fix the bug")], tmp_path)
-    assert "auto" not in entries[0]
-
-
-@pytest.mark.parametrize("flag", [False, None, "true", 1])
-def test_only_a_real_true_flag_marks_a_summary(tmp_path: Path, flag: Any):
-    entries = _built([_user("a prompt", isCompactSummary=flag)], tmp_path)
-    assert "auto" not in entries[0]
-
-
 # ------------------------------------------------------ the endpoint
 
 
@@ -195,9 +166,9 @@ class TestEndpoint:
     ):
         client = self._serve(webapp_client, monkeypatch, tmp_path, [
             _user("a real question"),
-            _assistant([{"type": "text", "text": "An answer."}], "m1"),
+            _assistant("An answer."),
             _user(at.DOORBELL_LINE),
-            _assistant([{"type": "text", "text": "Nothing new."}], "m2"),
+            _assistant("Nothing new."),
         ])
         body = client.get("/api/claude-code/sessions/s1/transcript").json()
         users = [(e["text"], e.get("auto")) for e in body["entries"] if e["kind"] == "user"]
@@ -208,7 +179,7 @@ class TestEndpoint:
     ):
         client = self._serve(webapp_client, monkeypatch, tmp_path, [
             _user("steer the lane"),
-            _assistant([{"type": "text", "text": "Done."}], "m1"),
+            _assistant("Done."),
         ])
         at.record_injected("s1", "steer the lane", "lane-steer", directory=audit.sessions_dir(), now=0)
         # The fixture timestamp is 2026-09-14; a row stamped in 1970 is outside the lag window.

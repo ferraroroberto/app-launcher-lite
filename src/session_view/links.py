@@ -8,7 +8,7 @@ session ends.
 
 Only what was said counts: the owner's prompts and the agent's own reply
 text, read through the same per-agent entry builders the Chat pane renders
-(so Claude, Codex, Grok, Pi, Antigravity and Copilot alike). A URL inside a
+(Copilot's). A URL inside a
 tool call, a tool result, a file read, command output or thinking is noise
 (a long session holds hundreds) and is never listed, and neither is a
 sub-agent's traffic. The one exception is a published artifact: the URL of
@@ -243,7 +243,7 @@ _Piece = Tuple[int, Optional[str], str, str, bool]
 
 def _spoken_pieces(lines: List[Line], flavor: str) -> List[_Piece]:
     """The owner's prompts and the agent's reply text, in file order."""
-    build = FLAVORS.get(flavor, FLAVORS["claude"])[0]
+    build = FLAVORS[flavor][0]
     pieces: List[_Piece] = []
     for entry in build(lines, uncapped=True):
         if entry.get("kind") not in ("user", "assistant") or entry.get("sidechain"):
@@ -338,7 +338,7 @@ def _artifact_pieces(lines: List[Line]) -> Tuple[List[_Piece], Dict[str, str], D
     return pieces, names, listed
 
 
-def fold_links(path: Path, flavor: str = "claude", before: Optional[int] = None) -> Dict[str, Any]:
+def fold_links(path: Path, flavor: str = "copilot", before: Optional[int] = None) -> Dict[str, Any]:
     """``{groups: [{key, title, links: [{url, label, title, first_seen,
     last_seen, count}]}], total, partial, offset, read_from}``; links newest
     first within a group. ``offset`` is where the scanned window starts (pass
@@ -349,7 +349,8 @@ def fold_links(path: Path, flavor: str = "claude", before: Optional[int] = None)
     artifact's title) or ``None`` for :mod:`src.session_view.link_titles` to
     look up.
     ``flavor`` picks the agent's transcript grammar (a key of
-    :data:`FLAVORS`; unknown falls back to Claude's, like the Chat pane)."""
+    :data:`FLAVORS`; an unknown one raises ``KeyError``, which the route never
+    sends, as it refuses an unsupported agent first)."""
     window = _read_window(path, before)
     lines: List[Line] = [
         (index, raw.decode("utf-8", errors="replace")) for index, raw in enumerate(window.lines)

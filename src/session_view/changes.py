@@ -8,27 +8,20 @@ other work in the same folder, and shows nothing once the work is committed
 or the worktree is gone — the transcript is the durable record that still
 holds after both.
 
-Two folds share one output. **Claude** records its own diff after each
-successful edit (``toolUseResult``, read by :func:`claude.recorded_edit` — the
-same reading a Chat step takes), so its fold prefilters raw lines for that
-marker: measured at 0.1 s for a 111 MB transcript on the dev box. **Every
-other agent** records only the call and its result, so its fold runs the
+Copilot records only the call and its result, so the fold runs the
 flavour's own entry builder — the one Chat uses — and reads the ``edited`` /
-``wrote`` / ``deleted`` steps it built, skipping any marked ``error``. Either
-way the per-file totals are the sum of the per-step counts a Chat step shows,
-by construction. Those diffs are worked out from the edit's own text, so most
+``wrote`` / ``deleted`` steps it built, skipping any marked ``error``. The
+per-file totals are the sum of the per-step counts a Chat step shows, by
+construction. Those diffs are worked out from the edit's own text, so most
 carry no line numbers (:mod:`._shared`).
 
-Bounded work per request: the Claude scan reads at most :data:`SCAN_CEILING`
-bytes; the builder fold at most :data:`FLAVOR_SCAN_CEILING`, in windows of
-:data:`FLAVOR_WINDOW` so memory stays flat. Both read the *newest* part of the
-file and report ``partial`` with a ``next_cursor`` when they cut; passing it
-back as ``before`` reads the next older window, so a long transcript is
-paged back to its start. The per-file reads (a diff, the jail) take ``since``,
-the oldest cursor the panel has loaded, so a file found in an older window
-opens too. Measured on the dev box: the
-largest Codex rollout, 33.8 MB, builds whole in 0.22 s (~6.5 ms/MB), so the
-64 MiB ceiling is ~0.4 s at worst; no rollout there passes it.
+Bounded work per request: the fold reads at most :data:`FLAVOR_SCAN_CEILING`
+bytes, in windows of :data:`FLAVOR_WINDOW` so memory stays flat. It reads the
+*newest* part of the file and reports ``partial`` with a ``next_cursor`` when
+it cuts; passing it back as ``before`` reads the next older window, so a long
+transcript is paged back to its start. The per-file reads (a diff, the jail)
+take ``since``, the oldest cursor the panel has loaded, so a file found in an
+older window opens too.
 
 The panel's File view is the one place this module touches a changed
 file itself: :func:`changed_file_path` finds a requested file in the fold
@@ -38,25 +31,15 @@ per reason it can't be shown.
 
 from __future__ import annotations
 
-import json
 import posixpath
 from pathlib import Path, PureWindowsPath
 from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Set, Tuple
 
 from src.session_view.transcript import FLAVORS
-from src.transcript_flavors._shared import (
-    DIFF_FULL_BYTES,
-    Hunk,
-    _loads,
-    cap_diff,
-    diff_counts,
-)
-from src.transcript_flavors.claude import recorded_edit
+from src.transcript_flavors._shared import DIFF_FULL_BYTES, Hunk, cap_diff
 
-SCAN_CEILING = 256 * 1024 * 1024
 FLAVOR_SCAN_CEILING = 64 * 1024 * 1024
 FLAVOR_WINDOW = 16 * 1024 * 1024
-_EDIT_MARKER = b'"structuredPatch"'
 _EDIT_VERBS = frozenset({"edited", "wrote", "deleted"})
 
 STATUS_ADDED = "A"
@@ -107,40 +90,6 @@ def _span(path: Path, ceiling: int, before: Optional[int], since: Optional[int])
     return (first if first < end else start), end
 
 
-def _claude_edits(path: Path, needle: Optional[bytes] = None, before: Optional[int] = None,
-                  since: Optional[int] = None) -> Tuple[Iterator[Edit], int]:
-    """``(edits, offset)``: every successful recorded edit in file order from
-    ``offset`` on (at most :data:`SCAN_CEILING` bytes ending at ``before``, or
-    from ``since``); a non-zero ``offset`` means older lines were not read.
-    ``needle`` pre-filters raw lines before parsing (one file's diff)."""
-    first, end = _span(path, SCAN_CEILING, before, since)
-
-    def walk() -> Iterator[Edit]:
-        with path.open("rb") as fh:
-            fh.seek(first)
-            pos = first
-            for raw in fh:
-                if pos >= end:
-                    break
-                pos += len(raw)
-                if _EDIT_MARKER not in raw or (needle is not None and needle not in raw):
-                    continue
-                obj = _loads(raw.decode("utf-8", errors="replace"))
-                if obj is None or obj.get("type") != "user":
-                    continue
-                content = (obj.get("message") or {}).get("content")
-                results = [b for b in content or [] if isinstance(b, dict) and b.get("type") == "tool_result"] \
-                    if isinstance(content, list) else []
-                if len(results) != 1 or results[0].get("is_error"):
-                    continue
-                edit = recorded_edit(obj.get("toolUseResult"))
-                if edit is not None:
-                    added, removed = diff_counts(edit[1])
-                    yield Edit(edit[0], edit[1], edit[2], obj.get("timestamp"), added=added, removed=removed)
-
-    return walk(), first
-
-
 def _windows(path: Path, first: int, end: int) -> Iterator[List[Tuple[int, str]]]:
     """The complete lines of ``path`` from the line boundary ``first`` up to
     byte ``end``, as ``(byte offset, text)`` in groups of about
@@ -168,7 +117,7 @@ def _windows(path: Path, first: int, end: int) -> Iterator[List[Tuple[int, str]]
 def _flavor_edits(path: Path, flavor: str, before: Optional[int] = None,
                   since: Optional[int] = None) -> Tuple[Iterator[Edit], int]:
     """``(edits, offset)`` from the flavour's own entry builder, in file
-    order, bounded like :func:`_claude_edits`. A call's outcome can sit in the
+    order, bounded by :data:`FLAVOR_SCAN_CEILING`. A call's outcome can sit in the
     next window, so a successful-looking edit with no result yet is held back
     and its lines are read again with that window — never split from its
     result. A call whose result lies past ``before`` has none here and counts
@@ -214,7 +163,7 @@ def _flavor_edits(path: Path, flavor: str, before: Optional[int] = None,
 
 def _edit_of(action: Dict[str, Any], ts: Any) -> Optional[Edit]:
     """The :class:`Edit` a built step stands for, or None for a step that
-    changed no line (an edit with no diff — the Claude fold skips these too)."""
+    changed no line (an edit with no diff)."""
     path = action.get("path")
     if not isinstance(path, str) or not path:
         return None
@@ -236,17 +185,15 @@ def _absolute(path: str) -> bool:
 
 def _resolved(path: str, project: Optional[str], flavor: str) -> str:
     """The path an edit names, made absolute against the project folder when
-    the agent recorded it relative (a Codex patch names files from its
-    working folder). Claude records absolute paths and is left untouched."""
-    if flavor == "claude" or not project or _absolute(path):
+    the agent recorded it relative (a patch names files from its working
+    folder)."""
+    if not project or _absolute(path):
         return path
     return posixpath.normpath(project.replace("\\", "/").rstrip("/") + "/" + path.replace("\\", "/"))
 
 
-def _edits(path: Path, flavor: str, project: Optional[str], needle: Optional[bytes] = None,
+def _edits(path: Path, flavor: str, project: Optional[str],
            before: Optional[int] = None, since: Optional[int] = None) -> Tuple[Iterator[Edit], int]:
-    if flavor == "claude":
-        return _claude_edits(path, needle, before, since)
     edits, offset = _flavor_edits(path, flavor, before, since)
     return (e._replace(path=_resolved(e.path, project, flavor)) for e in edits), offset
 
@@ -262,7 +209,7 @@ def _display(path: str, project: Optional[str]) -> str:
     return shown
 
 
-def changed_files(path: Path, project_dir: Optional[str], flavor: str = "claude",
+def changed_files(path: Path, project_dir: Optional[str], flavor: str = "copilot",
                   before: Optional[int] = None) -> Dict[str, Any]:
     """Every file the session's edits touched, folded per file.
 
@@ -317,20 +264,14 @@ def changed_files(path: Path, project_dir: Optional[str], flavor: str = "claude"
 
 
 def file_steps(path: Path, key: str, max_bytes: int = DIFF_FULL_BYTES,
-               flavor: str = "claude", project_dir: Optional[str] = None,
+               flavor: str = "copilot", project_dir: Optional[str] = None,
                since: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """The diffs of every edit the session made to ``key``, in order, all
     together capped at ``max_bytes``; None when the session never edited
     that file (so only a path the list handed out is ever answered).
     ``since`` is the oldest ``next_cursor`` the panel has loaded: the read
     covers everything the list does, not just the newest window."""
-    # The recorded path as it sits in the JSON line, to skip every other
-    # edit before parsing. Only when it round-trips as plain ASCII: a line
-    # may hold non-ASCII raw or \u-escaped, and a missed match would drop
-    # a real step — without the needle every edit line is parsed instead.
-    escaped = json.dumps(key)[1:-1]
-    needle = escaped.encode("ascii") if escaped.isascii() and "\\u" not in escaped else None
-    edits, offset = _edits(path, flavor, project_dir, needle, since=since)
+    edits, offset = _edits(path, flavor, project_dir, since=since)
     target = _key(key)
     steps: List[Dict[str, Any]] = []
     budget = max_bytes
@@ -382,7 +323,7 @@ class FileRefusal(Exception):
         self.size = size
 
 
-def changed_file_path(path: Path, requested: str, flavor: str = "claude",
+def changed_file_path(path: Path, requested: str, flavor: str = "copilot",
                       project_dir: Optional[str] = None, since: Optional[int] = None) -> Optional[str]:
     """The absolute path of the file ``requested`` names, when this session's
     edits touched it; None otherwise.
@@ -394,9 +335,6 @@ def changed_file_path(path: Path, requested: str, flavor: str = "claude",
     against) names no file on disk, so it is None too.
     """
     target = _key(_resolved(requested, project_dir, flavor))
-    # No raw-line needle (unlike file_steps): a Chat step's spelling of the
-    # path may differ in case or slashes from the line, and a miss here would
-    # refuse a file the session did edit. The fold costs the same as the list.
     edits, _offset = _edits(path, flavor, project_dir, since=since)
     # The first spelling, as the list's ``key`` keeps it: a later step may
     # record the same file in another case or with other slashes.

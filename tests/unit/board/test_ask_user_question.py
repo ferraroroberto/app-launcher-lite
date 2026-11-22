@@ -25,7 +25,6 @@ from src.ask_user_question import (
     questions_from_input,
 )
 from src.board import transcript as board_transcript
-from src.session_view import transcript as st
 
 
 def _q(question: str, labels: List[str], multi: bool = False) -> Dict[str, Any]:
@@ -144,50 +143,6 @@ def _answer(tid: str, answers: Any, error: bool = False) -> Dict[str, Any]:
             "message": {"role": "user", "content": [block]}}
 
 
-def _lines(path: Path):
-    raw, pos, out = path.read_bytes(), 0, []
-    for chunk in raw.split(b"\n"):
-        if chunk.strip():
-            out.append((pos, chunk.decode("utf-8")))
-        pos += len(chunk) + 1
-    return out
-
-
-def test_claude_entries_carry_the_question_and_its_answer(tmp_path: Path):
-    path = _jsonl(tmp_path / "t.jsonl", [
-        _ask("t1", [COLOUR]),
-        _answer("t1", {"questions": [COLOUR], "answers": {"Pick a colour": "Green"}}),
-        {"type": "assistant", "timestamp": "2026-09-24T02:00:06Z", "message": {
-            "id": "m2", "role": "assistant", "content": [
-                {"type": "tool_use", "id": "t2", "name": "Read", "input": {"file_path": "a.md"}}]}},
-        _answer("t2", "file body"),
-    ])
-    ask, read = st.claude_entries(_lines(path))
-    assert ask["name"] == "AskUserQuestion" and ask["call_id"] == "t1"
-    assert [o["label"] for o in ask["questions"][0]["options"]] == ["Red", "Green", "Blue"]
-    assert ask["answers"] == {"Pick a colour": "Green"}
-    # The generic path is untouched for every other tool.
-    assert "questions" not in read and "call_id" not in read and "answers" not in read
-    assert read["summary"] == "a.md"
-
-
-def test_an_answer_whose_call_is_on_an_earlier_page_still_carries_it(tmp_path: Path):
-    """The live tick can settle the call before its result arrives; the
-    standalone result keeps the picks so the card can still close."""
-    path = _jsonl(tmp_path / "t.jsonl", [_answer("t1", {"answers": {"Pick a colour": "Blue"}})])
-    (entry,) = st.claude_entries(_lines(path))
-    assert entry["kind"] == "tool_result" and entry["tool_use_id"] == "t1"
-    assert entry["answers"] == {"Pick a colour": "Blue"}
-
-
-def test_a_declined_question_is_marked_failed_with_no_answers(tmp_path: Path):
-    path = _jsonl(tmp_path / "t.jsonl", [
-        _ask("t1", [COLOUR]), _answer("t1", "User rejected tool use", error=True),
-    ])
-    (ask,) = st.claude_entries(_lines(path))
-    assert ask["error"] is True and "answers" not in ask
-
-
 # ------------------------------------------------------ pending (send gate)
 
 
@@ -214,110 +169,8 @@ def test_nothing_pending_once_answered_or_unreadable(tmp_path: Path):
 # ------------------------------------------------------------------ route
 
 
-def _live(kind: str = "pty", agent: str = "claude") -> Dict[str, Any]:
-    return {"session_id": "s1", "kind": kind, "agent": agent, "alive": True,
-            "project_dir": "E:/automation/proj", "started_at": 1_789_000_000}
-
-
-@pytest.fixture
-def answer_client(webapp_client, monkeypatch, tmp_path):
-    """The webapp with the gate bypassed, one live Claude session whose
-    transcript is ``path``, no key gap, and the PTY socket replaced by a
-    recorder — nothing here opens a real socket."""
-    from app.webapp.routers import session_screen as router
-    from src import middleware
-
-    monkeypatch.setattr(middleware.trust, "LOOPBACK_HOSTS",
-                        frozenset({"testclient", "127.0.0.1", "::1", "localhost"}))
-    client, _, overrides = webapp_client
-    session = overrides["session"]
-    session.list_sessions.return_value = [_live()]
-    path = tmp_path / "t.jsonl"
-    from src import board
-    monkeypatch.setattr(board, "state_row_for_session",
-                        lambda live, rows, sid: {"transcript_path": str(path)})
-    monkeypatch.setattr(router, "_ANSWER_KEY_GAP_S", 0)
-    typed: List[Any] = []
-
-    async def fake_pty(port, sid, keys):
-        typed.append((sid, keys))
-
-    monkeypatch.setattr(router, "_type_into_pty", fake_pty)
-    return client, session, path, typed
-
-
-def _post(client, body: Dict[str, Any]):
-    return client.post("/api/claude-code/sessions/s1/answer", json=body)
-
-
 def test_answer_route_is_passkey_gated():
     from src.middleware import _terminal_guard_level
     assert _terminal_guard_level("/api/claude-code/sessions/abc/answer") == "passkey"
 
 
-def test_answer_types_the_keys_built_from_the_transcripts_copy(answer_client):
-    client, _, path, typed = answer_client
-    _jsonl(path, [_ask("t1", [COLOUR, SIZE])])
-    r = _post(client, {"tool_use_id": "t1", "answers": [{"option": 1}, {"option": 2}]})
-    assert r.status_code == 200, r.text
-    assert r.json() == {"ok": True, "delivered": "unconfirmed", "steps": 3, "kind": "pty"}
-    assert typed == [("s1", [("1", False), ("2", False), ("1", False)])]
-
-
-def test_a_question_no_longer_waiting_types_nothing(answer_client):
-    client, _, path, typed = answer_client
-    _jsonl(path, [
-        _ask("t1", [COLOUR], mid="m1"), _answer("t1", {"answers": {"Pick a colour": "Red"}}),
-        _ask("t2", [SIZE], mid="m2"),
-    ])
-    for call_id in ("t1", "nope"):       # answered already / never existed
-        r = _post(client, {"tool_use_id": call_id, "answers": [{"option": 1}]})
-        assert r.status_code == 409 and "no longer waiting" in r.json()["detail"]
-    assert typed == []
-
-
-def test_an_ended_session_and_a_bad_answer_are_refused(answer_client):
-    client, session, path, typed = answer_client
-    _jsonl(path, [_ask("t1", [COLOUR])])
-    assert _post(client, {"answers": [{"option": 1}]}).status_code == 400
-    r = _post(client, {"tool_use_id": "t1", "answers": [{"option": 9}]})
-    assert r.status_code == 400 and "out of range" in r.json()["detail"]
-    session.list_sessions.return_value = []
-    r = _post(client, {"tool_use_id": "t1", "answers": [{"option": 1}]})
-    assert r.status_code == 409 and "no longer running" in r.json()["detail"]
-    session.list_sessions.return_value = [_live(agent="codex")]
-    assert _post(client, {"tool_use_id": "t1", "answers": [{"option": 1}]}).status_code == 409
-    assert typed == []
-
-
-def test_an_unreachable_session_host_is_a_503_not_an_ended_session(answer_client):
-    """#1308: the session may be alive; the caller should retry, not give up."""
-    from src.clients.session import SessionHostError
-
-    client, session, path, typed = answer_client
-    _jsonl(path, [_ask("t1", [COLOUR])])
-    session.list_sessions.side_effect = SessionHostError("timed out")
-    r = _post(client, {"tool_use_id": "t1", "answers": [{"option": 1}]})
-    assert r.status_code == 503 and "unreachable" in r.json()["detail"]
-    assert typed == []
-
-
-def test_detached_answer_is_one_console_send_per_step(answer_client):
-    client, session, path, typed = answer_client
-    session.list_sessions.return_value = [_live(kind="remote")]
-    session.send_input.return_value = {"ok": True}
-    _jsonl(path, [_ask("t1", [COLOUR])])
-    r = _post(client, {"tool_use_id": "t1", "answers": [{"text": "Teal"}]})
-    assert r.status_code == 200 and r.json()["kind"] == "remote"
-    assert [c.args[2:] for c in session.send_input.call_args_list] == [("4", False), ("Teal", True)]
-    assert typed == []
-
-
-def test_a_send_that_fails_part_way_says_how_far_it_got(answer_client):
-    client, session, path, _ = answer_client
-    session.list_sessions.return_value = [_live(kind="remote")]
-    session.send_input.side_effect = [{"ok": True}, session.SessionHostError("console gone")]
-    _jsonl(path, [_ask("t1", [COLOUR, SIZE])])
-    r = _post(client, {"tool_use_id": "t1", "answers": [{"option": 1}, {"option": 1}]})
-    assert r.status_code == 502
-    assert r.json()["detail"] == "Answer only partly sent (1 of 3 keys): check the PC console"

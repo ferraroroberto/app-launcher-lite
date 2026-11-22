@@ -1,17 +1,15 @@
 """Per-step diffs in the session Chat (#1349).
 
-An Edit / Write / MultiEdit step's ``action`` carries its diff: worked out
-from the tool's own input (no line numbers — never invented), or, for
-Claude, taken from the ``toolUseResult.structuredPatch`` the harness records
-after the call ran (real line numbers). A page trims each step and the whole
-diff is fetched on demand through ``/transcript/diff``.
+An ``edit`` / ``create`` / ``apply_patch`` step's ``action`` carries its diff,
+worked out from the tool's own input (no line numbers — never invented). A
+page trims each step and the whole diff is fetched on demand through
+``/transcript/diff``.
 
 Every path, id and line of content here is synthetic.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List
@@ -27,38 +25,13 @@ from src.session_view.transcript import (
 )
 from src.transcript_flavors import _shared as tf_shared
 from src.transcript_flavors._shared import diff_counts
-
-
-def _write_jsonl(path: Path, lines: List[Dict[str, Any]]) -> Path:
-    path.write_text("\n".join(json.dumps(line) for line in lines) + "\n", encoding="utf-8")
-    return path
-
-
-def _prompt(text: str) -> Dict[str, Any]:
-    return {"type": "user", "timestamp": "2026-09-30T10:00:00Z",
-            "message": {"role": "user", "content": text}}
-
-
-def _call(name: str, inputs: Dict[str, Any], tid: str, mid: str = "m1") -> Dict[str, Any]:
-    return {"type": "assistant", "timestamp": "2026-09-30T10:00:01Z",
-            "message": {"id": mid, "role": "assistant",
-                        "content": [{"type": "tool_use", "id": tid, "name": name, "input": inputs}]}}
-
-
-def _result(tid: str, text: str, tool_use_result: Any = None, *, error: bool = False) -> Dict[str, Any]:
-    block: Dict[str, Any] = {"type": "tool_result", "tool_use_id": tid, "content": text}
-    if error:
-        block["is_error"] = True
-    row: Dict[str, Any] = {"type": "user", "timestamp": "2026-09-30T10:00:02Z",
-                           "message": {"role": "user", "content": [block]}}
-    if tool_use_result is not None:
-        row["toolUseResult"] = tool_use_result
-    return row
-
-
-def _reply(text: str = "done", mid: str = "m9") -> Dict[str, Any]:
-    return {"type": "assistant", "timestamp": "2026-09-30T10:00:03Z",
-            "message": {"id": mid, "role": "assistant", "content": [{"type": "text", "text": text}]}}
+from tests.unit.transcript._support import (
+    _assistant,
+    _tool_result,
+    _tool_use,
+    _user,
+    _write_jsonl,
+)
 
 
 def _calls(path: Path) -> List[Dict[str, Any]]:
@@ -69,8 +42,8 @@ def _calls(path: Path) -> List[Dict[str, Any]]:
 
 
 def test_edit_input_diff_has_prefixed_lines_and_no_line_numbers():
-    act = tf_shared._tool_action("Edit", {
-        "file_path": "src/a.py", "old_string": "keep\nold\nkeep2", "new_string": "keep\nnew\nkeep2",
+    act = tf_shared._tool_action("edit", {
+        "path": "src/a.py", "old_str": "keep\nold\nkeep2", "new_str": "keep\nnew\nkeep2",
     })
     diff = act["diff"]
     assert diff["numbered"] is False and diff["truncated"] is False
@@ -79,116 +52,54 @@ def test_edit_input_diff_has_prefixed_lines_and_no_line_numbers():
     assert diff_counts(diff["hunks"]) == (act["added"], act["removed"]) == (1, 1)
 
 
-def test_multiedit_is_one_combined_diff_not_a_generic_row():
-    act = tf_shared._tool_action("MultiEdit", {"file_path": "b.md", "edits": [
-        {"old_string": "one", "new_string": "one\ntwo"},
-        {"old_string": "x\ny", "new_string": "x"},
+def test_an_edits_list_is_one_combined_diff_not_a_generic_row():
+    act = tf_shared._tool_action("edit", {"path": "b.md", "edits": [
+        {"old_str": "one", "new_str": "one\ntwo"},
+        {"old_str": "x\ny", "new_str": "x"},
     ]})
     assert act["verb"] == "edited" and act["path"] == "b.md"
     assert (act["added"], act["removed"]) == (1, 1)
     assert [h["lines"] for h in act["diff"]["hunks"]] == [[" one", "+two"], [" x", "-y"]]
 
 
-def test_write_input_is_all_added():
-    act = tf_shared._tool_action("Write", {"file_path": "n.txt", "content": "a\nb"})
+def test_create_input_is_all_added():
+    act = tf_shared._tool_action("create", {"path": "n.txt", "file_text": "a\nb"})
     assert act["diff"]["hunks"] == [{"old_start": None, "new_start": None, "lines": ["+a", "+b"]}]
     assert act["diff"]["numbered"] is False
 
 
-def test_each_harnesss_own_edit_and_write_keys_are_read():
-    """(#1356) One tool name, several key sets: Pi's ``write`` takes ``path``, Grok's
-    ``file_path``; Pi's ``edit`` takes ``oldText``/``newText``, Copilot's
-    ``old_str``/``new_str``. Each set was read from a real call or the
-    harness's own tool schema."""
+def test_the_tools_edit_and_create_keys_are_read():
+    """Copilot's ``edit`` takes ``old_str``/``new_str`` (or ``oldText``/
+    ``newText``); ``create`` takes ``path`` and ``file_text``. Each set was read
+    from a real call or the harness's own tool schema."""
     act = tf_shared._tool_action
-    grok_edit = act("search_replace", {"file_path": "a", "old_string": "x", "new_string": "y"})
-    assert (grok_edit["verb"], grok_edit["path"], grok_edit["added"], grok_edit["removed"]) == ("edited", "a", 1, 1)
-    assert act("write", {"file_path": "g", "content": "1\n2"})["added"] == 2         # Grok
-    assert act("write", {"path": "p", "content": "1"})["path"] == "p"               # Pi
     cop_edit = act("edit", {"path": "c", "old_str": "beta", "new_str": "gamma"})
     assert (cop_edit["path"], cop_edit["added"], cop_edit["removed"]) == ("c", 1, 1)
-    assert act("edit", {"path": "c", "oldText": "a", "newText": "b"})["added"] == 1  # Pi
-    assert act("create", {"path": "n", "file_text": "hi\nthere"})["added"] == 2      # Copilot
-    assert act("create", {"path": "n"}) is None and act("search_replace", {"file_path": "a"}) is None
+    assert act("edit", {"path": "c", "oldText": "a", "newText": "b"})["added"] == 1
+    assert act("create", {"path": "n", "file_text": "hi\nthere"})["added"] == 2
+    assert act("create", {"path": "n"}) is None and act("edit", {"path": "a"}) is None
 
 
 def test_an_edit_that_changes_no_line_gets_no_diff():
-    act = tf_shared._tool_action("Edit", {"file_path": "a.py", "old_string": "same", "new_string": "same"})
+    act = tf_shared._tool_action("edit", {"path": "a.py", "old_str": "same", "new_str": "same"})
     assert "diff" not in act and (act["added"], act["removed"]) == (0, 0)
 
 
 def test_full_cap_marks_truncation():
     body = "\n".join("line %d" % i for i in range(50_000))
-    act = tf_shared._tool_action("Write", {"file_path": "big.txt", "content": body})
+    act = tf_shared._tool_action("create", {"path": "big.txt", "file_text": body})
     assert act["diff"]["truncated"] is True
     kept = sum(len(line) + 1 for h in act["diff"]["hunks"] for line in h["lines"])
     assert kept <= tf_shared.DIFF_FULL_BYTES
     assert act["added"] == 50_000   # the count stays whole; only the text is capped
 
 
-# ------------------------------------------------ Claude's recorded patch
-
-
-_PATCH = [{"oldStart": 40, "oldLines": 3, "newStart": 40, "newLines": 4,
-           "lines": [" a", "-b", "+c", "+d", " e"]}]
-
-
-def test_claude_edit_takes_the_recorded_patch_with_real_line_numbers(tmp_path):
-    path = _write_jsonl(tmp_path / "t.jsonl", [
-        _prompt("go"),
-        _call("Edit", {"file_path": "E:/repo/src/a.py", "old_string": "b", "new_string": "c\nd"}, "t1"),
-        _result("t1", "The file has been updated successfully.",
-                {"filePath": "E:\\repo\\src\\a.py", "structuredPatch": _PATCH,
-                 "oldString": "b", "newString": "c\nd", "originalFile": None}),
-        _reply(),
-    ])
-    (call,) = _calls(path)
-    diff = call["action"]["diff"]
-    assert diff["numbered"] is True
-    assert diff["hunks"] == [{"old_start": 40, "new_start": 40, "lines": _PATCH[0]["lines"]}]
-    assert (call["action"]["added"], call["action"]["removed"]) == (2, 1)
-    assert diff["n"] == 0 and isinstance(diff["offset"], int)
-    assert call["result"] == "The file has been updated successfully."
-
-
-def test_claude_write_of_a_new_file_is_all_added_from_line_one(tmp_path):
-    path = _write_jsonl(tmp_path / "t.jsonl", [
-        _prompt("go"),
-        _call("Write", {"file_path": "new.txt", "content": "x\ny"}, "t1"),
-        _result("t1", "File created successfully.",
-                {"type": "create", "filePath": "new.txt", "content": "x\ny",
-                 "structuredPatch": [], "originalFile": None}),
-        _reply(),
-    ])
-    (call,) = _calls(path)
-    assert call["action"]["diff"]["numbered"] is True
-    assert call["action"]["diff"]["hunks"] == [{"old_start": 0, "new_start": 1, "lines": ["+x", "+y"]}]
-    # The Edited card's A badge (#1477) reads this, as the Changed files fold does.
-    assert call["action"]["created"] is True
-
-
-def test_claude_write_over_a_file_counts_its_removed_lines(tmp_path):
-    """The input alone says +N −0; the recorded patch knows what went."""
-    patch = [{"oldStart": 1, "oldLines": 2, "newStart": 1, "newLines": 1, "lines": ["-old1", "-old2", "+new"]}]
-    path = _write_jsonl(tmp_path / "t.jsonl", [
-        _prompt("go"),
-        _call("Write", {"file_path": "f.txt", "content": "new"}, "t1"),
-        _result("t1", "The file has been updated.",
-                {"type": "update", "filePath": "f.txt", "content": "new", "structuredPatch": patch}),
-        _reply(),
-    ])
-    (call,) = _calls(path)
-    assert (call["action"]["added"], call["action"]["removed"]) == (1, 2)
-    assert "created" not in call["action"]
-
-
 def test_a_failed_edit_keeps_todays_row_with_no_diff(tmp_path):
     path = _write_jsonl(tmp_path / "t.jsonl", [
-        _prompt("go"),
-        _call("Edit", {"file_path": "a.py", "old_string": "zz", "new_string": "yy"}, "t1"),
-        _result("t1", "String to replace not found in file.",
-                "Error: String to replace not found in file.", error=True),
-        _reply(),
+        _user("go"),
+        _tool_use("edit", {"path": "a.py", "old_str": "zz", "new_str": "yy"}, "t1"),
+        _tool_result("t1", "String to replace not found in file.", ok=False),
+        _assistant("done"),
     ])
     (call,) = _calls(path)
     assert call["error"] is True
@@ -196,54 +107,30 @@ def test_a_failed_edit_keeps_todays_row_with_no_diff(tmp_path):
     assert call["action"]["verb"] == "edited"
 
 
-def test_a_patch_for_another_file_is_ignored(tmp_path):
-    path = _write_jsonl(tmp_path / "t.jsonl", [
-        _prompt("go"),
-        _call("Edit", {"file_path": "a.py", "old_string": "b", "new_string": "c"}, "t1"),
-        _result("t1", "ok", {"filePath": "other.py", "structuredPatch": _PATCH}),
-        _reply(),
-    ])
-    (call,) = _calls(path)
-    assert call["action"]["diff"]["numbered"] is False
-    assert call["action"]["diff"]["hunks"][0]["lines"] == ["-b", "+c"]
-
-
-def test_a_malformed_patch_falls_back_to_the_input_diff(tmp_path):
-    path = _write_jsonl(tmp_path / "t.jsonl", [
-        _prompt("go"),
-        _call("Edit", {"file_path": "a.py", "old_string": "b", "new_string": "c"}, "t1"),
-        _result("t1", "ok", {"filePath": "a.py", "structuredPatch": [{"oldStart": "1", "lines": []}]}),
-        _reply(),
-    ])
-    (call,) = _calls(path)
-    assert call["action"]["diff"]["numbered"] is False
-
-
 def test_steps_with_no_edit_data_look_as_they_did(tmp_path):
     path = _write_jsonl(tmp_path / "t.jsonl", [
-        _prompt("go"),
-        _call("Grep", {"pattern": "x"}, "t1"),
-        _result("t1", "a.py:1:x"),
-        _call("Bash", {"command": "ls"}, "t2", mid="m2"),
-        _result("t2", "a.py"),
-        _reply(),
+        _user("go"),
+        _tool_use("rg", {"pattern": "x"}, "t1"),
+        _tool_result("t1", "a.py:1:x"),
+        _tool_use("powershell", {"command": "ls"}, "t2"),
+        _tool_result("t2", "a.py"),
+        _assistant("done"),
     ])
-    grep, bash = _calls(path)
+    grep, shell = _calls(path)
     assert "action" not in grep
-    assert "diff" not in bash["action"]
+    assert "diff" not in shell["action"]
 
 
 # ------------------------------------------------- page caps and full fetch
 
 
 def _big_edit_transcript(tmp_path: Path, lines: int = 300) -> Path:
-    patch = [{"oldStart": 1, "oldLines": 0, "newStart": 1, "newLines": lines,
-              "lines": ["+row %d" % i for i in range(lines)]}]
+    body = "\n".join("row %d" % i for i in range(lines))
     return _write_jsonl(tmp_path / "t.jsonl", [
-        _prompt("go"),
-        _call("Edit", {"file_path": "a.py", "old_string": "", "new_string": "x"}, "t1"),
-        _result("t1", "ok", {"filePath": "a.py", "structuredPatch": patch}),
-        _reply(),
+        _user("go"),
+        _tool_use("edit", {"path": "a.py", "old_str": "", "new_str": body}, "t1"),
+        _tool_result("t1", "ok"),
+        _assistant("done"),
     ])
 
 
@@ -254,9 +141,9 @@ def test_a_page_trims_each_step_and_the_full_diff_is_one_request_away(tmp_path):
     assert inline["truncated"] is True
     assert sum(len(h["lines"]) for h in inline["hunks"]) == DIFF_INLINE_LINES
     assert "offset" not in call   # a folded entry's own offset stays unexposed
-    full = entry_diff(path, inline["offset"], inline["n"], "claude")
+    full = entry_diff(path, inline["offset"], inline["n"], "copilot")
     assert full["path"] == "a.py"
-    assert full["diff"]["numbered"] is True and full["diff"]["truncated"] is False
+    assert full["diff"]["truncated"] is False
     assert sum(len(h["lines"]) for h in full["diff"]["hunks"]) == 300
 
 
@@ -264,9 +151,9 @@ def test_entry_diff_refuses_a_bad_ref(tmp_path):
     path = _big_edit_transcript(tmp_path)
     (call,) = _calls(path)
     ref = call["action"]["diff"]
-    assert entry_diff(path, ref["offset"], 5, "claude") is None
-    assert entry_diff(path, ref["offset"] + 1, 0, "claude") is None
-    assert entry_diff(path, 10**9, 0, "claude") is None
+    assert entry_diff(path, ref["offset"], 5, "copilot") is None
+    assert entry_diff(path, ref["offset"] + 1, 0, "copilot") is None
+    assert entry_diff(path, 10**9, 0, "copilot") is None
 
 
 def test_the_live_tail_trims_too(tmp_path):
@@ -291,7 +178,7 @@ def _bypass_gate(monkeypatch):
 
 def _serve(overrides, monkeypatch, path: Path) -> None:
     overrides["session"].list_sessions.return_value = [{
-        "session_id": "s1", "kind": "pty", "agent": "claude", "alive": True,
+        "session_id": "s1", "kind": "pty", "agent": "copilot", "alive": True,
         "project_dir": "E:/work/proj", "started_at": 1_789_000_000,
     }]
     monkeypatch.setattr(board, "state_row_for_session",

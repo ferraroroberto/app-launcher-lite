@@ -1,13 +1,13 @@
 """A session's Changed files (#1349): every file its edits touched, folded
-from the transcript — never git. The Claude fold and its routes; the other
-agents' fold is ``test_session_changes_flavors.py`` (#1356).
+from the transcript — never git. The Copilot fold (its ``edit`` / ``create`` /
+``apply_patch`` steps, built by the same entry builder Chat uses) and its
+routes.
 
 Every path, id and line of content here is synthetic.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List
@@ -18,70 +18,68 @@ from src import board
 from src.session_view import changes as session_changes
 from src.session_view.changes import changed_files, file_steps
 from src.session_view.transcript import transcript_page
+from src.transcript_flavors.apply_patch import parse_apply_patch
+from tests.unit.transcript._support import (
+    _tool_result,
+    _tool_use,
+    _user,
+    _write_jsonl,
+)
 
 
-def _write_jsonl(path: Path, lines: List[Dict[str, Any]]) -> Path:
-    path.write_text("\n".join(json.dumps(line) for line in lines) + "\n", encoding="utf-8")
-    return path
+def _call(name: str, inputs: Any, tid: str, *, ok: bool = True,
+          ts: str = "2026-09-30T10:00:01.000Z") -> List[Dict[str, Any]]:
+    """A tool call and its result, as the two events Copilot writes."""
+    return [_tool_use(name, inputs, tid, ts), _tool_result(tid, "ok", ts, ok=ok)]
 
 
-def _call(name: str, inputs: Dict[str, Any], tid: str) -> Dict[str, Any]:
-    return {"type": "assistant", "timestamp": "2026-09-30T10:00:01Z",
-            "message": {"id": "m-" + tid, "role": "assistant",
-                        "content": [{"type": "tool_use", "id": tid, "name": name, "input": inputs}]}}
+def _chat_edit_sum(path: Path) -> Dict[str, int]:
+    """What the Chat steps of this transcript add up to."""
+    page = transcript_page(path, flavor="copilot", limit=100)
+    steps = [
+        e["action"] for e in page["entries"]
+        if e.get("kind") == "tool_call" and not e.get("error")
+        and (e.get("action") or {}).get("verb") in ("edited", "wrote") and (e["action"].get("diff") or {}).get("hunks")
+    ]
+    return {"additions": sum(a["added"] for a in steps), "deletions": sum(a["removed"] for a in steps)}
 
 
-def _result(tid: str, tur: Any, *, error: bool = False, sidechain: bool = False,
-            ts: str = "2026-09-30T10:00:02Z") -> Dict[str, Any]:
-    block: Dict[str, Any] = {"type": "tool_result", "tool_use_id": tid, "content": "ok"}
-    if error:
-        block["is_error"] = True
-    return {"type": "user", "timestamp": ts, "isSidechain": sidechain,
-            "message": {"role": "user", "content": [block]}, "toolUseResult": tur}
-
-
-def _patch(old_start: int, lines: List[str]) -> List[Dict[str, Any]]:
-    return [{"oldStart": old_start, "oldLines": 0, "newStart": old_start, "newLines": 0, "lines": lines}]
-
-
-def _session(tmp_path: Path, project: Path) -> Path:
-    """Three files: one created then edited, one modified (by a sub-agent
-    too), one modified and since deleted; plus a failed edit and a read."""
+def _session(tmp_path: Path, project: Path, *, failed_edit: bool = True) -> Path:
+    """Three files: one created then edited, one modified (once under another
+    spelling of its path), one modified and since deleted; plus a failed edit
+    and a read. A window cut between a call and its result counts the call as
+    made, so the paging tests leave the failed edit out."""
     a, b, gone = project / "src" / "a.py", project / "b.md", project / "old.txt"
     a.parent.mkdir(parents=True)
     a.write_text("x\n", encoding="utf-8")
     b.write_text("y\n", encoding="utf-8")
+    add_a = f"*** Begin Patch\n*** Add File: {a}\n+l1\n+l2\n*** End Patch\n"
     return _write_jsonl(tmp_path / "t.jsonl", [
-        {"type": "user", "timestamp": "2026-09-30T10:00:00Z", "message": {"role": "user", "content": "go"}},
-        _call("Write", {"file_path": str(a), "content": "l1\nl2"}, "t1"),
-        _result("t1", {"type": "create", "filePath": str(a), "content": "l1\nl2", "structuredPatch": []}),
-        _call("Edit", {"file_path": str(a), "old_string": "l2", "new_string": "l2\nl3"}, "t2"),
-        _result("t2", {"filePath": str(a), "structuredPatch": _patch(2, [" l2", "+l3"])},
-                ts="2026-09-30T10:05:00Z"),
-        _call("Edit", {"file_path": str(b), "old_string": "q", "new_string": "r"}, "t3"),
-        _result("t3", {"filePath": str(b), "structuredPatch": _patch(7, ["-q", "+r"])}),
-        _call("Edit", {"file_path": str(b), "old_string": "s", "new_string": "t"}, "t4"),
-        _result("t4", {"filePath": str(b).replace("\\", "/").upper(),
-                       "structuredPatch": _patch(9, ["-s", "+t", "+u"])}, sidechain=True),
-        _call("Edit", {"file_path": str(gone), "old_string": "z", "new_string": ""}, "t5"),
-        _result("t5", {"filePath": str(gone), "structuredPatch": _patch(1, ["-z"])}),
-        _call("Edit", {"file_path": str(b), "old_string": "nope", "new_string": "x"}, "t6"),
-        _result("t6", "Error: String to replace not found in file.", error=True),
-        _call("Read", {"file_path": str(b)}, "t7"),
-        _result("t7", {"type": "text", "file": {"filePath": str(b)}}),
+        _user("go", "2026-09-30T10:00:00.000Z"),
+        *_call("apply_patch", add_a, "t1"),
+        *_call("edit", {"path": str(a), "old_str": "l2", "new_str": "l2\nl3"}, "t2", ts="2026-09-30T10:05:00.000Z"),
+        *_call("edit", {"path": str(b), "old_str": "q", "new_str": "r"}, "t3"),
+        *_call("edit", {"path": str(b).replace("\\", "/").upper(), "old_str": "s", "new_str": "t\nu"}, "t4"),
+        *_call("edit", {"path": str(gone), "old_str": "z", "new_str": ""}, "t5"),
+        *(_call("edit", {"path": str(b), "old_str": "nope", "new_str": "x"}, "t6", ok=False)
+          if failed_edit else []),
+        *_call("view", {"path": str(b)}, "t7"),
     ])
+
+
+def _rows(found: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    return {r["path"]: r for r in found["files"]}
 
 
 def test_fold_lists_every_touched_file_with_badges_and_counts(tmp_path):
     project = tmp_path / "proj"
     path = _session(tmp_path, project)
     out = changed_files(path, str(project))
-    rows = {r["path"]: r for r in out["files"]}
+    rows = _rows(out)
     assert list(rows) == ["b.md", "old.txt", "src/a.py"]   # relative, sorted
     assert (rows["src/a.py"]["status"], rows["src/a.py"]["additions"], rows["src/a.py"]["deletions"],
             rows["src/a.py"]["steps"]) == ("A", 3, 0, 2)
-    # Two edits, one by a sub-agent, one recorded with the other slash and
-    # case: still one Windows file.
+    # Two edits, one recorded with the other slash and case: still one Windows file.
     assert (rows["b.md"]["status"], rows["b.md"]["additions"], rows["b.md"]["deletions"],
             rows["b.md"]["steps"]) == ("M", 3, 2, 2)
     assert rows["old.txt"]["status"] == "D"
@@ -94,14 +92,7 @@ def test_totals_match_the_per_step_counts(tmp_path):
     Chat steps say, failed steps excluded on both sides."""
     project = tmp_path / "proj"
     path = _session(tmp_path, project)
-    steps = [e["action"] for e in transcript_page(path)["entries"]
-             if e["kind"] == "tool_call" and e.get("action", {}).get("verb") in ("edited", "wrote")
-             and not e.get("error")]
-    out = changed_files(path, str(project))
-    assert out["counts"] == {
-        "additions": sum(a["added"] for a in steps),
-        "deletions": sum(a["removed"] for a in steps),
-    }
+    assert changed_files(path, str(project))["counts"] == _chat_edit_sum(path)
 
 
 def test_a_gone_project_folder_marks_nothing_deleted(tmp_path):
@@ -117,22 +108,20 @@ def test_a_gone_project_folder_marks_nothing_deleted(tmp_path):
 
 
 def test_no_edits_is_an_empty_fold(tmp_path):
-    path = _write_jsonl(tmp_path / "t.jsonl", [
-        {"type": "user", "timestamp": "2026-09-30T10:00:00Z", "message": {"role": "user", "content": "hi"}},
-    ])
+    path = _write_jsonl(tmp_path / "t.jsonl", [_user("hi"), *_call("powershell", {"command": "ls"}, "c1")])
     out = changed_files(path, None)
-    assert out["files"] == [] and out["counts"] == {"additions": 0, "deletions": 0}
+    assert out["files"] == [] and out["counts"] == {"additions": 0, "deletions": 0} and out["partial"] is False
 
 
 def test_file_steps_are_that_files_edits_in_order(tmp_path):
     project = tmp_path / "proj"
     path = _session(tmp_path, project)
     key = next(r["key"] for r in changed_files(path, str(project))["files"] if r["path"] == "src/a.py")
-    out = file_steps(path, key)
+    out = file_steps(path, key, project_dir=str(project))
     assert [s["created"] for s in out["steps"]] == [True, False]
     assert out["steps"][0]["diff"]["hunks"] == [{"old_start": 0, "new_start": 1, "lines": ["+l1", "+l2"]}]
     assert out["steps"][1]["diff"]["hunks"][0]["lines"] == [" l2", "+l3"]
-    assert out["steps"][1]["timestamp"] == "2026-09-30T10:05:00Z"
+    assert out["steps"][1]["timestamp"] == "2026-09-30T10:05:00.000Z"
     assert out["truncated"] is False
 
 
@@ -141,32 +130,158 @@ def test_file_steps_refuses_a_file_the_session_never_edited(tmp_path):
     path = _session(tmp_path, project)
     assert file_steps(path, str(project / "elsewhere.py")) is None
     # A file it only read is not a changed file either.
-    assert file_steps(path, str(tmp_path / "unrelated")) is None
+    assert file_steps(path, str(project / "b.md" "x")) is None
 
 
 def test_file_steps_cap_marks_truncation(tmp_path):
     project = tmp_path / "proj"
     path = _session(tmp_path, project)
     key = next(r["key"] for r in changed_files(path, str(project))["files"] if r["path"] == "src/a.py")
-    out = file_steps(path, key, max_bytes=8)
+    out = file_steps(path, key, max_bytes=8, project_dir=str(project))
     assert out["truncated"] is True and len(out["steps"]) == 1
 
 
-def test_a_transcript_past_the_ceiling_reads_its_newest_part(tmp_path, monkeypatch):
+# ------------------------------------------------------------- the tools
+
+
+def test_the_fold_reads_edit_and_create_keys_probed_from_the_cli(tmp_path):
     project = tmp_path / "proj"
-    path = _session(tmp_path, project)
-    monkeypatch.setattr(session_changes, "SCAN_CEILING", path.stat().st_size // 2)
-    out = changed_files(path, str(project))
-    assert out["partial"] is True
-    assert "src/a.py" not in {r["path"] for r in out["files"]}   # its edits sit in the older half
+    project.mkdir()
+    a, n = project / "a.txt", project / "new.txt"
+    path = _write_jsonl(tmp_path / "events.jsonl", [
+        *_call("edit", {"path": str(a), "old_str": "beta", "new_str": "gamma"}, "t1"),
+        *_call("create", {"path": str(n), "file_text": "hi\nthere"}, "t2"),
+        *_call("edit", {"path": str(a), "old_str": "x", "new_str": "y"}, "t3", ok=False),
+        *_call("view", {"path": str(a)}, "t4"),
+    ])
+    found = changed_files(path, str(project), "copilot")
+    by = _rows(found)
+    assert sorted(by) == ["a.txt", "new.txt"]
+    assert (by["a.txt"]["steps"], by["a.txt"]["additions"], by["a.txt"]["deletions"]) == (1, 1, 1)
+    assert by["new.txt"]["additions"] == 2
+    assert found["counts"] == _chat_edit_sum(path)
 
 
-def _paged(path: Path, project: Path, flavor: str = "claude") -> List[Dict[str, Any]]:
+def test_the_fold_reads_an_apply_patch_call_whose_arguments_are_the_patch_text(tmp_path):
+    """GPT-family Copilot sessions edit through ``apply_patch`` with a *string*
+    ``arguments`` (probed from a real session that created ``tmp/test.txt``
+    and edited a tracked file): both files must list, the new one as added,
+    its relative path resolved against the project folder."""
+    project = tmp_path / "proj"
+    (project / "tmp").mkdir(parents=True)
+    (project / "a.txt").write_text("goodbye\n", encoding="utf-8")      # a file gone from disk reads as deleted
+    (project / "tmp" / "test.txt").write_text("hi\n", encoding="utf-8")
+    patch = ("*** Begin Patch\n*** Update File: a.txt\n@@\n-hello\n+goodbye\n"
+             "*** Add File: tmp/test.txt\n+hi\n*** End Patch\n")
+    path = _write_jsonl(tmp_path / "events.jsonl", _call("apply_patch", patch, "p1"))
+    found = changed_files(path, str(project), "copilot")
+    by = _rows(found)
+    assert sorted(by) == ["a.txt", "tmp/test.txt"]
+    assert (by["a.txt"]["status"], by["a.txt"]["additions"], by["a.txt"]["deletions"]) == ("M", 1, 1)
+    assert (by["tmp/test.txt"]["status"], by["tmp/test.txt"]["additions"]) == ("A", 1)
+    assert found["counts"] == _chat_edit_sum(path)
+    steps = file_steps(path, str(project / "tmp" / "test.txt"), flavor="copilot", project_dir=str(project))
+    assert steps is not None and steps["steps"][0]["created"] is True
+
+
+def test_a_rejected_apply_patch_changed_nothing(tmp_path):
+    """A patch Copilot rejects (``success: false``) changed nothing."""
+    project = tmp_path / "proj"
+    project.mkdir()
+    patch = "*** Begin Patch\n*** Update File: a.txt\n@@\n-x\n+y\n*** End Patch\n"
+    path = _write_jsonl(tmp_path / "events.jsonl", _call("apply_patch", patch, "p1", ok=False))
+    assert changed_files(path, str(project), "copilot")["files"] == []
+
+
+def test_a_patch_the_text_says_failed_changed_nothing(tmp_path):
+    project = tmp_path / "proj"
+    project.mkdir()
+    patch = "*** Begin Patch\n*** Delete File: gone.txt\n*** End Patch\n"
+    path = _write_jsonl(tmp_path / "events.jsonl", [
+        _tool_use("apply_patch", patch, "p1"),
+        _tool_result("p1", "apply_patch verification failed: could not find lines"),
+    ])
+    assert changed_files(path, str(project), "copilot")["files"] == []
+
+
+_PATCH = (
+    "*** Begin Patch\n"
+    "*** Add File: src/new.py\n+one\n+two\n"
+    "*** Update File: src/a.py\n@@ def f():\n ctx\n-old\n+new\n+more\n"
+    "*** Delete File: src/gone.py\n"
+    "*** End Patch"
+)
+
+
+class TestApplyPatchGrammar:
+
+    def test_sections_become_wrote_edited_deleted(self):
+        actions = parse_apply_patch(_PATCH)
+        assert [(a["verb"], a["path"]) for a in actions] == [
+            ("wrote", "src/new.py"), ("edited", "src/a.py"), ("deleted", "src/gone.py")]
+        add, upd = actions[0], actions[1]
+        assert (add["added"], add["removed"], add["created"]) == (2, 0, True)
+        assert add["diff"]["numbered"] is True                       # an Add starts at line 1
+        assert (upd["added"], upd["removed"]) == (2, 1)
+        assert upd["diff"]["numbered"] is False and upd["diff"]["hunks"][0]["lines"] == [" ctx", "-old", "+new", "+more"]
+
+    def test_a_move_edits_the_new_path_and_deletes_the_old(self):
+        actions = parse_apply_patch(
+            "*** Begin Patch\n*** Update File: a.py\n*** Move to: b.py\n@@\n-x\n+y\n*** End Patch")
+        assert [(a["verb"], a["path"]) for a in actions] == [("edited", "b.py"), ("deleted", "a.py")]
+
+    def test_an_incomplete_patch_reads_as_nothing(self):
+        assert parse_apply_patch("*** Begin Patch\n*** Add File: a\n+x") == []
+        assert parse_apply_patch("just text") == []
+
+    def test_blank_context_lines_stay_in_the_hunk(self):
+        (upd,) = parse_apply_patch("*** Begin Patch\n*** Update File: a\n@@\n a\n\n-b\n+c\n*** End Patch")
+        assert upd["diff"]["hunks"][0]["lines"] == [" a", " ", "-b", "+c"]
+
+
+# ------------------------------------------------------------------ bounding
+
+
+def _big_patches(tmp_path: Path, count: int) -> Path:
+    rows: List[Dict[str, Any]] = []
+    for i in range(count):
+        rows += _call("apply_patch", f"*** Begin Patch\n*** Add File: f{i}.txt\n+{'x' * 200}\n*** End Patch", f"c{i}")
+    return _write_jsonl(tmp_path / "big.jsonl", rows)
+
+
+def test_a_call_and_its_result_are_never_split_across_windows(tmp_path, monkeypatch):
+    """With windows a few lines wide every call sits at some window's edge;
+    the fold must still equal one pass over the whole file."""
+    path = _big_patches(tmp_path, 40)
+    whole = changed_files(path, None)
+    monkeypatch.setattr(session_changes, "FLAVOR_WINDOW", 700)
+    windowed = changed_files(path, None)
+    assert len(whole["files"]) == 40 and windowed == whole
+
+
+def test_a_failed_patch_in_the_next_window_still_cancels_its_call(tmp_path, monkeypatch):
+    rows = _call("apply_patch", "*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch", "c1", ok=False)
+    rows += _call("powershell", {"command": "ls"}, "c2")
+    path = _write_jsonl(tmp_path / "r.jsonl", rows)
+    monkeypatch.setattr(session_changes, "FLAVOR_WINDOW", 1)
+    assert changed_files(path, None)["files"] == []
+
+
+def test_the_ceiling_keeps_the_newest_part_and_says_partial(tmp_path, monkeypatch):
+    path = _big_patches(tmp_path, 40)
+    monkeypatch.setattr(session_changes, "FLAVOR_SCAN_CEILING", path.stat().st_size // 2)
+    found = changed_files(path, None)
+    names = [r["path"] for r in found["files"]]
+    assert found["partial"] is True and 0 < len(names) < 40
+    assert "f39.txt" in names and "f0.txt" not in names           # the newest survive
+
+
+def _paged(path: Path, project: Path) -> List[Dict[str, Any]]:
     """Every window of the fold, newest first, following ``next_cursor``."""
     pages: List[Dict[str, Any]] = []
     cursor = None
     while True:
-        page = changed_files(path, str(project), flavor, before=cursor)
+        page = changed_files(path, str(project), "copilot", before=cursor)
         pages.append(page)
         cursor = page["next_cursor"]
         if cursor is None:
@@ -187,10 +302,10 @@ def _merged(pages: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 def test_next_cursor_pages_back_to_the_start_and_sums_to_the_whole(tmp_path, monkeypatch):
     project = tmp_path / "proj"
-    path = _session(tmp_path, project)
+    path = _session(tmp_path, project, failed_edit=False)
     whole = changed_files(path, str(project))
     assert whole["next_cursor"] is None and whole["partial"] is False
-    monkeypatch.setattr(session_changes, "SCAN_CEILING", path.stat().st_size // 4)
+    monkeypatch.setattr(session_changes, "FLAVOR_SCAN_CEILING", path.stat().st_size // 4)
     pages = _paged(path, project)
     assert len(pages) > 1
     assert all(p["partial"] is True and p["next_cursor"] for p in pages[:-1])
@@ -205,15 +320,13 @@ def test_next_cursor_pages_back_to_the_start_and_sums_to_the_whole(tmp_path, mon
 def test_a_file_edited_in_two_windows_is_a_row_in_each_with_each_windows_counts(tmp_path, monkeypatch):
     project = tmp_path / "proj"
     target = str(project / "a.py")
-    rows: List[Dict[str, Any]] = []
-    for i, (kind, lines) in enumerate([("create", ["+one"]), ("edit", ["+two", "+three"])]):
-        tid = f"e{i}"
-        rows += [_call("Edit", {"file_path": target}, tid),
-                 _result(tid, {"type": kind, "filePath": target, "structuredPatch": _patch(1, lines)})]
-        if i == 0:   # filler between the two edits, so a two-thirds ceiling cuts between them
-            rows += [{"type": "user", "message": {"role": "user", "content": "pad " * 200}}] * 4
+    rows: List[Dict[str, Any]] = [
+        *_call("create", {"path": target, "file_text": "one"}, "e0"),
+        *[_user("pad " * 200)] * 4,   # filler, so a two-thirds ceiling cuts between the two edits
+        *_call("edit", {"path": target, "old_str": "one", "new_str": "one\ntwo\nthree"}, "e1"),
+    ]
     path = _write_jsonl(tmp_path / "t.jsonl", rows)
-    monkeypatch.setattr(session_changes, "SCAN_CEILING", path.stat().st_size * 2 // 3)
+    monkeypatch.setattr(session_changes, "FLAVOR_SCAN_CEILING", path.stat().st_size * 2 // 3)
     newer, older = _paged(path, project)
     assert [(r["additions"], r["steps"]) for r in newer["files"]] == [(2, 1)]
     assert [(r["additions"], r["steps"]) for r in older["files"]] == [(1, 1)]
@@ -239,8 +352,8 @@ def test_before_past_the_file_reads_the_newest_window(tmp_path):
 
 def test_since_lets_a_file_only_an_older_window_holds_open(tmp_path, monkeypatch):
     project = tmp_path / "proj"
-    path = _session(tmp_path, project)
-    monkeypatch.setattr(session_changes, "SCAN_CEILING", path.stat().st_size // 4)
+    path = _session(tmp_path, project, failed_edit=False)
+    monkeypatch.setattr(session_changes, "FLAVOR_SCAN_CEILING", path.stat().st_size // 4)
     pages = _paged(path, project)
     newest = {r["path"] for r in pages[0]["files"]}
     old_only = next(r for p in pages[1:] for r in p["files"] if r["path"] not in newest)
@@ -267,7 +380,7 @@ def _bypass_gate(monkeypatch):
     )
 
 
-def _serve(overrides, monkeypatch, path: Path, project: Path, agent: str = "claude") -> None:
+def _serve(overrides, monkeypatch, path: Path, project: Path, agent: str = "copilot") -> None:
     overrides["session"].list_sessions.return_value = [{
         "session_id": "s1", "kind": "pty", "agent": agent, "alive": True,
         "project_dir": str(project), "started_at": 1_789_000_000,
@@ -308,9 +421,9 @@ class TestChangedFilesEndpoints:
     def test_before_reads_the_next_older_window(self, webapp_client, _bypass_gate, monkeypatch, tmp_path):
         client, _, overrides = webapp_client
         project = tmp_path / "proj"
-        path = _session(tmp_path, project)
+        path = _session(tmp_path, project, failed_edit=False)
         _serve(overrides, monkeypatch, path, project)
-        monkeypatch.setattr(session_changes, "SCAN_CEILING", path.stat().st_size // 4)
+        monkeypatch.setattr(session_changes, "FLAVOR_SCAN_CEILING", path.stat().st_size // 4)
         url = "/api/claude-code/sessions/s1/changed-files"
         seen, cursor, hops = {}, None, 0
         while True:
@@ -338,9 +451,13 @@ class TestChangedFilesEndpoints:
     ):
         client, _, overrides = webapp_client
         project = tmp_path / "proj"
-        _serve(overrides, monkeypatch, _session(tmp_path, project), project, agent="aider")
-        body = client.get("/api/claude-code/sessions/s1/changed-files").json()
-        assert body["available"] is False and body["reason"] == "unsupported_agent"
+        path = _session(tmp_path, project)
+        for agent in ("aider", "claude"):
+            _serve(overrides, monkeypatch, path, project, agent=agent)
+            body = client.get("/api/claude-code/sessions/s1/changed-files").json()
+            assert body["available"] is False and body["reason"] == "unsupported_agent"
+            body = client.get("/api/claude-code/sessions/s1/changed-files/diff", params={"path": "x"}).json()
+            assert body["available"] is False and body["reason"] == "unsupported_agent"
 
     def test_no_transcript_is_said(self, webapp_client, _bypass_gate, monkeypatch, tmp_path):
         client, _, overrides = webapp_client
@@ -374,18 +491,18 @@ def test_file_routes_refused_off_tailnet(webapp_client):
 
 
 def test_a_relative_recorded_path_resolves_against_the_project(tmp_path, monkeypatch):
-    """A Codex patch names files from its working folder; the fold resolves
-    them, and so does the lookup, so a Chat step's relative path and the
-    list's absolute key both find the file."""
+    """A patch names files from its working folder; the fold resolves them,
+    and so does the lookup, so a Chat step's relative path and the list's
+    absolute key both find the file."""
     project = tmp_path / "proj"
     edit = session_changes.Edit("src/x.py", [{"lines": ["+a"]}], True, None, added=1)
     absolute = str(project).replace("\\", "/") + "/src/x.py"
     for requested in ("src/x.py", absolute, absolute.upper()):
         monkeypatch.setattr(session_changes, "_flavor_edits", lambda path, flavor, *window: (iter([edit]), 0))
-        assert session_changes.changed_file_path(tmp_path / "t.jsonl", requested, "codex", str(project)) == absolute
+        assert session_changes.changed_file_path(tmp_path / "t.jsonl", requested, "copilot", str(project)) == absolute
     # With no project folder the recorded path stays relative: no file on disk.
     monkeypatch.setattr(session_changes, "_flavor_edits", lambda path, flavor, *window: (iter([edit]), 0))
-    assert session_changes.changed_file_path(tmp_path / "t.jsonl", "src/x.py", "codex", None) is None
+    assert session_changes.changed_file_path(tmp_path / "t.jsonl", "src/x.py", "copilot", None) is None
 
 
 class TestChangedFileContent:
@@ -420,7 +537,6 @@ class TestChangedFileContent:
         "C:/Windows/win.ini",                 # anywhere else
         "{project}/notes.txt",                # on disk, never edited
         "{project}/src/../b.md",              # traversal onto an edited file
-        "b.md",                               # relative, for an agent that records absolute paths
         "{transcript}",                       # the transcript itself
     ])
     def test_a_path_outside_the_edited_set_is_file_not_found(

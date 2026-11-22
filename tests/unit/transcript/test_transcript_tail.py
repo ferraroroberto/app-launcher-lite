@@ -14,10 +14,9 @@ from src.session_view import transcript as st
 from tests.unit.transcript._support import (
     _assistant,
     _conversation,
-    _grok,
-    _grok_chunk,
     _kinds,
     _live,
+    _thinking,
     _tool_result,
     _tool_use,
     _user,
@@ -44,7 +43,7 @@ def _turn_texts(entries: List[Dict[str, Any]]) -> List[Tuple[str, str]]:
     return [(e["kind"], e.get("text", "")) for e in entries if st._is_turn(e)]
 
 
-def _live_view(path: Path, flavor: str = "claude"):
+def _live_view(path: Path, flavor: str = "copilot"):
     """Open a chat view: the newest page plus its live cursor."""
     page = st.transcript_page(path, limit=100, flavor=flavor)
     return list(page["entries"]), page["tail"], page["size"]
@@ -80,41 +79,13 @@ def test_tail_returns_only_what_was_appended(tmp_path: Path):
     assert "prompt 0 " not in texts, "nothing already seen is resent"
 
 
-def test_tail_holds_back_a_message_that_is_still_growing(tmp_path: Path):
-    """A Claude message is one line per content block under one id. Settling
-    the first line would render the reply, then render it *again* as a second
-    card when its trailing text arrives — so the whole span stays pending
-    until a differently-keyed line follows it."""
-    path = _write_jsonl(tmp_path / "t.jsonl", [_user("go")])
-    _, tail, size = _live_view(path)
-    _append_jsonl(path, [_assistant([{"type": "text", "text": "first half"}], "m9")])
-    out = st.transcript_tail(path, after=tail, size=size)
-    # The prompt settles (it is complete and something now follows it); the
-    # message that just started does not.
-    assert [e["kind"] for e in out["entries"]] == ["user"]
-    assert [e["kind"] for e in out["pending"]] == ["assistant"]
-
-    # The rest of the same message lands; it is still one card, not two.
-    _append_jsonl(path, [
-        _assistant([_tool_use("Bash", {"command": "ls"}, "t9")], "m9"),
-        _assistant([{"type": "text", "text": " and second half"}], "m9"),
-    ])
-    out = st.transcript_tail(path, after=out["tail"], size=out["size"])
-    replies = [e for e in out["entries"] + out["pending"] if e["kind"] == "assistant"]
-    assert len(replies) == 1, "one message must never become two cards"
-    # Both blocks are in that one card (joined the way the builder joins
-    # blocks), so nothing was dropped to achieve the single card either.
-    assert "first half" in replies[0]["text"]
-    assert "and second half" in replies[0]["text"]
-
-
 def test_tail_settles_a_message_once_the_next_one_starts(tmp_path: Path):
     path = _write_jsonl(tmp_path / "t.jsonl", [_user("go")])
     _, tail, size = _live_view(path)
-    _append_jsonl(path, [_assistant([{"type": "text", "text": "done"}], "m1")])
+    _append_jsonl(path, [_assistant("done")])
     out = st.transcript_tail(path, after=tail, size=size)
     assert [e["kind"] for e in out["pending"]] == ["assistant"]
-    _append_jsonl(path, [_assistant([{"type": "text", "text": "next"}], "m2")])
+    _append_jsonl(path, [_assistant("next")])
     out = st.transcript_tail(path, after=out["tail"], size=out["size"])
     # The finished message is now settled — appended once and never touched
     # again — and only the new one is provisional.
@@ -128,10 +99,10 @@ def test_tail_keys_every_entry_so_a_rebuild_can_restore_open_cards(tmp_path: Pat
     path = _write_jsonl(tmp_path / "t.jsonl", [_user("go")])
     _, tail, size = _live_view(path)
     _append_jsonl(path, [
-        _assistant([{"type": "thinking", "thinking": "hmm"}], "m1"),
-        _assistant([_tool_use("Bash", {"command": "ls"}, "t1")], "m1"),
-        _user([_tool_result("t1", "out")]),
-        _assistant([{"type": "text", "text": "done"}], "m2"),
+        _thinking("hmm"),
+        _tool_use("powershell", {"command": "ls"}, "t1"),
+        _tool_result("t1", "out"),
+        _assistant("done"),
     ])
     out = st.transcript_tail(path, after=tail, size=size)
     assert out["entries"], "the finished message should have settled"
@@ -164,8 +135,8 @@ def test_tail_of_a_half_written_line_waits_for_the_rest(tmp_path: Path):
     cursor must not step over it — the next tick reads it whole."""
     path = _write_jsonl(tmp_path / "t.jsonl", [_user("go")])
     _, tail, size = _live_view(path)
-    head = '{"type": "assistant", "message": {"id": "m1", "role'
-    rest = '": "assistant", "content": [{"type": "text", "text": "hi"}]}}\n'
+    head = '{"type": "assistant.message", "data": {"con'
+    rest = 'tent": "hi"}}\n'
     with path.open("a", encoding="utf-8", newline="") as fh:
         fh.write(head)
     out = st.transcript_tail(path, after=tail, size=size)
@@ -179,30 +150,24 @@ def test_tail_of_a_half_written_line_waits_for_the_rest(tmp_path: Path):
     assert [e["text"] for e in out["pending"] if e["kind"] == "assistant"] == ["hi"]
 
 
-def test_tail_pairs_a_call_with_a_result_a_tick_later_for_an_unkeyed_flavour(tmp_path: Path):
-    """#1310. Grok's line key is always ``None`` (self-contained lines), so
+def test_tail_pairs_a_call_with_a_result_a_tick_later(tmp_path: Path):
+    """#1310. Copilot's line key is always ``None`` (self-contained lines), so
     a tool call and its result — always two separate lines — routinely land
     a tick apart. Before the fix, the "last line" fallback settled the call
     the moment it was read; the result then arrived with no open call in
     that tick's build and rendered as a standalone orphan card."""
-    path = _write_jsonl(tmp_path / "updates.jsonl", [_grok_chunk("user_message_chunk", "go")])
-    _, tail, size = _live_view(path, flavor="grok")
+    path = _write_jsonl(tmp_path / "events.jsonl", [_user("go")])
+    _, tail, size = _live_view(path)
 
-    _append_jsonl(path, [_grok({
-        "sessionUpdate": "tool_call", "toolCallId": "t1",
-        "title": "ls", "rawInput": {"command": "ls"},
-    })])
-    out = st.transcript_tail(path, after=tail, size=size, flavor="grok")
+    _append_jsonl(path, [_tool_use("powershell", {"command": "ls"}, "t1")])
+    out = st.transcript_tail(path, after=tail, size=size)
     # The prompt settles now that the call follows it; the call itself, with
     # no result yet, stays pending rather than settling with none.
     assert [e["kind"] for e in out["entries"]] == ["user"]
     assert [e["kind"] for e in out["pending"]] == ["tool_call"]
 
-    _append_jsonl(path, [_grok({
-        "sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed",
-        "content": [{"type": "content", "content": {"type": "text", "text": "out"}}],
-    })])
-    out = st.transcript_tail(path, after=out["tail"], size=out["size"], flavor="grok")
+    _append_jsonl(path, [_tool_result("t1", "out")])
+    out = st.transcript_tail(path, after=out["tail"], size=out["size"])
     tool_kinds = [e["kind"] for e in out["entries"] + out["pending"] if e["kind"] != "user"]
     assert tool_kinds == ["tool_call"], (
         "the result must land inside its call's card, never as its own tool_result card"
@@ -211,21 +176,19 @@ def test_tail_pairs_a_call_with_a_result_a_tick_later_for_an_unkeyed_flavour(tmp
     assert len(calls) == 1 and calls[0]["result"] == "out"
 
 
-def test_tail_pairs_a_call_and_result_that_land_in_the_same_read_unkeyed_flavour(tmp_path: Path):
+def test_tail_pairs_a_call_and_result_that_land_in_the_same_read(tmp_path: Path):
     """#1310's other half: a call and its result that arrive *together* (a
     fresh page load, or a tail read that caught up in one tick) must not be
     split by a naive "just the last line" cut — that settles the call alone
     (no result) and leaves the result to render as an orphan."""
-    path = _write_jsonl(tmp_path / "updates.jsonl", [_grok_chunk("user_message_chunk", "go")])
-    _, tail, size = _live_view(path, flavor="grok")
+    path = _write_jsonl(tmp_path / "events.jsonl", [_user("go")])
+    _, tail, size = _live_view(path)
 
     _append_jsonl(path, [
-        _grok({"sessionUpdate": "tool_call", "toolCallId": "t1",
-               "title": "ls", "rawInput": {"command": "ls"}}),
-        _grok({"sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed",
-               "content": [{"type": "content", "content": {"type": "text", "text": "out"}}]}),
+        _tool_use("powershell", {"command": "ls"}, "t1"),
+        _tool_result("t1", "out"),
     ])
-    out = st.transcript_tail(path, after=tail, size=size, flavor="grok")
+    out = st.transcript_tail(path, after=tail, size=size)
     tool_kinds = [e["kind"] for e in out["entries"] + out["pending"] if e["kind"] != "user"]
     assert tool_kinds == ["tool_call"], (
         "the result must land inside its call's card, never as its own tool_result card"

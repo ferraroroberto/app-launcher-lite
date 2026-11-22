@@ -166,18 +166,6 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         "The route itself also refuses anyone but the PC (403).",
     ),
     (
-        lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/transcript/image"),
-        "passkey",
-        "Chat transcript images (#1265): a pasted image or screenshot out of the "
-        "transcript, decoded on demand — the transcript's own sensitivity.",
-    ),
-    (
-        lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/transcript/file"),
-        "passkey",
-        "Chat sent files (#1530): a file a Claude SendUserFile call named, read "
-        "from disk through the outbox's guards: the transcript's own sensitivity.",
-    ),
-    (
         lambda p: p.startswith("/api/claude-code/sessions/") and (
             p.endswith("/outbox") or "/outbox/" in p
         ),

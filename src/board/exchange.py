@@ -1,21 +1,18 @@
-"""Agent-aware conversation previews for the Board drawer.
+"""Conversation previews for the Board drawer.
 
-The hook row's Claude JSONL remains the best source when it exists because it
-is structured chat data.  When no row names one, a Claude conversation is
-correlated from the filesystem instead (reported as ``native_scan``
-because the match is inferred rather than exact).  Launcher-owned PTYs also
-have an exact-id capture, however, and that is the fallback for a scan that
-refuses and for agents such as Codex that publish no hook transcript at all.
+The hook row's transcript is the best source when it exists because it is
+structured chat data; for a Copilot session without one, its ``events.jsonl``
+is correlated from the filesystem instead. Launcher-owned PTYs also have an
+exact-id capture, which is the fallback when no structured history answers.
 
 The capture is terminal output, not prose.  A bounded tail is replayed through
 ``pyte`` and reply blocks are selected by the same leading-bullet colour
 contract as the browser's read-aloud extractor.  This keeps ANSI/full-screen
 repaint bytes out of the API response and avoids any cwd-based guessing.
 
-The filesystem correlation itself — locating which harness file belongs to a
-live session at all, across Codex/Pi/Antigravity/Copilot and Claude's own
-scan/resume-id fallbacks — lives in ``src/session_view/transcript_locate.py``; this
-module resolves *what to show*, not *which file*.
+The filesystem correlation itself — locating the Copilot event log that
+belongs to a live session — lives in ``src/session_view/transcript_locate.py``;
+this module resolves *what to show*, not *which file*.
 """
 
 from __future__ import annotations
@@ -33,7 +30,6 @@ from src.board.transcript import _read_tail_bytes, _tail_lines
 from src.board.transcript_exchange import last_exchange
 from src.session_host_scan import _cook_input_line
 from src.session_view import plan_picker, transcript_locate
-from src.transcript_flavors.codex import codex_entries
 from src.transcript_flavors.copilot import copilot_entries
 
 logger = logging.getLogger(__name__)
@@ -54,7 +50,7 @@ _CAPTURE_HISTORY_LINES = 2500
 # ``report_device_status`` takes no ``private`` argument and raises, and a
 # replay has no terminal to answer, so the query is dropped before feeding.
 _PRIVATE_DSR = re.compile(r"\x1b\[\?[0-9;]*n")
-_CODEX_TAIL_BYTES = 4 * 1024 * 1024
+_EVENTS_TAIL_BYTES = 4 * 1024 * 1024
 _ASSISTANT_TEXT_CAP = 6000
 _USER_TEXT_CAP = 1500
 
@@ -105,80 +101,21 @@ def resolve_exchange(
     native_path: Any,
     launcher_capture_path: Path,
     launcher_input_path: Optional[Path] = None,
-    live: Optional[Iterable[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Resolve one live session's exchange through the source hierarchy.
 
-    The row-declared ``native_path`` is exact and always wins. When no row
-    names one and the agent is Claude,
-    :func:`transcript_locate._scan_claude_transcript`
-    (the scan ``/transcript`` shares via
-    :func:`transcript_locate.resolve_claude_transcript`) correlates the
-    conversation from the filesystem — the fallback for the window where
-    the hook has deleted the row out from under a still-live session.
-
-    **Ordering.** Unlike ``/transcript``, this route already had a
-    working fallback, so adding a second one is a ranking decision rather
-    than a gap-fill. The scanned JSONL is placed **above** the launcher's
-    exact-id PTY capture, for two reasons: it is structured chat data
-    rather than replayed terminal output, and a *detached* session has no
-    capture at all, so for a ``RemoteSession`` it is the difference between
-    an exchange and ``no_exchange``. The capture is kept for when the scan
-    refuses — either of :func:`transcript_locate._scan_claude_transcript`'s
-    two guards — so an ambiguous folder still degrades to the
-    rougher-but-honest answer rather than to a neighbour's text.
-
-    **The ranking's one cost, and how it is now bounded.** Claude
-    Code fires ``SessionEnd`` on ``/resume`` too, so the rowless window
-    opens the moment a session resumes a *different* conversation. Until
-    the resumed conversation is itself written, the newest file in the
-    folder is the one the session just left, and the scan answered with it
-    while the capture showed what is on screen now. Nothing on the
-    filesystem separates the two — both are written by the same process
-    seconds apart — so no tightening of the mtime guard closes this
-    window, and none was added rather than ship a knob that only looks
-    like a fix. What does close it is a signal from *outside* the
-    filesystem: the PTY's own window title, which Claude Code repaints
-    with the resumed conversation's name before any hook fires. When it
-    and the scanned file's own declared name are both present and
-    genuinely conflict, the scan is refused and the capture answers
-    instead (:func:`transcript_locate._disprove_by_live_title`). It
-    disproves only, never confirms, so it can make this resolver more
-    conservative and never less — and when it cannot settle the question
-    it says so as its own ``title_check`` state rather than passing for
-    agreement.
-
-    Because that correlation is *inferred* and not established, it reports
-    itself as its own source, ``native_scan``, rather than folding into the
-    exact ``native``: a check that cannot establish a fact must not be
-    scored as the passing state. ``/transcript`` keeps reporting ``native``
-    for both, deliberately — there it has no competing source to outrank,
-    so it has nothing to be honest about.
-
-    Every response whose resolution went through that scan also carries
-    ``title_check`` — ``corroborated``, ``disproved``, ``unknown`` or
-    ``not_checked`` — so the drawer and the logs can tell "the title
-    agreed" from "there was no title to ask". A check that cannot
-    establish a fact reports that as its own state instead of folding
-    into the answer it was meant to qualify.
+    The row-declared ``native_path`` is exact and always wins. A Copilot
+    session whose row names none has its ``events.jsonl`` found from the
+    filesystem instead. Anything else falls back to the launcher's exact-id
+    PTY capture, so a session whose structured history cannot be read
+    degrades to the rougher-but-honest answer rather than to a neighbour's
+    text.
     """
     native = last_exchange(native_path)
     if native.get("available"):
         return {**native, "source": "native", "reason": None}
 
-    agent = str(session.get("agent") or "claude").lower()
-    title_check: Optional[str] = None
-    if not native_path and agent == "claude":
-        scanned, title_check = _scanned_exchange(session, live)
-        if scanned is not None:
-            return scanned
-
-    if agent == "codex":
-        codex_path = transcript_locate.find_codex_transcript(session)
-        codex = codex_last_exchange(codex_path)
-        if codex.get("available"):
-            return codex
-
+    agent = str(session.get("agent") or "").lower()
     if agent == "copilot":
         copilot = _copilot_session_exchange(session, native_path)
         if copilot.get("available"):
@@ -192,43 +129,23 @@ def resolve_exchange(
         cols=int(session.get("cols") or 120),
     )
     if fallback.get("available"):
-        return _with_title_check(fallback, title_check)
+        return fallback
 
     reason = _unavailable_reason(fallback, native_path, launcher_capture_path)
-    return _with_title_check(unavailable(reason), title_check)
+    return unavailable(reason)
 
 
 def _copilot_session_exchange(session: Dict[str, Any], native_path: Any) -> Dict[str, Any]:
     """A Copilot session's exchange from its ``events.jsonl``.
 
-    The file is not Claude's JSONL shape, so the Claude parser reads nothing
-    from it. The hook-named path wins when a row carries one, else the
-    launch-window match finds the file.
+    The hook-named path wins when a row carries one, else the launch-window
+    match finds the file.
     """
     path = (
         Path(str(native_path)) if native_path
         else transcript_locate.find_copilot_transcript(session)
     )
     return copilot_last_exchange(path)
-
-
-def _scanned_exchange(
-    session: Dict[str, Any], live: Optional[Iterable[Dict[str, Any]]],
-) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    """The exchange from the scanned Claude transcript (``None`` when the
-    scan found nothing readable) and the scan's ``title_check``."""
-    scanned_path, title_check = transcript_locate._scan_claude_transcript(
-        session, live or (), disprove=True
-    )
-    scanned = last_exchange(scanned_path)
-    if not scanned.get("available"):
-        return None, title_check
-    return {
-        **scanned,
-        "source": "native_scan",
-        "reason": None,
-        "title_check": title_check,
-    }, title_check
 
 
 def _unavailable_reason(fallback: Dict[str, Any], native_path: Any, launcher_capture_path: Path) -> str:
@@ -238,36 +155,6 @@ def _unavailable_reason(fallback: Dict[str, Any], native_path: Any, launcher_cap
     if native_path:
         return "native_unavailable"
     return "no_exchange"
-
-
-def _with_title_check(
-    result: Dict[str, Any], title_check: Optional[str]
-) -> Dict[str, Any]:
-    """Attach the scan's ``title_check`` verdict to a non-scan answer.
-
-    Only when the Claude scan actually ran (``title_check`` is ``None`` for
-    an exact row, a non-Claude agent, or any route that never reached the
-    scan), so the field's presence means "the scan was consulted" and its
-    value says what the title settled. The ``disproved`` case is the one
-    that matters most here: it is the only reason a launcher capture can be
-    answering while a readable scanned conversation sat right there, and
-    without the field that would be indistinguishable from the scan simply
-    finding nothing.
-    """
-    if title_check is None:
-        return result
-    return {**result, "title_check": title_check}
-
-
-def codex_last_exchange(path: Optional[Path]) -> Dict[str, Any]:
-    """Read the newest Codex user/assistant messages from bounded JSONL.
-
-    Reads the rollout through :func:`transcript_flavors.codex.codex_entries`
-    so the drawer and the Chat reader agree on what counts as a typed
-    prompt — harness plumbing such as ``<environment_context>`` is a ``system``
-    entry there, never the "last prompt" shown here.
-    """
-    return _flavor_last_exchange(path, codex_entries, "codex")
 
 
 def copilot_last_exchange(path: Optional[Path]) -> Dict[str, Any]:
@@ -285,7 +172,7 @@ def _flavor_last_exchange(
 ) -> Dict[str, Any]:
     if path is None:
         return unavailable("native_unavailable")
-    raw = _read_tail(path, _CODEX_TAIL_BYTES)
+    raw = _read_tail(path, _EVENTS_TAIL_BYTES)
     if not raw:
         return unavailable("native_unavailable")
     entries = entries_of(list(enumerate(raw.splitlines())), uncapped=True)

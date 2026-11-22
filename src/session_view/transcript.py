@@ -1,10 +1,7 @@
 """Paginated, typed transcript pages for one live Coding session.
 
-The Coding tab's transcript overlay reads a session's *native* history —
-Claude Code's hook JSONL, a Codex rollout, Grok Build's ACP-style
-``updates.jsonl`` stream, a Pi session JSONL, an Antigravity CLI
-conversation log, or a Copilot CLI ``events.jsonl``
-(:data:`FLAVORS`) — as an ordered list of typed
+The Coding tab's transcript overlay reads a session's *native* history — a
+Copilot CLI ``events.jsonl`` (:data:`FLAVORS`) — as an ordered list of typed
 entries the phone can render chat-style: typed ``user`` prompts and
 ``assistant`` replies expanded, everything else (``tool_call`` +
 paired result, ``thinking``, ``system`` plumbing, sub-agent traffic) folded.
@@ -31,37 +28,21 @@ Deliberately **not** on the session-host import closure (CLAUDE.md
 "session-host"): this is a webapp-only reader, so a change here is never a
 ``:8466`` restart concern.
 
-The six line grammars (:data:`FLAVORS`) live one per module under
-``src/transcript_flavors/`` — this module keeps only what is common
-to all of them: the byte-window paging above, the live-tail cursor, on-demand
-image decoding, and the registry that dispatches to each flavour's builder.
+The line grammar (:data:`FLAVORS`) lives under ``src/transcript_flavors/`` —
+this module keeps only what is common to a grammar: the byte-window paging
+above, the live-tail cursor, and the registry that dispatches to a flavour's
+builder.
 """
 
 from __future__ import annotations
 
-import base64
-import binascii
 import json
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from src.session_view.image_sniff import sniff_image
-from src.transcript_flavors._shared import (
-    Entry,
-    EntryBuilder,
-    Line,
-    _image_data,
-    _line_image_blocks,
-    _loads,
-    cap_diff,
-)
-from src.transcript_flavors.antigravity import antigravity_entries, antigravity_line_key
-from src.transcript_flavors.claude import claude_entries, claude_line_key, sent_file_at
-from src.transcript_flavors.codex import codex_entries, codex_line_key
+from src.transcript_flavors._shared import Entry, EntryBuilder, Line, cap_diff
 from src.transcript_flavors.copilot import copilot_entries, copilot_line_key
-from src.transcript_flavors.grok import grok_entries, grok_line_key
-from src.transcript_flavors.pi import pi_entries, pi_line_key
 
 # One backwards read step. 256 KB is the same window the Board's
 # last-exchange reader uses (`src.board.transcript._EXCHANGE_TAIL_BYTES`).
@@ -528,7 +509,7 @@ def _pending_from(lines: List[Line], build: EntryBuilder, line_key: LineKey) -> 
     newest keyed span (found by taking the key of the last keyed line and
     scanning back to that span's first line).
 
-    For an **unkeyed** flavour (codex, grok, pi, antigravity, copilot —
+    For an **unkeyed** flavour (copilot —
     ``line_key`` always ``None``, so every line here reads standalone), the
     keyed rule degenerates to "just the last line", which is wrong for a
     tool call: its result is always a separate, later raw line — often the
@@ -750,12 +731,11 @@ _ACTIVITY_MEMO_MAX = 64
 
 
 def transcript_activity(
-    path: Any, *, flavor: str = "claude", busy: bool = False, now: Optional[float] = None
+    path: Any, *, flavor: str = "copilot", now: Optional[float] = None
 ) -> Optional[Dict[str, Any]]:
     """:func:`turn_activity` of ``path``'s newest turn, plus ``working``.
 
-    ``working`` is the harness's own busy signal (``busy``, the caller's) or,
-    failing that, a transcript that ends mid-turn and was written within
+    ``working`` is a transcript that ends mid-turn and was written within
     :data:`ACTIVITY_FRESH_S`. Reads the newest page, widening only while no
     user message is in it, so it costs one window in the usual case and
     nothing while the file is unchanged; ``None`` when none turns up within
@@ -786,95 +766,8 @@ def transcript_activity(
     fresh = (time.time() if now is None else now) - st.st_mtime <= ACTIVITY_FRESH_S
     out = dict(found)
     is_open = out.pop("open")
-    out["working"] = bool(busy or (is_open and fresh))
+    out["working"] = is_open and fresh
     return out
-
-
-# ------------------------------------------------------ transcript images
-#
-# An image block rides the transcript as base64. The page never carries the
-# bytes: an entry lists where its images are, ``{"offset": <line offset>,
-# "n": <index>}``, and the image route re-reads that one line and decodes
-# block ``n`` on demand. ``n`` counts the line's image blocks in a fixed walk
-# order (its content list, with a Claude ``tool_result``'s own content in
-# place), so it is stable for as long as the line is. A block with no data
-# keeps the ``[image]`` placeholder, as does every harness whose transcript
-# records none.
-
-IMAGE_LINE_CAP = 32 * 1024 * 1024      # a raw line holding an image, base64 and all
-IMAGE_BYTE_CAP = 16 * 1024 * 1024      # one decoded image
-_IMAGE_FLAVORS = frozenset({"claude", "pi"})
-
-
-def _line_at(path: Path, offset: int, cap: int) -> Optional[str]:
-    """The whole line starting at byte ``offset``, or None when ``offset``
-    doesn't start a line or the line runs past ``cap`` bytes. Raises OSError
-    on a read failure."""
-    with path.open("rb") as fh:
-        if offset > 0:
-            fh.seek(offset - 1)
-            if fh.read(1) != b"\n":
-                return None
-        raw = fh.read(cap + 1)
-    end = raw.find(b"\n")
-    if end < 0:
-        if len(raw) > cap:
-            return None
-        end = len(raw)
-    return raw[:end].decode("utf-8", "replace")
-
-
-def transcript_image(path: Path, offset: int, n: int, flavor: str) -> Optional[Tuple[bytes, str]]:
-    """``(bytes, media type)`` of image ``n`` on the line starting at ``offset``.
-
-    None when the flavour records no images, ``offset`` doesn't start a line
-    (or the file moved on), the line is over :data:`IMAGE_LINE_CAP`, block
-    ``n`` isn't there or carries no data, it doesn't decode, it is over
-    :data:`IMAGE_BYTE_CAP`, or its bytes aren't an allowlisted image format.
-    The declared media type is never trusted. Raises OSError on a read failure.
-    """
-    if flavor not in _IMAGE_FLAVORS or offset < 0 or n < 0:
-        return None
-    raw = _line_at(path, offset, IMAGE_LINE_CAP)
-    if raw is None:
-        return None
-    obj = _loads(raw)
-    msg = obj.get("message") if obj and isinstance(obj.get("message"), dict) else {}
-    blocks = _line_image_blocks(msg.get("content"))
-    if n >= len(blocks):
-        return None
-    data = _image_data(blocks[n])
-    if not data or len(data) > IMAGE_BYTE_CAP * 4 // 3 + 4:
-        return None
-    try:
-        decoded = base64.b64decode(data, validate=False)
-    except (binascii.Error, ValueError):
-        return None
-    media = sniff_image(decoded)
-    return (decoded, media) if media and len(decoded) <= IMAGE_BYTE_CAP else None
-
-
-# ------------------------------------------------- sent files
-#
-# A Claude ``SendUserFile`` call names files by path. The page carries refs
-# (``{"offset", "n", "name"}``), never the path or the bytes; the file route
-# re-reads that one line for the path and hands it to the outbox's guards
-# (``src.session_view.outbox.read_source``), which read the file live from disk.
-
-SENT_FILE_LINE_CAP = 1024 * 1024
-_SENT_FILE_FLAVORS = frozenset({"claude"})
-
-
-def transcript_sent_file(
-    path: Path, offset: int, n: int, flavor: str
-) -> Optional[Tuple[str, Optional[str]]]:
-    """``(path as the call wrote it, the line's cwd)`` of sent file ``n`` on
-    the line starting at ``offset``, else None (a flavour with no such tool,
-    a bad ref, or a file that moved on). Raises OSError on a read failure."""
-    if flavor not in _SENT_FILE_FLAVORS or offset < 0 or n < 0:
-        return None
-    raw = _line_at(path, offset, SENT_FILE_LINE_CAP)
-    return sent_file_at(raw, n) if raw is not None else None
 
 
 # How far a harness's own history can be trusted to mark a failed tool call.
@@ -896,23 +789,9 @@ TOOL_ERRORS_PARTIAL = "partial"
 TOOL_ERRORS_NONE = "none"
 
 # The line grammars this reader understands: flavour name → (entry builder,
-# line key, tool-error fidelity). One table so a new harness is one row here
-# plus its parser, rather than a branch in every dispatch site. The names are
-# the endpoint's `_FLAVOR_BY_AGENT` values
-# (app/webapp/routers/session_transcript.py).
+# line key, tool-error fidelity). The names are the endpoint's
+# `_FLAVOR_BY_AGENT` values (app/webapp/routers/session_transcript.py).
 FLAVORS: Dict[str, Tuple[EntryBuilder, LineKey, str]] = {
-    # `is_error` on every `tool_result` block.
-    "claude": (claude_entries, claude_line_key, TOOL_ERRORS_REPORTED),
-    # No success/error field at any level — see the reader's own comment; a
-    # rejected `apply_patch` states so in its fixed tool message.
-    "codex": (codex_entries, codex_line_key, TOOL_ERRORS_PARTIAL),
-    # `status: "failed"` on the `tool_call_update` that carries the result.
-    "grok": (grok_entries, grok_line_key, TOOL_ERRORS_REPORTED),
-    # `isError` on every `toolResult` message.
-    "pi": (pi_entries, pi_line_key, TOOL_ERRORS_REPORTED),
-    # `status: "ERROR"` catches a tool that could not run; a shell command
-    # exiting non-zero is still `DONE`, with the code only in prose.
-    "antigravity": (antigravity_entries, antigravity_line_key, TOOL_ERRORS_PARTIAL),
     # `success: false` catches a tool-level failure and
     # `shellExecution.exitCode` a command-level one — but the latter key is
     # absent from most completions on disk, leaving those exits unrecorded.
@@ -921,10 +800,13 @@ FLAVORS: Dict[str, Tuple[EntryBuilder, LineKey, str]] = {
 
 
 def _flavor(flavor: str) -> Tuple[EntryBuilder, LineKey, str]:
-    """The builder + line key + tool-error fidelity for ``flavor``,
-    defaulting to Claude's — the same fallback the endpoint applies to a
-    session with no agent field."""
-    return FLAVORS.get(flavor, FLAVORS["claude"])
+    """The builder + line key + tool-error fidelity for ``flavor``. Raises
+    ``ValueError`` for a flavour with no grammar here: the endpoint refuses
+    such a session as ``unsupported_agent`` before it gets this far."""
+    try:
+        return FLAVORS[flavor]
+    except KeyError:
+        raise ValueError(f"no transcript grammar for flavor {flavor!r}") from None
 
 
 # ---------------------------------------------------------------- public
@@ -935,7 +817,7 @@ def transcript_page(
     *,
     before: Optional[int] = None,
     limit: int = DEFAULT_LIMIT,
-    flavor: str = "claude",
+    flavor: str = "copilot",
 ) -> Dict[str, Any]:
     """One page of typed entries from ``path``, newest-last.
 
@@ -960,7 +842,7 @@ def transcript_tail(
     *,
     after: int,
     size: Optional[int] = None,
-    flavor: str = "claude",
+    flavor: str = "copilot",
 ) -> Dict[str, Any]:
     """Entries appended since byte offset ``after``.
 

@@ -10,7 +10,7 @@ refusal comes back with its own ``reason`` and status.
 ``GET /api/claude-code/sessions/{sid}/outbox`` lists a session's entries and
 ``GET .../outbox/{entry_id}`` serves one entry's bytes. Both are
 terminal-grade content behind the Tailscale + passkey gate
-(``middleware._TERMINAL_GUARD_RULES``), like ``/transcript/image``.
+(``middleware._TERMINAL_GUARD_RULES``), like ``/transcript``.
 
 The Chat pane does not poll the list: the transcript page and live tick
 carry the outbox alongside the entries (``session_transcript.py``), so a

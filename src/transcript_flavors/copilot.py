@@ -20,7 +20,7 @@ from src.transcript_flavors._shared import (
     _tool_summary,
     _with_action,
 )
-from src.transcript_flavors.codex import _PATCH_FAILED, parse_apply_patch
+from src.transcript_flavors.apply_patch import _PATCH_FAILED, parse_apply_patch
 
 # Copilot's own bookkeeping event families, none of which carry conversation
 # the reader should render. `model.*` is the worst of them: `model.message`,
@@ -124,15 +124,15 @@ def copilot_entries(lines: List[Line], *, uncapped: bool = False) -> List[Entry]
       from a *later* line, so a reply can never be hoisted above the call
       that produced it.
     * **Call and result pair by an exact id** — ``data.toolCallId`` on both
-      ``tool.execution_start`` and ``tool.execution_complete`` — so unlike
-      Antigravity there is no positional guessing. A result whose
-      call fell off the page stands alone, as in every other flavour.
+      ``tool.execution_start`` and ``tool.execution_complete`` — so there is
+      no positional guessing. A result whose
+      call fell off the page stands alone.
     * A ``task_complete`` call's ``arguments.summary`` is the agent's reply
       to the user (autopilot's turn-end), so it is an ``assistant`` entry at
       the call's offset and neither the call nor its result gets a tool row.
     * ``apply_patch`` (the edit tool GPT-family models get) takes the patch
       text itself as ``arguments``; each file section becomes its own step
-      after the call, sharing the call's result, as in the Codex flavour.
+      after the call, sharing the call's result.
     * ``data.reasoningText`` is readable thinking and folds as ``thinking``
       (14 of 68 assistant messages here). Its neighbours
       ``reasoningOpaque``, ``encryptedContent`` and ``reasoningBlocks``
@@ -147,27 +147,26 @@ def copilot_entries(lines: List[Line], *, uncapped: bool = False) -> List[Entry]
       client's ``new Date`` reads directly — no epoch conversion, so no
       1970-epoch cards.
 
-    **This is by far the least byte-efficient of the five flavours.** The
-    capture ran 670 KB for three short turns — ~220 KB per turn, of which
+    **This grammar is very byte-inefficient.** The capture ran 670 KB for three short turns — ~220 KB per turn, of which
     about 600 bytes was visible text. The bulk is ``model.*`` bookkeeping
     (70%) plus one ~87 KB ``system.message`` holding the whole system prompt
     (written once per session here, not per turn), and a single
     ``assistant.message`` line reaches 14 KB because of its opaque blobs.
     The paging contract absorbs this exactly as designed —
     :data:`src.session_view.transcript.REQUEST_BYTE_CAP` ends a page early and hands
-    back a cursor — but a Copilot page carries fewer turns per request than
-    the other flavours, so "Load older" is tapped more often. Nothing is
+    back a cursor — but a Copilot page carries few turns per request, so
+    "Load older" is tapped often. Nothing is
     lost, and the system prompt never reaches a card.
 
-    Known omission, shared with the Codex, Grok, Pi and Antigravity
-    flavours: a failed tool call reads much like a successful one.
+    Known omission: a failed tool call reads much like a successful one.
     Copilot's ``data.success`` describes whether the *tool* ran, not whether
     the command succeeded — a shell command exiting 1 is still
     ``success: true``, with the failure only in the result's own
     ``<shellId: N completed with exit code 1>`` footer. That footer is kept
     in the result text precisely because it is the only signal there is.
 
-    ``uncapped`` — see :func:`src.transcript_flavors.claude.claude_entries`.
+    ``uncapped`` lifts the per-entry text caps, for the Board drawer's
+    last-exchange read.
     """
     assistant_cap = NO_CAP if uncapped else _shared.ASSISTANT_TEXT_CAP
     user_cap = NO_CAP if uncapped else _shared.USER_TEXT_CAP
