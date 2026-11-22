@@ -42,7 +42,9 @@ from owner_check import block  # noqa: E402
 GLAB_TIMEOUT_SECONDS = 60
 # A fleet-wide list is ~2 calls per repo plus one notes read per labelled issue.
 LIST_WORKERS = 6
-REPO_ROOT = _LIB.parents[1]
+# The checkout holding copilot/ (copilot/skills/_lib): its .fleet.toml carries the
+# scope opt-in, and its siblings are the fleet.
+REPO_ROOT = _LIB.parents[2]
 SCOPE_SEP = "::"
 
 

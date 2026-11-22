@@ -10,8 +10,8 @@ The client in `src/clients/gitlab.py` ran against gitlab.com with `glab` 1.131 (
 | --- | --- |
 | Open group issues (`groups/<group>/issues?state=opened`), including `references.full`, `web_url`, `labels` as strings | verified |
 | Closed group issues with `updated_after`, `closed_at` as a millisecond `Z` stamp, landing in Done | verified |
-| Open and merged group merge-request reads (the endpoints and query strings are accepted) | verified to answer; the group held none, so the row shape is `unknown` |
-| Merge-request `draft` and `description`, and the `Closes #N` / `VISUAL_PROOF=` pairing | `unknown` |
+| Open and merged group merge-request reads (the endpoints and query strings are accepted) | verified; a real merged row (2026-11-22) carries `iid`, `draft` and `work_in_progress`, `description`, `merged_at`, `references.full` ending in `!<iid>`, `web_url` and `labels` as strings, and the client parses it; the group held no open merge request |
+| Merge-request `draft` and `description`, and the `Closes #N` / `VISUAL_PROOF=` pairing | `draft` and `description` verified on real rows (2026-11-22); no real row carried `Closes #N` or `VISUAL_PROOF=`, so the pairing is unit-tested on the real row shape and `unknown` live |
 | A merged merge request carries `merged_at` as a millisecond `Z` stamp (group and project reads) | verified |
 | `merged_after` on `projects/<path>/merge_requests?state=merged` filters: a stamp in the future answers `[]`, one in the past answers the merged rows | verified |
 | `created_after` on `projects/<path>/issues` filters the same way | verified |
@@ -23,13 +23,16 @@ The client in `src/clients/gitlab.py` ran against gitlab.com with `glab` 1.131 (
 | A group with no issues or merge requests refreshes with no error | verified |
 | A page of 100 (`truncated`) against a real group, a subgroup-nested project, a self-hosted `gitlab_host` | `unknown` |
 | Project list (`groups/<group>/projects?include_subgroups=true&archived=false`) with `id`, `path`, `path_with_namespace`, `default_branch` and `builds_access_level` | verified |
-| Pipelines on the default branch (`projects/<id>/pipelines?ref=<default>&order_by=id&sort=desc&per_page=20`): a project with none answers `200 []` | verified (empty); the group's projects held no pipeline |
+| Pipelines on the default branch (`projects/<id>/pipelines?ref=<default>&order_by=id&sort=desc&per_page=20`): a project with none answers `200 []` | verified, empty and with a pipeline (2026-11-22) |
 | The same read for a ref GitLab does not know | verified: `200 []`, the same as "no pipelines", so the ref is named from the project row, never guessed |
 | `projects/<id>/pipelines/latest?ref=<default>` on a project with no pipeline | `403 Forbidden`; not used |
-| Reading a pipeline's row shape and `status` values (`id`, `iid`, `sha`, `ref`, `status`, `source`, `created_at`, `web_url`) | verified against a public project's pipelines (`success` and `failed`); not yet against a pipeline of the group |
-| A red or green pipeline of the group itself, `cancelled`/`skipped` rows, a project with CI switched off, a self-hosted host | `unknown` |
+| Reading a pipeline's row shape and `status` values (`id`, `iid`, `sha`, `ref`, `status`, `source`, `created_at`, `web_url`) | verified against a public project's pipelines (`success` and `failed`) and a `failed` pipeline of the group (2026-11-22) |
+| A red pipeline of the group itself | verified (2026-11-22): a pipeline committed to a test project's default branch read as `red` and drew one `CI failed` card; see [Pipelines on gitlab.com's free runners](#pipelines-on-gitlabcoms-free-runners) |
+| A green pipeline of the group itself | blocked (2026-11-22): gitlab.com's shared runners refuse an unverified account, so no job ran and no pipeline can succeed until the owner verifies the account or registers a project runner |
+| `cancelled`/`skipped` rows, a project with CI switched off, a self-hosted host | `unknown` |
 | `glab mr merge --auto-merge` through the chief's merge verb | verified on a GitLab test project through the companion repo's copy of the verb: one request merged and read back clean, two conflicting requests refused with GitLab's reason; this tree's copy is unit-tested and not re-run live from here |
-| Labels | `unknown` (not read or written by the client today) |
+| Owner-check labels, plain (`needs-owner`, `needs-validation`) | verified (2026-11-22) on a test project: created, applied, listed, then cleared through the Board's answer path; see [Owner checks](#owner-checks) |
+| Owner-check labels, scoped (`label_scope = "owner"`) | written and read back (2026-11-22), but on the free tier both scoped labels sat on one issue together, so GitLab's one-of-a-kind rule (a paid feature) is not enforced; plain labels stay the default |
 | The two-remote mirror and `scripts/sync_gitlab_mirror.py` | verified (push, level re-run); see below |
 | An Android Git client | `unknown` |
 
@@ -71,7 +74,13 @@ Both are used by the Board's file-an-issue flow and by anything that answers on 
 
 ## Owner checks
 
-The owner-check feature (shipped work to validate, steps owed before a start) is meant to use GitLab scoped labels. It is opt-in and **not yet live**: the label scheme and the helper that reads and clears the labels are in `copilot/skills/_lib/owner_check/`. Until then the Board's owner-check card stays empty.
+The owner-check list (shipped work to validate, steps owed before a start) rides two plain labels, `needs-validation` and `needs-owner`, which work on any GitLab tier. `copilot/skills/_lib/owner_check/` creates, reads and clears them through `glab`; the Board's `src/board/owner_checks.py` runs that package's `list --json` beside each forge refresh and its `clear` when the owner answers Validated or Done. The fleet it lists is every sibling checkout of this one with a GitLab remote.
+
+Live on a test project (2026-11-22): `mark` created both labels and posted the note block, `list --json` returned the issue, the Board's cache showed it with its Try, an answer of Done removed both labels and posted the cleared block, and the next list was empty at once. `[owner_check] label_scope = "<scope>"` in `.fleet.toml` switches to scoped labels; they work, but on the free tier they behave as ordinary labels, so the switch buys nothing there and stays off.
+
+### Pipelines on gitlab.com's free runners
+
+A new gitlab.com account must verify its identity before shared runners take its jobs. Until then every pipeline fails before a job starts, and GitLab says "The pipeline failed due to the user not being verified." The REST row says only `failed`, so the Board shows that project as `CI failed` although no job ran. The reason appears in GraphQL (`pipeline.failureReason`) and on the pipeline page.
 
 ## Merging
 

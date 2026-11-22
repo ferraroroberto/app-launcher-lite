@@ -5,9 +5,8 @@ rows follow GitLab's REST v4 shapes: ``iid`` rather than ``number``, plain
 string ``labels``, ``web_url``, ``references.full`` carrying the (possibly
 subgroup-nested) project path, ``draft`` on a merge request, ``merged_at``
 and ``description`` on a merged one. The issue shapes (open and closed) and
-the issue write, note and ``user`` responses were read live from gitlab.com;
-the merge-request shapes are the documented API and are not yet proven
-against a live instance (the live group had no merge request to read).
+the issue write, note and ``user`` responses were read live from gitlab.com,
+and so was a merged merge-request row (``_LIVE_GROUP_MR``).
 """
 
 from __future__ import annotations
@@ -214,6 +213,28 @@ def test_an_issue_closed_through_the_api_lands_in_done(monkeypatch):
     [row] = forge.search_done_on("grp", date(2026, 11, 19), timezone.utc)
     assert (row["repo"], row["number"], row["pr"], row["not_planned"]) == ("tool", 1, None, False)
     assert row["closed_at"] == "2026-11-19T07:10:55.623Z"
+
+
+# A merged row from the live group endpoint, names and URLs scrubbed: ``draft`` and
+# ``work_in_progress`` false, a plain description, ``references.full`` with ``!``.
+_LIVE_GROUP_MR = {
+    "iid": 18, "state": "merged", "draft": False, "work_in_progress": False,
+    "title": "Throwaway", "description": "Throwaway merge proof.", "labels": [],
+    "merged_at": "2026-11-20T09:36:31.736Z", "updated_at": "2026-11-20T09:36:32.103Z",
+    "web_url": "https://gitlab.com/grp/tool/-/merge_requests/18",
+    "references": {"short": "!18", "relative": "tool!18", "full": "grp/tool!18"},
+}
+
+
+def test_a_live_merged_row_pairs_only_through_its_description(monkeypatch):
+    day = date(2026, 11, 20)
+    proved = {**_LIVE_GROUP_MR, "iid": 19, "description": "Closes #5\n\nVISUAL_PROOF=fresh"}
+    _install(monkeypatch, {"merge_requests?state=merged": [_LIVE_GROUP_MR, proved]})
+    closers = forge.search_merged_on("grp", day, timezone.utc)
+    assert closers == {("tool", 5): {
+        "pr": 19, "pr_url": proved["web_url"], "visual_proof": "fresh",
+    }}
+    assert forge._norm_pr(_LIVE_GROUP_MR)["is_draft"] is False
 
 
 def test_a_failed_mr_read_leaves_done_without_pairing(monkeypatch):

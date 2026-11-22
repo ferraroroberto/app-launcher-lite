@@ -5,7 +5,7 @@ returned: the group's project list (``id``, ``path``, ``path_with_namespace``,
 ``default_branch``, ``builds_access_level``), a project with no pipeline
 answering ``200 []`` (also for a ref GitLab does not know), and a pipeline row
 (``id``, ``iid``, ``sha``, ``ref``, ``status``, ``created_at``, ``web_url``)
-read from a public project; the live group held no pipeline of its own.
+read from a public project and from a failed pipeline of the live group.
 """
 
 from __future__ import annotations

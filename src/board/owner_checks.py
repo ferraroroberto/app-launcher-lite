@@ -1,13 +1,14 @@
 """Owner checks on the Board: shipped work to validate, and steps owed before a start.
 
-fleet-config's ``owner_check`` package owns the two labels (``needs-validation``,
-``needs-owner``), the comment block and every read and write of them
-(fleet-config ``docs/owner-check.md``). This module runs that package's command
-line with fleet-config's own venv, never re-reading the labels itself:
+The ``owner_check`` package under ``copilot/skills/_lib/`` owns the two labels
+(``needs-validation``, ``needs-owner``, plain on any GitLab tier), the note block
+and every read and write of them through ``glab`` (``copilot/docs/chief.md``).
+This module runs that package's command line, never re-reading the labels itself:
 
 * ``list --json`` fills an in-memory cache, read by the 5 s Board poll for free.
-  The list costs two ``gh`` calls per fleet repo, so it runs only beside the
-  Board's GitHub refresh, in a background thread with a cooldown.
+  The list costs two ``glab`` calls per sibling GitLab checkout plus a notes read
+  per labelled issue, so it runs only beside the Board's forge refresh, in a
+  background thread with a cooldown.
 * ``clear`` answers Validated and Done: it removes the label and posts the
   cleared block carrying the answer.
 
@@ -18,8 +19,9 @@ The launcher keeps four marks of its own, in ``webapp/owner-check-marks.json``:
 the issue; the label stays until the chief acts). A marked item stays listed but
 leaves the "needs you" count.
 
-GitHub's label search trails a label change by minutes, so an item cleared here
-is hidden for :data:`CLEARED_HIDE_SECONDS` even if the next list still returns it.
+An item cleared here is hidden for :data:`CLEARED_HIDE_SECONDS` even if the next
+list still returns it, so a forge read that trails the label change cannot bring
+it back.
 
 Degradation contract: a read that did not land is ``unknown``, never "none". A
 never-filled cache says ``available: false``; a failed refresh keeps the older
@@ -120,7 +122,7 @@ _fetch_body = forge.issue_body
 
 
 class OwnerCheckError(RuntimeError):
-    """fleet-config's owner_check could not run, or a write did not land."""
+    """The owner_check CLI could not run, or a write did not land."""
 
 
 def _now_iso(now: Optional[datetime] = None) -> str:
@@ -501,7 +503,7 @@ def answer(
 ) -> None:
     """Apply one validated answer; OwnerCheckError when its write did not land.
 
-    ``comment(repo, number, body)`` posts a plain comment (the launcher's ``gh``).
+    ``comment(repo, number, body)`` posts a plain note (the launcher's ``glab``).
     """
     moment = now or datetime.now(timezone.utc)
     ref = ans["ref"]
