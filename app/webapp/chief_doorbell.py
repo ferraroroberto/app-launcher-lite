@@ -36,9 +36,20 @@ real session.
 The line carries no count, issue number or worker text. Everything the chief
 acts on comes from ``chief_ops.py inbox``.
 
-Breadcrumbs go to ``webapp/chief-doorbell.log``: every ring, and every skip
-reason when it changes, repeated every :data:`SKIP_REPEAT_SECONDS` while it
-holds (a 3 s tick logging each skip would be ~29k lines a day).
+A ring counts only when the session-host confirms its submit
+(``submit_state`` ``confirmed``). Anything else, a deferred or unconfirmed
+submit or Copilot leaving the line on its input, is logged as not delivered,
+never as rung, and the back-off re-ring covers it.
+
+A missed wake must surface on its own. When the oldest pending event has
+waited :data:`UNREAD_ALERT_SECONDS`, the tick logs one warning per backlog
+with its current skip reason, and :func:`unread_mailbox_age` lets
+``GET /api/board`` move the chief's card to Your turn with the wait shown.
+
+Breadcrumbs go to ``webapp/chief-doorbell.log``: every ring and its delivery
+verdict, and every skip reason when it changes, repeated every
+:data:`SKIP_REPEAT_SECONDS` while it holds (a 3 s tick logging each skip would
+be ~29k lines a day).
 """
 
 from __future__ import annotations
@@ -50,7 +61,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from app.webapp.routers import board_chief
 from app.webapp.routers.board_spawn import read_live_sessions
@@ -82,7 +93,12 @@ SKIP_REPEAT_SECONDS = 600.0
 #: (``chief_ops.CLAIM_STALE_SECONDS``).
 CLAIM_STALE_MS = 900_000
 
-_CLAIM_NAME = re.compile(r"^(\d+)-(.+)\.json$")
+#: A pending event this old means the chief missed its wake: the back-off
+#: re-rings every minute, so fifteen minutes is many rings that did not land.
+UNREAD_ALERT_SECONDS = 900.0
+
+#: Root events and claims alike are ``<epoch-ms>-<id>.json``.
+_STAMPED_NAME = re.compile(r"^(\d+)-(.+)\.json$")
 
 #: Board statuses that mean "at its prompt, nothing pending on screen".
 #: ``waiting-on-task`` is included because the chief ends every turn with a
@@ -105,19 +121,44 @@ def _is_counted_name(entry: Any) -> bool:
     )
 
 
-def count_pending(inbox_dir: Path, now_ms: int) -> Optional[int]:
+@dataclass(frozen=True)
+class PendingScan:
+    """The pending count, and the oldest stamp among the pending names
+    (``None`` when none carries one)."""
+
+    count: int
+    oldest_ms: Optional[int] = None
+
+    def oldest_age(self, now_ms: int) -> Optional[float]:
+        if self.oldest_ms is None or self.count <= 0:
+            return None
+        return max(0.0, (now_ms - self.oldest_ms) / 1000.0)
+
+
+def _stamp(name: str) -> Optional[int]:
+    match = _STAMPED_NAME.match(name)
+    return int(match.group(1)) if match else None
+
+
+def _oldest(stamps: List[Optional[int]]) -> Optional[int]:
+    known = [s for s in stamps if s is not None]
+    return min(known) if known else None
+
+
+def scan_pending(inbox_dir: Path, now_ms: int) -> Optional[PendingScan]:
     """Pending events in ``inbox_dir`` by the mailbox contract's counting rule.
 
     ``R + S``: regular, non-dot ``*.json`` files in the root, plus those in
     ``.claimed/`` whose claim is stale (or carries no readable time). Never
     opens a file. A missing directory is ``0``; one present but not listable
-    is ``None`` (unknown), never ``0``.
+    is ``None`` (unknown), never ``0``. A stale claim's stamp is its claim
+    time, so the oldest age it gives is a lower bound.
     """
     try:
         with os.scandir(inbox_dir) as entries:
-            root = sum(1 for e in entries if _is_counted_name(e))
+            root = [_stamp(e.name) for e in entries if _is_counted_name(e)]
     except FileNotFoundError:
-        return 0
+        return PendingScan(0)
     except OSError:
         return None
     claimed_dir = inbox_dir / ".claimed"
@@ -125,15 +166,37 @@ def count_pending(inbox_dir: Path, now_ms: int) -> Optional[int]:
         with os.scandir(claimed_dir) as entries:
             names = [e.name for e in entries if _is_counted_name(e)]
     except FileNotFoundError:
-        return root
+        return PendingScan(len(root), _oldest(root))
     except OSError:
         return None
-    stale = 0
+    stale = []
     for name in names:
-        match = _CLAIM_NAME.match(name)
-        if match is None or now_ms - int(match.group(1)) >= CLAIM_STALE_MS:
-            stale += 1
-    return root + stale
+        stamp = _stamp(name)
+        if stamp is None or now_ms - stamp >= CLAIM_STALE_MS:
+            stale.append(stamp)
+    return PendingScan(len(root) + len(stale), _oldest(root + stale))
+
+
+def count_pending(inbox_dir: Path, now_ms: int) -> Optional[int]:
+    """:func:`scan_pending`'s count alone."""
+    scan = scan_pending(inbox_dir, now_ms)
+    return None if scan is None else scan.count
+
+
+def unread_mailbox_age(cfg: Any) -> Optional[float]:
+    """Seconds the oldest pending event has waited, once that passes
+    :data:`UNREAD_ALERT_SECONDS` with the doorbell on; else ``None``.
+
+    Read from the inbox alone, independent of the doorbell's tick, so the
+    Board shows a missed wake whatever the bell decided."""
+    if cfg is None or not doorbell_on(cfg):
+        return None
+    now_ms = int(time.time() * 1000)
+    scan = scan_pending(Path(cfg.chief_inbox_dir), now_ms)
+    age = None if scan is None else scan.oldest_age(now_ms)
+    if age is None or age < UNREAD_ALERT_SECONDS:
+        return None
+    return age
 
 
 @dataclass(frozen=True)
@@ -149,6 +212,8 @@ class Observation:
     output_age: Optional[float] = None
     #: Set when a fact could not be established (host unreadable, no chief).
     blocked: Optional[str] = None
+    #: Seconds the oldest pending event has waited; ``None`` when unknown.
+    oldest_age: Optional[float] = None
 
     @property
     def idle(self) -> Optional[bool]:
@@ -160,9 +225,11 @@ class Observation:
 
     def summary(self) -> str:
         age = "-" if self.output_age is None else f"{self.output_age:.0f}s"
+        oldest = "-" if self.oldest_age is None else f"{self.oldest_age:.0f}s"
         return (
             f"idle={self.idle} status={self.status} dirty={self.dirty} "
-            f"output_age={age} pending={self.pending} chief={(self.chief_sid or '-')[:8]}"
+            f"output_age={age} pending={self.pending} oldest={oldest} "
+            f"chief={(self.chief_sid or '-')[:8]}"
         )
 
 
@@ -183,9 +250,10 @@ async def observe(cfg: Any) -> Observation:
     reconcile stays on the loop, as in ``GET /api/board``: it schedules the
     chief-pointer write with ``create_task``.
     """
-    pending = await asyncio.to_thread(
-        count_pending, Path(cfg.chief_inbox_dir), int(time.time() * 1000)
-    )
+    now_ms = int(time.time() * 1000)
+    scan = await asyncio.to_thread(scan_pending, Path(cfg.chief_inbox_dir), now_ms)
+    pending = None if scan is None else scan.count
+    oldest_age = None if scan is None else scan.oldest_age(now_ms)
     if not pending:
         return Observation(pending=pending)
     (live, host_error), state = await asyncio.gather(
@@ -193,13 +261,17 @@ async def observe(cfg: Any) -> Observation:
         asyncio.to_thread(board.read_sessions_state, Path(cfg.sessions_state_file)),
     )
     if host_error is not None:
-        return Observation(pending=pending, blocked=f"session-host unreadable: {host_error}")
+        return Observation(
+            pending=pending,
+            oldest_age=oldest_age,
+            blocked=f"session-host unreadable: {host_error}",
+        )
     live = board_chief._reconcile_chief_labels(
         live, state["rows"], cfg.fleet_config_dir
     )
     chief = board_chief._find_chief(live)
     if not chief:
-        return Observation(pending=pending, blocked="no live chief")
+        return Observation(pending=pending, oldest_age=oldest_age, blocked="no live chief")
     sid = str(chief.get("session_id") or "")
     # A session-host that predates the composer field sends none: unknown.
     dirty = chief.get("composer_dirty")
@@ -217,6 +289,7 @@ async def observe(cfg: Any) -> Observation:
         status=status,
         dirty=dirty,
         output_age=_output_age(chief.get("last_output_at"), time.time()),
+        oldest_age=oldest_age,
     )
 
 
@@ -227,6 +300,20 @@ class Doorbell:
     def __init__(self) -> None:
         self._eligible_since: Optional[float] = None
         self._last_ring: Optional[float] = None
+        self._alarmed = False
+
+    def unread_alarm(self, obs: Observation) -> bool:
+        """``True`` once per backlog, on the first tick its oldest event has
+        waited :data:`UNREAD_ALERT_SECONDS`; an emptied mailbox re-arms it."""
+        if obs.pending is not None and obs.pending <= 0:
+            self._alarmed = False
+            return False
+        if obs.oldest_age is None or obs.oldest_age < UNREAD_ALERT_SECONDS:
+            return False
+        if self._alarmed:
+            return False
+        self._alarmed = True
+        return True
 
     def decide(self, obs: Observation, now: float) -> str:
         """``"ring"``, or the reason not to."""
@@ -305,6 +392,11 @@ async def tick_once(
         skips.note(reason, None, tick_now)
         return reason
     decision = bell.decide(obs, tick_now)
+    if bell.unread_alarm(obs):
+        logger.warning(
+            "⚠️ chief has not read its mailbox for %d min, doorbell decision: %s (%s)",
+            int((obs.oldest_age or 0) // 60), decision, obs.summary(),
+        )
     if decision != "ring":
         skips.note(decision, obs, tick_now)
         return decision
@@ -326,12 +418,30 @@ async def tick_once(
     await asyncio.to_thread(
         record_fn, obs.chief_sid, DOORBELL_LINE, ORIGIN_DOORBELL, now=sent_at
     )
-    logger.info(
-        "🔔 chief doorbell rang (%s) reason=%s",
-        obs.summary(),
-        (result or {}).get("reason"),
-    )
-    return "ring"
+    body = result if isinstance(result, dict) else {}
+    verdict = ring_verdict(body)
+    if verdict == "ring":
+        logger.info(
+            "🔔 chief doorbell rang, submit confirmed (%s) reason=%s",
+            obs.summary(), body.get("reason"),
+        )
+    else:
+        logger.warning(
+            "⚠️ chief doorbell ring not delivered: submit_state=%s delivered=%s "
+            "reason=%s (%s)",
+            body.get("submit_state"), body.get("delivered"), body.get("reason"),
+            obs.summary(),
+        )
+    return verdict
+
+
+def ring_verdict(body: Dict[str, Any]) -> str:
+    """``"ring"`` only for a delivered, confirmed submit; anything the host
+    did not confirm (deferred, unconfirmed, untaken, a field missing) is
+    ``"ring not delivered"``."""
+    if body.get("delivered") is True and body.get("submit_state") == "confirmed":
+        return "ring"
+    return "ring not delivered"
 
 
 async def tick_forever(app: Any) -> None:

@@ -63,6 +63,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
+from app.webapp import chief_doorbell
 from app.webapp.hot_poll import BuildSteps, hot_poll, session_poll
 from app.webapp.routers import board_chief, board_owner
 from app.webapp.routers._helpers import (
@@ -276,6 +277,8 @@ async def _build_board_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[str
     # bounded transcript scan, off the loop and memoized in _helpers, so the
     # Board poll re-uses whatever the (identically-paced) sessions poll found.
     await steps.run("attach_provider_web_urls", attach_provider_web_urls, session_cards)
+    board.mark_chief_mailbox_unread(session_cards, await steps.run(
+        "chief_mailbox_unread", chief_doorbell.unread_mailbox_age, cfg))
     columns = board.build_board(session_cards, github, job_cards)
     columns["done"] = await steps.run(
         "annotate_proof", proof_reports.annotate, columns["done"], cfg.projects_dir)

@@ -106,6 +106,8 @@ The chief is the launcher session whose working directory is the chief's folder 
 
 The doorbell can ring a Copilot chief, with the owner's Settings > Chief > Doorbell switch on. app-launcher-lite's session host tracks Copilot's composer from the keys probed on CLI 1.0.114 and reports `composer_dirty` as `True`/`False`, or `None` when it cannot tell; the bell rings only on `False`. Against the live chief, idle with pending mailbox events, a ring was seen 3 seconds after the debounce, and the chief started a turn and claimed the event. A chief started or restarted through the launcher had a composer left unknown by its own `/chief` until the first ordinary message; the launcher no longer does that, once its session host runs that build. A person's half-typed `/cmd` or `#` mention still reads unknown, and the bell holds off. The item `composer_keys_doorbell` stays `unknown` in this repo's probe results until the owner runs `copilot_probe.py record` for it.
 
+A missed wake surfaces on its own. A ring counts only when the session host confirms its submit; a deferred, unconfirmed or untaken one is logged in `webapp/chief-doorbell.log` as not delivered, and the bell rings again after its one-minute back-off. Every ring and every skip reason is logged there. When the oldest pending event has waited 15 minutes with the doorbell on, the log gets one warning naming the current skip reason, and the chief's row appears in the Board's Your turn with a `mailbox unread` chip, counted in the Board tab's badge, until the mailbox is read.
+
 `chief_ops.py slots-idle` prints `SLOTS_IDLE=<n> free=<f> queued=<q>`, or `unknown` with a reason, plus `SLOTS_COVERED=slots-idle` when that question is open.
 
 ## Compaction

@@ -40,8 +40,8 @@
  * `board/drawer.js`; the Chief's plan card in `board/chief-plan.js`. This
  * module keeps card rendering, one-tap issue-start, the lanes and the poll,
  * and calls into those for the rest. The Board has no chief card:
- * the chief lives in its row under Code › Sessions, and here only as its
- * session row in Bot's turn.
+ * the chief lives in its row under Code › Sessions, and shows here only in
+ * Your turn, with a "mailbox unread" chip, while it has missed its wake.
  *
  * This module and everything under board/ load on the first Board visit
  * (lazy-views.js), never with the page: every caller outside the Board goes
@@ -188,6 +188,9 @@ function renderSessionCard(card, openItem) {
   const chips = [];
   if (stalled) chips.push(chip('stalled', 'danger', 'board-stalled-chip'));
   if (card.kind === 'remote') chips.push(chip('detached', 'neutral', 'session-detached'));
+  if (card.mailbox_unread_seconds != null) {
+    chips.push(chip('mailbox unread ' + fmtDuration(card.mailbox_unread_seconds), 'attention', 'board-mailbox-unread-chip'));
+  }
   const trust = folderTrustControls(card, function () { fetchBoard().catch(function () {}); });
   if (trust) chips.push(trust.chip);
   const parts = sessionStatusParts(card.status, card.age_seconds, { chief: chief, hideStatus: stalled });

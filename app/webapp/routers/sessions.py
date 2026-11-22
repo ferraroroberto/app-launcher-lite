@@ -29,6 +29,7 @@ from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect as ws_connect
 from websockets.exceptions import InvalidHandshake
 
+from app.webapp import chief_doorbell
 from app.webapp.hot_poll import BuildSteps, hot_poll
 from app.webapp.routers._helpers import (
     PROJECT_ROOT,
@@ -72,6 +73,7 @@ def _session_board_columns(
         columns = board.session_board_columns(
             sessions, state_rows, active["rows"],
             fleet_config_dir=Path(cfg.fleet_config_dir),
+            chief_unread_seconds=chief_doorbell.unread_mailbox_age(cfg),
         )
     except Exception as exc:
         if not _board_columns_failing:
@@ -193,6 +195,8 @@ async def _build_sessions_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[
             sess["board_column"] = placed["column"] if placed else None
             sess["board_status"] = placed["status"] if placed else None
             sess["board_age_seconds"] = placed.get("age_seconds") if placed else None
+            sess["mailbox_unread_seconds"] = (
+                placed.get("mailbox_unread_seconds") if placed else None)
     questions = await steps.run("chief_questions", _chief_questions, cfg)
     owner = await steps.run("owner_checks", _owner_checks)
     return {"sessions": sessions, "chief_questions": questions, "owner_checks": owner}
