@@ -257,6 +257,54 @@ def test_defer_timeout_is_reported_as_not_delivered_end_to_end(monkeypatch):
     assert last_input["delivered"] is False
     assert last_input["submit_state"] == "not_submitted"
     assert "\r" not in [c.args[0] for c in session._pty.write.call_args_list]
+    # The watcher's verdict answers the same call the 202 acknowledged.
+    assert last_input["input_id"] == posted["input_id"]
+    assert last_input["written_at"] == posted["written_at"]
+
+
+def _real_session(sid: str) -> PtySession:
+    return PtySession(
+        session_id=sid,
+        project_dir=r"C:\stub",
+        name="copilot",
+        flags="",
+        started_at=time.time(),
+        _loop=MagicMock(),
+        _pty=MagicMock(name="PtyProcess"),
+    )
+
+
+def test_input_acknowledgment_id_matches_last_input(monkeypatch):
+    """The input call answers with an id plus its write and submit times, and
+    the session's ``last_input`` records the same id, so a caller can match a
+    later agent turn to its own write. Two calls never share an id."""
+    session = _real_session("sid-ack")
+    monkeypatch.setattr(server.manager, "get", lambda sid: session)
+    client = TestClient(server.app)
+
+    before = time.time()
+    first = client.post("/sessions/sid-ack/input", json={"data": "hi", "submit": True}).json()
+    last_input = client.get("/sessions/sid-ack").json()["last_input"]
+    second = client.post("/sessions/sid-ack/input", json={"data": "hi", "submit": True}).json()
+
+    assert first["submitted"] is True
+    assert isinstance(first["input_id"], str) and first["input_id"]
+    assert before <= first["written_at"] <= first["submitted_at"]
+    assert last_input["input_id"] == first["input_id"]
+    assert last_input["written_at"] == first["written_at"]
+    assert second["input_id"] != first["input_id"]
+
+
+def test_input_acknowledgment_has_no_submit_time_without_a_submit(monkeypatch):
+    session = _real_session("sid-paste")
+    monkeypatch.setattr(server.manager, "get", lambda sid: session)
+    client = TestClient(server.app)
+
+    body = client.post("/sessions/sid-paste/input", json={"data": "hi", "submit": False}).json()
+
+    assert body["input_id"]
+    assert body["written_at"] is not None
+    assert body["submitted_at"] is None
 
 
 def test_deferred_reason_constant_does_not_drift_across_the_process_boundary():

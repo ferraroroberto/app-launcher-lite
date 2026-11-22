@@ -21,6 +21,7 @@ import ast
 import logging
 import re
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -93,7 +94,21 @@ def unavailable(reason: str) -> Dict[str, Any]:
         "reason": reason,
         "user": None,
         "assistant": None,
+        "latest_user": None,
     }
+
+
+def _turn_time(timestamp: Any) -> Optional[Dict[str, Any]]:
+    """``{"timestamp", "at"}`` for a turn's ISO-8601 time, ``at`` in epoch
+    seconds so it compares with the session-host's ``written_at``; None when
+    there is no readable time."""
+    if not isinstance(timestamp, str) or not timestamp:
+        return None
+    try:
+        at = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+    return {"timestamp": timestamp, "at": at}
 
 
 def resolve_exchange(
@@ -113,14 +128,30 @@ def resolve_exchange(
     """
     native = last_exchange(native_path)
     if native.get("available"):
-        return {**native, "source": "native", "reason": None}
+        return {"latest_user": None, **native, "source": "native", "reason": None}
 
+    latest_user = None
     agent = str(session.get("agent") or "").lower()
     if agent == "copilot":
         copilot = _copilot_session_exchange(session, native_path)
         if copilot.get("available"):
             return copilot
+        # A prompt the agent has not answered yet is still a turn the caller
+        # may be waiting to see, so its time survives the fallback below.
+        latest_user = copilot.get("latest_user")
+    return {
+        **_fallback_exchange(session, native_path, launcher_capture_path, launcher_input_path),
+        "latest_user": latest_user,
+    }
 
+
+def _fallback_exchange(
+    session: Dict[str, Any],
+    native_path: Any,
+    launcher_capture_path: Path,
+    launcher_input_path: Optional[Path],
+) -> Dict[str, Any]:
+    """The launcher capture's exchange, else the unavailable answer naming why."""
     fallback = launcher_last_exchange(
         launcher_capture_path,
         launcher_input_path=launcher_input_path,
@@ -177,13 +208,19 @@ def _flavor_last_exchange(
         return unavailable("native_unavailable")
     entries = entries_of(list(enumerate(raw.splitlines())), uncapped=True)
     messages = [e for e in entries if e["kind"] in ("user", "assistant")]
+    # The newest user turn, answered or not: what a caller matches its own
+    # input's acknowledged write time against.
+    latest_user = next(
+        (_turn_time(m.get("timestamp")) for m in reversed(messages) if m["kind"] == "user"),
+        None,
+    )
     assistant_index = next(
         (index for index in range(len(messages) - 1, -1, -1)
          if messages[index]["kind"] == "assistant"),
         None,
     )
     if assistant_index is None:
-        return unavailable("no_exchange")
+        return {**unavailable("no_exchange"), "latest_user": latest_user}
     user_record = next(
         (messages[index] for index in range(assistant_index - 1, -1, -1)
          if messages[index]["kind"] == "user"),
@@ -205,6 +242,7 @@ def _flavor_last_exchange(
             "text": assistant["text"][-_ASSISTANT_TEXT_CAP:],
             "timestamp": assistant["timestamp"],
         },
+        "latest_user": latest_user,
     }
 
 

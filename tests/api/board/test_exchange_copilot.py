@@ -75,3 +75,29 @@ def test_copilot_exchange_with_no_events_file_stays_unavailable(
     result = board_exchange.resolve_exchange(_session(), None, tmp_path / "none")
     assert result["available"] is False
     assert result["reason"] == "no_exchange"
+
+
+def test_copilot_exchange_reports_the_newest_user_turn_time_even_unanswered(tmp_path: Path):
+    """``latest_user`` is the newest prompt, answered or not, with its time in
+    epoch seconds so a caller can compare it with the session-host's
+    acknowledged ``written_at``."""
+    events = _write_events(tmp_path / "events.jsonl", [
+        _event("user.message", {"content": "first"}, "2026-11-22T10:00:00.000Z"),
+        _event("assistant.message", {"content": "done"}, "2026-11-22T10:00:05.000Z"),
+        _event("user.message", {"content": "second"}, "2026-11-22T10:01:00.500Z"),
+    ])
+    result = board_exchange.resolve_exchange(_session(), str(events), tmp_path / "none")
+    assert result["available"] is True
+    assert result["user"]["text"] == "first"
+    assert result["latest_user"] == {
+        "timestamp": "2026-11-22T10:01:00.500Z", "at": 1_795_341_660.5,
+    }
+
+
+def test_copilot_exchange_with_only_a_prompt_still_reports_its_time(tmp_path: Path):
+    events = _write_events(tmp_path / "events.jsonl", [
+        _event("user.message", {"content": "hello"}, "2026-11-22T10:00:00Z"),
+    ])
+    result = board_exchange.resolve_exchange(_session(), str(events), tmp_path / "none")
+    assert result["available"] is False
+    assert result["latest_user"]["at"] == 1_795_341_600.0

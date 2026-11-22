@@ -14,7 +14,7 @@ import logging
 import threading
 import time
 from collections import deque
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from src.agents import supports_type_ahead
 from src.session_host_input import (
@@ -29,6 +29,7 @@ from src.session_host_input import (
     INPUT_UNVERIFIED,
     InputOutcome,
     InputProtocol,
+    acknowledge,
     attach_converting,
     chip_visible,
 )
@@ -240,6 +241,7 @@ class DeferredSubmit(InputProtocol):
         touches: Optional[int] = None,
         *,
         nbytes: int,
+        ack: Tuple[str, float],
     ) -> None:
         """Hand a still-unsubmitted payload to a background watcher thread.
 
@@ -249,7 +251,7 @@ class DeferredSubmit(InputProtocol):
         threading.Thread(
             target=self._run_deferred_submit,
             args=(seq, mark, needles, chip_id, touches),
-            kwargs={"nbytes": nbytes},
+            kwargs={"nbytes": nbytes, "ack": ack},
             name=f"defer-submit-{self.session_id[:8]}",
             daemon=True,
         ).start()
@@ -263,6 +265,7 @@ class DeferredSubmit(InputProtocol):
         touches: Optional[int] = None,
         *,
         nbytes: int,
+        ack: Tuple[str, float],
     ) -> None:
         """Thread body: run the watcher, then record whatever it concluded.
 
@@ -297,7 +300,7 @@ class DeferredSubmit(InputProtocol):
             return
         # Whatever the composer still holds got no Enter from this watcher.
         self._pending.drop_composer()
-        self._record_input(outcome, nbytes, True)
+        self._record_input(acknowledge(outcome, *ack), nbytes, True)
 
     def _await_deferred_submit(
         self,

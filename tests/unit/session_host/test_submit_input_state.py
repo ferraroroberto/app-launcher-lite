@@ -283,7 +283,8 @@ def test_deferred_verdict_is_recorded_on_the_session(clock):
     session._last_output_at = clock.now
 
     session._run_deferred_submit(
-        session._defer_seq, mark, needles, None, nbytes=len(payload)
+        session._defer_seq, mark, needles, None, nbytes=len(payload),
+        ack=("call-id", 123.0),
     )
 
     last_input = session.to_api()["last_input"]
@@ -292,6 +293,10 @@ def test_deferred_verdict_is_recorded_on_the_session(clock):
     assert last_input["submit_confirmed"] is True
     assert last_input["bytes"] == len(payload)
     assert last_input["submit"] is True
+    # The watcher finishes the call that deferred it, so it keeps that id.
+    assert last_input["input_id"] == "call-id"
+    assert last_input["written_at"] == 123.0
+    assert last_input["submitted_at"] >= 123.0
 
 
 def test_paste_chip_counts_as_ingest_evidence(clock):

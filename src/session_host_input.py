@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+import uuid
 from dataclasses import dataclass, replace
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -266,6 +267,12 @@ class InputOutcome:
     # went in mid-turn and the agent showed the message queued for when the
     # turn yields. Only ever True next to a confirmed submit.
     queued: bool = False
+    # The delivery acknowledgment (:func:`acknowledge`): which /input call this
+    # verdict answers and when it wrote and submitted, so a caller can match
+    # an agent turn to its own write by identity and time, not by text.
+    input_id: Optional[str] = None
+    written_at: Optional[float] = None
+    submitted_at: Optional[float] = None
 
     @property
     def submit_state(self) -> str:
@@ -316,7 +323,29 @@ class InputOutcome:
             "waited_ms": self.waited_ms,
             "deferred": self.deferred,
             "queued": self.queued,
+            "input_id": self.input_id,
+            "written_at": self.written_at,
+            "submitted_at": self.submitted_at,
         }
+
+
+def new_input_id() -> str:
+    """A fresh id for one /input call's delivery acknowledgment."""
+    return uuid.uuid4().hex
+
+
+def acknowledge(outcome: Any, input_id: str, written_at: float) -> Any:
+    """``outcome`` stamped with its call's acknowledgment.
+
+    ``submitted_at`` is the time the verdict was reached after a submitting
+    CR went out (so never earlier than the CR itself), and ``None`` when no
+    CR was sent. Both outcome kinds (this module's and the detached
+    console's) carry the same three fields.
+    """
+    return replace(
+        outcome, input_id=input_id, written_at=written_at,
+        submitted_at=time.time() if outcome.submitted else None,
+    )
 
 
 # Any escape sequence a TUI paints its composer with — CSI (cursor moves,
@@ -569,7 +598,9 @@ class InputProtocol:
         ingest wait extends the hold to at most ``_INGEST_CAP_MS``, and only
         on the failing path, so a keyboard writer is never blocked for long.
         """
+        input_id = new_input_id()
         with self._write_lock:
+            written_at = time.time()
             clean_before = self._composer_known_empty()
             mark = self._output_total
             # Refused before the write and its supersede: the watcher that
@@ -596,12 +627,16 @@ class InputProtocol:
             defer_args = self._defer_args
             self._defer_args = None
             self._track_pending(data, outcome, mark, clean_before)
+        outcome = acknowledge(outcome, input_id, written_at)
         self._record_input(outcome, len(data), submit)
         # Armed only after the ``deferred`` verdict is already on the session,
         # so the watcher can never overwrite ``last_input`` with its own
-        # outcome before the call that created it has recorded one.
+        # outcome before the call that created it has recorded one. The
+        # watcher's verdict carries this call's id: it finishes the same write.
         if defer_args is not None:
-            self._arm_deferred_submit(*defer_args, nbytes=len(data))
+            self._arm_deferred_submit(
+                *defer_args, nbytes=len(data), ack=(input_id, written_at)
+            )
         return outcome
 
     def _await_bulk_settle(

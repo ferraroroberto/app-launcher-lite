@@ -7,6 +7,7 @@ import logging
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -22,6 +23,8 @@ from src.session_host_input import (
     SUBMIT_NOT_REQUESTED,
     SUBMIT_NOT_SUBMITTED,
     SUBMIT_UNCONFIRMED,
+    acknowledge,
+    new_input_id,
 )
 from src.session_hosting.child_env import agent_child_env
 from src.session_hosting.kinds import KIND_REMOTE, STOP_GRACE_SECONDS, STOP_KILL
@@ -122,6 +125,10 @@ class RemoteInputOutcome:
     submit_requested: bool = True
     units: int = 0
     error: str = ""
+    # Same acknowledgment as ``InputOutcome`` (``acknowledge``).
+    input_id: Optional[str] = None
+    written_at: Optional[float] = None
+    submitted_at: Optional[float] = None
 
     @property
     def sent(self) -> bool:
@@ -153,6 +160,9 @@ class RemoteInputOutcome:
             "deferred": False,
             "units": self.units,
             "error": self.error or None,
+            "input_id": self.input_id,
+            "written_at": self.written_at,
+            "submitted_at": self.submitted_at,
         }
 
 
@@ -225,28 +235,30 @@ class RemoteSession:
         ``console_failed`` answer rather than keystrokes into an unprobed TUI.
         """
         sid = self.session_id[:8]
+        input_id, written_at = new_input_id(), time.time()
+
+        def record(verdict: RemoteInputOutcome) -> RemoteInputOutcome:
+            verdict = acknowledge(verdict, input_id, written_at)
+            self.last_input = verdict.to_api()
+            return verdict
+
         if not data and not submit:
-            outcome = RemoteInputOutcome(reason=INPUT_NOOP, submit_requested=False)
-            self.last_input = outcome.to_api()
-            return outcome
+            return record(RemoteInputOutcome(reason=INPUT_NOOP, submit_requested=False))
         if not supports_console_input(self.agent):
-            outcome = RemoteInputOutcome(
+            outcome = record(RemoteInputOutcome(
                 reason=INPUT_CONSOLE_FAILED, submit_requested=submit,
                 error=f"agent {self.agent!r} was not probed for console input",
-            )
-            self.last_input = outcome.to_api()
+            ))
             logger.info(f"⚠️ remote {sid} console input refused: {outcome.error}")
             return outcome
         if not self.alive:
-            outcome = RemoteInputOutcome(reason=INPUT_DROPPED, submit_requested=submit)
-            self.last_input = outcome.to_api()
-            return outcome
+            return record(RemoteInputOutcome(reason=INPUT_DROPPED, submit_requested=submit))
         argv = [sys.executable, "-m", _CONSOLE_INPUT_MODULE, str(self._pid)]
         if not submit:
             argv.append("--no-submit")
         with self._input_lock:
-            outcome = self._run_console_input(argv, data, submit)
-        self.last_input = outcome.to_api()
+            written_at = time.time()
+            outcome = record(self._run_console_input(argv, data, submit))
         if outcome.sent:
             # Breadcrumb carries the size only — never the text.
             logger.info(
