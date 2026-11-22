@@ -126,9 +126,13 @@ git diff --stat -- tests/e2e/shots
 
 then stage the changed PNGs. A drift that is not deliberate means something on screen is unpinned: fix the capture, never widen the bands. Exit 3 is NOT CONFIRMED and fails.
 
+### Gate runtime and workers
+
+Gate runtime is a property of the host measuring it: re-measure before trusting any figure. Worker counts live in `scripts/e2e-gate-route.ps1`: `$UnitDefaultWorkers` (override `UNIT_WORKERS`) for the non-browser phase and `$E2EDefaultWorkers` (override `E2E_WORKERS`; `1` runs serially) for the browser slice. The disposable webapp stays scoped to the launch target (`pin_launch_target`), so the Coding list does not scan the whole projects folder. Tests marked `serial` run after the workers finish. A run that looks wedged is read from the progress log below: every `START` without a matching `DONE` is a test still in flight, so read them all before killing anything.
+
 ### Progress log
 
-The gate writes `webapp/verify-progress.log` (gitignored, overwritten each run): phase markers plus one `START`/`DONE` line per test with its total including fixture cost, and a slowest-tests summary. If an outer timeout kills the gate, the last lines name the active phase and test node. Recent browser-leg runs are also appended to `webapp/verify-progress-history.log` in the primary checkout.
+The gate writes `webapp/verify-progress.log` (gitignored, overwritten each run, worker lines tagged `[gw1]`): phase markers plus one `START`/`DONE` line per test with its total including fixture cost, and a slowest-tests summary. If an outer timeout kills the gate, the last lines name the active phase and test node. Recent browser-leg runs are also appended to `webapp/verify-progress-history.log` in the primary checkout.
 
 ### After the gate: restart and confirm
 
