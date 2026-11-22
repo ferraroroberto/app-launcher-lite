@@ -6,7 +6,9 @@
       normalized to "--" per the ASCII-only rule below, and the example
       ports in comments updated to this fork's 8465/8466. Local code change:
       reclaim also owns a session-host started from this repo root without
-      .venv in its command line, and fails when an owned holder survives.
+      .venv in its command line, fails when an owned holder survives, matches
+      this repo's paths under either drive spelling of a junctioned root, and
+      says so when a restart found nothing to stop.
       Vendored for the lite fork so the tray has zero external dependencies;
       this repo-local copy replaces the machine-shared
       %USERPROFILE%\.claude\tray\tray_lifecycle.ps1. Keep ASCII-only.
@@ -107,18 +109,34 @@ param(
 # image path reports the shared base python while only the CommandLine still
 # carries the .venv path; an image-path guard never matches the real process and
 # the operation silently no-ops. (scaffold docs/windows-tray.md)
+# A path is compared by its segments, never as a literal string: the same tree is reachable under
+# two spellings (a drive-letter junction, `C:\automation\x` and `E:\automation\x`, either slash
+# style) and a live process keeps the spelling it was started from, while -VenvDir carries the
+# spelling of the tray.bat that is running now. The drive letter is dropped, and the match starts
+# at a path boundary and ends at a separator or the end of the token, so a sibling checkout
+# (`<repo>-wt-N`) or a longer parent path is not this repo.
+function Get-PathPattern {
+    param([string] $Path, [string] $Tail)
+    $segments = @($Path -replace '^[A-Za-z]:', '' -split '[\\/]+' | Where-Object { $_ })
+    if ($segments.Count -eq 0) { return $null }
+    $root = ($segments | ForEach-Object { [regex]::Escape($_) }) -join '[\\/]+'
+    return '(^|[\s"''=])([A-Za-z]:)?[\\/]+' + $root + $Tail
+}
+
+function Test-CommandLineMatches {
+    param([string] $CommandLine, [string] $Pattern)
+    if (-not $CommandLine -or -not $Pattern) { return $false }
+    return [regex]::IsMatch($CommandLine, $Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+}
+
 function Test-UnderVenv {
     param([string] $CommandLine)
-    return $CommandLine -and
-        $CommandLine.IndexOf($VenvDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+    return Test-CommandLineMatches $CommandLine (Get-PathPattern ($VenvDir -replace '[\\/]+$', '') '([\\/]|["''\s]|$)')
 }
 
 # A session-host re-execs from the base interpreter, so its CommandLine can carry the repo's
 # launcher.py but no .venv path. Ownership is then the repo root plus the role
-# (`launcher.py session-host`), never the port or image name alone. The drive letter is not
-# compared: the same tree is reachable under two spellings (a junction onto another drive) and
-# the live process keeps the spelling it was started from. The root must end at a separator so a
-# sibling checkout (`<repo>-wt-N`) is not this repo.
+# (`launcher.py session-host`), never the port or image name alone.
 function Get-RepoRoot {
     if ($ScriptDir) { return $ScriptDir }
     return (Split-Path -Parent ($VenvDir -replace '[\\/]+$', ''))
@@ -126,12 +144,7 @@ function Get-RepoRoot {
 
 function Test-IsRepoSessionHost {
     param([string] $CommandLine)
-    if (-not $CommandLine) { return $false }
-    $segments = @((Get-RepoRoot) -replace '^[A-Za-z]:', '' -split '[\\/]+' | Where-Object { $_ })
-    if ($segments.Count -eq 0) { return $false }
-    $root = ($segments | ForEach-Object { [regex]::Escape($_) }) -join '[\\/]+'
-    $pattern = '(^|[\s"''])([A-Za-z]:)?[\\/]+' + $root + '[\\/]+launcher\.py["'']?\s+session-host(\s|$)'
-    return [regex]::IsMatch($CommandLine, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    return Test-CommandLineMatches $CommandLine (Get-PathPattern (Get-RepoRoot) '[\\/]+launcher\.py["'']?\s+session-host(\s|$)')
 }
 
 function Test-OwnsProcess {
@@ -182,6 +195,7 @@ function Invoke-ReclaimPorts {
             $cim = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $ownerProcessId) -ErrorAction SilentlyContinue
             if (-not $cim) { continue }
             if (Test-OwnsProcess $cim.CommandLine) {
+                $script:ReclaimedCount++
                 Write-Host ("Reclaiming :{0} from PID {1}" -f $port, $ownerProcessId)
                 Stop-Process -Id $ownerProcessId -Force -ErrorAction SilentlyContinue
                 if (-not (Wait-ProcessGone -ProcessId $ownerProcessId)) {
@@ -362,8 +376,13 @@ switch ($Action) {
                 Write-Host ("Stopping previous {0} tray (PID: {1})..." -f $AppName, ($trayPids -join " "))
                 Stop-TrayProcesses -ProcessIds $trayPids
             }
+            $script:ReclaimedCount = 0
             if ((Invoke-ReclaimPorts) -gt 0) {
                 throw "restart failed: an old process still holds an owned port"
+            }
+            if ($trayPids.Count -eq 0 -and $script:ReclaimedCount -eq 0) {
+                # Starting fresh is not a restart: nothing was replaced, so a stale build may still be serving.
+                Write-Host ("NOTE: no running {0} tray or owned port holder matched {1}; nothing was stopped, so this starts a tray beside whatever else is running. The build check below says whether the new one is the one serving." -f $AppName, $VenvDir)
             }
             Start-Sleep -Seconds 2
         }
