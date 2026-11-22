@@ -1,7 +1,8 @@
 """Speech to text: the dictation upload proxy and the Settings connection test.
 
 Every record button posts its take to ``/api/transcribe``; the webapp forwards
-it to the OpenAI-shaped endpoint set in Settings > Speech to text. With the
+it to the OpenAI-shaped endpoint set in Settings > Speech to text, converted
+to 16 kHz mono WAV when it arrives in another shape (``speech_audio``). With the
 switch off the route answers 503 and no record button is shown.
 """
 
@@ -39,7 +40,7 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> Dict[str
         raise HTTPException(status_code=400, detail="empty recording")
     try:
         result = await asyncio.to_thread(
-            speech_client.transcribe,
+            speech_client.transcribe_upload,
             cfg.speech_base_url,
             cfg.speech_model,
             cfg.speech_api_key,
@@ -62,7 +63,8 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> Dict[str
 
 @router.post("/api/speech/test")
 async def speech_test(request: Request) -> Dict[str, Any]:
-    """Probe the saved endpoint: ``{"state": reachable | refused | unknown, "detail"}``.
+    """Probe the saved endpoint with a short test recording: ``{"state", "detail"}``,
+    the state one of transcribes, refuses_audio, reachable, refused or unknown.
 
     Reads only the saved settings, never a URL from the request, so this route
     cannot be pointed at an arbitrary host.
@@ -71,5 +73,5 @@ async def speech_test(request: Request) -> Dict[str, Any]:
     if not cfg.speech_base_url:
         raise HTTPException(status_code=400, detail="Set a base URL first.")
     return await asyncio.to_thread(
-        speech_client.check_connection, cfg.speech_base_url, cfg.speech_api_key
+        speech_client.check_connection, cfg.speech_base_url, cfg.speech_model, cfg.speech_api_key
     )

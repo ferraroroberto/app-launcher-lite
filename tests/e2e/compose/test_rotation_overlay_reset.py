@@ -57,12 +57,14 @@ def test_orientationchange_releases_stale_overlay_pin(
     # overlay-chrome pinning (and the orientationchange listener this test
     # pins) never runs there. Open the same way a real phone tap does:
     # normal page load, then openTerminal() directly, matching
-    # test_terminal_reconnect.py's warm re-open leg.
+    # test_terminal_reconnect.py's warm re-open leg. It goes through
+    # lazy-views.js, as a tap does: terminal.js is a lazy view, loaded and
+    # wired there, so importing it raw races the page's own prefetch.
     authed_page.goto(f"{base_url}/", wait_until="domcontentloaded")
     authed_page.evaluate(
         """async (sid) => {
           const live = """ + _LIVE_MODULE + """;
-          const term = await import(live('terminal.js'));
+          const term = await import(live('lazy-views.js'));
           const { state } = await import(live('state.js'));
           const s = (state.sessions || []).find(
             (x) => x.session_id === sid

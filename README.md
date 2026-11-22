@@ -108,7 +108,7 @@ There is no `.env`. Committed samples live next to each gitignored real file in 
 | `webapp_config.json` | `team_os_dir` | sibling `../team-os` | Team OS checkout root. |
 | `webapp_config.json` | `gitlab_group` | `""` | GitLab group the Board reads (subgroups included). Empty keeps the panel dormant with a Settings hint. |
 | `webapp_config.json` | `speech_enabled` | `false` | Shows the record button in every message box. Off, no record button shows anywhere. |
-| `webapp_config.json` | `speech_base_url` | `""` | Base URL of any OpenAI-shaped speech server, e.g. `http://127.0.0.1:8000/v1`; audio goes to `<base>/audio/transcriptions`. |
+| `webapp_config.json` | `speech_base_url` | `""` | Base URL of any OpenAI-shaped speech server, e.g. `http://127.0.0.1:8000/v1`; audio goes to `<base>/audio/transcriptions` as 16 kHz mono 16-bit WAV, which every such server reads. The page converts each take; an upload that arrives in another shape is converted with ffmpeg when it is on PATH, else refused as an unsupported format. Settings' Test connection sends a short test recording and reports Transcribes only when it comes back transcribed. |
 | `webapp_config.json` | `speech_model` | `""` | Model name sent with each upload; omitted when empty. |
 | `webapp_config.json` | `speech_api_key` | `""` | Bearer key sent when set. A secret: kept in the gitignored file and never returned by the API. |
 | `webapp_config.json` | `gitlab_host` | `""` | Self-hosted GitLab (rides glab's `GITLAB_HOST`). Empty means glab's default context. |

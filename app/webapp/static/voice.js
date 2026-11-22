@@ -3,9 +3,9 @@
  * One module, many mics: the compose bar, the Board
  * dispatch bar and the shared composer (terminal, Chat, Board drawer) each mount a
  * `createDictation` instance on their own button + textarea. Lite takes the
- * single-shot path only (buffer the whole take, POST once to /api/transcribe,
- * which forwards it to the OpenAI-shaped endpoint in Settings > Speech to
- * text); the app's streamed-session branch below stays for upstream syncs but
+ * single-shot path only (buffer the whole take, convert it to 16 kHz mono WAV,
+ * POST once to /api/transcribe, which forwards it to the OpenAI-shaped
+ * endpoint in Settings > Speech to text); the app's streamed-session branch below stays for upstream syncs but
  * is never entered, because no streamed session is ever opened. The transcript
  * always lands in the target textarea for review — never straight into a PTY
  * or a dispatch.
@@ -48,11 +48,11 @@ export function voiceDictationAvailable() {
 // instance while another records is refused, not silently hijacked.
 let _activeInstance = null;
 
-// First supported of the recorder MIME ladder. mp4 comes first because the
-// local hub's parakeet and whisper backends cannot decode a browser's
-// webm/opus take (HTTP 400), while any OpenAI-shaped server reads mp4; iOS
-// Safari only offers mp4 and Chromium offers both. webm stays as the
-// fallback for a browser with no mp4 recorder.
+// First supported of the recorder MIME ladder. Each take is converted to WAV
+// before upload (shared/voice-wav.js), so this container is sent only when
+// that conversion fails. mp4 comes first because more backends read it than
+// a browser's webm/opus take; iOS Safari only offers mp4 and Chromium offers
+// both. webm stays as the fallback for a browser with no mp4 recorder.
 export function pickAudioMime() {
   const candidates = [
     'audio/mp4;codecs=mp4a.40.2',
@@ -707,11 +707,31 @@ async function finishStreaming(d) {
   }
 }
 
-// Single-shot fallback: the whole take in one POST to /api/transcribe.
-async function sendBufferedRecording(d, blob) {
-  const ext = (blob.type && blob.type.indexOf('mp4') >= 0) ? 'mp4' : 'webm';
+// The take as the upload's form body: a 16 kHz mono WAV every backend reads,
+// or, where Web Audio cannot convert it, the browser's own recording, which
+// the server converts when it has ffmpeg. The converter loads on the first
+// take, so it adds nothing to page boot.
+async function uploadForm(blob) {
   const fd = new FormData();
+  let wav = null;
+  try {
+    const { takeToWav } = await import('./shared/voice-wav.js');
+    wav = await takeToWav(blob);
+  } catch (exc) {
+    console.warn('[dictation] the WAV converter did not load', exc);
+  }
+  if (wav) {
+    fd.append('file', wav, 'recording.wav');
+    return fd;
+  }
+  const ext = (blob.type && blob.type.indexOf('mp4') >= 0) ? 'mp4' : 'webm';
+  console.info('[dictation] uploading the browser recording as ' + ext + ': it could not be converted to WAV here');
   fd.append('file', blob, 'recording.' + ext);
+  return fd;
+}
+
+// Single-shot: the whole take in one POST to /api/transcribe.
+async function sendBufferedRecording(d, blob) {
   const signal = d.takeCtrl.signal;
   const op = beginFinishing(d);
   // A dispose() or a cancel that lands mid-request must not
@@ -719,6 +739,8 @@ async function sendBufferedRecording(d, blob) {
   // resolves to.
   const gone = function () { return d.aborted || d.finishOp !== op; };
   try {
+    const fd = await uploadForm(blob);
+    if (gone()) return;
     const body = await apiRawJson('/api/transcribe', {
       method: 'POST', terminalToken: readTerminalToken(), body: fd, signal: signal,
     });

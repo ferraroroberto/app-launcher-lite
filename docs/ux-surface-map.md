@@ -1499,7 +1499,7 @@ flowchart LR
   - Done
 - **Does:**
   - every field saves as it changes
-  - Test connection reports Reachable, Refused or Unknown with a reason, using the saved settings
+  - Test connection sends a short test recording with the saved settings and reports Transcribes, Refuses audio, Reachable (transcription not confirmed), Refused or Unknown, with a reason
   - with Dictation off no record button shows in any message box
 - **States:** the Settings row reads Off, On or No URL
 
