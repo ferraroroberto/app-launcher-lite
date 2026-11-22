@@ -1001,7 +1001,7 @@ derive = "usageState"
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "4ab952df641052c485a139a3184f7708605de55e"
+synced_sha = "2457905104ef10f0dbaaa2f305780fb05970b9d3"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
@@ -1058,3 +1058,11 @@ reason = "already present: these vendored files are already at that scaffold rev
 [[upstream.skipped]]
 sha = "41658660c43ad035b09700940d32af75e6c5054e"
 reason = "not applicable: it is a Codex-only prompt probe and Lite runs Copilot"
+
+[[upstream.skipped]]
+sha = "f0fde1bb3761c953e23d1c1a9cbebb75dd8e0908"
+reason = "already present: the PC load sheet's IP row with its Copy action exists here"
+
+[[upstream.skipped]]
+sha = "814dcd6553e08fdb22a628d5e0e7fc728162d5b8"
+reason = "already present: the private-network switches for terminal routes exist here"

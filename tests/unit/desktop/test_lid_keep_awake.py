@@ -114,9 +114,7 @@ def test_an_unreadable_state_is_unknown_never_off(fake):
 
 
 def test_malformed_output_is_unknown(fake):
-    def odd(args):
-        return subprocess.CompletedProcess(args, 0, stdout="Current AC Power Setting Index: 0x00000001\n", stderr="")
-
+    odd = lambda args: subprocess.CompletedProcess(args, 0, stdout="Current AC Power Setting Index: 0x00000001\n", stderr="")
     assert lid.payload(odd)["state"] == "unknown"
 
 
@@ -262,3 +260,7 @@ def test_the_default_runner_spawns_without_a_window_and_with_a_timeout(monkeypat
     assert seen["cmd"] == ["powercfg", "/q"]
     assert seen["kwargs"]["creationflags"] == lid.NO_WINDOW
     assert seen["kwargs"]["timeout"] == lid.POWERCFG_TIMEOUT_S
+
+
+def test_the_saved_values_root_is_the_repo_root(project_root):
+    assert lid.PROJECT_ROOT == project_root  # STATE_FILE itself is redirected by the autouse fixture
