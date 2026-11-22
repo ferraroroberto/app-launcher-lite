@@ -41,7 +41,7 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 ```bat
 git clone https://github.com/ferraroroberto/app-launcher-lite
 cd app-launcher-lite
-setup.bat        REM creates .venv + installs requirements (icons are committed)
+setup.bat        REM creates .venv, installs requirements, creates missing configs; safe to rerun (-WhatIf lists, changes nothing)
 tray.bat         REM tray icon -> webapp :8465 + session-host :8466
 ```
 
@@ -196,6 +196,7 @@ app-launcher keeps growing. This repo tracks it through the `[upstream]` waterma
 | [docs/jobs-tab.md](docs/jobs-tab.md) | Jobs tab: schema, kinds, schedules, webhooks, alerting, coverage, watchdog. |
 | [docs/android.md](docs/android.md) | Android Chrome as the primary phone: install, HTTPS, what to check. |
 | [docs/fresh-machine-checklist.md](docs/fresh-machine-checklist.md) | A new Windows machine from nothing to a lane run end to end, one proof command per step. |
+| [docs/install.md](docs/install.md) | Install and update: what `setup.bat` does, what a rerun never overwrites, the execution policy, uninstall. |
 | [docs/installing-agent-clis.md](docs/installing-agent-clis.md) | Installing and signing in to the Copilot CLI and `glab`. |
 | [copilot/docs/install.md](copilot/docs/install.md) | Installing the Copilot side: a fresh machine, migrating, a machine with its own skills repo (`skills_dir`), uninstall, and what each installer line means. |
 | [docs/migrating-from-fleet-config-lite.md](docs/migrating-from-fleet-config-lite.md) | Moving a machine from the old two-repo install to `copilot/install.ps1`: what moves, the order, uninstall. |

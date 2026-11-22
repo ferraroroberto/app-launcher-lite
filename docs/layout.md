@@ -52,7 +52,7 @@ app-launcher-lite/
 │   ├── auth/                   # job-scoped API tokens, the passkey (WebAuthn) gate
 │   ├── middleware/             # the webapp's auth gate: trust (loopback / tailnet), credentials, route guard table, bearer
 │   ├── clients/                # loopback HTTP clients (shared base, session-host) and the GitLab client (gitlab.py, via glab)
-│   ├── launching/              # agent launch: Copilot flags (flags.py), spawn helpers (launcher.py), the tray-restart check, the PowerShell script launcher (ps_script.py)
+│   ├── launching/              # agent launch: Copilot flags (flags.py), spawn helpers (launcher.py), the tray-restart check, the PowerShell script launcher (ps_script.py), the installer behind setup.bat (installer.py)
 │   ├── board/                  # Board backend: column assembly, session-state join, drawer exchange, proof reports, owner checks
 │   ├── chief/                  # the chief's plan, journal, answers and dispatch briefs
 │   ├── session_view/           # a live session's views: transcript pages, changed files, the Chat outbox, plan and resume pickers
@@ -66,6 +66,7 @@ app-launcher-lite/
 ├── scripts/                    # operator tools and the vendored ratchets
 │   ├── verify-before-ship.ps1  # the pre-ship gate: disposable webapp + session-host, no tray needed
 │   ├── run-e2e.ps1             # dev-loop e2e runner against the live tray
+│   ├── install.py              # setup.bat's work: venv, requirements, configs from samples (never overwriting), checklist
 │   ├── restart-session-host.ps1 # confirmation-gated :8466 restart (see CLAUDE.md, session-host)
 │   ├── tray_lifecycle.ps1      # the tray's start / restart / reclaim logic, used by tray.bat
 │   ├── classify_e2e.py         # diff -> browser-slice routing
