@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import re
 
 import pytest
@@ -63,6 +64,63 @@ def _check_the_line_is_a_centred_icon(page: Page, line, browser_name: str) -> No
     page.evaluate("() => window.__keepStatusOff.disconnect()")
 
 
+# Ink rows of the text alone, found by screenshotting its clip across the strip's
+# full height and scanning for pixels that differ from the strip's own background.
+_INK_ROWS_JS = """async (b64) => {
+  const img = new Image();
+  img.src = 'data:image/png;base64,' + b64;
+  await img.decode();
+  const c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height).data;
+  let top = c.height, bottom = -1;
+  for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+    const i = (y * c.width + x) * 4;
+    if (Math.abs(d[i] - d[0]) + Math.abs(d[i + 1] - d[1]) + Math.abs(d[i + 2] - d[2]) > 60) {
+      top = Math.min(top, y); bottom = Math.max(bottom, y + 1);
+    }
+  }
+  return { height: c.height, top, bottom };
+}"""
+
+
+def _ink_offset_from_strip_centre(page: Page) -> float:
+    """How far (px, + is low) the drawn glyphs' vertical midline sits from the
+    strip's. A line box centred around a font's uneven ascent and descent
+    passes a box-only check while the glyphs it holds still sit low."""
+    strip = page.locator("#terminalStatusStrip")
+    text = page.locator("#terminalActivity .terminal-activity-text")
+    sbox, tbox = stable_eval(strip, "el => el.getBoundingClientRect().toJSON()"),         stable_eval(text, "el => el.getBoundingClientRect().toJSON()")
+    png = page.screenshot(
+        clip={"x": tbox["x"], "y": sbox["y"], "width": tbox["width"], "height": sbox["height"]},
+        animations="disabled",
+    )
+    reader = page.context.new_page()
+    try:
+        ink = reader.evaluate(_INK_ROWS_JS, base64.b64encode(png).decode())
+    finally:
+        reader.close()
+    assert ink["bottom"] > ink["top"], f"no text was drawn in the strip: {ink}"
+    # The screenshot is in device pixels (3 per CSS px in the iPhone projection).
+    scale = ink["height"] / sbox["height"]
+    return ((ink["top"] + ink["bottom"]) / 2 - ink["height"] / 2) / scale
+
+
+def _check_the_ink_is_centred(page: Page) -> None:
+    """The glyphs, not only the boxes, sit on the strip's midline, desktop and phone, light and dark."""
+    for width, height in ((1280, 800), (390, 844)):
+        page.set_viewport_size({"width": width, "height": height})
+        for scheme in ("light", "dark"):
+            page.emulate_media(color_scheme=scheme)
+            # The stubbed mirror may re-show a connection status over the line.
+            page.evaluate("() => { const s = document.getElementById('terminalStatus'); s.hidden = true; }")
+            expect(page.locator("#terminalActivity")).to_be_visible()
+            off = _ink_offset_from_strip_centre(page)
+            assert abs(off) <= 1, f"{scheme} at {width}px: the text is {off:+.1f}px off the strip's midline"
+
+
 @pytest.mark.iphone
 def test_the_strip_shows_the_turn_in_progress_as_a_centred_icon_line_and_gives_way_to_status(
     authed_page: Page, base_url: str, browser_name: str
@@ -112,6 +170,10 @@ def test_the_strip_shows_the_turn_in_progress_as_a_centred_icon_line_and_gives_w
     # between the write and the read.
     assert _line_shown_with_status(page, "Reconnecting…") is False
     assert _line_shown_with_status(page, None) is True
+    # Last of the geometry: it resizes and recolours the page, which the
+    # counter and status steps above must not see.
+    _check_the_ink_is_centred(page)
+    page.set_viewport_size({"width": 390, "height": 844})
 
     # A harness with no tool data gives the time alone — never "0 actions".
     tr.activity = {"since": tr.activity["since"], "actions": None, "last": "Thinking", "working": True}
