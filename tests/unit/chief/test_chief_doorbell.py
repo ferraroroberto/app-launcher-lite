@@ -27,14 +27,17 @@ from app.webapp.chief_doorbell import (
     DOORBELL_LINE,
     SKIP_REPEAT_SECONDS,
     STALE_WORKING_SECONDS,
+    UNREAD_ALERT_SECONDS,
     Doorbell,
     Observation,
     _SkipLog,
     count_pending,
     observe,
+    scan_pending,
     tick_once,
+    unread_mailbox_age,
 )
-from src import instance_role
+from src import board, instance_role
 from src.clients import session as session_client
 from src.webapp_config import SESSION_HOST_PORT_ENV
 from tests.api.chief._support import CHIEF_DIR
@@ -277,6 +280,10 @@ class _Clock:
         return self.t
 
 
+#: The session-host's verdict for a submit it saw land.
+_CONFIRMED = {"reason": "ok", "delivered": True, "submit_state": "confirmed"}
+
+
 def _cfg(**kw):
     base = dict(chief_doorbell=True, session_host_port=54321)
     base.update(kw)
@@ -298,7 +305,7 @@ async def _run_ticks(cfg, obs, *, ticks=3, send=None, records=None):
         sends.append((port, sid, data, submit))
         if send is not None:
             return send()
-        return {"reason": "ok"}
+        return dict(_CONFIRMED)
 
     def fake_record(sid, text, origin, *, now=None):
         rows.append((sid, text, origin, now))
@@ -661,3 +668,137 @@ def test_the_log_file_handler_is_attached_once(tmp_path, monkeypatch):
             target.removeHandler(h)
             h.close()
     assert os.path.exists(path)
+
+
+# --- missed wakes: delivery verdicts, the unread alarm, the Board state ---
+
+_DEFERRED = {"reason": "deferred", "delivered": True, "submit_state": "pending", "deferred": True}
+_UNTAKEN = {"reason": "submit_untaken", "delivered": False, "submit_state": "not_submitted"}
+
+
+async def _run_timeline(cfg, obs_at, results, *, seconds):
+    """Tick every 3 s of fake time up to ``seconds``; ``obs_at(t)`` is each
+    tick's observation and ``results`` the host's verdicts, in send order."""
+    clock, bell, skips = _Clock(), Doorbell(), _SkipLog()
+    queue = list(results)
+
+    async def fake_observe(c):
+        return obs_at(clock.t)
+
+    def fake_send(port, sid, data, submit=True):
+        return dict(queue.pop(0) if queue else _CONFIRMED)
+
+    decisions = []
+    while clock.t <= seconds:
+        decisions.append((clock.t, await tick_once(
+            cfg, bell, skips, now=clock, observe_fn=fake_observe, send_fn=fake_send,
+            record_fn=lambda *a, **k: True,
+        )))
+        clock.t += 3.0
+    return decisions
+
+
+def _inbox_cfg(tmp_path, age_s, *, on=True):
+    inbox = tmp_path / "chief-inbox"
+    _touch(inbox / f"{int((time.time() - age_s) * 1000)}-{'e' * 32}.json")
+    return SimpleNamespace(chief_doorbell=on, chief_inbox_dir=str(inbox))
+
+
+def _cards():
+    chief = {"session_id": CHIEF_SID, "label": "chief", "kind": "pty", "status": "idle-finished"}
+    return [chief, {"session_id": "worker", "status": "idle-finished"}]
+
+
+class TestRingVerdict:
+    @pytest.mark.parametrize("body", [
+        _DEFERRED,
+        {"reason": "ok", "delivered": "unconfirmed", "submit_state": "unconfirmed"},
+        _UNTAKEN,
+        {"reason": "ok"},
+    ])
+    async def test_a_ring_whose_submit_is_not_confirmed_is_not_delivered(self, body, caplog):
+        with caplog.at_level(logging.WARNING, logger=bell_mod.logger.name):
+            decisions, sends, _ = await _run_ticks(_cfg(), _obs(), ticks=3, send=lambda: dict(body))
+        assert decisions == ["debouncing", "ring not delivered", "backing off after ring"]
+        assert len(sends) == 1
+        assert f"submit_state={body.get('submit_state')}" in caplog.text
+
+    async def test_a_confirmed_ring_logs_its_verdict(self, caplog):
+        with caplog.at_level(logging.INFO, logger=bell_mod.logger.name):
+            decisions, _, _ = await _run_ticks(_cfg(), _obs(), ticks=2)
+        assert decisions == ["debouncing", "ring"]
+        assert "chief doorbell rang, submit confirmed" in caplog.text
+
+
+class TestUnreadMailbox:
+    def test_the_oldest_stamp_spans_root_events_and_stale_claims(self, tmp_path):
+        inbox = tmp_path / "chief-inbox"
+        _touch(inbox / f"{NOW_MS - 5000}-a.json")
+        _touch(inbox / "unstamped.json")
+        _touch(inbox / ".claimed" / f"{NOW_MS - CLAIM_STALE_MS - 1000}-b.json")
+        _touch(inbox / ".claimed" / f"{NOW_MS - 1000}-held.json")
+        scan = scan_pending(inbox, NOW_MS)
+        assert scan.count == 3
+        assert scan.oldest_age(NOW_MS) == CLAIM_STALE_MS / 1000 + 1
+
+    def test_no_stamp_or_no_event_is_no_age(self, tmp_path):
+        assert scan_pending(tmp_path / "missing", NOW_MS).oldest_age(NOW_MS) is None
+        _touch(tmp_path / "inbox" / "unstamped.json")
+        assert scan_pending(tmp_path / "inbox", NOW_MS).oldest_age(NOW_MS) is None
+
+    def test_only_an_event_past_the_threshold_with_the_bell_on_counts(self, tmp_path):
+        assert unread_mailbox_age(_inbox_cfg(tmp_path / "young", UNREAD_ALERT_SECONDS - 60)) is None
+        assert unread_mailbox_age(_inbox_cfg(tmp_path / "off", UNREAD_ALERT_SECONDS + 60, on=False)) is None
+        age = unread_mailbox_age(_inbox_cfg(tmp_path / "old", UNREAD_ALERT_SECONDS + 60))
+        assert UNREAD_ALERT_SECONDS + 59 <= age <= UNREAD_ALERT_SECONDS + 70
+
+    def test_a_stamped_chief_is_your_turn_and_an_unstamped_one_is_not(self):
+        cards = _cards()
+        board.mark_chief_mailbox_unread(cards, None)
+        assert [c["session_id"] for c in board.build_board(cards, {}, [])["your_turn"]] == []
+        board.mark_chief_mailbox_unread(cards, UNREAD_ALERT_SECONDS + 60.4)
+        columns = board.build_board(cards, {}, [])
+        assert [c["session_id"] for c in columns["your_turn"]] == [CHIEF_SID]
+        assert columns["your_turn"][0]["mailbox_unread_seconds"] == int(UNREAD_ALERT_SECONDS + 60)
+        assert [c["session_id"] for c in columns["claude_turn"]] == ["worker"]
+
+
+class TestMissedWake:
+    """The reported case: lanes end, their events land, the Copilot chief
+    sits idle and the first ring does not take."""
+
+    async def test_an_unsubmitted_ring_is_rung_again_well_inside_the_threshold(self):
+        decisions = await _run_timeline(_cfg(), lambda t: _obs(oldest_age=t), [_DEFERRED], seconds=120)
+        rings = [(t, d) for t, d in decisions if d.startswith("ring")]
+        assert rings[0][1] == "ring not delivered"
+        # The back-off, then one debounce tick.
+        assert rings[1] == (rings[0][0] + BACKOFF_SECONDS + DEBOUNCE_SECONDS, "ring")
+        assert rings[1][0] < UNREAD_ALERT_SECONDS
+
+    async def test_a_ring_stranded_in_the_composer_alarms_once_then_shows_on_the_board(
+        self, tmp_path, caplog,
+    ):
+        def obs_at(t):
+            # The untaken line sits in the composer from the first ring on.
+            return _obs(oldest_age=t, dirty=t > DEBOUNCE_SECONDS)
+
+        with caplog.at_level(logging.WARNING, logger=bell_mod.logger.name):
+            decisions = await _run_timeline(
+                _cfg(), obs_at, [_UNTAKEN], seconds=UNREAD_ALERT_SECONDS + 300)
+        assert [d for _, d in decisions if d.startswith("ring")] == ["ring not delivered"]
+        alarms = [r.getMessage() for r in caplog.records if "has not read its mailbox" in r.getMessage()]
+        assert alarms == [
+            "⚠️ chief has not read its mailbox for 15 min, doorbell decision: composer dirty ("
+            + _obs(oldest_age=UNREAD_ALERT_SECONDS, dirty=True).summary() + ")"
+        ]
+        cards = _cards()
+        board.mark_chief_mailbox_unread(
+            cards, unread_mailbox_age(_inbox_cfg(tmp_path, UNREAD_ALERT_SECONDS + 300)))
+        assert [c["session_id"] for c in board.build_board(cards, {}, [])["your_turn"]] == [CHIEF_SID]
+
+    def test_an_emptied_mailbox_re_arms_the_alarm(self):
+        bell = Doorbell()
+        old = _obs(oldest_age=UNREAD_ALERT_SECONDS)
+        assert [bell.unread_alarm(old), bell.unread_alarm(old)] == [True, False]
+        bell.unread_alarm(_obs(pending=0))
+        assert bell.unread_alarm(old) is True

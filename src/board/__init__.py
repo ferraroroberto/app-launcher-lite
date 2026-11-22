@@ -218,6 +218,23 @@ def _is_chief_card(card: Dict[str, Any]) -> bool:
     )
 
 
+def mark_chief_mailbox_unread(
+    session_cards: List[Dict[str, Any]], unread_seconds: Optional[float]
+) -> None:
+    """Stamp ``mailbox_unread_seconds`` on the chief's card when its mailbox
+    has held an event past the doorbell's alert threshold, which routes it to
+    Your turn in :func:`build_board`. ``None`` stamps nothing."""
+    if unread_seconds is None:
+        return
+    for card in session_cards:
+        if _is_chief_card(card):
+            card["mailbox_unread_seconds"] = int(unread_seconds)
+
+
+def _chief_needs_you(card: Dict[str, Any]) -> bool:
+    return _is_chief_card(card) and card.get("mailbox_unread_seconds") is not None
+
+
 def build_board(
     session_cards: List[Dict[str, Any]],
     github: Dict[str, Any],
@@ -244,16 +261,18 @@ def build_board(
     ``Stop``-hook-driven status sits in the needs-you family for nearly its
     entire life between dispatches — for a long-lived chat session that's a
     resting state, not a transient alert like it is for a worker session. It
-    always lands in Claude's turn instead, regardless of its raw status.
+    always lands in Claude's turn instead, regardless of its raw status,
+    except when :func:`mark_chief_mailbox_unread` stamped it: a chief that has
+    left its mailbox unread past the threshold missed its wake, and that is
+    the owner's to see.
     """
-    claude_turn = [
-        c for c in session_cards
-        if c["status"] not in _NEEDS_YOU_STATUSES or _is_chief_card(c)
-    ]
-    your_turn = [
-        c for c in session_cards
-        if c["status"] in _NEEDS_YOU_STATUSES and not _is_chief_card(c)
-    ]
+    def needs_you(c: Dict[str, Any]) -> bool:
+        if _is_chief_card(c):
+            return _chief_needs_you(c)
+        return c["status"] in _NEEDS_YOU_STATUSES
+
+    claude_turn = [c for c in session_cards if not needs_you(c)]
+    your_turn = [c for c in session_cards if needs_you(c)]
     return {
         "backlog": list(github.get("issues") or []),
         "claude_turn": claude_turn,
@@ -274,8 +293,12 @@ def session_board_columns(
     *,
     fleet_config_dir: Path,
     now: Optional[datetime] = None,
+    chief_unread_seconds: Optional[float] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Each live session's Board column, status and age, keyed by session id.
+
+    ``chief_unread_seconds`` is :func:`mark_chief_mailbox_unread`'s input, so
+    a chief that missed its wake is Your turn here as on the Board.
 
     The Coding tab's rows carry the Board's status vocabulary ("needs you",
     "stalled") without polling ``/api/board``: its own sessions poll asks this
@@ -297,6 +320,7 @@ def session_board_columns(
         live, state_rows, now=now,
         active_issue_repos=active_issue_repos(active_issue_rows, claim_states),
     )
+    mark_chief_mailbox_unread(cards, chief_unread_seconds)
     columns = build_board(cards, {}, [])
     out: Dict[str, Dict[str, Any]] = {}
     for column in ("claude_turn", "your_turn"):
@@ -308,4 +332,6 @@ def session_board_columns(
                     "status": str(card["status"]),
                     "age_seconds": card.get("age_seconds"),
                 }
+                if "mailbox_unread_seconds" in card:
+                    out[str(sid)]["mailbox_unread_seconds"] = card["mailbox_unread_seconds"]
     return out

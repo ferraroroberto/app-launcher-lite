@@ -1275,6 +1275,7 @@ flowchart LR
 - **Holds:**
   - live sessions waiting on the owner
   - a needs folder trust chip on a session sitting on Copilot's trust prompt
+  - the chief's row with a mailbox unread chip, only while the doorbell is on and a mailbox event has waited 15 minutes
   - the owner-check groups Before you start, Validate to close and Try what shipped, one fold each
 - **Does:**
   - a row unfolds its detail in place

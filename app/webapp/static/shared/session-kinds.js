@@ -29,7 +29,10 @@ export function isManagedSession(s) {
 }
 // True for a card the Board's lanes and every waiting count must leave out:
 // any managed session, the chief included (it keeps its Coding tab row).
+// A chief the server stamped with `mailbox_unread_seconds` missed its wake,
+// which is the owner's to see, so it stays on until it reads its mailbox.
 export function isOffBoard(item) {
+  if (isChiefSession(item) && item.mailbox_unread_seconds != null) return false;
   return isManagedSession(item);
 }
 export const CHIEF_RESTART_CONFIRM = {
