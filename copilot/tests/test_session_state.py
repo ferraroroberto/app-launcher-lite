@@ -87,6 +87,12 @@ class SessionStateTests(unittest.TestCase):
         self.assertEqual(row["status"], "working")
         self.assertEqual(row["transcript_path"], "C:\\t\\events.jsonl")
 
+    def test_only_a_payload_naming_a_parent_is_a_subagent_event(self):
+        sub = _payload("call_abc", agentId="call_abc", parentAgentId="abc-123")
+        self.assertTrue(session_state.subagent_event(sub))
+        self.assertFalse(session_state.subagent_event(_payload()))
+        self.assertFalse(session_state.subagent_event(_payload(parentAgentId="")))
+
     def test_unknown_event_without_a_file_writes_nothing(self):
         session_state.apply_event(_payload(), "preToolUse")
         self.assertFalse(session_state.state_file().exists())

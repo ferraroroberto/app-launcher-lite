@@ -31,6 +31,7 @@ The status is written by event name, and the rules for it (which event sets whic
 - **Write** replaces the row with the new status and keeps a `transcript_path` learned earlier.
 - **Refresh** keeps the row exactly as it is and only moves `updated_at`. `sessionStart` never downgrades: in non-interactive runs it fires after `userPromptSubmitted`, so writing `idle` there would flip a correct `working` row back.
 - **A stored status outside the set** (a hand-edited or damaged file) counts as no usable status: the next `sessionStart` rewrites the row as `idle`, and the other events behave as for any row. The hook never raises on it and always exits 0.
+- **A sub-agent's own events write nothing.** A sub-agent (a `task` call, autopilot's completion review) runs through its parent's hooks: its `userPromptSubmitted` and `agentStop` arrive with `sessionId` set to its tool-call id and `parentAgentId` naming the parent, under the parent's inherited launcher env. A row written for it would claim the parent's Board card and read `needs-you` while the parent is still mid-turn, so `main()` returns before any write or chief-mailbox event when the payload carries `parentAgentId`.
 - A hard kill never fires `sessionEnd`; the webapp's reconcile pass stamps those rows `ended` (a value this module never writes, so it is not a `SessionStatus` member), and the 24-hour prune on the next write removes them. A resumed session's next event replaces its ended row.
 
 ## Who reads it
