@@ -22,6 +22,7 @@ from .lite_lanes import (
     _worker_cap_inputs,
     chief_managed,
     load_dispatch_brief,
+    note_lane_mark,
 )
 
 # Seconds a just-spawned Copilot TUI needs before it reads input: a live probe sent text 2 s after
@@ -138,6 +139,7 @@ def _mark_open_lane(sid: str, repo: str, number: Optional[int]) -> None:
     except OSError as exc:
         print(f"WARNING=lane not marked chief-managed ({exc}); its end will not reach the mailbox")
         return
+    note_lane_mark(sid, repo, number, dispatch_id)
     print(f"DISPATCH_ID={dispatch_id}", flush=True)
 
 

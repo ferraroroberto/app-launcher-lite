@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Set, Tuple
 
 import chief_managed
+from fleet_core import hooks_state
 
 from chief.steer_delivery import (
     DEFAULT_VERIFY_POLL_INTERVAL,
@@ -40,6 +41,17 @@ from chief.steer_delivery import (
 )
 
 from . import digest, launcher, mailbox, rails
+
+
+def note_lane_mark(sid: str, repo: str, number: Any, dispatch_id: str) -> None:
+    """Leave the lane mark in `chief-decisions.log` beside the registry it was written to.
+
+    The ported `chief_managed.mark` stays byte-identical to its source, so its Lite callers
+    leave the breadcrumb Settings > Save diagnostics reads.
+    """
+    hooks_state.note_decision(chief_managed.state_file().parent, "lane-mark",
+                              f"marked {sid} chief-managed for {repo}#{number} dispatch={dispatch_id}")
+
 
 DEFAULT_TAIL = 2000
 
@@ -347,6 +359,7 @@ def cmd_dispatch(args: argparse.Namespace) -> int:
     if sid:
         try:
             chief_managed.mark(str(sid), args.repo, args.number, dispatch_id=dispatch_id)
+            note_lane_mark(str(sid), args.repo, args.number, dispatch_id)
         except OSError:
             pass  # best-effort -- a marking failure must never undo a real dispatch
     print(f"DISPATCHED session={sid} repo={args.repo} issue={args.number}")

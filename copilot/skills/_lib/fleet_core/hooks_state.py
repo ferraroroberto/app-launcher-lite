@@ -28,6 +28,7 @@ import os
 import re
 import tempfile
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -135,4 +136,36 @@ def atomic_write_text(
             except OSError:
                 pass
         raise
+# jscpd:ignore-end
+
+
+# The decision-log writer mirrors the other tier's copy on purpose: the tree
+# boundary forbids either tier importing the other.
+# jscpd:ignore-start
+DECISIONS_LOG_NAME = "chief-decisions.log"
+# Rolled to `.1` past this size, so a year of lanes cannot grow it without bound;
+# Save diagnostics reads both files.
+DECISIONS_LOG_MAX_BYTES = 5 * 1024 * 1024
+
+
+def note_decision(log_dir: Path, source: str, message: str) -> None:
+    """Append `<local time> [INFO] <source>: <message>` to `<log_dir>/chief-decisions.log`.
+
+    The trail Settings > Save diagnostics reads for mailbox writes, claims,
+    acks and lane marks, which run in hook and helper processes with no log of
+    their own. Advisory: a failed write is dropped, never raised.
+    """
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
+    target = log_dir / DECISIONS_LOG_NAME
+    try:
+        # runtime-write-exempt: the decisions log sits beside the chief mailbox in the user state dir
+        log_dir.mkdir(parents=True, exist_ok=True)
+        if target.exists() and target.stat().st_size > DECISIONS_LOG_MAX_BYTES:
+            # must-use-exempt: rolls the log aside by renaming it; nothing is written
+            os.replace(target, target.with_name(target.name + ".1"))
+        # runtime-write-exempt: the decisions log sits beside the chief mailbox in the user state dir
+        with open(target, "a", encoding="utf-8") as handle:
+            handle.write(f"{stamp} [INFO] {source}: {message}\n")
+    except OSError:
+        pass
 # jscpd:ignore-end

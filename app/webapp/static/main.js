@@ -24,6 +24,7 @@ import { wireTokens } from './settings/tokens.js';
 import { wireDocuments } from './settings/documents.js';
 import { wireSettingsSheets } from './settings/settings-sheets.js';
 import { wireLidKeepAwake } from './settings/lid-keep-awake.js';
+import { wireDiagnostics } from './settings/diagnostics.js';
 import { wireQuoteCopy } from './quote-copy.js';
 import { adoptBoard, fetchBoard, fetchJobs, markMirrorWindowEarly, openBoardCard, openScreenWindow, openTerminal, prefetchViews, renderBoard, startSessionViews, wireViewOpeners } from './lazy-views.js';
 import { loadXtermScripts } from './terminal/xterm-loader.js';
@@ -68,6 +69,7 @@ function wireSettings() {
     els.bootAutostartToggle.addEventListener('click', toggleBootAutostart);
   }
   wireLidKeepAwake(function () { return fetchConfig(); });
+  wireDiagnostics();
   // Every other Settings field saves as it changes: settings-sheets.js.
   wireSettingsSheets();
 }

@@ -29,6 +29,8 @@ import chief_inbox  # noqa: E402
 import chief_managed  # noqa: E402
 import chief_ops  # noqa: E402
 
+from chief import lite_lanes  # noqa: E402
+
 
 def _ops(*argv: str) -> tuple:
     out = io.StringIO()
@@ -114,6 +116,25 @@ class MailboxTests(unittest.TestCase):
         self.assertEqual(_ops("ack", *ids), (0, "ACKED=2\n"))
         self.assertEqual(_ops("inbox")[1].strip(), "INBOX=empty")
         self.assertEqual(_ops("ack", "nope"), (1, "ACKED=0\nACK_MISSING=nope\n"))
+
+    def test_decisions_log_records_mark_write_skip_claim_and_ack(self) -> None:
+        chief_managed.mark("sid-1", "fleet-config-lite", 102, dispatch_id="d" * 32)
+        lite_lanes.note_lane_mark("sid-1", "fleet-config-lite", 102, "d" * 32)
+        written = chief_inbox.record({}, "agentStop")
+        chief_inbox.record({}, "agentStop")  # debounced
+        _ops("inbox")
+        ids = [e["id"] for e in self._claimed()]
+        _ops("ack", *ids, "nope")
+        lines = (self.state / "chief-decisions.log").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 5)
+        for line in lines:
+            self.assertRegex(line, r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d{3} \[INFO\] (mailbox|lane-mark): ")
+        self.assertIn("lane-mark: marked sid-1 chief-managed for fleet-config-lite#102 dispatch=" + "d" * 32,
+                      lines[0])
+        self.assertIn(f"mailbox: event written {written.name} kind=turn-end lane=sid-1", lines[1])
+        self.assertIn("mailbox: turn-end for sid-1: skipped, within", lines[2])
+        self.assertIn(f"mailbox: claimed 1 [{ids[0]}] reoffered 0 [] dropped 0", lines[3])
+        self.assertIn(f"mailbox: acked 1 [{ids[0]}] missing 1 [nope]", lines[4])
 
     def _claimed(self) -> list:
         return [json.loads(p.read_text(encoding="utf-8")) for p in (self.inbox / ".claimed").glob("*.json")]

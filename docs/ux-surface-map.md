@@ -21,7 +21,7 @@ Walked 2026-11-18 against build `52a7d40`, at widths 390, 1280, themes light, da
 | [Jobs](#jobs) | 10 |
 | [Team OS](#team-os) | 7 |
 | [Board](#board) | 15 |
-| [Settings](#settings) | 14 |
+| [Settings](#settings) | 15 |
 | [Keys and gestures](#keys-and-gestures) | 4 |
 
 ## Chrome
@@ -439,7 +439,7 @@ flowchart LR
   s19(["Changes overlay · Code"])
   s6(["Confirm dialog · Chrome"])
   s79(["Session drawer · Board"])
-  s101(["Composer keys · Keys and gestures"])
+  s102(["Composer keys · Keys and gestures"])
   s11 -->|"row tap"| s21
   s12 -->|"Links"| s27
   s12 -->|"Rename"| s26
@@ -456,7 +456,7 @@ flowchart LR
   s23 -->|"Changed files"| s19
   s23 -->|"Stop and kill"| s6
   s79 -->|"Terminal"| s21
-  s101 -->|"keys button"| s28
+  s102 -->|"keys button"| s28
 ```
 
 ### `terminal.overlay` Session overlay
@@ -685,12 +685,12 @@ flowchart LR
   s38["Quality sheet"]
   s39["Readout"]
   s2(["PC load sheet · Chrome"])
-  s100(["Screen view keys · Keys and gestures"])
+  s101(["Screen view keys · Keys and gestures"])
   s2 -->|"Screen View live"| s36
   s36 -->|"Quality"| s38
   s36 -->|"Paste to PC"| s37
   s36 -->|"readout switch"| s39
-  s100 -->|"Screen view"| s36
+  s101 -->|"Screen view"| s36
 ```
 
 ### `screen.view` Screen view
@@ -1359,6 +1359,7 @@ flowchart LR
   s95["Chat folder menu"]
   s96["Passkeys sheet"]
   s97["Terminal sheet"]
+  s98["Diagnostics sheet"]
   s1(["Tab header · Chrome"])
   s12(["Session menu · Code"])
   s13(["Stopped chief menu · Code"])
@@ -1379,6 +1380,7 @@ flowchart LR
   s84 -->|"Folders"| s94
   s84 -->|"Passkeys"| s96
   s84 -->|"Terminal"| s97
+  s84 -->|"Diagnostics"| s98
   s87 -->|"preset kebab"| s92
   s88 -->|"model"| s89
   s94 -->|"a folder's kebab"| s95
@@ -1402,6 +1404,7 @@ flowchart LR
   - [Folders sheet](#settingsfolders-folders-sheet) (Folders)
   - [Passkeys sheet](#settingspasskeys-passkeys-sheet) (Passkeys)
   - [Terminal sheet](#settingsterminal-terminal-sheet) (Terminal)
+  - [Diagnostics sheet](#settingsdiagnostics-diagnostics-sheet) (Diagnostics)
 
 ### `settings.groups` Settings rows
 
@@ -1554,20 +1557,32 @@ flowchart LR
   - a switch saves through the passkey unlock and works only on the PC itself or over Tailscale
 - **States:** the screen switch is off and dimmed while the private-network switch is off, and turns off with it
 
+### `settings.diagnostics` Diagnostics sheet
+
+- **Root:** `data-surface`
+- **Reach:** Diagnostics in This PC
+- **Holds:**
+  - a Window choice of Last 15 minutes, Last hour and Last 3 hours, with a help line naming what is collected and that secrets are removed
+  - Save diagnostics
+- **Does:**
+  - Save diagnostics writes one redacted text file of every Lite log in the window on the PC and shows its record count, size and path
+  - Download the file appears once a file is saved and hands it to the browser
+  - both go through the passkey unlock
+
 ## Keys and gestures
 
 Inputs that are not elements.
 
 ```mermaid
 flowchart LR
-  s98["Swipe a row"]
-  s99["Long-press hint"]
-  s100["Screen view keys"]
-  s101["Composer keys"]
+  s99["Swipe a row"]
+  s100["Long-press hint"]
+  s101["Screen view keys"]
+  s102["Composer keys"]
   s36(["Screen view · Screen"])
   s28(["On-screen keys · Terminal"])
-  s100 -->|"Screen view"| s36
-  s101 -->|"keys button"| s28
+  s101 -->|"Screen view"| s36
+  s102 -->|"keys button"| s28
 ```
 
 ### `keys.swipe-row` Swipe a row
@@ -1722,6 +1737,7 @@ flowchart LR
 | [Settings](#settingspane-settings) | Folders | [Folders sheet](#settingsfolders-folders-sheet) |
 | [Settings](#settingspane-settings) | Passkeys | [Passkeys sheet](#settingspasskeys-passkeys-sheet) |
 | [Settings](#settingspane-settings) | Terminal | [Terminal sheet](#settingsterminal-terminal-sheet) |
+| [Settings](#settingspane-settings) | Diagnostics | [Diagnostics sheet](#settingsdiagnostics-diagnostics-sheet) |
 | [GitHub Copilot sheet](#settingscopilot-github-copilot-sheet) | preset kebab | [Launch preset menu](#settingspreset-menu-launch-preset-menu) |
 | [Chief sheet](#settingschief-chief-sheet) | model | [Chief model menu](#settingschief-model-menu-chief-model-menu) |
 | [Folders sheet](#settingsfolders-folders-sheet) | a folder's kebab | [Chat folder menu](#settingsoutbox-menu-chat-folder-menu) |

@@ -25,6 +25,7 @@ from app.webapp import chief_doorbell
 from app.webapp.observability import (
     SlowRequestLogMiddleware,
     ensure_autostart_log_handler,
+    ensure_chief_events_log_handler,
     ensure_doorbell_log_handler,
     ensure_slow_log_handler,
     ensure_warning_log_handler,
@@ -37,6 +38,7 @@ from app.webapp.routers import (
     config,
     copilot_usage,
     desktop_screen,
+    diagnostics,
     documents,
     jobs,
     misc,
@@ -442,6 +444,7 @@ def create_app() -> FastAPI:
     ensure_slow_log_handler()
     ensure_autostart_log_handler(_autostart_log)
     ensure_doorbell_log_handler(chief_doorbell.logger)
+    ensure_chief_events_log_handler()
     ensure_warning_log_handler()
 
     app = FastAPI(
@@ -495,6 +498,7 @@ def create_app() -> FastAPI:
     app.include_router(config.router)
     app.include_router(copilot_usage.router)
     app.include_router(documents.router)
+    app.include_router(diagnostics.router)
     app.include_router(tokens.router)
     app.include_router(apps.router)
     app.include_router(jobs.router)

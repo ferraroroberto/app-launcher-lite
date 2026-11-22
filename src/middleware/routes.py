@@ -236,6 +236,12 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         "only and stays token-gated, so Settings can draw it without a passkey.",
     ),
     (
+        lambda p: p == "/api/diagnostics" or p.startswith("/api/diagnostics/"),
+        "passkey",
+        "Settings > Diagnostics: saving and downloading the redacted log bundle, "
+        "which carries session lifecycle and chief mailbox traffic.",
+    ),
+    (
         lambda p: p == "/api/team-os/file" or p.startswith("/api/team-os/file/"),
         "passkey",
         "Team OS private-content browser: file read, delete and rename surface "

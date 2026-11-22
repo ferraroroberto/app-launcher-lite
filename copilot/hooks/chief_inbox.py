@@ -31,6 +31,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+import _lib
+
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 2
@@ -156,6 +158,8 @@ def record(payload: Dict[str, Any], hook_event: str) -> Optional[Path]:
     if reason == UNDETERMINED:
         logger.info("ℹ️ chief_inbox: chief-managed state undetermined for %s -- no %s event written",
                     sid, hook_event)
+        _lib.note_decision(state_dir(), "mailbox",
+                           f"{hook_event} for {sid}: not written, chief-managed state undetermined")
         return None
     if row is None:
         return None
@@ -187,16 +191,24 @@ def record(payload: Dict[str, Any], hook_event: str) -> Optional[Path]:
     if kind == "turn-end" and _debounced(directory, sid, time.time()):
         logger.info("ℹ️ chief_inbox: turn-end for %s within %ss of the last -- skipped",
                     sid, TURN_END_DEBOUNCE_SECONDS)
+        _lib.note_decision(directory.parent, "mailbox",
+                           f"turn-end for {sid}: skipped, within {TURN_END_DEBOUNCE_SECONDS}s of the last")
         return None
     if kind == "session-end":
         stamp = stamp_path(directory, kind, sid)
         if stamp.exists():
             logger.info("ℹ️ chief_inbox: session-end for %s already published -- skipped", sid)
+            _lib.note_decision(directory.parent, "mailbox",
+                               f"session-end for {sid}: skipped, already published")
             return None
         published = _publish(directory, entry, now)
         _touch(stamp)
-        return published
-    return _publish(directory, entry, now)
+    else:
+        published = _publish(directory, entry, now)
+    _lib.note_decision(directory.parent, "mailbox",
+                       f"event written {published.name} kind={kind} lane={sid} "
+                       f"issue={entry['repo']}#{entry['number']}")
+    return published
 
 
 def record_safely(payload: Dict[str, Any], hook_event: str) -> None:

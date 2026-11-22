@@ -164,7 +164,7 @@ async def _mark_chief_managed(
     if not script.exists():
         return True
     try:
-        await asyncio.to_thread(
+        done = await asyncio.to_thread(
             subprocess.run,
             [str(venv_python), str(script), "mark", sid, repo, str(number)],
             capture_output=True,
@@ -175,6 +175,11 @@ async def _mark_chief_managed(
         logger.warning(
             "⚠️ chief-managed mark failed for session %s: %s", sid[:8], exc
         )
+        return True
+    if done.returncode == 0:
+        logger.info("🏷️ lane mark: %s chief-managed for %s#%s", sid, repo, number)
+    else:
+        logger.warning("⚠️ chief-managed mark exited %s for session %s", done.returncode, sid[:8])
     return True
 
 
