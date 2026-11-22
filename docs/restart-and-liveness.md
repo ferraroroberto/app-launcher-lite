@@ -101,3 +101,11 @@ be confirmed either way.
 **Do not restart `:8466` to "fix" this** as a side effect of finishing an
 issue: it kills every live PTY on the machine. The one supported restart path is the `update command` in `CLAUDE.md`'s
 `## session-host` block.
+
+## The declared path list and the restart command
+
+`CLAUDE.md`'s `## session-host` block is the machine-read declaration, so its bullets stay there; this section holds the detail behind two of them.
+
+**Path list.** The list is the session-host server module's first-party import closure. `src.session_host_paths.session_host_import_closure()` computes it statically from the import graph, and `tests/unit/session_host/test_session_host_paths.py` fails when the declaration drifts from it, so add a module to the block in the same change that makes the session-host import it. Out of scope: the argparse bootstrap above the server module (`launcher.py` to the CLI dispatcher). Deliberately kept off the closure: `src/console_input.py`, which `RemoteSession.submit_input` runs as a fresh `python -m` subprocess per message, so a fix there is live on the next send without a `:8466` restart.
+
+**Update command.** `scripts/restart-session-host.ps1 -Confirm` works under `AllSigned`. It wraps `tray_lifecycle.ps1 reclaim -Ports 8466`, then `tray.bat --restart`, then the `restart_check session-host` confirmation described above.
