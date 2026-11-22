@@ -25,7 +25,7 @@ The table lives in `src/webapp_settings/performance.py`: the config defaults, th
 | `pool_hot_poll` | 8 | 4 | 4–32 | Threads building the session list and the Board. |
 | `pool_session_reads` | 12 | 6 | 4–48 | Threads reading open chats. |
 | `pool_sends` | 0 (automatic) | 8 | 0 or 4–64 | Threads behind sending to a session and every route without its own pool; 0 is CPUs + 4, at most 32. |
-| `pool_git_status` | 8 | 2 | 1–32 | Repos scanned in parallel. |
+| `pool_git_status` | 2 | 1 | 1–32 | Repos scanned in parallel, which is also the most git processes alive during a scan. |
 | `git_status_ttl_s` | 10 | 30 | 2–60 s | How long a git scan is served as it is; past it the next poll shows it at once and refreshes it behind the response. |
 | `transcript_page_cache_size` | 32 | 16 | 0–256 pages | Parsed chat pages kept for unchanged files; 0 turns the cache off. |
 | `transcript_tail_cache_mb` | 32 | 16 | 0–256 MB | Session transcript tails kept for unchanged files, so the session list and the Board read each transcript once per change; 0 turns the cache off. |

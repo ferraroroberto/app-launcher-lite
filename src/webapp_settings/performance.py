@@ -89,8 +89,9 @@ KNOBS: Tuple[Knob, ...] = (
              "0 picks from the CPU count (CPUs + 4, at most 32).",
     ),
     Knob(
-        "pool_git_status", "Git status", GROUP_POOLS, KIND_INT, 8, 2, 1, 32, "threads",
-        help="Repos scanned in parallel. Fewer is gentler on a slow disk and takes longer for a big fleet.",
+        "pool_git_status", "Git status", GROUP_POOLS, KIND_INT, 2, 1, 1, 32, "threads",
+        help="Repos scanned in parallel, which is also the number of git processes running at once "
+             "during a scan. Fewer is gentler on a slow PC and takes longer for a big fleet.",
     ),
     Knob(
         "git_status_ttl_s", "Git status cache", GROUP_CACHES, KIND_INT, 10, 30, 2, 60, "s",

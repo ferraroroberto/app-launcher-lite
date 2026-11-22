@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 _WORKTREE_SUFFIX_RE = re.compile(r"-wt-\d+$")
 
 
-def _normalize_repo_name(name: str) -> str:
+def normalize_repo_name(name: str) -> str:
     """Lower-cased repo key for a project/directory name, worktree-suffix
     stripped — see :data:`_WORKTREE_SUFFIX_RE`."""
     return _WORKTREE_SUFFIX_RE.sub("", str(name or "").strip().lower())
@@ -563,7 +563,7 @@ def derive_card_status(
         and picker_on_screen()
     ):
         status = card_status.AWAITING_DECISION
-    if status == card_status.IDLE_FINISHED and _normalize_repo_name(project) in active_repos:
+    if status == card_status.IDLE_FINISHED and normalize_repo_name(project) in active_repos:
         status = card_status.AWAITING_INPUT
     return status, anchor
 

@@ -73,6 +73,9 @@ export const state = {
   // When that map last landed (Date.now()), for the Projects card's "Git
   // checked N min ago" footer. null until the first fetch.
   gitStatusAt: null,
+  // True when the server answered from a cache past its TTL (a refresh is
+  // running behind it), so the footer says so instead of implying a fresh read.
+  gitStatusStale: false,
   // Coding-tab favorites filter. false = show all projects
   // (favorites pinned to the top); true = show only starred projects. A
   // client-side view toggle, persisted across reloads so the

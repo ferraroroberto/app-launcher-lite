@@ -98,7 +98,7 @@ The `.sample` file carries a `copilot_models` default list; a per-launch model (
 | `transcript_tail_cache_mb` | `32` | MB of session transcript tails kept for files that have not changed, so the session list and the Board open each transcript once per change instead of once per reader per poll; `0` turns the cache off. |
 | `transcript_resolve_miss_ttl_s` | `10.0` | Seconds a Copilot session whose event log was not found answers "not found" before the session-state folder is scanned again. A new session folder ends the wait early. |
 | `poll_board_s`, `poll_sessions_s`, `poll_transcript_s`, `poll_pause_hidden` | `5`, `5`, `3`, `true` | How often the Board, the session list and an open chat refresh, in seconds, and whether a hidden tab stops every page poll. Settings > Performance; applied live. |
-| `pool_hot_poll`, `pool_session_reads`, `pool_sends`, `pool_git_status` | `8`, `12`, `0`, `8` | Thread limits for the Board and session builds, transcript reads, sends and every route without its own pool (`0` picks from the CPU count), and the git scan. Settings > Performance; applied live. |
+| `pool_hot_poll`, `pool_session_reads`, `pool_sends`, `pool_git_status` | `8`, `12`, `0`, `2` | Thread limits for the Board and session builds, transcript reads, sends and every route without its own pool (`0` picks from the CPU count), and the git scan (one thread runs one git process at a time, so this is also the most git processes alive during a scan). Settings > Performance; applied live. |
 | `git_status_ttl_s` | `10` | Seconds a git scan is served as it is before the next poll refreshes it behind the response. |
 | `request_budget_scale` | `1.0` | Multiplier on every request budget, so a slow PC logs fewer breaches. |
 
