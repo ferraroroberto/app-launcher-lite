@@ -9,6 +9,7 @@ from playwright.sync_api import Page, expect
 from tests.e2e.fixtures.pages import loopback
 from tests.e2e.fixtures.sessions import auth_headers
 from tests.e2e.fixtures.ui import open_settings, open_settings_sheet
+from tests.e2e.fixtures.waits import stable_eval
 
 
 def _config_values(base_url: str, auth_token: str) -> dict:
@@ -35,6 +36,12 @@ def walk_performance_sheet(page: Page, base_url: str, auth_token: str) -> None:
     expect(_preset(page, "custom")).to_be_disabled()
     # The health line never stays blank: a figure it cannot read says unknown.
     expect(page.locator("#performanceHealth")).to_contain_text("Now: ")
+    # The help line sits clear of the selector, not flush against it.
+    gap = stable_eval(page.locator("#performancePresetHelp"), """el => {
+      const sel = document.getElementById('performancePreset').getBoundingClientRect();
+      return el.getBoundingClientRect().top - sel.bottom;
+    }""")
+    assert gap >= 8, f"preset help sits {gap}px under the selector"
 
     # A refused value stays in the field with the reason, and nothing is saved.
     _field(page, "poll_board_s").fill("1")
