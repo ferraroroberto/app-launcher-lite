@@ -28,7 +28,6 @@ import { usage } from './usage.js';
 import { attachMicNotice } from './_vendored/mic-notice/mic-notice.js';
 import { REMOTE_MIC_HINT, inRemoteDesktopSession } from './voice-remote.js';
 import { watchForPause } from './voice-autostop.js';
-import { takeToWav } from './shared/voice-wav.js';
 
 const _CHUNK_MS = 1000;
 // A chunk upload that fails (network error or non-2xx) is retried this many
@@ -710,10 +709,17 @@ async function finishStreaming(d) {
 
 // The take as the upload's form body: a 16 kHz mono WAV every backend reads,
 // or, where Web Audio cannot convert it, the browser's own recording, which
-// the server converts when it has ffmpeg.
+// the server converts when it has ffmpeg. The converter loads on the first
+// take, so it adds nothing to page boot.
 async function uploadForm(blob) {
   const fd = new FormData();
-  const wav = await takeToWav(blob);
+  let wav = null;
+  try {
+    const { takeToWav } = await import('./shared/voice-wav.js');
+    wav = await takeToWav(blob);
+  } catch (exc) {
+    console.warn('[dictation] the WAV converter did not load', exc);
+  }
   if (wav) {
     fd.append('file', wav, 'recording.wav');
     return fd;
