@@ -1,6 +1,6 @@
 # Migrating from fleet-config-lite
 
-App Launcher Lite carries its own Copilot hooks, chief helpers and issue skills in [`copilot/`](../copilot), and installs them with `copilot/install.ps1`. A machine that already runs the companion repo fleet-config-lite has the same hooks and skills installed from *that* checkout. Two copies of the session-state hook would race on one state file, so the old install is removed first. This page is the order to do it in.
+App Launcher Lite carries its own Copilot hooks, chief helpers and issue skills in [`copilot/`](../copilot), and installs them with `copilot/install.py`. A machine that already runs the companion repo fleet-config-lite has the same hooks and skills installed from *that* checkout. Two copies of the session-state hook would race on one state file, so the old install is removed first. This page is the order to do it in.
 
 A machine that never ran fleet-config-lite needs none of this: `setup.bat` offers the install, or run it by hand (see [Install, uninstall, migrate](#install-uninstall-migrate)).
 
@@ -24,7 +24,7 @@ The order matters because the chief's folder is a setting. Lite defaults it to i
 3. **Migrate:**
 
    ```powershell
-   .\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1 -Migrate
+   .\.venv\Scripts\python.exe copilot\install.py --migrate
    ```
 
    It lists the old hook configs and skill links it would remove and asks before touching anything; `-Yes` answers for it. Then it installs this checkout's hooks and skills. It also reads Lite's **Copilot folder** setting: when that holds a path other than this checkout's `copilot/`, it offers to point it there through Lite's own Settings API, changing that one field and reading it back. If Lite is not running, or does not answer, the line reads `[unknown]` and nothing is changed: start the tray and run the command again, or set the folder in **Settings → Folders** yourself.
@@ -32,7 +32,7 @@ The order matters because the chief's folder is a setting. Lite defaults it to i
 5. **Start the chief from the Board.** It now runs in `copilot/` and picks up the plan where it stopped.
 6. **Restart any open Copilot session.** Hook configs load at CLI startup only.
 
-Run the commands from this checkout's root. The `ps_script` form works under every execution policy, `AllSigned` included, without changing the machine's policy; on a machine with a permissive policy `.\copilot\install.ps1 -Migrate` does the same.
+Run the commands from this checkout's root. The installer is plain Python, so it runs under every execution policy, `AllSigned` included, without changing the machine's policy; on a machine where scripts may run, `.\copilot\install.ps1 -Migrate` forwards to the same code.
 
 ## Checking it worked
 
@@ -44,12 +44,12 @@ Run the commands from this checkout's root. The `ps_script` form works under eve
 ## Install, uninstall, migrate
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1             # install or refresh
-.\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1 -Uninstall  # remove what this installer put there
-.\.venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1 -Migrate    # leave fleet-config-lite, then install
+.\.venv\Scripts\python.exe copilot\install.py             # install or refresh
+.\.venv\Scripts\python.exe copilot\install.py --uninstall  # remove what this installer put there
+.\.venv\Scripts\python.exe copilot\install.py --migrate    # leave fleet-config-lite, then install
 ```
 
-Install is idempotent: re-run it after moving the checkout or changing a hook template. `-Uninstall` removes only Lite's own hook configs and skill links, never `hooks/state/`, and restores nothing, so to go back to fleet-config-lite run `-Uninstall` here and then that repo's own `install.ps1`; never leave both installed.
+Install is idempotent: re-run it after moving the checkout or changing a hook template. `--uninstall` removes only Lite's own hook configs and skill links, never `hooks/state/`, and restores nothing, so to go back to fleet-config-lite run `--uninstall` here and then that repo's own `install.ps1`; never leave both installed.
 
 **A shared machine** is one where `~/.copilot/skills` or `~/.agents/skills` is a link into another tree, so the full fleet runs there too. The installer then writes no skill, and renders the session-state hook with `--lite-sessions-only`, so it records only sessions Lite launched. A hook config, hooks folder or skills folder that is itself a link into another tree is never written through.
 
@@ -57,7 +57,7 @@ Install is idempotent: re-run it after moving the checkout or changing a hook te
 
 ## If it goes wrong
 
-- `[warn] the old fleet-config-lite hook configs are still installed` after a plain install: run it again with `-Migrate`. Until then both session-state hooks write the same file.
+- `[warn] the old fleet-config-lite hook configs are still installed` after a plain install: run it again with `--migrate`. Until then both session-state hooks write the same file.
 - `[skip] skill exists and is not ours`: a real folder, or a link into another tree, already holds that skill name. Move it aside and re-run.
 - A refused prompt (`no answer to read`) means there was no terminal to ask on; re-run with `-Yes`.
 - Where the Copilot folder setting stays on the old path, start the chief only after fixing it in **Settings → Folders**.

@@ -1,4 +1,4 @@
-"""Can `git` reach GitLab with no prompt? The check behind install.ps1's checklist line.
+"""Can `git` reach GitLab with no prompt? The check behind install.py's checklist line.
 
 `glab auth login` keeps its token in the keyring for glab's own API calls; `git`
 asks its own credential helper, which on a fresh PC holds no GitLab credential.

@@ -9,7 +9,7 @@ REM    setup.bat            create .venv, install requirements, create missing
 REM                         configs, add keys a config lacks (after a backup)
 REM    setup.bat -WhatIf    list every change, make none
 REM    setup.bat -Startup   also start the tray at log on
-REM  Then it offers the Copilot hooks and skills (copilot\install.ps1).
+REM  Then it offers the Copilot hooks and skills (copilot\install.py).
 REM  A batch file, not a .ps1, so an AllSigned execution policy never refuses it.
 REM  (PWA/tray icons are committed in the repo -- no generation step needed.)
 REM  After this runs once, `tray.bat` is enough for day-to-day use.
@@ -45,16 +45,16 @@ echo docs\migrating-from-fleet-config-lite.md instead.
 set "ANSWER="
 set /p "ANSWER=Install it now? [y/N] "
 if /i not "%ANSWER%"=="y" goto copilot_skipped
-"%VENV_PY%" -m src.launching.ps_script copilot\install.ps1 || goto copilot_failed
+"%VENV_PY%" copilot\install.py || goto copilot_failed
 goto copilot_done
 :copilot_failed
 echo.
 echo The Copilot install did not finish. Fix what it printed, then run:
-echo   .venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1
+echo   .venv\Scripts\python.exe copilot\install.py
 exit /b 1
 :copilot_skipped
 echo Skipped. Install it later with:
-echo   .venv\Scripts\python.exe -m src.launching.ps_script copilot\install.ps1
+echo   .venv\Scripts\python.exe copilot\install.py
 :copilot_done
 
 echo.

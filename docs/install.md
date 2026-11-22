@@ -56,11 +56,11 @@ Running `setup.bat` on a configured PC is safe and is how you pick up a new sett
 
 ## Execution policy
 
-Nothing here needs a signed script or overrides the PC's PowerShell execution policy, `AllSigned` included. `setup.bat`, `tray.bat` and `webapp.bat` are batch files. `tray.bat` starts its helper through `src/launching/ps_script.py`, as does the operator-only session-host restart (`.venv\Scripts\python.exe -m src.launching.ps_script scripts\restart-session-host.ps1 -Confirm`); it falls back to a ScriptBlock launch under `AllSigned` or `Restricted`. PowerShell jobs in the Jobs tab start the same way.
+Nothing here needs a signed script or overrides the PC's PowerShell execution policy, `AllSigned` included. `setup.bat`, `tray.bat` and `webapp.bat` are batch files, and the Copilot install (`copilot\install.py`) is Python. `tray.bat` starts its helper through `src/launching/ps_script.py`, as does the operator-only session-host restart (`.venv\Scripts\python.exe -m src.launching.ps_script scripts\restart-session-host.ps1 -Confirm`); it falls back to a ScriptBlock launch under `AllSigned` or `Restricted`. PowerShell jobs in the Jobs tab start the same way.
 
 ## Uninstall
 
 1. Turn off **Start at log on** in Settings, or delete `AppLauncherLite.bat` from your Startup folder (`shell:startup`).
 2. Remove any job schedules you made in the Jobs tab: they are Task Scheduler tasks under the `\AppLauncherLite\` folder.
-3. Remove the Copilot hooks and skills with `copilot\install.ps1 -Uninstall` ([copilot/docs/install.md](../copilot/docs/install.md)).
+3. Remove the Copilot hooks and skills with `.venv\Scripts\python.exe copilot\install.py --uninstall` ([copilot/docs/install.md](../copilot/docs/install.md)).
 4. Quit the tray from its menu, then delete the `app-launcher-lite` folder.
