@@ -50,11 +50,16 @@ def browser_type_launch_args(browser_type_launch_args: dict, browser_name: str) 
     unrelated navigations with ERR_ADDRESS_IN_USE / ERR_NO_BUFFER_SPACE. With
     the switch the handshake passes and the sockets are reused. WebKit already
     pools them (~6 per boot) and has no such switch.
+
+    The two media switches give Chromium a fake microphone that plays a tone
+    and grant it without a prompt, so dictation runs its real recording path.
     """
     if browser_name != "chromium":
         return browser_type_launch_args
     extra = list(browser_type_launch_args.get("args") or [])
-    return {**browser_type_launch_args, "args": extra + ["--ignore-certificate-errors", *CHROMIUM_CAPTURE_ARGS]}
+    media = ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"]
+    return {**browser_type_launch_args,
+            "args": extra + ["--ignore-certificate-errors", *media, *CHROMIUM_CAPTURE_ARGS]}
 
 
 # The readout only shows the server's constant `git_sha` and `built_at`, but

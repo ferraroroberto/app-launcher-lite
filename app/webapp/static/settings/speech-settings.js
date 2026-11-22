@@ -12,7 +12,15 @@ import { apiFailToast, jsonApi, toast } from '../api.js';
 import { patchConfig, wireConfigSwitch } from './claude-options.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
 
-const _STATE_WORD = { reachable: 'Reachable', refused: 'Refused', unknown: 'Unknown' };
+// The connection test's verdicts, strongest first: only `transcribes` proves a
+// recording would come back as text.
+const _STATE_WORD = {
+  transcribes: 'Transcribes',
+  refuses_audio: 'Refuses audio',
+  reachable: 'Reachable',
+  refused: 'Refused',
+  unknown: 'Unknown',
+};
 
 // Saves still in flight, so the connection test never probes with a
 // half-saved endpoint: a field's `change` fires on blur, just before the tap.

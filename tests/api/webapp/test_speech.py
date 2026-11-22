@@ -63,7 +63,7 @@ def test_transcribe_forwards_to_the_configured_endpoint(webapp_client, monkeypat
         seen.update(base=base, model=model, key=key, content=content)
         return {"transcript": "hi", "silent": False}
 
-    monkeypatch.setattr(speech_client, "transcribe", fake)
+    monkeypatch.setattr(speech_client, "transcribe_upload", fake)
     resp = _upload(client)
     assert resp.status_code == 200 and resp.json() == {"transcript": "hi", "silent": False}
     assert seen == {"base": "http://h:1/v1", "model": "m", "key": "k", "content": b"audio"}
@@ -77,7 +77,7 @@ def test_transcribe_surfaces_endpoint_errors(webapp_client, monkeypatch):
     def boom(*a):
         raise speech_client.SpeechError("speech endpoint unreachable", status=503)
 
-    monkeypatch.setattr(speech_client, "transcribe", boom)
+    monkeypatch.setattr(speech_client, "transcribe_upload", boom)
     resp = _upload(client)
     assert resp.status_code == 503 and "unreachable" in resp.json()["detail"]
 
@@ -87,6 +87,6 @@ def test_connection_test_uses_saved_settings_only(webapp_client, monkeypatch):
     assert client.post("/api/speech/test").status_code == 400
     client.post("/api/config", json={"speech_base_url": "http://h:1/v1", "speech_api_key": "k"})
     monkeypatch.setattr(speech_client, "check_connection",
-                        lambda base, key: {"state": "reachable", "detail": f"{base} {key}"})
+                        lambda base, model, key: {"state": "transcribes", "detail": f"{base} {key}"})
     resp = client.post("/api/speech/test", json={"base_url": "http://evil/v1"})
-    assert resp.json() == {"state": "reachable", "detail": "http://h:1/v1 k"}
+    assert resp.json() == {"state": "transcribes", "detail": "http://h:1/v1 k"}
