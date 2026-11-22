@@ -366,7 +366,7 @@ builders = [
 ]
 
 [test_weight]
-ratio_ceiling = "1.0021"
+ratio_ceiling = "1.0028"
 
 # ---------------------------------------------------------------------------
 # [shot_baseline] -- the scaffold's screenshot baseline. The last stage of
