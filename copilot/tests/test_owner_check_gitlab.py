@@ -74,6 +74,12 @@ class ForgeTests(unittest.TestCase):
         self.assertEqual(forge.plain_label("owner::needs-owner"), "needs-owner")
         self.assertEqual(forge.plain_label("priority::high"), "priority::high")
 
+    def test_the_seam_roots_at_the_checkout_holding_copilot(self) -> None:
+        # The opt-in scope is read from that checkout's .fleet.toml, and the fleet
+        # the Board lists is that checkout's siblings.
+        self.assertEqual(forge.REPO_ROOT, REPO.parent)
+        self.assertTrue((forge.REPO_ROOT / ".fleet.toml").is_file())
+
     def test_fetch_issue_maps_gitlab_to_the_callers_shape(self) -> None:
         fake = FakeGlab({"issue view": _issue(["owner::needs-owner", "bug"]),
                          "api projects/ferraroroberto%2Fdemo/issues/5/closed_by": [{"web_url": "mr-url"}],

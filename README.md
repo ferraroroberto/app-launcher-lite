@@ -20,7 +20,7 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 
 **Unknown (not yet verified live):**
 
-- GitLab, in part: group issue reads, issue create and note, and the two-remote mirror are verified live on gitlab.com, and the merge verb on a GitLab test project; the merge-request row shape, the group's own pipelines, labels and a self-hosted host are `unknown`. See [docs/gitlab.md](docs/gitlab.md).
+- GitLab, in part: group issue reads, issue create and note, and the two-remote mirror are verified live on gitlab.com, and the merge verb on a GitLab test project; the merge-request row shape, a red pipeline of the group and the owner-check labels are verified too; a green pipeline waits on the account's runner verification, and a self-hosted host is `unknown`. See [docs/gitlab.md](docs/gitlab.md).
 - On Copilot CLI (last probed on 1.0.105; the installed CLI is 1.0.114): `/compact` with a focus argument (a bare `/compact` is verified on 1.0.114, idle and queued at turn end), `/remote on` typed from the launcher, a background shell finishing waking the agent, and `ask_user` blocking under autopilot.
 - An Android Git client (MGit) clone, push and PC-side fetch, see [docs/gitlab.md](docs/gitlab.md#working-from-an-android-git-client). The Android Chrome device checks (install, safe areas, gesture bar, keyboard) passed on the owner's phone; versions were not given ([docs/android.md](docs/android.md)).
 

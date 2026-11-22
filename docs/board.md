@@ -125,7 +125,7 @@ The hooks flip status only on a few events. Two resume paths fire no hook: answe
 
 ## Owner checks
 
-Work that waits on the owner rather than on a session: shipped work to try as a user (`validate-after`) and a step owed before work can start (`before-start`). **Not yet live, and opt-in:** in lite these are meant to ride GitLab scoped labels (for example `owner::needs-validation` and `owner::needs-owner`) read through `glab`; the list is off until the labels exist in the group and the reads have been verified against a real GitLab. `src/board/owner_checks.py` holds the cache, the marks and the answer plumbing; it was written against GitHub labels, so the GitLab mapping is part of the unfinished port.
+Work that waits on the owner rather than on a session: shipped work to try as a user (`validate-after`) and a step owed before work can start (`before-start`). The items ride the plain GitLab labels `needs-validation` and `needs-owner`, read and cleared through `glab` by the `owner_check` package in `copilot/`, verified live on a test project ([gitlab.md](gitlab.md#owner-checks)). `src/board/owner_checks.py` holds the cache, the marks and the answer plumbing, and runs that package's command line rather than reading labels itself.
 
 **The list is a cached read with its age.** It costs calls per project, so it never rides the 5 s poll: the Board's refresh starts it in a background thread (one at a time, no closer than a minute apart), and `GET /api/board` carries the cache as `owner_checks` (`available`, `fetched_at`, `error`, `refreshing`, `unknown`, `items`). `available: false` until a list has landed, so the Board says *Owner checks not loaded yet* instead of an empty list; a read that did not land is `unknown`, never "none".
 
