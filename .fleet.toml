@@ -1001,7 +1001,7 @@ derive = "usageState"
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "23c9ba2139528fbb366156e489d99cb69b919fe1"
+synced_sha = "4ab952df641052c485a139a3184f7708605de55e"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
