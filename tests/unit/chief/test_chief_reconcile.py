@@ -231,3 +231,21 @@ def test_a_second_agent_stop_hook_line_does_not_repeat_a_published_turn_end(lane
                     _line("hook.start", T0 + 2, hookType="agentStop"))
     lane.stamp("turn-end", LANE, T0 + 0.5)
     assert lane.run(now=T0 + 600) == []
+
+
+def test_a_finished_subagent_is_not_the_lane_s_turn_end(lane: Lane) -> None:
+    # Two sub-agents run in parallel; the first ends and logs its own agentStop
+    # (its hook input names the lane as parentAgentId) while the second keeps
+    # the lane mid-turn with no further turn start for minutes.
+    sub = {"sessionId": "call_a", "agentId": "call_a", "parentAgentId": "lane-copilot-sid"}
+    lane.transcript(LANE, _line("user.message", T0 - 60, content="/upstream-sync"),
+                    _line("assistant.turn_start", T0 - 59),
+                    _line("tool.execution_start", T0 - 50, toolName="task", toolCallId="call_a"),
+                    _line("tool.execution_start", T0 - 50, toolName="task", toolCallId="call_b"),
+                    _line("user.message", T0 - 49, content="review", parentToolCallId="call_a"),
+                    _line("assistant.turn_start", T0 - 48, parentToolCallId="call_a"),
+                    _line("assistant.turn_end", T0, parentToolCallId="call_a"),
+                    _line("hook.start", T0, hookType="agentStop", input=sub),
+                    _line("tool.execution_complete", T0 + 1, toolCallId="call_a"))
+    assert lane.run(now=T0 + 600) == []
+    assert not lane.inbox.exists()

@@ -256,6 +256,19 @@ def lite_session(launcher_sid: str) -> bool:
     return any(isinstance(r, dict) and r.get("session_id") == launcher_sid for r in rows or [])
 
 
+def subagent_event(payload: Dict[str, Any]) -> bool:
+    """True for a sub-agent's own hook event, which says nothing about its session.
+
+    A sub-agent (a ``task`` call, autopilot's completion review) runs through
+    its parent's hooks with ``sessionId`` set to its tool-call id and
+    ``parentAgentId`` naming the parent; it inherits the parent's launcher
+    env, so a row written for it would claim the parent's Board card and its
+    ``agentStop`` would read as the parent's turn end while the parent works.
+    """
+    parent = payload.get("parent_agent_id")
+    return isinstance(parent, str) and bool(parent)
+
+
 def main() -> None:
     try:
         event = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -263,6 +276,8 @@ def main() -> None:
                 os.environ.get("APP_LAUNCHER_SESSION_ID", "").strip()):
             _lib.allow()
         payload = _lib.read_stdin_json()
+        if subagent_event(payload):
+            _lib.allow()
         apply_event(payload, event)
         # The chief's mailbox rides the same invocation: a chief-managed worker's
         # turn end or exit becomes one event file (no-op for every other session).

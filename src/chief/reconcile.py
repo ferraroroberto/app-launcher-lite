@@ -13,7 +13,8 @@ carries its launcher session id) for the terminal evidence Copilot writes
 itself: ``session.task_complete`` (autopilot) or the ``agentStop`` hook it logs
 as ``hook.start`` closes a turn, and ``session.shutdown`` closes the session.
 An interactive turn, or one that stops blocked, never writes
-``session.task_complete``, so the ``agentStop`` line is its only trace. A turn
+``session.task_complete``, so the ``agentStop`` line is its only trace (a
+sub-agent's own ``agentStop`` line is skipped: see :func:`_is_agent_stop`). A turn
 end is dated by its first marker, which precedes the hook's stamp, so a turn
 end the hook published is never published again. A turn end or exit older
 than :data:`GRACE_SECONDS` that the lane's mailbox stamp does not already
@@ -86,7 +87,18 @@ def _epoch(raw: Any) -> Optional[float]:
 
 
 def _is_agent_stop(kind: Any, entry: Dict[str, Any]) -> bool:
-    return kind == "hook.start" and (entry.get("data") or {}).get("hookType") == "agentStop"
+    """The lane's own ``agentStop`` hook line.
+
+    A sub-agent runs through the lane's hooks and logs its own ``agentStop``
+    in the same ``events.jsonl``, its input naming the lane as
+    ``parentAgentId``; the lane is still mid-turn then, so that line is no
+    turn end.
+    """
+    data = entry.get("data") or {}
+    if kind != "hook.start" or data.get("hookType") != "agentStop":
+        return False
+    hook_input = data.get("input")
+    return not (isinstance(hook_input, dict) and hook_input.get("parentAgentId"))
 
 
 def transcript_evidence(path: Path) -> Optional[Evidence]:
