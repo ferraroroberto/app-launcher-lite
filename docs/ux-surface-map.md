@@ -505,7 +505,9 @@ flowchart LR
 - **Holds:**
   - Rename, Copy link, Changed files, Links
   - in Chat mode Show or Hide steps, Show or Hide automatic, Load new and Reload
+  - Compact, for a Copilot session
   - Stop and kill
+- **Does:** Compact sends /compact to the session and toasts the host's verdict
 - **Leads to:**
   - [Rename session](#terminalrename-dialog-rename-session) (Rename)
   - [Links sheet](#terminallinks-sheet-links-sheet) (Links)

@@ -23,6 +23,7 @@ The bar carries ‹ back, the title, an icon-only **Terminal ⇄ Chat** toggle a
 - **Rename · Copy link · Stop and kill** — always.
 - **Hide steps** (or **Show steps**), **Hide automatic** (or **Show automatic**), **Load new** and **Reload** — while Chat shows.
 - **Changed files** and **Links** — in either mode.
+- **Compact** — in either mode, for a Copilot session whose input route is open. It sends `/compact` through the same `/input` path as Chat's Send and toasts the host's verdict (*Compact: Sent…*). Verified on Copilot CLI 1.0.114: a bare `/compact` runs on an idle session, and sent while a turn is running it waits and runs when the turn ends. A `/compact <focus>` is not probed, so the item never sends one.
 
 The phone's floating tab bar hides while the session view is open.
 
@@ -135,4 +136,4 @@ An opened card whose call is unmarked says the outcome was never recorded. A ses
 
 ## Not ported yet
 
-These are **unknown** or planned, not working: a queued `/compact` running at turn end, a remote-control link captured and copied from the launcher, plan approval and question cards driving Copilot's `ask_user`, and a writer for the Board's `.proof/` reports (the Chat view's context ring is shipped). The `unknown` items were last probed on 1.0.105; the installed CLI is 1.0.114, on which the doorbell's composer keys are verified ([docs/board.md](board.md#the-chief)). Verified on CLI 1.0.105: interactive and `-p` sessions fire the four hooks (`sessionStart`, `userPromptSubmitted`, `agentStop`, `sessionEnd`), and `events.jsonl`'s `session.usage_record` carries `inputTokens` and `maxPromptTokens`.
+These are **unknown** or planned, not working: `/compact` with a focus argument, a remote-control link captured and copied from the launcher, plan approval and question cards driving Copilot's `ask_user`, and a writer for the Board's `.proof/` reports (the Chat view's context ring is shipped). The `unknown` items were last probed on 1.0.105; the installed CLI is 1.0.114, on which the doorbell's composer keys are verified ([docs/board.md](board.md#the-chief)). Verified on CLI 1.0.105: interactive and `-p` sessions fire the four hooks (`sessionStart`, `userPromptSubmitted`, `agentStop`, `sessionEnd`), and `events.jsonl`'s `session.usage_record` carries `inputTokens` and `maxPromptTokens`.

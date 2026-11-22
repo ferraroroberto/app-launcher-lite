@@ -504,7 +504,10 @@ surfaces:
     holds:
       - Rename, Copy link, Changed files, Links
       - in Chat mode Show or Hide steps, Show or Hide automatic, Load new and Reload
+      - Compact, for a Copilot session
       - Stop and kill
+    does:
+      - Compact sends /compact to the session and toasts the host's verdict
     links:
       - to: terminal.rename-dialog
         via: Rename

@@ -161,22 +161,22 @@ def _wait_for_calls(page: Page, calls: list, n: int) -> None:
 
 _DETACHED_SID = "s-send-967-detached"
 
-# Chat mode's full set: the chat-only rows sit between Links and Stop, and
-# nothing named Send appears for either kind.
+# Chat mode's full set: the chat-only rows sit between Links and Compact, which
+# closes the safe group above Stop, and nothing named Send appears for either kind.
 _CHAT_MENU = ["Rename", "Copy link", "Changed files", "Links", "Hide steps", "Hide automatic",
-              "Load new", "Reload", "Stop and kill"]
+              "Load new", "Reload", "Compact", "Stop and kill"]
 
 
 def _assert_menu_is_a_vertical_icon_and_label_list(menu) -> None:
     """#967's shape contract for the shared row-menu component, on the
     overlay's ⋮ menu in Terminal mode: Rename · Copy link · Changed files ·
-    Links · Stop and kill (the chat-only rows are detached from the DOM, not
-    hidden — #982)."""
+    Links · Compact · Stop and kill (the chat-only rows are detached from the
+    DOM, not hidden — #982; Compact shows in both modes for a Copilot session)."""
     buttons = menu.locator("button")
-    expect(buttons).to_have_count(5)
+    expect(buttons).to_have_count(6)
     labels = menu.locator(".row-menu-label")
-    expect(labels).to_have_text(["Rename", "Copy link", "Changed files", "Links", "Stop and kill"])
-    for i in range(5):
+    expect(labels).to_have_text(["Rename", "Copy link", "Changed files", "Links", "Compact", "Stop and kill"])
+    for i in range(6):
         expect(buttons.nth(i).locator("svg.icon")).to_have_count(1)
         expect(labels.nth(i)).to_be_visible()
 
@@ -243,6 +243,13 @@ def test_session_menu_is_a_vertical_list_with_no_send_item_for_either_kind(
     authed_page.locator("#terminalMenu").click()
     expect(menu).to_be_visible()
     _assert_chat_menu_has_no_send(authed_page, menu)
+
+    # ⋮ Compact sends /compact through the same /input route Chat's Send uses,
+    # and the toast names the verdict.
+    menu.locator('button[aria-label="Compact conversation"]').click()
+    expect(authed_page.locator("#toast")).to_contain_text("Compact: Sent")
+    assert full_control["body"] == {"data": "/compact", "submit": True}
+    assert full_control["calls"] == 1
 
     authed_page.locator("#terminalBack").click()
     expect(authed_page.locator("#terminalOverlay")).to_be_hidden()
