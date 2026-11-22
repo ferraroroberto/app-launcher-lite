@@ -101,6 +101,6 @@ def test_apps_life_and_jobs_panels_are_collapsible(
     assert _is_open(authed_page, "#paneJobs details.jobs-card"), (
         "header action tap must not collapse the jobs panel"
     )
-    assert bool(authed_page.locator("#jobDialog").evaluate("el => el.open")), (
-        "Add job should open its dialog"
-    )
+    # A tap that beats the lazily loaded Jobs code is held and replayed once
+    # it lands, so the dialog opens a moment after the click returns.
+    expect(authed_page.locator("#jobDialog")).to_have_js_property("open", True)

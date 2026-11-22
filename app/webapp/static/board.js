@@ -943,21 +943,6 @@ async function refreshGithub({ quiet = false } = {}) {
   }
 }
 
-// --------------------------------------------------------- column sections
-
-export const DESKTOP_BOARD = '(min-width: 700px) and (pointer: fine)';
-
-// The desktop grid is a kanban at a glance, so all five sections start open
-// there; the phone keeps the markup's default (the two live columns open).
-// Boot only — after that a section's open state is the user's.
-function openDesktopColumns() {
-  if (!window.matchMedia || !window.matchMedia(DESKTOP_BOARD).matches) return;
-  COLUMNS.forEach(function (col) {
-    const section = els[col.section];
-    if (section) section.open = true;
-  });
-}
-
 // ------------------------------------------------------------------ wire
 
 // A visit to the tab. lazy-views.js calls it too, for the visit that loaded
@@ -976,7 +961,6 @@ export function wireBoard() {
   els.tabBoard.addEventListener('click', openBoardTab);
   wireDispatch();
   wireJournal();
-  openDesktopColumns();
   wireFoldAll(els.boardFoldAll, els.boardColumns);
   // Back in the foreground: an aged cache refreshes now, not on the next poll.
   document.addEventListener('visibilitychange', function () {

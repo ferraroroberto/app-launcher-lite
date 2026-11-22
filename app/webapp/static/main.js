@@ -29,6 +29,7 @@ import { adoptBoard, fetchBoard, fetchJobs, markMirrorWindowEarly, openBoardCard
 import { fetchWebauthnStatus, wireWebauthn, writeTerminalToken } from './webauthn.js';
 import { renderSettingsHead } from './home-head.js';
 import { isWideLayout } from './layout.js';
+import { openDesktopColumns } from './board/board-columns.js';
 import { icon } from './_vendored/icons/icons.js';
 
 // --------------------------------------------------------- settings panel
@@ -364,6 +365,7 @@ wireSessions();
 wireSystemLoad();
 wireApps();
 wireTeamOs();
+openDesktopColumns();
 if (boardFirst) adoptBoard(boardFirst);
 wireImageLightbox();
 wireHtmlViewer();
