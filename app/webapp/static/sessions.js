@@ -47,6 +47,7 @@ import { icon } from './_vendored/icons/icons.js';
 // before the Board's code has loaded.
 import { runChiefAction } from './board/chief-actions.js';
 import { openSettingsAt } from './tabs.js';
+import { singleFlight } from './shared/poll.js';
 
 // Kept as a named re-export (apps.js, jobs.js, jobs-row.js, and this
 // module's own row render all import it) over the shared formatter in
@@ -150,7 +151,7 @@ function chiefMenuItems(kebab, alive) {
       onTap: function () {
         runChiefAction({
           button: kebab, label: 'Restart', fresh: true, resume: true,
-          onDone: fetchSessions, confirmMessage: CHIEF_RESTART_CONFIRM,
+          onDone: fetchSessions.fresh, confirmMessage: CHIEF_RESTART_CONFIRM,
         });
       },
     },
@@ -203,7 +204,7 @@ function stoppedChiefRow() {
     btn.addEventListener('click', function () {
       runChiefAction({
         button: btn, label: verb.text, fresh: false, resume: verb.resume,
-        restart: verb.restart, onDone: fetchSessions,
+        restart: verb.restart, onDone: fetchSessions.fresh,
       });
     });
     actions.appendChild(btn);
@@ -531,10 +532,13 @@ export async function stopSession(s) {
       state.sessionView.session.session_id === s.session_id) {
     closeSessionOverlay();
   }
-  setTimeout(fetchSessions, 1500);
+  setTimeout(fetchSessions.fresh, 1500);
 }
 
-export async function fetchSessions() {
+// One session-list read in flight per page: the poll, a visit and an open share it.
+export const fetchSessions = singleFlight(readSessions);
+
+async function readSessions() {
   try {
     const body = await jsonApi('/api/claude-code/sessions');
     state.sessions = body.sessions || [];
@@ -665,7 +669,7 @@ function wireSessionRenameDialog() {
       if (renameSessionOnDone) {
         renameSessionOnDone(title);
       } else {
-        await fetchSessions();
+        await fetchSessions.fresh();
       }
     } catch (exc) {
       apiFailToast('Rename failed', exc);

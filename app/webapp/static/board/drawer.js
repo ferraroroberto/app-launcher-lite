@@ -241,7 +241,7 @@ export function buildDrawer(card) {
         await stopSession({ session_id: card.session_id, name: sessionLabel(card) });
         // The host stops gracefully (quit → force) — give it the same beat
         // sessions.js gives fetchSessions before reconciling the board.
-        setTimeout(function () { fetchBoard().catch(function () {}); }, 1500);
+        setTimeout(function () { fetchBoard.fresh().catch(function () {}); }, 1500);
       },
     },
   ]);
