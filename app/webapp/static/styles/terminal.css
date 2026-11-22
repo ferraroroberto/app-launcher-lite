@@ -283,7 +283,14 @@ and ⋮, which always fit beside a shrinking title. Only the Life OS
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-#terminalOverlay { --status-row: calc(var(--font-body-sm) * 1.45 + 16px); }
+#terminalOverlay {
+  --status-row: calc(var(--font-body-sm) * 1.45 + 16px);
+  /* The compose bar's own bottom padding (.compose-bar, 8px). The strip's line
+     is centred in the band from the input's edge to the card's bottom, not in
+     the strip alone, so it takes this much as bottom padding: the line rises
+     by half of it, and the strip's reserved row is unchanged. */
+  --strip-lead: 8px;
+}
 /* Where the vendored mic-notice sits: one row under the compose bar. The input
    name, level strip and timer are one group centred in the row, so a phone's
    rounded corners never cut either end; a long name takes the room left beside
@@ -519,12 +526,16 @@ and ⋮, which always fit beside a shrinking title. Only the Life OS
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 0 12px var(--strip-lead);
   font-size: var(--font-body-sm);
   line-height: 1.45;
   text-align: center;
   color: var(--attention);
 }
+/* The message text, trimmed to the glyphs for the reason `.terminal-activity-text`
+   gives below: centring the line box leaves them ~1.5px low. A message that
+   wraps trims only its first and last line, so it still reads as one block. */
+.terminal-status-text { text-box: trim-both ex alphabetic; }
 /* Chat mode's line in the same strip: the turn in progress, or a
    forced read's note. One line that ellipsizes, never wraps, so it
    fills the reserved row exactly like a message does and moves nothing.
@@ -537,7 +548,7 @@ and ⋮, which always fit beside a shrinking title. Only the Life OS
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 0 12px var(--strip-lead);
   font-size: var(--font-body-sm);
   line-height: 1.45;
   white-space: nowrap;

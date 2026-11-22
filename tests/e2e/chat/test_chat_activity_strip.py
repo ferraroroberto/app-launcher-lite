@@ -21,6 +21,7 @@ from tests.e2e.chat._support import (
     _tick,
     _turn,
 )
+from tests.e2e.fixtures.ui import set_terminal_status
 from tests.e2e.fixtures.waits import OVERLAY_OPEN_MS, stable_eval
 
 pytestmark = pytest.mark.smoke
@@ -45,10 +46,20 @@ def _check_the_line_is_a_centred_icon(page: Page, line, browser_name: str) -> No
     assert got["use"] == "#i-timer", got
     assert got["iconColor"] == got["lineColor"], f"the icon is not in the line's muted colour: {got}"
     assert 12 <= got["iconSize"] <= 18, got
-    assert abs(got["spanMid"] - got["stripMid"]) <= 1, (
-        f"the line's centre is {got['spanMid'] - got['stripMid']:+.1f}px off the strip's: {got}"
-    )
     assert abs(got["iconMid"] - got["textMid"]) <= 1.5, f"the icon is off the text's centre: {got}"
+    # The line is centred in the band under the composer input, at desktop and
+    # phone width, light and dark. The strip box alone is no reference: it
+    # starts below the compose bar's 8px bottom padding.
+    for width, height in ((1280, 900), (390, 844)):
+        page.set_viewport_size({"width": width, "height": height})
+        for scheme in ("dark", "light"):
+            page.emulate_media(color_scheme=scheme)
+            seen = stable_eval(line, _STRIP_LINE_JS)
+            for part in ("spanMid", "textMid"):
+                assert abs(seen[part] - seen["bandMid"]) <= 1, (
+                    f"{width}px {scheme}: the line's {part} is {seen[part] - seen['bandMid']:+.1f}px "
+                    f"off the band's centre: {seen}"
+                )
 
     # The strip is max(row, home-indicator inset) tall (#1219), so a taller
     # inset leaves slack the line must split evenly, not keep at its top.
@@ -58,8 +69,8 @@ def _check_the_line_is_a_centred_icon(page: Page, line, browser_name: str) -> No
         cdp.send("Emulation.setSafeAreaInsetsOverride", {"insets": {"bottom": 56, "bottomMax": 56}})
         tall = stable_eval(line, _STRIP_LINE_JS)
         assert tall["stripMid"] != got["stripMid"], f"the emulated inset did not reach the strip: {tall}"
-        assert abs(tall["spanMid"] - tall["stripMid"]) <= 1, (
-            f"in a taller strip the line is {tall['spanMid'] - tall['stripMid']:+.1f}px off its centre: {tall}"
+        assert abs(tall["spanMid"] - tall["bandMid"]) <= 1, (
+            f"in a taller strip the line is {tall['spanMid'] - tall['bandMid']:+.1f}px off its centre: {tall}"
         )
     page.evaluate("() => window.__keepStatusOff.disconnect()")
 
@@ -86,13 +97,17 @@ _INK_ROWS_JS = """async (b64) => {
 }"""
 
 
-def _ink_offset_from_strip_centre(page: Page) -> float:
+def _ink_offset_from_band_centre(page: Page, text_selector: str) -> float:
     """How far (px, + is low) the drawn glyphs' vertical midline sits from the
-    strip's. A line box centred around a font's uneven ascent and descent
-    passes a box-only check while the glyphs it holds still sit low."""
+    midline of the band under the composer input (its bottom edge to the
+    strip's bottom). A line box centred around a font's uneven ascent and
+    descent passes a box-only check while the glyphs it holds still sit low."""
     strip = page.locator("#terminalStatusStrip")
-    text = page.locator("#terminalActivity .terminal-activity-text")
+    text = page.locator(text_selector)
     sbox, tbox = stable_eval(strip, "el => el.getBoundingClientRect().toJSON()"),         stable_eval(text, "el => el.getBoundingClientRect().toJSON()")
+    band_top = page.evaluate(
+        "() => document.querySelector('#chatComposeBar .composer-input').getBoundingClientRect().bottom"
+    )
     png = page.screenshot(
         clip={"x": tbox["x"], "y": sbox["y"], "width": tbox["width"], "height": sbox["height"]},
         animations="disabled",
@@ -105,11 +120,13 @@ def _ink_offset_from_strip_centre(page: Page) -> float:
     assert ink["bottom"] > ink["top"], f"no text was drawn in the strip: {ink}"
     # The screenshot is in device pixels (3 per CSS px in the iPhone projection).
     scale = ink["height"] / sbox["height"]
-    return ((ink["top"] + ink["bottom"]) / 2 - ink["height"] / 2) / scale
+    band_mid = (band_top + sbox["y"] + sbox["height"]) / 2 - sbox["y"]
+    return ((ink["top"] + ink["bottom"]) / 2 / scale) - band_mid
 
 
 def _check_the_ink_is_centred(page: Page) -> None:
-    """The glyphs, not only the boxes, sit on the strip's midline, desktop and phone, light and dark."""
+    """The glyphs, not only the boxes, sit on the band's midline, desktop and phone, light and dark,
+    for the activity line and for the connection status that takes its row."""
     for width, height in ((1280, 800), (390, 844)):
         page.set_viewport_size({"width": width, "height": height})
         for scheme in ("light", "dark"):
@@ -117,8 +134,14 @@ def _check_the_ink_is_centred(page: Page) -> None:
             # The stubbed mirror may re-show a connection status over the line.
             page.evaluate("() => { const s = document.getElementById('terminalStatus'); s.hidden = true; }")
             expect(page.locator("#terminalActivity")).to_be_visible()
-            off = _ink_offset_from_strip_centre(page)
-            assert abs(off) <= 1, f"{scheme} at {width}px: the text is {off:+.1f}px off the strip's midline"
+            off = _ink_offset_from_band_centre(page, "#terminalActivity .terminal-activity-text")
+            assert abs(off) <= 1, f"{scheme} at {width}px: the text is {off:+.1f}px off the band's midline"
+            # The connection status takes the row over the line: written
+            # through the page's own setTerminalStatus, then cleared again.
+            set_terminal_status(page, "Reconnecting…")
+            off = _ink_offset_from_band_centre(page, "#terminalStatus")
+            assert abs(off) <= 1, f"{scheme} at {width}px: the status is {off:+.1f}px off the band's midline"
+            set_terminal_status(page, None)
 
 
 @pytest.mark.iphone
