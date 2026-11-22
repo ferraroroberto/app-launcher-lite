@@ -82,7 +82,7 @@ def _finished_turn(at: float = T0) -> list:
 
 def test_a_terminal_lane_whose_hook_was_missed_gets_one_turn_end(lane: Lane) -> None:
     lane.transcript(LANE, *_finished_turn())
-    assert lane.run(now=T0 + 60) == [], "inside the grace window the hook may still land"
+    assert lane.run(now=T0 + 10) == [], "inside the grace window the hook may still land"
     assert len(lane.run(now=T0 + 600)) == 1
     assert lane.run(now=T0 + 1200) == [], "deduplicated across ticks"
     [event] = lane.events()
@@ -156,3 +156,78 @@ def test_the_hook_writes_the_stamps_the_reconciler_reads(lane: Lane, monkeypatch
     lane.transcript(LANE, *_finished_turn(), _line("session.shutdown", T0 + 10))
     assert len(lane.run(now=T0 + 600)) == 1, "only the turn end; the session end was stamped"
     assert sorted(e["kind"] for e in lane.events()) == ["session-end", "turn-end"]
+
+
+def _copilot_turn(start: float, end: float, reply: str, prompt: str) -> list:
+    """An interactive Copilot turn as its transcript records it: no ``session.task_complete``,
+    only the turn end and the ``agentStop`` hook Copilot logs as it runs it."""
+    return [_line("user.message", start, content=prompt),
+            _line("assistant.turn_start", start + 1),
+            _line("assistant.message", end - 1, content=reply),
+            _line("assistant.turn_end", end),
+            _line("hook.start", end, hookType="agentStop"),
+            _line("hook.end", end + 1, hookType="agentStop")]
+
+
+async def test_a_blocked_turn_end_inside_the_debounce_reaches_an_idle_chief(
+    lane: Lane, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A lane's turn ends, the chief steers it on, and it ends again blocked 20 s later: the hook's
+    45 s debounce drops that second end, and nothing else may be left to report it."""
+    from types import SimpleNamespace
+
+    from app.webapp import chief_doorbell as bell
+
+    monkeypatch.syspath_prepend(str(REPO / "copilot" / "hooks"))
+    sys.modules.pop("chief_inbox", None)
+    import chief_inbox
+
+    monkeypatch.setenv("COPILOT_HOOKS_STATE_DIR", str(lane.root))
+    monkeypatch.setenv("APP_LAUNCHER_SESSION_ID", LANE)
+    first = time.time()
+    second = first + 20
+    blocked = "Item blocked: browser-gate retry budget exhausted. Watermark unchanged; stopping."
+    lines = _copilot_turn(first - 60, first, "Gate red; retrying.", "/upstream-sync")
+    lines += _copilot_turn(first + 5, second, blocked, "go on")
+    transcript = lane.transcript(LANE, *lines)
+    payload = {"transcript_path": str(transcript)}
+    assert chief_inbox.record(payload, "agentStop") is not None, "the first turn end is published"
+    for acked in lane.inbox.glob("*.json"):  # the chief read and acked it
+        acked.unlink()
+    monkeypatch.setattr(chief_inbox.time, "time", lambda: second)
+    assert chief_inbox.record(payload, "agentStop") is None, "the hook's debounce drops the blocked end"
+
+    bound = reconcile.GRACE_SECONDS + reconcile.TICK_SECONDS
+    assert len(lane.run(now=second + bound)) == 1, f"the reconciler reports it within {bound:g}s"
+    [event] = lane.events()
+    assert (event["kind"], event["excerpt"]) == ("turn-end", blocked)
+
+    async def idle_chief(cfg):
+        scan = bell.scan_pending(Path(cfg.chief_inbox_dir), int(time.time() * 1000))
+        return bell.Observation(pending=scan.count, chief_sid="chief", status="idle-finished", dirty=False)
+
+    sends = []
+    cfg = SimpleNamespace(chief_doorbell=True, chief_inbox_dir=str(lane.inbox), session_host_port=1)
+    doorbell, skips, clock = bell.Doorbell(), bell._SkipLog(), [0.0]
+    decisions = []
+    for _ in range(2):
+        decisions.append(await bell.tick_once(
+            cfg, doorbell, skips, now=lambda: clock[0], observe_fn=idle_chief,
+            send_fn=lambda *a: sends.append(a) or {"delivered": True, "submit_state": "confirmed"},
+            record_fn=lambda *a, **k: True))
+        clock[0] += bell.TICK_SECONDS
+    assert decisions == ["debouncing", "ring"] and len(sends) == 1
+
+
+def test_an_autopilot_stop_followed_by_its_continuation_is_active(lane: Lane) -> None:
+    lane.transcript(LANE, *_copilot_turn(T0 - 60, T0, "Working.", "/issue-start 7"),
+                    _line("user.message", T0 + 3, content="", source="autopilot"),
+                    _line("assistant.turn_start", T0 + 4))
+    assert lane.run(now=T0 + 3600) == []
+
+
+def test_a_second_agent_stop_hook_line_does_not_repeat_a_published_turn_end(lane: Lane) -> None:
+    lane.transcript(LANE, *_copilot_turn(T0 - 60, T0, "Done.", "/issue-start 7"),
+                    _line("hook.start", T0 + 2, hookType="agentStop"))
+    lane.stamp("turn-end", LANE, T0 + 0.5)
+    assert lane.run(now=T0 + 600) == []

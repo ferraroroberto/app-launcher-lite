@@ -10,14 +10,19 @@ then sits at its prompt and nothing ever wakes the chief.
 Every :data:`TICK_SECONDS` the canonical webapp reads each managed lane's
 Copilot transcript (``events.jsonl``, found through the hook state row that
 carries its launcher session id) for the terminal evidence Copilot writes
-itself: ``session.task_complete`` closes a turn, and ``session.shutdown``
-closes the session. A turn end or exit older than :data:`GRACE_SECONDS` that
-the lane's mailbox stamp does not already cover gets one event, published and
-stamped exactly as the hook would, so the doorbell rings once for it.
+itself: ``session.task_complete`` (autopilot) or the ``agentStop`` hook it logs
+as ``hook.start`` closes a turn, and ``session.shutdown`` closes the session.
+An interactive turn, or one that stops blocked, never writes
+``session.task_complete``, so the ``agentStop`` line is its only trace. A turn
+end is dated by its first marker, which precedes the hook's stamp, so a turn
+end the hook published is never published again. A turn end or exit older
+than :data:`GRACE_SECONDS` that the lane's mailbox stamp does not already
+cover gets one event, published and stamped exactly as the hook would, so the
+doorbell rings once for it.
 
 An active lane never gets an event: a ``user.message`` or
-``assistant.turn_start`` after the last ``session.task_complete`` means a turn
-is running. A plain session is never in the registry and is never read.
+``assistant.turn_start`` after the last turn end means a turn is running. A
+plain session is never in the registry and is never read.
 "Could not tell" is not "nothing to do": an unreadable registry or transcript
 is logged and publishes nothing.
 """
@@ -49,10 +54,11 @@ from src.chief_session_end import (
 logger = logging.getLogger(__name__)
 
 SOURCE_RECONCILE = "reconcile"
-TICK_SECONDS = 60.0
-#: A hook lands within a couple of seconds of the transcript line it reports;
-#: two minutes leaves it every chance to win before a reconcile speaks for it.
-GRACE_SECONDS = 120.0
+#: With :data:`GRACE_SECONDS` it bounds how long a dropped turn end waits: 45 s.
+TICK_SECONDS = 15.0
+#: A hook lands within a couple of seconds of the transcript line it reports
+#: (its ``timeoutSec`` is 10), so this leaves it every chance to win first.
+GRACE_SECONDS = 30.0
 #: Enough of ``events.jsonl`` for the last turn without reading a long session whole.
 TRANSCRIPT_TAIL_BYTES = 512 * 1024
 #: The hook's excerpt length (``chief_inbox.EXCERPT_CHARS``).
@@ -79,6 +85,10 @@ def _epoch(raw: Any) -> Optional[float]:
         return None
 
 
+def _is_agent_stop(kind: Any, entry: Dict[str, Any]) -> bool:
+    return kind == "hook.start" and (entry.get("data") or {}).get("hookType") == "agentStop"
+
+
 def transcript_evidence(path: Path) -> Optional[Evidence]:
     """The terminal evidence in the tail of a Copilot ``events.jsonl``; ``None`` when unreadable."""
     try:
@@ -100,8 +110,9 @@ def transcript_evidence(path: Path) -> Optional[Evidence]:
         if not isinstance(entry, dict):
             continue
         kind = entry.get("type")
-        if kind == "session.task_complete":
-            turn_ended_at = _epoch(entry.get("timestamp"))
+        if kind == "session.task_complete" or _is_agent_stop(kind, entry):
+            if turn_ended_at is None:
+                turn_ended_at = _epoch(entry.get("timestamp"))
         elif kind in _TURN_STARTS:
             turn_ended_at = None
         elif kind == "session.shutdown":
