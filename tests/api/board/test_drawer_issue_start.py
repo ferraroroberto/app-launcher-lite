@@ -8,6 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src._fleet_contract import fleet_python
+
 # ------------------------------------------------------------- issue start
 
 
@@ -500,7 +502,9 @@ class TestChiefManagedMarking:
         assert len(_fake_run) == 1
         cmd = _fake_run[0]
         assert cmd[2:] == ["mark", "spawned-1", "myrepo", "42"]
-        assert cmd[0].endswith("python.exe")
+        # The interpreter `fleet_python` picks: `python.exe` on Windows, the
+        # running interpreter on a runner with no `Scripts/` venv.
+        assert cmd[0] == str(fleet_python(_fleet_config_repo))
         assert cmd[1].endswith("chief_managed.py")
         # #1283: `chief_ops.py dispatch` lands here, and opens no PC window.
         assert _mirror_asked == []
