@@ -104,8 +104,34 @@ class TestOwnership:
         assert owned == [False, False, False, False, False]
 
 
-def _spawn_listener(script_dir: Path) -> Tuple["subprocess.Popen[str]", int, int]:
-    """A throwaway ``<script_dir>/launcher.py session-host`` that listens on a free port."""
+class TestVenvSpelling:
+    """The tray is found whichever spelling of the junctioned repo root started it."""
+
+    REPO = "C:" + "\\automation\\app-launcher-lite"
+
+    def test_venv_command_line_matches_under_either_spelling_and_slash_style(self, tmp_path: Path) -> None:
+        owned = _owns(tmp_path, self.REPO, [
+            "C:\\automation\\app-launcher-lite\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "E:\\automation\\app-launcher-lite\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "C:/automation/app-launcher-lite/.venv/Scripts/pythonw.exe launcher.py tray",
+            "E:/automation/app-launcher-lite/.venv/Scripts/pythonw.exe launcher.py tray",
+            '"e:\\AUTOMATION\\App-Launcher-Lite\\.venv\\Scripts\\python.exe" -m src.launching.ps_script',
+        ])
+        assert owned == [True, True, True, True, True]
+
+    def test_venv_of_a_sibling_checkout_or_another_repo_is_not_owned(self, tmp_path: Path) -> None:
+        owned = _owns(tmp_path, self.REPO, [
+            "E:\\automation\\app-launcher-lite-wt-416\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "E:\\automation\\app-launcher\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "E:\\other\\automation\\app-launcher-lite\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "E:\\automation\\app-launcher-lite\\.venv-old\\Scripts\\pythonw.exe launcher.py tray",
+            "C:\\Python314\\pythonw.exe launcher.py tray",
+        ])
+        assert owned == [False, False, False, False, False]
+
+
+def _spawn_listener(script_dir: Path, role: str = "session-host") -> Tuple["subprocess.Popen[str]", int, int]:
+    """A throwaway ``<script_dir>/launcher.py <role>`` that listens on a free port."""
     script_dir.mkdir(parents=True)
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
@@ -120,7 +146,7 @@ def _spawn_listener(script_dir: Path) -> Tuple["subprocess.Popen[str]", int, int
         encoding="ascii",
     )
     proc = subprocess.Popen(
-        [sys.executable, str(script_dir / "launcher.py"), "session-host", "--port", str(port)],
+        [sys.executable, str(script_dir / "launcher.py"), role, "--port", str(port)],
         stdout=subprocess.PIPE, text=True, creationflags=NO_WINDOW,
     )
     assert proc.stdout is not None
@@ -182,3 +208,23 @@ class TestReclaim:
         assert "SURVIVORS=1" in out
         assert f"FAILED: old holder PID {pid} is still running on :{port}" in out
         assert _alive(pid)
+
+
+class TestRestartWithNothingToStop:
+    def test_a_restart_that_matched_no_process_says_so(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        env = {k: v for k, v in os.environ.items() if k.upper() != "PSEXECUTIONPOLICYPREFERENCE"}
+        done = subprocess.run(
+            [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(TRAY_PS),
+             "launch", "-AppName", "probe", "-ScriptDir", str(repo), "-VenvDir", str(repo / ".venv"),
+             "-TrayMatch", "no-such-tray-zzz", "-Ports", str(port), "-TrayLaunch", "-c pass",
+             "-VerifyTimeoutSeconds", "1", "-Restart"],
+            capture_output=True, text=True, env=env, timeout=120, creationflags=NO_WINDOW,
+        )
+        # The start and the build check fail in this empty repo; the message comes before both.
+        assert "NOTE: no running probe tray or owned port holder matched" in done.stdout
+        assert "nothing was stopped" in done.stdout
