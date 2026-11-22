@@ -10,6 +10,16 @@ Android Chrome is the primary phone for the launcher. iOS Safari is still suppor
 
 The page declares itself an installable app in `app/webapp/static/manifest.webmanifest`: `display: standalone`, `start_url: /`, a dark `background_color` and `theme_color`, and 192 and 512 pixel icons plus a 512 pixel maskable icon so Android can shape the launcher icon. Installing on a handset: passed on device (owner, 2026-11-21); versions not given.
 
+## A managed phone: full screen without installing
+
+On a phone whose browser the organisation manages (for example Edge in an Android work profile), the browser may refuse to install Lite as an app, and Lite then shows the browser's address bar and toolbar. Three options, from easiest to most involved:
+
+1. **Full screen.** Settings, Appearance, **Full screen**. The switch asks the browser for full screen, which hides the address bar and toolbar, with no install and no policy change. The choice is kept on that device. A browser grants full screen only to a tap, so after a reload the switch stays on and the first tap anywhere goes full screen again. The switch, or the back gesture, leaves it. A browser with no full screen for web pages shows the switch disabled and says so.
+2. **A home-screen shortcut.** In the browser's menu choose **Add to Home screen** (or **Add to phone**). That is a shortcut to the page, not an installed app, so it needs no trusted certificate; whether it opens without the toolbar depends on the browser.
+3. **Trust Lite's certificate in the work profile.** A browser installs a web app only from a secure origin with a certificate the device trusts, and a self-signed certificate is marked not secure. If the device policy lets the profile add a certificate authority, trusting Lite's certificate there lets the browser install Lite as an app. Where the policy forbids it, use option 1 or 2, or serve Lite with a certificate the device already trusts (see [HTTPS is required](#https-is-required)). Lite's certificate setup is not changed by any of this.
+
+Settings, Appearance, **Install as app** reports where the browser stands: **Installed** (already running as an app), **Ready** (the browser offers to install it), **Blocked** (the page is not on an HTTPS address), **Unavailable** (the browser has no install prompt for web apps) or **Not offered**. A page cannot read whether its certificate is trusted, so Not offered names the usual cause, an untrusted certificate, without claiming it.
+
 ## HTTPS is required
 
 Chrome offers installation, and grants a service worker, WebAuthn passkeys and clipboard access, only on a secure origin. Serve the launcher over HTTPS with a certificate the phone trusts: `scripts/gen_tailscale_cert.py` provisions one for a Tailscale MagicDNS name, or drop any trusted `cert.pem` and `key.pem` pair into `webapp/certificates/`. A self-signed certificate the phone does not trust blocks install and the passkey gate. The passkey relying party (`webauthn_rp_id`) must be the exact hostname the phone browses to.

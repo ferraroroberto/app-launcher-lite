@@ -45,7 +45,7 @@ A kanban over four computed columns: **Backlog** (open GitLab issues across `git
 - **Copilot** — the model list, the saved model, effort, context, autopilot and skip-permissions.
 - **Sessions** — open sessions in Chat, open in a new PC window, mirror window, terminal scrollback lines.
 - **Access** — bearer token, sign-in password, passkey device list (enrolment starts from the PC tray menu, not the phone), job-scoped API tokens (safe to bake into a Stream Deck URL; the raw token shows once).
-- **Appearance and startup** — a Small / Default / Large text size, the light/dark toggle in the header, and **Start App Launcher Lite at log on** (a Startup-folder wrapper, no admin).
+- **Appearance and startup** — a Small / Default / Large text size, a **Full screen** switch for a phone browser that will not install Lite (see [android.md](android.md#a-managed-phone-full-screen-without-installing)), an **Install as app** row that says whether the browser can and why not, the light/dark toggle in the header, and **Start App Launcher Lite at log on** (a Startup-folder wrapper, no admin).
 - **Documents** — the reading sheet renders listed Markdown files with Mermaid diagrams ([Documents](documents.md)).
 
 ## The chief
