@@ -96,6 +96,12 @@ The `.sample` file carries a `copilot_models` default list; a per-launch model (
 | `request_budgets` | `{}` | Per-request-class time budgets, `{class: [soft_s, hard_s]}`, laid over the defaults in [diagnostics](diagnostics.md#request-timings-and-budgets). Read live. |
 | `transcript_page_cache_size` | `32` | Parsed transcript pages kept for files that have not changed since, so reopening a chat does not parse it again; `0` turns the cache off. |
 | `transcript_resolve_miss_ttl_s` | `10.0` | Seconds a Copilot session whose event log was not found answers "not found" before the session-state folder is scanned again. A new session folder ends the wait early. |
+| `poll_board_s`, `poll_sessions_s`, `poll_transcript_s`, `poll_pause_hidden` | `5`, `5`, `3`, `true` | How often the Board, the session list and an open chat refresh, in seconds, and whether a hidden tab stops every page poll. Settings > Performance; applied live. |
+| `pool_hot_poll`, `pool_session_reads`, `pool_sends`, `pool_git_status` | `8`, `12`, `0`, `8` | Thread limits for the Board and session builds, transcript reads, sends and every route without its own pool (`0` picks from the CPU count), and the git scan. Settings > Performance; applied live. |
+| `git_status_ttl_s` | `10` | Seconds a git scan is served as it is before the next poll refreshes it behind the response. |
+| `request_budget_scale` | `1.0` | Multiplier on every request budget, so a slow PC logs fewer breaches. |
+
+Every row from `transcript_page_cache_size` down is a Settings > Performance limit with a hard range and a Light machine preset value: [performance](performance.md).
 | `large_upload_max_mb` | `2048` | Limit for the composer's **Attach large file (not read)**, 1–10240 MB; the ordinary attach keeps its fixed 12 MB. |
 | `outbox_scratch_roots` | `["%TEMP%/claude"]` | Folders, besides a session's own, an agent may send a file to Chat from. `%VAR%` and `~` expand; Settings › Folders validates each on save. |
 | `documents` | `[]` | Files the reading sheet may show, each `{id, title, repo, path}` ([Documents](documents.md)). |

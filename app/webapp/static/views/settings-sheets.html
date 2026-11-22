@@ -450,6 +450,33 @@
       </div>
     </dialog>
 
+    <!-- Performance: performance.js draws the fields from GET /api/config's
+         `performance` table and saves each as it changes. -->
+    <dialog id="performanceSheet" data-surface="settings.performance" class="detail-dialog settings-sheet" data-track-view="sheet.performance" aria-labelledby="performanceSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="performance.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="performanceSheetTitle" tabindex="-1" autofocus>Performance</h2>
+          <button data-track="performance.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <div class="segmented" id="performancePreset" role="group" aria-label="Machine preset">
+            <button type="button" class="segmented-item" data-preset="standard" data-track="performance.preset-standard" aria-pressed="false">Standard</button>
+            <button type="button" class="segmented-item" data-preset="light" data-track="performance.preset-light" aria-pressed="false">Light machine</button>
+            <button type="button" class="segmented-item" data-preset="custom" data-track="performance.preset-custom" aria-pressed="false" disabled>Custom</button>
+          </div>
+          <p id="performancePresetHelp" class="field-help"></p>
+          <p id="performanceHealth" class="muted small" role="status" aria-live="polite"></p>
+          <div id="performanceFields"></div>
+        </div>
+        <div class="detail-actions">
+          <button data-track="performance.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
+        </div>
+      </div>
+    </dialog>
+
     <!-- Diagnostics: diagnostics.js saves the recent logs to one redacted
          file on the PC and offers it for download. -->
     <dialog id="diagnosticsSheet" data-surface="settings.diagnostics" class="detail-dialog settings-sheet" data-track-view="sheet.diagnostics" aria-labelledby="diagnosticsSheetTitle">

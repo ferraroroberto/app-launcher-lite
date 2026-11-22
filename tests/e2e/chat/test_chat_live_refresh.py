@@ -47,7 +47,7 @@ def _check_forced_read_via_load_new(page: Page, tr, open_turn) -> None:
     expect(newer).to_be_hidden()
 
     # Timed against the poll: right after a tick's read lands, the next is a
-    # full LIVE_POLL_MS (3 s) away, so a turn that shows within 1.5 s of the
+    # full default transcript poll (3 s) away, so a turn that shows within 1.5 s of the
     # tap came from the forced read, not the timer.
     _tick(page, tr)
     tr.append(_turn("user", "and the second flake?", 350))

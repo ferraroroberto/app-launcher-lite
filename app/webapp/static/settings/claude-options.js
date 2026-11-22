@@ -21,6 +21,7 @@ import { renderSettingsValues } from './settings-sheets.js';
 import { renderSpeech } from './speech-settings.js';
 import { renderLidKeepAwake } from './lid-keep-awake.js';
 import { renderNetworkAccess, wireNetworkAccess } from './network-access.js';
+import { renderPerformance } from './performance.js';
 
 export async function fetchConfig(shouldApply) {
   const body = await jsonApi('/api/config');
@@ -78,6 +79,7 @@ export async function fetchConfig(shouldApply) {
     setSwitch(els.openSessionsInChatToggle, body.open_sessions_in_chat !== false);
   }
   renderNetworkAccess(body);
+  renderPerformance(body);
   renderClaudeOptions();
   renderSettingsValues();
   return true;

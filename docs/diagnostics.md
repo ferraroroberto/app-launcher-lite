@@ -82,7 +82,7 @@ Each request class has a **soft** and a **hard** limit, in seconds:
 | `shell` | `GET /` | 0.25 | 3 |
 | `jobs-list` | `GET /api/jobs` | 0.25 | 3 |
 
-Past soft, the log gets a `⏱️ over budget` line; past hard, a `🚨 budget breach` line. To change a class, set it in `request_budgets` in `config/webapp_config.json`, for example `{"board": [1.0, 3.0]}`; the other classes keep their defaults, an entry that is not `[soft_s, hard_s]` with `0 < soft_s <= hard_s` is ignored with a warning, and a save applies live.
+Past soft, the log gets a `⏱️ over budget` line; past hard, a `🚨 budget breach` line. Settings > Performance scales every class at once with `request_budget_scale` ([performance](performance.md)). To change a class, set it in `request_budgets` in `config/webapp_config.json`, for example `{"board": [1.0, 3.0]}`; the other classes keep their defaults, an entry that is not `[soft_s, hard_s]` with `0 < soft_s <= hard_s` is ignored with a warning, and a save applies live.
 
 `GET /api/request-stats` (`?window_s=300`) reads the same counters: requests in flight now, the highest in-flight count in the window, the verdicts per class since boot, the budgets in force and the age of the last git-status scan. It reads counters and a cache and starts no work.
 

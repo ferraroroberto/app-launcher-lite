@@ -218,7 +218,7 @@ async def resolve_source(
         # The machine factors ride along so a slow box reads apart from a regression.
         slow_logger.info(
             "⏱️ transcript %s source via %s took %.2fs (cpus=%s, session-reads pool=%s)",
-            sid[:8], via, took, os.cpu_count(), getattr(SESSION_READS_POOL, "_max_workers", "?"),
+            sid[:8], via, took, os.cpu_count(), SESSION_READS_POOL.limit,
         )
     if path is None:
         return "no_transcript", None, None, agent, _missing_link(row, row_sid), session

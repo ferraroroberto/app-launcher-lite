@@ -88,6 +88,8 @@ A kanban over four computed columns: **Backlog** (open GitLab issues across `git
 
 Directories (projects dir and ignore globs, apps scan root, team-os dir), GitLab group and host, Copilot launch defaults, terminal scrollback, **Start App Launcher Lite at log on** (Startup-folder wrapper, no admin needed), **Speech to text**, a **Text size** control (Small / Default / Large, persisted in the browser), Save and **Scan for new apps**, edit mode, a **Screen → View live** row (the PC's desktop, live; see [docs/screen-view.md](docs/screen-view.md)), and a machine status readout. A second card mints **job-scoped API tokens** (safe to bake into a Stream Deck button URL; each fires only its chosen job; the raw token is shown once). The light/dark toggle sits in the page header; passkey enrollment is deliberately started from the PC tray menu, not from the phone.
 
+**Performance** (Settings) makes every poll spacing, thread pool and cache limit adjustable, with Standard and Light machine presets and a read-only health line, and applies a change without a restart ([docs/performance.md](docs/performance.md)).
+
 **Diagnostics** saves the last 15 minutes, hour or 3 hours of every Lite log to one redacted, time-ordered text file on the PC and offers it for download; `.\.venv\Scripts\python.exe launcher.py diagnostics --minutes 60` does the same from the command line ([docs/diagnostics.md](docs/diagnostics.md)).
 
 ### Speech to text
@@ -192,6 +194,7 @@ app-launcher keeps growing. This repo tracks it through the `[upstream]` waterma
 | [docs/features.md](docs/features.md) | One screen per tab: what each does. |
 | [docs/config.md](docs/config.md) | Every config key. |
 | [docs/diagnostics.md](docs/diagnostics.md) | Save diagnostics: what the file collects, how it is redacted, where it lands. |
+| [docs/performance.md](docs/performance.md) | Settings > Performance: every speed limit, the Standard and Light machine presets, the health line. |
 | [docs/board.md](docs/board.md) | Board tab: columns, `glab` reads, state-file join, drill-down, security boundary. |
 | [docs/gitlab.md](docs/gitlab.md) | The GitLab side: `glab` setup, what is read and written, dual remote, an Android Git client. |
 | [docs/history.md](docs/history.md) | The History sheet: the two sources, the cache, the honest states. |

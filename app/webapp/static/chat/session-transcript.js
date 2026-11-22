@@ -104,6 +104,7 @@ import { syncEditedCards, syncFileChips } from './chat-turn-cards.js';
 import { closePendingSheet, syncPendingChip, wirePendingChip } from './chat-pending.js';
 import { automaticDefault, rememberAutomatic, syncAutomatic } from './automatic-fold.js';
 import { isChiefSession } from '../shared/session-kinds.js';
+import { pauseWhenHidden, perfValue } from '../shared/perf-config.js';
 import { reasonCopy } from './transcript-reasons.js';
 
 
@@ -131,7 +132,9 @@ const OLDER_LABEL = 'Load older';
 // design — an unchanged file answers from one `stat` server-side (0.02ms
 // measured against 18-45ms to re-read the newest page of a multi-MB
 // session), so an idle session costs ~20 round-trips a minute and no read.
-const LIVE_POLL_MS = 3000;
+const LIVE_POLL_FALLBACK_MS = 3000;
+// The owner's Settings > Performance spacing, read at each re-arm.
+function livePollMs() { return perfValue('poll_transcript_s', LIVE_POLL_FALLBACK_MS / 1000) * 1000; }
 
 // A failing tick backs off instead of hammering: a dropped tunnel or a
 // sleeping session-host would otherwise get 20 requests a minute from every
@@ -430,7 +433,7 @@ export function liveAllowed() {
     !view.ended &&
     !!els.terminalOverlay &&
     els.terminalOverlay.dataset.mode === 'chat' &&
-    document.visibilityState === 'visible';
+    (document.visibilityState === 'visible' || !pauseWhenHidden());
 }
 
 export function stopLiveTimer() {
@@ -485,7 +488,7 @@ function liveUnavailable(reason, missing) {
     stopLiveTimer();
     return;
   }
-  view.backoff = Math.min(LIVE_BACKOFF_MAX_MS, (view.backoff || LIVE_POLL_MS) * 2);
+  view.backoff = Math.min(LIVE_BACKOFF_MAX_MS, (view.backoff || livePollMs()) * 2);
   scheduleLive(view.backoff);
 }
 
@@ -538,14 +541,14 @@ async function readForward(target, manual) {
     if (view !== target || view.seq !== seq) return 'stale';
     if (manual) {
       apiFailToast('Load new failed', exc);
-      scheduleLive(target.backoff || LIVE_POLL_MS);
+      scheduleLive(target.backoff || livePollMs());
       return 'failed';
     }
     // Quietly, and slower each time: a tick is background work the reader
     // did not ask for, so a failing one must not toast over the pane the way
     // a tapped Reload does.
     target.backoff = Math.min(
-      LIVE_BACKOFF_MAX_MS, (target.backoff || LIVE_POLL_MS) * 2
+      LIVE_BACKOFF_MAX_MS, (target.backoff || livePollMs()) * 2
     );
     scheduleLive(target.backoff);
     return 'failed';
@@ -595,7 +598,7 @@ async function readForward(target, manual) {
     else showState('Nothing in the transcript yet');
   }
   checkSendWatch(target);
-  scheduleLive(LIVE_POLL_MS);
+  scheduleLive(livePollMs());
   return body.changed ? 'changed' : 'unchanged';
 }
 
@@ -679,7 +682,7 @@ async function loadNewest() {
     showState('Nothing in the transcript yet');
     // Still live: an empty transcript is the normal state of a session that
     // has just started, and its first turn should appear on its own.
-    scheduleLive(LIVE_POLL_MS);
+    scheduleLive(livePollMs());
     return;
   }
   hideState();
@@ -699,7 +702,7 @@ async function loadNewest() {
   syncFileChips();
   syncEditedCards();
   els.transcriptBody.scrollTop = els.transcriptBody.scrollHeight;
-  scheduleLive(LIVE_POLL_MS);
+  scheduleLive(livePollMs());
 }
 
 // The line a Load older that found no turn leaves behind, so the

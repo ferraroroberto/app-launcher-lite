@@ -88,31 +88,99 @@ current: "contextvars.ContextVar[Optional[RequestTiming]]" = contextvars.Context
 
 
 class TimedExecutor(ThreadPoolExecutor):
-    """A thread pool that reports queue and worker time to the submitting request."""
+    """A thread pool that reports queue and worker time to the submitting request.
 
-    def __init__(self, pool_name: str, max_workers: int, thread_name_prefix: str = "") -> None:
-        super().__init__(max_workers=max_workers, thread_name_prefix=thread_name_prefix or pool_name)
+    Its size is a *limit* that :meth:`resize` changes while the pool runs: a
+    standard pool cannot shrink, and callers hold the pool object by name, so
+    the real thread cap is the fixed ``ceiling`` and a gate lets at most
+    ``limit`` calls run at once. A call over the limit waits for the gate and
+    that wait counts as queue time.
+    """
+
+    def __init__(
+        self, pool_name: str, max_workers: int, thread_name_prefix: str = "", ceiling: Optional[int] = None
+    ) -> None:
+        self.ceiling = max(max_workers, ceiling or 0)
+        super().__init__(max_workers=self.ceiling, thread_name_prefix=thread_name_prefix or pool_name)
         self.pool_name = pool_name
+        self._gate = threading.Condition()
+        self._limit = max_workers
+        self._running = 0
+
+    @property
+    def limit(self) -> int:
+        """How many calls may run at once right now."""
+        return self._limit
+
+    def resize(self, limit: int) -> int:
+        """Set the concurrency limit (clamped to 1..ceiling); returns the one in force.
+
+        A call already running finishes, so a smaller limit is met as they
+        end, not by cutting any off.
+        """
+        limit = max(1, min(int(limit), self.ceiling))
+        with self._gate:
+            self._limit = limit
+            self._gate.notify_all()
+        return limit
 
     def submit(self, fn: Callable[..., Any], /, *args: Any, **kwargs: Any) -> "Future[Any]":
         timing = current.get()
-        if timing is None:
-            return super().submit(fn, *args, **kwargs)
         queued = time.monotonic()
 
-        def timed() -> Any:
+        def gated() -> Any:
+            with self._gate:
+                while self._running >= self._limit:
+                    self._gate.wait()
+                self._running += 1
             started = time.monotonic()
             try:
                 return fn(*args, **kwargs)
             finally:
-                timing.record(self.pool_name, started - queued, time.monotonic() - started)
+                with self._gate:
+                    self._running -= 1
+                    self._gate.notify()
+                if timing is not None:
+                    timing.record(self.pool_name, started - queued, time.monotonic() - started)
 
-        return super().submit(timed)
+        return super().submit(gated)
+
+
+#: The one pool :func:`default_executor` made, so a settings save can resize it.
+_default_pool: Optional[TimedExecutor] = None
+
+#: The configured size of the default pool (0 = automatic). Held here so a size
+#: applied at app creation reaches the pool the lifespan builds later.
+_default_size = 0
+
+#: The default pool's most threads.
+DEFAULT_POOL_CEILING = 64
+
+
+def automatic_default_size() -> int:
+    """The event loop's own default executor size: CPUs + 4, at most 32."""
+    return min(32, (os.cpu_count() or 1) + 4)
 
 
 def default_executor() -> TimedExecutor:
-    """A timed stand-in for the event loop's own default executor, same size."""
-    return TimedExecutor(DEFAULT_POOL, min(32, (os.cpu_count() or 1) + 4), "asyncio")
+    """A timed stand-in for the event loop's own default executor, at the configured size."""
+    global _default_pool
+    _default_pool = TimedExecutor(
+        DEFAULT_POOL, _default_size or automatic_default_size(), "asyncio", ceiling=DEFAULT_POOL_CEILING
+    )
+    return _default_pool
+
+
+def resize_default_executor(size: int) -> Optional[int]:
+    """Set the default pool's size (0 = automatic); the size in force, or ``None`` before the pool exists.
+
+    The size is kept either way, so one applied before the pool is built still takes.
+    """
+    global _default_size
+    _default_size = size
+    if _default_pool is None:
+        return None
+    return _default_pool.resize(size or automatic_default_size())
 
 
 # --------------------------------------------------------------------- budgets
@@ -189,6 +257,21 @@ def resolve_budgets(overrides: Optional[Mapping[str, Sequence[float]]] = None) -
         if name in table and valid is not None:
             table[name] = Budget(*valid)
     return table
+
+
+def scaled_overrides(
+    overrides: Optional[Mapping[str, Sequence[float]]], scale: float
+) -> Optional[Mapping[str, Sequence[float]]]:
+    """``overrides`` with every class's limits (default or overridden) multiplied by ``scale``.
+
+    A scale of 1 returns ``overrides`` untouched, so the unscaled path allocates nothing.
+    """
+    if scale == 1:
+        return overrides
+    return {
+        name: [budget.soft_s * scale, budget.hard_s * scale]
+        for name, budget in resolve_budgets(overrides).items()
+    }
 
 
 def _valid_pair(pair: Any) -> Optional[Tuple[float, float]]:
