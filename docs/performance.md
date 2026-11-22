@@ -28,6 +28,7 @@ The table lives in `src/webapp_settings/performance.py`: the config defaults, th
 | `pool_git_status` | 8 | 2 | 1–32 | Repos scanned in parallel. |
 | `git_status_ttl_s` | 10 | 30 | 2–60 s | How long a git scan is served as it is; past it the next poll shows it at once and refreshes it behind the response. |
 | `transcript_page_cache_size` | 32 | 16 | 0–256 pages | Parsed chat pages kept for unchanged files; 0 turns the cache off. |
+| `transcript_tail_cache_mb` | 32 | 16 | 0–256 MB | Session transcript tails kept for unchanged files, so the session list and the Board read each transcript once per change; 0 turns the cache off. |
 | `transcript_resolve_miss_ttl_s` | 10 | 30 | 1–120 s | How long a session whose Copilot log was not found answers not found before the folder is scanned again. |
 | `request_budget_scale` | 1.0 | 2.0 | 0.5–10 | Multiplies every request class's soft and hard budget ([diagnostics](diagnostics.md#request-timings-and-budgets)), so a slower PC does not log a breach for every ordinary request. Per-class values stay in `request_budgets`. |
 
@@ -37,7 +38,7 @@ A save outside a range is refused with the rule it broke ("Board refresh must be
 
 - **Poll spacings and the hidden-tab pause** are read from the page's copy of the config at each re-arm, so a running poll picks up a change at its next tick. A page that has not loaded its config yet uses the defaults.
 - **Pools** are `TimedExecutor`s (`src/request_timing.py`) built once with a fixed thread ceiling and a live concurrency limit. A save resizes the limit (`app/webapp/perf_apply.py`); a call already running finishes, so a smaller limit is met as running calls end. The session-host is never touched.
-- **Caches, budgets and the git TTL** are read off the config on each use.
+- **Caches, budgets and the git TTL** are read off the config on each use, except the transcript tail cache, which lives below the routes and is resized by the same `perf_apply` call as the pools.
 
 ## The health line
 

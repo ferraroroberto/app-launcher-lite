@@ -102,6 +102,11 @@ KNOBS: Tuple[Knob, ...] = (
         help="Parsed chat pages kept for files that have not changed. 0 turns the cache off.",
     ),
     Knob(
+        "transcript_tail_cache_mb", "Transcript tail cache", GROUP_CACHES, KIND_INT, 32, 16, 0, 256, "MB",
+        help="Session transcript tails kept for files that have not changed, so the session list and "
+             "the Board read each transcript once per change. 0 turns the cache off.",
+    ),
+    Knob(
         "transcript_resolve_miss_ttl_s", "Missing-log wait", GROUP_CACHES, KIND_FLOAT, 10.0, 30.0, 1, 120, "s",
         help="How long a Copilot session whose event log was not found answers not found "
              "before the session-state folder is scanned again.",

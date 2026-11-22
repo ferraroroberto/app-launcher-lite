@@ -303,7 +303,8 @@ class WebappConfig:
     # declared once in src/webapp_settings/performance.py. All are read live, so
     # a save applies without a restart. Poll spacings are in seconds; the
     # pools are thread counts (pool_sends 0 = pick from the CPU count); the
-    # transcript cache is in pages and its miss wait in seconds.
+    # transcript page cache is in pages, the tail cache in MB and the miss wait
+    # in seconds.
     poll_board_s: int = performance.default("poll_board_s")
     poll_sessions_s: int = performance.default("poll_sessions_s")
     poll_transcript_s: int = performance.default("poll_transcript_s")
@@ -314,6 +315,7 @@ class WebappConfig:
     pool_git_status: int = performance.default("pool_git_status")
     git_status_ttl_s: int = performance.default("git_status_ttl_s")
     transcript_page_cache_size: int = performance.default("transcript_page_cache_size")
+    transcript_tail_cache_mb: int = performance.default("transcript_tail_cache_mb")
     transcript_resolve_miss_ttl_s: float = performance.default("transcript_resolve_miss_ttl_s")
     request_budget_scale: float = performance.default("request_budget_scale")
     # Large-file attach limit in MB, Settings-tab configurable.
