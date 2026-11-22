@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from app.webapp.routers._helpers import (
     audit_off_loop,
@@ -37,7 +38,7 @@ from src.diagnostics import (
     listening_port_for_pid_tree,
 )
 from src.git_upstream import launch_refusal
-from src.launching import app_refresh
+from src.launching import app_refresh, launch_requests
 from src.launching.flags import (
     build_copilot_flags,
     build_resume_flags,
@@ -246,7 +247,10 @@ async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
     # streamed). `agent` must be a key in `agents.AGENTS` (see
     # `src/agents.py` for the full set).
     if entry.kind == KIND_CLAUDE_CODE:
-        return await _launch_coding(entry, cfg, request)
+        request_id = (await maybe_json(request)).get("request_id")
+        if request_id is None:
+            return await _launch_coding(entry, cfg, request)
+        return await _launch_coding_once(entry, cfg, request, request_id)
 
     # everything else: a fresh CMD window running the bat. `stealth` picks the Apps tab's 🚫👁 button
     # instead of its ⚡ one — same bat, same process shape, no console window on screen. Absent or false keeps
@@ -268,6 +272,70 @@ async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
         "kind": entry.kind,
         "stealth": stealth,
     }
+
+
+def _launch_requests(state: Any) -> launch_requests.LaunchRequests:
+    """The webapp's one launch-request registry, made on first use."""
+    registry = getattr(state, "launch_requests", None)
+    if registry is None:
+        registry = state.launch_requests = launch_requests.LaunchRequests()
+    return registry
+
+
+async def _launch_coding_once(
+    entry: AppEntry, cfg: WebappConfig, request: Request, request_id: Any,
+) -> Any:
+    """A Coding launch that a repeat with the same ``request_id`` never opens twice.
+
+    The spawn runs in a task the slot holds and the handler only waits on it
+    shielded, so a caller that times out and disconnects still leaves the
+    finished session in the slot for its repeat or its poll to find.
+    """
+    if not launch_requests.valid_request_id(request_id):
+        raise HTTPException(status_code=400, detail="request_id must be 1-64 letters, digits, '-' or '_'")
+    slot, new = _launch_requests(request.app.state).claim(entry.id, request_id)
+    if new:
+        logger.info(f"ℹ️ launch {entry.id}: request {request_id[:12]} claimed")
+        slot.task = asyncio.ensure_future(_fill_launch_slot(slot, _launch_coding(entry, cfg, request)))
+        await asyncio.shield(slot.task)
+    else:
+        logger.info(f"ℹ️ launch {entry.id}: request {request_id[:12]} repeated while {slot.state}")
+    return _launch_slot_answer(slot, request_id, resumed=not new)
+
+
+async def _fill_launch_slot(slot: launch_requests.LaunchSlot, launch: Any) -> None:
+    """Await ``launch`` and record its outcome in ``slot``; never raises.
+
+    Anything but an HTTP refusal is recorded as a 500: the spawn may or may not
+    have happened, which the caller reads as unconfirmed, never as refused."""
+    try:
+        slot.response = await launch
+        slot.state = launch_requests.DONE
+    except HTTPException as exc:
+        slot.state, slot.status, slot.detail = launch_requests.FAILED, exc.status_code, str(exc.detail)
+    except Exception as exc:  # noqa: BLE001 -- the slot must settle whatever the spawn raised
+        logger.warning(f"⚠️ launch request failed unexpectedly: {exc.__class__.__name__}: {exc}")
+        slot.state, slot.status, slot.detail = launch_requests.FAILED, 500, f"{exc.__class__.__name__}: {exc}"
+
+
+def _launch_slot_answer(slot: launch_requests.LaunchSlot, request_id: str, resumed: bool) -> Any:
+    """The launch route's answer from a slot: the launch body, 202 while pending, or its refusal."""
+    if slot.state == launch_requests.PENDING:
+        return JSONResponse(status_code=202, content={"request_id": request_id, **slot.as_dict()})
+    if slot.state == launch_requests.FAILED:
+        raise HTTPException(status_code=slot.status or 500, detail=slot.detail)
+    return {**(slot.response or {}), "request_id": request_id, "resumed": resumed}
+
+
+@router.get("/api/apps/{app_id}/launch/{request_id}")
+async def launch_request_state(app_id: str, request_id: str, request: Request) -> Dict[str, Any]:
+    """Where a request-id launch stands: ``pending``, ``done`` with its
+    session, or ``failed`` with the status and detail it was refused with.
+    404 when this process has no such request, which is unknown, not "nothing launched"."""
+    slot = _launch_requests(request.app.state).get(app_id, request_id)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="unknown launch request")
+    return {"request_id": request_id, **slot.as_dict()}
 
 
 def _spawn_and_track(entry: AppEntry, stealth: bool) -> None:

@@ -23,13 +23,15 @@ Subcommands
       refuse before the POST (`REFUSED=...`); a spawn the launcher may still be
       running is `DISPATCH=unconfirmed`, never retried. On success it marks the
       session chief-managed and prints `DISPATCHED`, `DISPATCH_ID=`.
-  open <repo> [--message-file F] [--settle S] [--timeout T]
+  open <repo> [--message-file F] [--request-id ID] [--settle S] [--timeout T]
       A plain Copilot session in a Coding project through `POST /api/apps/<id>/launch`,
       behind `dispatch`'s occupied-repo and worker-cap rails. Not lane work: never
       marked chief-managed, never in the plan, left running. With a message it waits
       `--settle`, sends once, and prints `OPENED session=<sid>` plus `DELIVERED` only
       when the transcript shows the message as a user turn; otherwise `STRANDED` or
-      `UNKNOWN`, `SESSION_LIVE` and exit 1, never `OPENED`.
+      `UNKNOWN`, `SESSION_LIVE` and exit 1, never `OPENED`. Always ends with
+      `LAUNCHED=`, `PROMPT_DELIVERED=` and `EXCHANGE_CONFIRMED=` (yes|no|unknown|none);
+      after `OPEN=unconfirmed`, rerun with the printed `REQUEST_ID=` to resume.
   file <repo> --title T --body-file F
       Files one GitLab issue through the launcher's `POST /api/board/issues/file`
       (the Board's file button; no labels). Prints `FILED=<repo>#<N>` and `URL=`,

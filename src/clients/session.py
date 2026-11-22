@@ -186,6 +186,32 @@ def list_sessions(port: int) -> List[Dict[str, Any]]:
     return list(data.get("sessions") or [])
 
 
+# The roster probe's whole budget: a host that cannot list its sessions in this
+# long is reported unreachable to the chief, never waited on.
+ROSTER_TIMEOUT = 3.0
+
+
+async def list_sessions_bounded(port: int, timeout: float = ROSTER_TIMEOUT) -> List[Dict[str, Any]]:
+    """The host's session list within ``timeout`` seconds, on the event loop.
+
+    Async rather than :func:`list_sessions` in a worker thread, so the probe
+    still answers when every pool thread is busy with transcript reads.
+    Raises :class:`SessionHostError` on a timeout, a transport failure or an
+    error status."""
+    url = base_url(port) + "/sessions"
+    try:
+        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+            resp = await client.get(url)
+    except httpx.TransportError as exc:
+        raise SessionHostError(f"session-host did not list its sessions at {url} ({exc!r})", status=503) from exc
+    if resp.status_code >= 400:
+        raise SessionHostError(_loopback_http.detail(resp, "session-host"), status=resp.status_code)
+    try:
+        return list(resp.json().get("sessions") or [])
+    except (ValueError, AttributeError) as exc:
+        raise SessionHostError(f"session-host returned an unreadable list ({exc})") from exc
+
+
 def get_session(port: int, session_id: str) -> Dict[str, Any]:
     return _request("GET", port, f"/sessions/{session_id}")
 

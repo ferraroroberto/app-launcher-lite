@@ -17,10 +17,12 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Optional
 from unittest import mock
 
 REPO = Path(__file__).resolve().parents[1]
@@ -31,7 +33,7 @@ sys.path.append(str(REPO / "hooks"))
 import chief_inbox  # noqa: E402
 import chief_ops  # noqa: E402
 
-from chief import launcher, lite_lanes, lite_verify  # noqa: E402
+from chief import launcher, lite_lanes, lite_open, lite_verify  # noqa: E402
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -49,10 +51,14 @@ def _card(sid: str, repo: str) -> dict:
 
 
 class StubLauncher:
-    """A loopback HTTP server answering the lite launcher endpoints from a dict."""
+    """A loopback HTTP server answering the lite launcher endpoints from a dict.
+
+    A route is `(status, body)` or a callable `(method, body) -> (status, body)`; `delays`
+    holds seconds a path waits before answering, the injected slow launcher."""
 
     def __init__(self) -> None:
         self.routes: dict = {}
+        self.delays: dict = {}
         self.posts: list = []
         self.paths: list = []
         stub = self
@@ -61,23 +67,29 @@ class StubLauncher:
             def log_message(self, *_args) -> None:
                 pass
 
-            def _answer(self) -> None:
+            def _answer(self, body_in: Optional[dict] = None) -> None:
                 stub.paths.append(self.path)
-                status, body = stub.routes.get(self.path, (404, {"detail": "no route"}))
+                time.sleep(stub.delays.get(self.path, 0))
+                route = stub.routes.get(self.path, (404, {"detail": "no route"}))
+                status, body = route(self.command, body_in) if callable(route) else route
                 raw = json.dumps(body).encode("utf-8")
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(raw)))
-                self.end_headers()
-                self.wfile.write(raw)
+                try:
+                    self.send_response(status)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(raw)))
+                    self.end_headers()
+                    self.wfile.write(raw)
+                except OSError:
+                    pass  # the client gave up first: the injected-delay case
 
             def do_GET(self) -> None:
                 self._answer()
 
             def do_POST(self) -> None:
                 length = int(self.headers.get("Content-Length") or 0)
-                stub.posts.append((self.path, json.loads(self.rfile.read(length) or b"{}")))
-                self._answer()
+                body_in = json.loads(self.rfile.read(length) or b"{}")
+                stub.posts.append((self.path, body_in))
+                self._answer(body_in)
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
@@ -228,6 +240,10 @@ class OpenTests(StubbedLauncherCase):
         })
         self.message = self.state / "message.txt"
         self.message.write_text("Say hello\nto the team.", encoding="utf-8")
+        for name in ("LAUNCH_POLL_WINDOW", "LAUNCH_POLL_INTERVAL"):
+            patcher = mock.patch.object(lite_open, name, 0)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def _open(self, *extra: str) -> tuple:
         return _ops("open", "demo", "--settle", "0", "--timeout", "0", "--poll-interval", "0",
@@ -242,7 +258,11 @@ class OpenTests(StubbedLauncherCase):
         self.assertEqual(code, 0, out)
         self.assertIn("OPENED session=plain-1 repo=demo", out)
         self.assertIn("MESSAGE=none", out)
-        self.assertEqual(self.stub.posts, [("/api/apps/demo/launch", {"mode": "pty", "agent": "copilot"})])
+        launch = self.stub.posts[0][1]
+        self.assertEqual({k: launch[k] for k in ("mode", "agent")}, {"mode": "pty", "agent": "copilot"})
+        self.assertEqual(launch["request_id"], out.split("REQUEST_ID=")[1].split()[0])
+        self.assertEqual(len(self.stub.posts), 1)
+        self.assertIn("PROMPT_DELIVERED=none", out)
         self.assertFalse((self.state / "chief-managed.json").exists())
 
     def test_message_seen_as_the_first_user_turn_is_opened_and_delivered(self) -> None:
@@ -317,7 +337,8 @@ class OpenTests(StubbedLauncherCase):
         self.stub.routes["/api/apps/demo/launch"] = (503, {"detail": "busy"})
         code, out = self._open("--message-file", str(self.message))
         self.assertEqual(code, 1)
-        self.assertIn("OPEN=unconfirmed reason=http-503 repo=demo", out)
+        self.assertIn("OPEN=unconfirmed reason=http-503; then the launcher holds no record", out)
+        self.assertIn("LAUNCHED=unknown", out)
         self.assertEqual([path for path, _ in self.stub.posts], ["/api/apps/demo/launch"])
 
     def test_a_lane_opened_for_issue_work_reaches_the_mailbox_when_it_ends(self) -> None:
