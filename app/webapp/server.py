@@ -55,6 +55,7 @@ from app.webapp.static_trim import trim_js
 from src import app_runtime, instance_role, private_network, system_load
 from src.app_config import load_app_config
 from src.auth.webauthn_gate import WebAuthnGate
+from src.chief import reconcile as chief_reconcile
 from src.clients import session as session_client
 from src.compression import StreamSafeGZipMiddleware
 from src.jobs import snapshot as jobs_snapshot
@@ -397,6 +398,11 @@ async def _lifespan(app: FastAPI):
         # Always started: it re-reads the chief_doorbell toggle every tick and
         # does nothing while it is off, so a Settings save arms it live.
         tasks.append(asyncio.create_task(chief_doorbell.tick_forever(app)))
+        # A managed lane whose hook missed its turn end or exit still reaches
+        # the mailbox. Canonical only: it writes the real chief inbox.
+        tasks.append(asyncio.create_task(chief_reconcile.tick_forever(
+            lambda: getattr(app.state, "webapp_config", None)
+        )))
         # The Projects tiles' ahead/behind: a slow fetch round while a page
         # polls git status. Canonical only, so a gate webapp stays offline.
         tasks.append(asyncio.create_task(claude_code.fetch_tick_forever(app)))

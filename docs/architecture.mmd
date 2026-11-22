@@ -68,6 +68,9 @@ flowchart TB
   WSERVER --> routers
   MGR --> WSERVER
   WSERVER -->|"lifespan doorbell tick, canonical only"| DOORBELL
+  RECONCILE["src/chief/reconcile.py
+publishes a managed lane's missed turn end or exit"]
+  WSERVER -->|"lifespan reconcile tick, canonical only"| RECONCILE
 
   subgraph static["app/webapp/static/ — vanilla JS PWA (Android first)"]
     STATICJS["index.html, tabs.js, state.js,\nsession-overlay.js over terminal.js + terminal/\n+ chat/ (Chat view), composer.js,\nsessions.js, jobs.js + jobs/, board.js + board/,\napps.js + apps/, team-os.js, settings/"]

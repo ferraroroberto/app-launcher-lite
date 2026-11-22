@@ -25,8 +25,12 @@ from unittest import mock
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "skills" / "_lib"))
+# Appended: a hook module must never shadow a skills/_lib module of the same name.
+sys.path.append(str(REPO / "hooks"))
 
+import chief_inbox  # noqa: E402
 import chief_ops  # noqa: E402
+
 from chief import launcher, lite_lanes, lite_verify  # noqa: E402
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -315,6 +319,44 @@ class OpenTests(StubbedLauncherCase):
         self.assertEqual(code, 1)
         self.assertIn("OPEN=unconfirmed reason=http-503 repo=demo", out)
         self.assertEqual([path for path, _ in self.stub.posts], ["/api/apps/demo/launch"])
+
+    def test_a_lane_opened_for_issue_work_reaches_the_mailbox_when_it_ends(self) -> None:
+        self.message.write_text("/issue-start 7 --brief lane.md", encoding="utf-8")
+        self._user_turn("/issue-start 7 --brief lane.md")
+        marked_after_posts: list = []
+        real_mark = lite_lanes.chief_managed.mark
+
+        def mark(*a, **kw):
+            marked_after_posts.append([path for path, _ in self.stub.posts])
+            return real_mark(*a, **kw)
+
+        with mock.patch.object(lite_lanes.chief_managed, "mark", side_effect=mark):
+            code, out = self._open("--message-file", str(self.message), "--issue", "7")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(marked_after_posts, [["/api/apps/demo/launch"]], "marked before its first message")
+        dispatch_id = out.split("DISPATCH_ID=")[1].split()[0]
+        # The lane's own agentStop, as its hook runs it.
+        with mock.patch.dict(os.environ, {"APP_LAUNCHER_SESSION_ID": "plain-1"}):
+            event = json.loads(chief_inbox.record({}, "agentStop").read_text(encoding="utf-8"))
+        self.assertEqual((event["kind"], event["repo"], event["number"], event["dispatch_id"]),
+                         ("turn-end", "demo", 7, dispatch_id))
+
+    def test_a_lane_skill_in_a_plain_open_is_refused_before_launching(self) -> None:
+        for text in ("/issue-start 7 --brief lane.md", "Please run /upstream-sync now."):
+            self.message.write_text(text, encoding="utf-8")
+            code, out = self._open("--message-file", str(self.message))
+            self.assertEqual(code, 1, text)
+            self.assertIn("REFUSED=the message runs lane work", out)
+        self.assertEqual(self.stub.posts, [])
+        self.assertFalse((self.state / "chief-managed.json").exists())
+
+    def test_a_queue_lane_with_no_issue_is_managed_with_no_number(self) -> None:
+        self.message.write_text("/upstream-sync", encoding="utf-8")
+        self._user_turn("/upstream-sync")
+        code, out = self._open("--message-file", str(self.message), "--lane")
+        self.assertEqual(code, 0, out)
+        row = json.loads((self.state / "chief-managed.json").read_text(encoding="utf-8"))["plain-1"]
+        self.assertEqual((row["repo"], row["number"]), ("demo", None))
 
 
 class FileTests(StubbedLauncherCase):

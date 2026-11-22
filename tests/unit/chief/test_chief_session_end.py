@@ -154,7 +154,7 @@ def test_publish_is_atomic_and_leaves_no_temp_file(
     assert seen["src"].startswith(".event.") and seen["src"].endswith(".tmp")
     assert seen["json_before"] == []
     assert seen["tmp_complete"] == "session-end"
-    assert [p.name for p in inbox.iterdir() if p.name.startswith(".")] == []
+    assert [p.name for p in inbox.iterdir() if p.name.startswith(".event.")] == []
     assert len(list(inbox.glob("*.json"))) == 1
 
 
@@ -170,6 +170,17 @@ def test_failed_publish_leaves_neither_json_nor_temp_and_does_not_raise(
     monkeypatch.setattr(chief_session_end.os, "replace", boom)
     assert publish_session_ends([_session(SID)], registry=registry, inbox=inbox) == []
     assert list(inbox.iterdir()) == []
+
+
+def test_a_session_end_already_published_is_never_published_again(tmp_path: Path) -> None:
+    registry = _registry(tmp_path, {SID: {"repo": "r", "number": 1}, OTHER: {"repo": "r", "number": 2}})
+    inbox = tmp_path / "chief-inbox"
+    inbox.mkdir()
+    # The worker's own sessionEnd hook already published and stamped SID.
+    chief_session_end.touch_stamp(chief_session_end.stamp_path(inbox, "session-end", SID))
+    publish_session_ends([_session(SID), _session(OTHER)], registry=registry, inbox=inbox)
+    publish_session_ends([_session(OTHER)], registry=registry, inbox=inbox)
+    assert [e["launcher_sid"] for e in _events(inbox)] == [OTHER]
 
 
 def test_resolve_paths_reads_config_then_falls_back(

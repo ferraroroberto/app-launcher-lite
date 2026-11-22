@@ -6,7 +6,6 @@
     {"key": "order:I001:copilot/skills/_lib/chief/drain.py:from __future__ import annotations", "files": ["copilot/skills/_lib/chief/drain.py"]},
     {"key": "order:I001:copilot/skills/_lib/chief/lite_compact.py:from __future__ import annotations", "files": ["copilot/skills/_lib/chief/lite_compact.py"]},
     {"key": "order:I001:copilot/tests/test_chief_compact.py:import chief_ops  # noqa: E402", "files": ["copilot/tests/test_chief_compact.py"]},
-    {"key": "order:I001:copilot/tests/test_chief_lanes.py:import chief_ops  # noqa: E402", "files": ["copilot/tests/test_chief_lanes.py"]},
     {"key": "order:I001:copilot/tests/test_gitlab_namespace.py:import gitlab_namespace  # noqa: E402", "files": ["copilot/tests/test_gitlab_namespace.py"]},
     {"key": "order:I001:copilot/tests/test_owner_check_gitlab.py:import chief_guard  # noqa: E402", "files": ["copilot/tests/test_owner_check_gitlab.py"]}
   ]

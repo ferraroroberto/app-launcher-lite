@@ -98,6 +98,7 @@ from chief import (  # noqa: E402
     lite_file,
     lite_lanes,
     lite_merge,
+    lite_open,
     lite_rerun,
     lite_sweep,
     lite_verify,
@@ -113,6 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan_cli.add_cli(sub.add_parser("plan", help="read or change the chief's plan"))
     lite_commands.add_mailbox_parsers(sub)
     lite_lanes.add_lane_parsers(sub)
+    lite_open.add_parser(sub)
     lite_file.add_parser(sub)
     lite_verify.add_parser(sub)
     lite_merge.add_parser(sub)
