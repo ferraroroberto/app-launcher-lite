@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope
 
-from app.webapp import chief_doorbell
+from app.webapp import chief_doorbell, loop_lag
 from app.webapp.observability import (
     SlowRequestLogMiddleware,
     ensure_autostart_log_handler,
@@ -390,6 +390,10 @@ async def _lifespan(app: FastAPI):
     tasks.append(asyncio.create_task(system_load.tick_forever()))
     # The snapshot behind /api/version, rebuilt only while that route is polled.
     tasks.append(asyncio.create_task(misc.version_cache(app).tick_forever()))
+    # Re-reads the terminal_timing_log switch each round, so a config save arms it live.
+    tasks.append(asyncio.create_task(loop_lag.tick_forever(
+        lambda: getattr(getattr(app.state, "webapp_config", None), "terminal_timing_log", False)
+    )))
     cfg = getattr(app.state, "webapp_config", None)
     canonical, role_reason = instance_role.canonical_instance()
     if cfg is not None and canonical:
