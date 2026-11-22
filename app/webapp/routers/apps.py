@@ -418,22 +418,12 @@ def _validated_launch_model(agent: str, requested_model: str, cfg: WebappConfig)
         if model_value not in cfg.copilot_models:
             raise HTTPException(status_code=400, detail=unknown_model_detail(model_value))
         return model_value
-    # The prefix match is not enough on its own, in two ways.
+    # The prefix match alone misses two cases, each refused with a 400.
     #
-    # First: four of the six agents take no per-launch model at all.
-    # Antigravity, Copilot and Grok send no `--model`, and Pi's comes
-    # from the persisted `pi_model` setting - so a request naming one
-    # fell straight through to the cfg-only builder and returned 200
-    # on a session running whatever the agent picked for itself,
-    # which a caller cannot tell apart from having got what it asked
-    # for. Which agents those are is read off the registry
-    # (`Agent.per_launch_model`), not re-listed here, so a seventh
-    # agent inherits the guard. Refusing is safe: no first-party
-    # bundle has ever sent one - the `startsWith(agent + ':')` guard
-    # shipped in the very commit that introduced `payload.model`, and
-    # the model combo has only ever offered `claude:`/`codex:`
-    # values - so the cached-client risk the issue flagged does not
-    # exist, and a non-browser caller learns from the 400.
+    # An agent with no per-launch model would return 200 on a session running
+    # the agent's own pick, which a caller cannot tell from having got what it
+    # asked for. The set is read off the registry (`Agent.per_launch_model`),
+    # so a new agent inherits the guard.
     if not agents.AGENTS[agent].per_launch_model:
         raise HTTPException(
             status_code=400,
@@ -443,16 +433,10 @@ def _validated_launch_model(agent: str, requested_model: str, cfg: WebappConfig)
                 "launch without one and choose the model in the agent"
             ),
         )
-    # Second: for the two that do, an out-of-catalog *value* used to
-    # launch silently on the CLI's own default.
-    # build_claude_flags / build_codex_flags emit no --model at all
-    # for a value they don't recognise *and* discard the persisted
-    # model (model_override is not None), so a phone holding a
-    # pre-rename cached bundle got a 200 and a session on the wrong
-    # model with nothing said. Reject it instead, as the Life OS
-    # and Board launch routes already do. The
-    # accepted set is exactly what the builder would honour, so a
-    # legacy-but-still-supported alias keeps working.
+    # For an agent that does take one, a value outside the catalog is refused:
+    # the flag builder emits no --model for an unrecognised value and discards
+    # the persisted model, so the session would silently run on the CLI
+    # default. The catalog is exactly what the builder honours.
     if model_value not in _LAUNCH_MODEL_CATALOG[agent]:
         raise HTTPException(
             status_code=400,
