@@ -5,7 +5,8 @@
  * and sends it as the verdict's `submit_state`: CONFIRMED (Enter went in after
  * a verified settle), UNCONFIRMED (Enter went in, nothing verified it landed),
  * PENDING (the deferred watcher still holds the Enter), NOT_SUBMITTED (asked
- * for, never sent) or NOT_REQUESTED (the call asked for no submit).
+ * for, and never sent or, by the screen, never taken) or NOT_REQUESTED (the
+ * call asked for no submit).
  * submitState() is the one rule reading the field; sessions.js asks it
  * instead of re-spelling the strings. tests/unit/sessions/test_submit_state.py
  * fails when the set drifts from the server's.

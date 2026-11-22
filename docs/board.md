@@ -164,13 +164,14 @@ All reads happen only when the drawer opens; the 5 s poll performs no transcript
 
 | `reason` | HTTP | Meaning |
 |---|---|---|
-| `ok` | 200 | Ingest seen, Enter followed an echo-then-quiet settle. |
+| `ok` | 200 | Ingest seen, Enter followed an echo-then-quiet settle. For a paste Copilot collapses into its `[Paste #N - M lines]` chip, the chip has also left the live screen. |
+| `submit_untaken` | 200 | Copilot's paste chip was still on the input line after Enter and one more Enter. Not delivered; `submit_state` is `not_submitted`. |
 | `deferred` | 202 | Ingest seen, but the agent is still working. No Enter yet; a bounded background watcher holds the submit. |
 | `unverified` | 200 | Nothing checked by design: a short payload or a bare submit. |
 | `not_ingested` | 502 | Written, never painted back. Treated as not delivered; no Enter sent. |
 | `dropped` | 409 | The write never reached the PTY. |
 
-`delivered` is `true` only when every write landed and either the submit was sent or none was asked for. `submit_state` names the submit's fate (`confirmed`, `unconfirmed`, `pending`, `not_submitted`, `not_requested`). `submit_confirmed` and `ingested` are tri-state: `null` means *not established*, never folded into the passing state. The same verdict is recorded on the session as `last_input`, and every non-delivery leaves an info breadcrumb in the session-host log.
+`delivered` is `true` only when every write landed and either the submit was sent, and the screen did not show it untaken, or none was asked for. `submit_state` names the submit's fate (`confirmed`, `unconfirmed`, `pending`, `not_submitted`, `not_requested`). `submit_confirmed` and `ingested` are tri-state: `null` means *not established*, never folded into the passing state. The same verdict is recorded on the session as `last_input`, and every non-delivery leaves an info breadcrumb in the session-host log.
 
 **A session that has just spawned.** A new Copilot discards text written before its TUI is ready, so the session-host would report a write as landed that was lost. `src/clients/session.py::send_input` therefore holds a write to a session younger than a minute until its window title is set (the TUI is up) and its boot output has been quiet for a second, which a live probe showed is later than the moment input is first read. If the TUI never comes up within 15 s the route answers **409** ("still starting … NOT delivered, nothing was sent"), audited as `not_ready`, and the caller resends; a TUI that is up but still painting gets the write anyway, since an agent already working takes type-ahead. The wait lives in the webapp, so it is live after a webapp restart without restarting the session-host.
 

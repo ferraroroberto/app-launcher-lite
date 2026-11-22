@@ -633,7 +633,8 @@ export function sendOutcome(verdict, opts) {
       // 202: in the agent's composer, Enter still with the watcher.
       return { text: 'Queued: the agent is busy, Enter goes in once it settles', kind: '' };
     case SubmitState.NOT_SUBMITTED:
-      return { text: 'Not submitted: the text reached the agent but Enter was never sent', kind: 'error' };
+      // Enter withheld, or pressed twice with the paste still on the input line.
+      return { text: 'Not submitted: the text is in the agent’s input line but Enter did not go through', kind: 'error' };
     default:
       break;
   }

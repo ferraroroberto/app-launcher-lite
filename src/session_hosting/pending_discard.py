@@ -199,7 +199,7 @@ class PendingInputProtocol(DeferredSubmit):
         if outcome.reason == INPUT_DEFERRED:
             self._pending.add(data, now, PENDING_IN_COMPOSER, clean_before=clean_before)
             return
-        if not outcome.submitted:
+        if not outcome.submitted or outcome.submit_confirmed is False:
             self._pending.drop_composer()
             return
         if not self._turn_running_now():
