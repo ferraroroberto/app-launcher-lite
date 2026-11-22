@@ -82,7 +82,7 @@ class TestTranscriptEndpoint:
         client, _, overrides = webapp_client
         overrides["session"].list_sessions.return_value = [_live(agent="copilot")]
         monkeypatch.setattr(
-            router_mod, "find_copilot_transcript", lambda session: COPILOT_CAPTURE,
+            router_mod, "find_copilot_transcript", lambda session, **_k: COPILOT_CAPTURE,
         )
         body = client.get("/api/claude-code/sessions/s1/transcript").json()
         assert body["available"] is True and body["source"] == "copilot"
@@ -99,7 +99,7 @@ class TestTranscriptEndpoint:
         assert full["text"].startswith("Bounded file reading keeps log viewers")
         # An ambiguous correlation (two sessions launched in one folder inside
         # the window) is "no transcript", never a neighbour's conversation.
-        monkeypatch.setattr(router_mod, "find_copilot_transcript", lambda session: None)
+        monkeypatch.setattr(router_mod, "find_copilot_transcript", lambda session, **_k: None)
         assert client.get(
             "/api/claude-code/sessions/s1/transcript"
         ).json()["reason"] == "no_transcript"

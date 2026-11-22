@@ -94,6 +94,8 @@ The `.sample` file carries a `copilot_models` default list; a per-launch model (
 | `terminal_history_lines` | `10000` | Scrollback the session-host replays on (re)connect, 200–50000. |
 | `terminal_timing_log` | `false` | Diagnostics: logs each terminal keystroke's stage timings and any event-loop stall over 100 ms to `webapp/slow-requests.log`. Read live. |
 | `request_budgets` | `{}` | Per-request-class time budgets, `{class: [soft_s, hard_s]}`, laid over the defaults in [diagnostics](diagnostics.md#request-timings-and-budgets). Read live. |
+| `transcript_page_cache_size` | `32` | Parsed transcript pages kept for files that have not changed since, so reopening a chat does not parse it again; `0` turns the cache off. |
+| `transcript_resolve_miss_ttl_s` | `10.0` | Seconds a Copilot session whose event log was not found answers "not found" before the session-state folder is scanned again. A new session folder ends the wait early. |
 | `large_upload_max_mb` | `2048` | Limit for the composer's **Attach large file (not read)**, 1–10240 MB; the ordinary attach keeps its fixed 12 MB. |
 | `outbox_scratch_roots` | `["%TEMP%/claude"]` | Folders, besides a session's own, an agent may send a file to Chat from. `%VAR%` and `~` expand; Settings › Folders validates each on save. |
 | `documents` | `[]` | Files the reading sheet may show, each `{id, title, repo, path}` ([Documents](documents.md)). |

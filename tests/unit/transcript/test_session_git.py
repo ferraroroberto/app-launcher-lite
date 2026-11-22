@@ -177,7 +177,7 @@ class TestRoutes:
             "project_dir": str(project), "started_at": 1_789_000_000,
         }]
         from app.webapp.routers import session_transcript as router_mod
-        monkeypatch.setattr(router_mod, "find_copilot_transcript", lambda session: path)
+        monkeypatch.setattr(router_mod, "find_copilot_transcript", lambda session, **_k: path)
 
     def test_list_diff_and_content_of_a_shell_written_file(
         self, webapp_client, _bypass_gate, monkeypatch, repo, transcript,

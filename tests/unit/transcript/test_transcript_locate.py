@@ -95,11 +95,15 @@ def test_find_copilot_transcript_refuses_two_candidates_in_one_window(
     construction — the sidecar says which folder, never which session — so
     both refuse rather than risk showing the other's conversation, the rule
     ``find_codex_transcript`` follows."""
+    import time
+
     from src.session_view import transcript_locate
 
     _copilot_session_dir(tmp_path, "aaaaaaaa-0000-0000-0000-000000000001",
                        r"E:\work\project", "2026-09-17T21:57:34.176Z")
     monkeypatch.setattr(transcript_locate, "_COPILOT_STATE_DIR", tmp_path)
+    # Inside the launch window, where a second launch can still appear.
+    monkeypatch.setattr(time, "time", lambda: _copilot_session()["started_at"] + 30)
     assert transcript_locate.find_copilot_transcript(_copilot_session()) is not None
     # A second launch in the same folder, 20 s later — still inside the
     # window, so neither folder can be claimed.

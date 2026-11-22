@@ -36,8 +36,11 @@ builder.
 
 from __future__ import annotations
 
+import copy
 import json
+import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -826,6 +829,13 @@ def _flavor(flavor: str) -> Tuple[EntryBuilder, LineKey, str]:
 
 # ---------------------------------------------------------------- public
 
+# Parsed pages by ``(path, size, mtime_ns, before, limit, flavor)``. 32 holds
+# the newest page and a few older ones for each of several open chats; the
+# owner tunes it as ``transcript_page_cache_size`` in webapp_config.json.
+DEFAULT_PAGE_CACHE_SIZE = 32
+_PAGE_CACHE: "OrderedDict[Tuple[Any, ...], Dict[str, Any]]" = OrderedDict()
+_PAGE_CACHE_LOCK = threading.Lock()
+
 
 def transcript_page(
     path: Any,
@@ -833,6 +843,7 @@ def transcript_page(
     before: Optional[int] = None,
     limit: int = DEFAULT_LIMIT,
     flavor: str = "copilot",
+    cache_size: int = DEFAULT_PAGE_CACHE_SIZE,
 ) -> Dict[str, Any]:
     """One page of typed entries from ``path``, newest-last.
 
@@ -842,14 +853,36 @@ def transcript_page(
     ``flavor`` picks the line grammar — see :data:`FLAVORS`. Raises
     ``OSError`` when the file can't be read — a distinct condition from "no
     transcript", which the caller establishes *before* calling.
+
+    A page is parsed once per ``(size, mtime)`` of the file: the chat's
+    opening read and every reopen of an unchanged session are answered from
+    the newest ``cache_size`` pages (``0`` turns the cache off).
     """
     build, line_key, tool_errors = _flavor(flavor)
+    p = Path(str(path))
+    st = p.stat()
+    # Taken before the read: the log only grows, so a write landing during
+    # the read leaves this page under a signature that never recurs.
+    key = (str(p), st.st_size, st.st_mtime_ns, before, limit, flavor)
+    if cache_size > 0:
+        with _PAGE_CACHE_LOCK:
+            hit = _PAGE_CACHE.get(key)
+            if hit is not None:
+                _PAGE_CACHE.move_to_end(key)
+        if hit is not None:
+            return copy.deepcopy(hit)
     with parse_memo():
-        page = _page(Path(str(path)), before, limit, build, line_key, fit_budget=True)
+        page = _page(p, before, limit, build, line_key, fit_budget=True)
     # A property of the harness, not of the page — but it travels with the
     # page because that is what the client has in hand when it decides
     # whether an unmarked tool call means "succeeded" or "nobody can tell".
     page["tool_errors"] = tool_errors
+    if cache_size > 0:
+        # A copy, so a caller's edits (the automatic-turn marks) never reach it.
+        with _PAGE_CACHE_LOCK:
+            _PAGE_CACHE[key] = copy.deepcopy(page)
+            while len(_PAGE_CACHE) > cache_size:
+                _PAGE_CACHE.popitem(last=False)
     return page
 
 

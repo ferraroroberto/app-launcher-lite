@@ -54,7 +54,13 @@ from typing import Any, Awaitable, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from app.webapp.hot_poll import BuildSteps, run_on_default_executor, session_poll
+from app.webapp.hot_poll import (
+    SESSION_READS_POOL,
+    BuildSteps,
+    run_on_default_executor,
+    session_poll,
+    slow_logger,
+)
 from app.webapp.routers import session_outbox_routes
 from app.webapp.routers._helpers import maybe_json
 from app.webapp.routers.board_spawn import SESSION_HOST_UNREACHABLE, read_live_sessions
@@ -105,6 +111,9 @@ router.include_router(session_outbox_routes.router)
 MAX_OFFSET = 2 ** 62
 
 _FLAVOR_BY_AGENT = {"copilot": "copilot"}
+# A source resolution this slow is logged with the machine's factors; a warm
+# one is a few stats.
+_SLOW_RESOLVE_S = 0.5
 
 
 def _unavailable(sid: str, reason: str) -> Dict[str, Any]:
@@ -132,17 +141,22 @@ async def _read_or_unavailable(
 
 def _resolve_path(
     session: Dict[str, Any], row: Optional[Dict[str, Any]], row_sid: Optional[str] = None,
-) -> Optional[Path]:
-    """The existing history file for this session, or None: the path the row
-    records, else the folder its Copilot session id names, else the Copilot
-    event log correlated from the filesystem by cwd + launch time (or by the
-    resume a reopened folder records). Each link is tried in turn because
-    any one can be missing: only agentStop records a path, a recorded file
-    can move, and a resumed folder predates the launch window."""
+    miss_ttl_s: Optional[float] = None,
+) -> Tuple[Optional[Path], str]:
+    """``(history file, which link named it)`` for this session: the path the
+    row records, else the folder its Copilot session id names, else the
+    Copilot event log correlated from the filesystem by cwd + launch time (or
+    by the resume a reopened folder records). Each link is tried in turn
+    because any one can be missing: only agentStop records a path, a
+    recorded file can move, and a resumed folder predates the launch window.
+    Only the last link lists the session-state folder."""
     raw = (row or {}).get("transcript_path")
     if raw and Path(str(raw)).is_file():
-        return Path(str(raw))
-    return copilot_events_for_id(row_sid) or find_copilot_transcript(session)
+        return Path(str(raw)), "recorded"
+    by_id = copilot_events_for_id(row_sid)
+    if by_id is not None:
+        return by_id, "id"
+    return find_copilot_transcript(session, miss_ttl_s=miss_ttl_s), "correlation"
 
 
 def _missing_link(row: Optional[Dict[str, Any]], row_sid: Optional[str]) -> str:
@@ -192,12 +206,20 @@ async def resolve_source(
     # The row's key is the Copilot session id, which names its log's folder.
     row_sid = board.state_sid_for_session(live, state["rows"], sid)
 
-    def resolve() -> Optional[Path]:
+    def resolve() -> Tuple[Optional[Path], str]:
         # The existence checks are stats too, so they stay off the loop.
-        found = _resolve_path(session, row, row_sid)
-        return found if found is not None and found.is_file() else None
+        found, via = _resolve_path(session, row, row_sid, cfg.transcript_resolve_miss_ttl_s)
+        return (found if found is not None and found.is_file() else None), via
 
-    path = await run("resolve_path", resolve)
+    resolve_started = time.monotonic()
+    path, via = await run("resolve_path", resolve)
+    took = time.monotonic() - resolve_started
+    if took >= _SLOW_RESOLVE_S:
+        # The machine factors ride along so a slow box reads apart from a regression.
+        slow_logger.info(
+            "⏱️ transcript %s source via %s took %.2fs (cpus=%s, session-reads pool=%s)",
+            sid[:8], via, took, os.cpu_count(), getattr(SESSION_READS_POOL, "_max_workers", "?"),
+        )
     if path is None:
         return "no_transcript", None, None, agent, _missing_link(row, row_sid), session
     return None, flavor, path, agent, "", session
@@ -293,7 +315,8 @@ async def _build_transcript(
     read_started = time.monotonic()
     page, refusal = await _read_or_unavailable(
         sid, agent, "transcript",
-        steps.run("transcript_page", transcript_page, path, before=before, limit=limit, flavor=flavor),
+        steps.run("transcript_page", transcript_page, path, before=before, limit=limit, flavor=flavor,
+                  cache_size=max(0, int(cfg.transcript_page_cache_size))),
     )
     if refusal is not None:
         return refusal

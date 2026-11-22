@@ -97,7 +97,7 @@ def test_a_slow_newest_page_is_never_answered_with_an_old_empty_one(
     overrides["session"].list_sessions.return_value = [_live(agent="copilot")]
     path = tmp_path / "events.jsonl"
     path.write_text(_event("session.start", {}), encoding="utf-8")
-    monkeypatch.setattr(router_mod, "find_copilot_transcript", lambda session: path)
+    monkeypatch.setattr(router_mod, "find_copilot_transcript", lambda session, **_k: path)
     monkeypatch.setattr(hot_poll, "DEADLINE_S", 0.05)
 
     first = client.get("/api/claude-code/sessions/s1/transcript").json()
