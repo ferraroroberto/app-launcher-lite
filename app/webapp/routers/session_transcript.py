@@ -55,7 +55,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from app.webapp.hot_poll import BuildSteps, run_on_default_executor, session_poll
 from app.webapp.routers import session_outbox_routes
 from app.webapp.routers._helpers import maybe_json
-from app.webapp.routers.board_spawn import SESSION_HOST_UNREACHABLE, _read_live_sessions
+from app.webapp.routers.board_spawn import SESSION_HOST_UNREACHABLE, read_live_sessions
 from src import board, instance_role
 from src.launching.vscode_workspace import is_vscode_installed, open_file
 from src.middleware import is_pc_itself
@@ -136,7 +136,7 @@ def _resolve_path(session: Dict[str, Any], row: Optional[Dict[str, Any]]) -> Opt
     return find_copilot_transcript(session)
 
 
-async def _resolve_source(
+async def resolve_source(
     sid: str, cfg: WebappConfig, steps: Optional[BuildSteps] = None
 ) -> Tuple[Optional[str], Optional[str], Optional[Path], str, str, Optional[Dict[str, Any]]]:
     """Session lookup + history-path resolution, shared by every route here.
@@ -156,7 +156,7 @@ async def _resolve_source(
     """
     run = steps.run if steps is not None else run_on_default_executor
     (live, host_error), state = await asyncio.gather(
-        run("read_live_sessions", _read_live_sessions, cfg.session_host_port),
+        run("read_live_sessions", read_live_sessions, cfg.session_host_port),
         run("read_sessions_state", board.read_sessions_state, Path(cfg.sessions_state_file)),
     )
     session = next(
@@ -253,7 +253,7 @@ async def _build_transcript(
     ob: Optional[int],
     steps: BuildSteps,
 ) -> Dict[str, Any]:
-    reason, flavor, path, agent, why, session = await _resolve_source(sid, cfg, steps)
+    reason, flavor, path, agent, why, session = await resolve_source(sid, cfg, steps)
     if reason is not None:
         # Neither of these is a source problem, and the live tick asks every
         # few seconds: the unreachable one is already latched by the list read.
@@ -377,7 +377,7 @@ async def session_transcript_entry(
     either way.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    reason, flavor, path, agent, _why, _session = await _resolve_source(sid, cfg)
+    reason, flavor, path, agent, _why, _session = await resolve_source(sid, cfg)
     if reason is not None:
         return _unavailable(sid, reason)
     entry, refusal = await _read_or_unavailable(
@@ -414,7 +414,7 @@ async def session_transcript_diff(
     inline diff it already has either way.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    reason, flavor, path, agent, _why, _session = await _resolve_source(sid, cfg)
+    reason, flavor, path, agent, _why, _session = await resolve_source(sid, cfg)
     if reason is not None:
         return _unavailable(sid, reason)
     found, refusal = await _read_or_unavailable(
@@ -452,7 +452,7 @@ async def session_background_tasks(
     On demand only; nothing polls it.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    reason, flavor, path, agent, _why, _session = await _resolve_source(sid, cfg)
+    reason, flavor, path, agent, _why, _session = await resolve_source(sid, cfg)
     if agent != "claude" and reason in (None, "no_transcript"):
         reason = "unsupported_agent"
     if reason is not None:
@@ -498,7 +498,7 @@ async def session_links_list(
     On demand only; nothing polls it.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    reason, flavor, path, agent, _why, _session = await _resolve_source(sid, cfg)
+    reason, flavor, path, agent, _why, _session = await resolve_source(sid, cfg)
     if reason is not None:
         logger.info("ℹ️ session links %s (%s) unavailable: %s", sid[:8], agent, reason)
         return _unavailable(sid, reason)
@@ -539,7 +539,7 @@ async def session_changed_files(
     this.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    reason, flavor, path, agent, _why, session = await _resolve_source(sid, cfg)
+    reason, flavor, path, agent, _why, session = await resolve_source(sid, cfg)
     if reason is not None:
         logger.info("ℹ️ changed files %s (%s) unavailable: %s", sid[:8], agent, reason)
         return _unavailable(sid, reason)
@@ -571,7 +571,7 @@ async def session_changed_file_diff(
     handed out; ``since`` the oldest ``next_cursor`` the panel loaded; a file the session never edited is ``file_not_found`` —
     nothing here reads the file system, only the transcript."""
     cfg: WebappConfig = request.app.state.webapp_config
-    reason, flavor, source, agent, _why, session = await _resolve_source(sid, cfg)
+    reason, flavor, source, agent, _why, session = await resolve_source(sid, cfg)
     if reason is not None:
         return _unavailable(sid, reason)
     project_dir = str((session or {}).get("project_dir") or "") or None
@@ -608,7 +608,7 @@ async def _changed_file_target(
     path when this session's edits touched it, else the unavailable body to
     answer with. The file-system jail of the two routes below."""
     cfg: WebappConfig = request.app.state.webapp_config
-    reason, flavor, source, agent, _why, session = await _resolve_source(sid, cfg)
+    reason, flavor, source, agent, _why, session = await resolve_source(sid, cfg)
     if reason is not None:
         logger.info("ℹ️ changed file %s %s (%s) unavailable: %s", what, sid[:8], agent, reason)
         return None, _unavailable(sid, reason), agent

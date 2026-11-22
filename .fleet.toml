@@ -996,11 +996,12 @@ derive = "usageState"
 # last commit of it whose work is in this tree (`synced_sha`); /upstream-sync and
 # /downstream-sync read exactly these keys and treat a table missing one as
 # invalid. The rebuild matched app-launcher's main at this commit; a port moves it.
+
 [upstream]
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "080990588e7b97e241ad1b3f5256b6a8e0544244"
+synced_sha = "c5ab25126694740a8d340763abd6b3e890ccc8aa"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
@@ -1045,3 +1046,15 @@ reason = "already present: a plan with only questions or lanes already reads as 
 [[upstream.skipped]]
 sha = "16c2da206c1950177b7e7285348aa3ea7f8b0b2a"
 reason = "not applicable: it adds a Codex context tier; Lite's presets already carry a Copilot context tier"
+
+[[upstream.skipped]]
+sha = "727fbcfb432d0071d2230d96b2aab7cac032a3e7"
+reason = "held: it edits src/diagnostics.py, which is on the session-host path list; the finished change sits on branch fix/433-listener-pids-per-process for the owner to merge with a session-host restart"
+
+[[upstream.skipped]]
+sha = "d5e2b176cccffe87ffe3aea584aa8928b0255be2"
+reason = "already present: these vendored files are already at that scaffold revision"
+
+[[upstream.skipped]]
+sha = "41658660c43ad035b09700940d32af75e6c5054e"
+reason = "not applicable: it is a Codex-only prompt probe and Lite runs Copilot"
