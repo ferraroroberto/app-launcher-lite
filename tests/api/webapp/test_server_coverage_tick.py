@@ -156,8 +156,8 @@ class TestLifespanGate:
             task = real_create_task(coro, *a, **k)
             # The jobs snapshot tick (#1324) and the header's load sampler
             # (#1522) start on every instance; they are pinned by the
-            # *_runs_on_every_instance tests below. The chief doorbell (#1645)
-            # and the relay idle close are canonical-only, pinned in their own
+            # *_runs_on_every_instance tests below. The chief doorbell (#1645),
+            # the chief reconcile and the relay idle close are canonical-only, pinned in their own
             # tests, as is the night auto-restart. All are named
             # tick_forever, so their module tells them apart.
             module = coro.cr_frame.f_globals.get("__name__") if coro.cr_frame else ""
@@ -169,8 +169,10 @@ class TestLifespanGate:
                 self.demand_ticks.append(task)
             elif coro.__qualname__ == "tick_forever" and module in (
                     "app.webapp.chief_doorbell", "app.webapp.relay_idle_close",
-                    "src.process_auto_restart", "src.chief.machine_critical"):
+                    "src.process_auto_restart", "src.chief.machine_critical",
+                    "src.chief.reconcile"):
                 self.doorbell_ticks.append(task)
+                self.canonical_modules.append(module)
             elif coro.__qualname__ == "fetch_tick_forever":
                 self.fetch_ticks.append(task)
             else:
@@ -181,6 +183,7 @@ class TestLifespanGate:
         self.load_ticks = []
         self.demand_ticks = []
         self.doorbell_ticks = []
+        self.canonical_modules = []
         self.fetch_ticks = []
         monkeypatch.setattr(server.asyncio, "create_task", _spy)
         # Never let the real tick body run — it would sleep two minutes and
@@ -269,6 +272,26 @@ class TestLifespanGate:
         assert len(created) == 1
         # Shutdown must not leave the tick running against a torn-down app.
         assert created[0].cancelled()
+
+    async def test_the_chief_reconcile_tick_is_canonical_only(self, tmp_path, monkeypatch):
+        """It writes the real chief inbox, so a worktree or gate webapp never runs it."""
+        monkeypatch.delenv(SESSION_HOST_PORT_ENV, raising=False)
+
+        def reconcile_ticks():
+            return [m for m in self.canonical_modules if m == "src.chief.reconcile"]
+
+        monkeypatch.setattr(
+            instance_role, "canonical_instance",
+            lambda project_root=None: (True, instance_role.REASON_CANONICAL),
+        )
+        await self._run_lifespan(_app(), monkeypatch)
+        assert len(reconcile_ticks()) == 1
+        monkeypatch.setattr(
+            instance_role, "canonical_instance",
+            lambda project_root=None: (False, instance_role.REASON_LINKED_WORKTREE),
+        )
+        await self._run_lifespan(_app(), monkeypatch)
+        assert reconcile_ticks() == []
 
     async def test_worktree_instance_never_starts_the_tick(
         self, tmp_path, monkeypatch, caplog

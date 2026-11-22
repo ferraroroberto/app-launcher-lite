@@ -17,8 +17,11 @@ whole interface.
 logs an *undetermined* line and writes nothing. A missing registry file is a
 determination (nothing was ever dispatched), and stays quiet.
 
-A worker whose own ``SessionEnd`` hook already fired yields a second event for
-the same sid and kind. That is harmless; the chief dedups by both.
+Each published event leaves a ``.<kind>-<sid>.stamp`` marker in the inbox
+whose mtime is when it was published. The worker's hook
+(``copilot/hooks/chief_inbox.py``), this reaper and the reconciler
+(``src/chief_reconcile.py``) all read and write the same names, so a session
+whose own ``SessionEnd`` hook already fired gets no second event here.
 """
 
 from __future__ import annotations
@@ -38,9 +41,12 @@ logger = logging.getLogger(__name__)
 
 EVENT_VERSION = 2
 KIND_SESSION_END = "session-end"
+KIND_TURN_END = "turn-end"
 SOURCE_REAPER = "reaper"
 #: v1-compatible event name, so ``wait-event`` still names the event.
 LEGACY_EVENT_NAME = "SessionEnd"
+#: v1-compatible event names by kind, as the worker's hook writes them.
+LEGACY_EVENT_NAMES = {KIND_SESSION_END: LEGACY_EVENT_NAME, KIND_TURN_END: "Stop"}
 
 
 #: ``src.webapp_config.WEBAPP_CONFIG_PATH_ENV`` and ``DEFAULT_CONFIG_PATH``. Not
@@ -81,7 +87,7 @@ def resolve_paths() -> Tuple[Path, Path]:
     )
 
 
-def _read_registry(registry: Path) -> Optional[Dict[str, Any]]:
+def read_registry(registry: Path) -> Optional[Dict[str, Any]]:
     """The chief-managed rows keyed by launcher sid.
 
     ``{}`` when the file is absent (a determination: nothing dispatched).
@@ -110,25 +116,59 @@ def _number(value: Any) -> Optional[int]:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def _event(sid: str, row: Dict[str, Any], agent: str, now: datetime) -> Dict[str, Any]:
+def stamp_path(inbox: Path, kind: str, sid: str) -> Path:
+    """The marker whose mtime is when ``kind`` was last published for ``sid``."""
+    return inbox / f".{kind}-{sid}.stamp"
+
+
+def stamp_mtime(stamp: Path) -> Optional[float]:
+    """The marker's mtime, ``None`` when there is none."""
+    try:
+        return stamp.stat().st_mtime
+    except OSError:
+        return None
+
+
+def touch_stamp(stamp: Path) -> None:
+    """Stamp a publish now. A failed write is logged: the event is out, only a repeat is possible."""
+    try:
+        runtime_files.save_text(stamp, "")
+    except OSError as exc:
+        logger.warning(f"⚠️ chief mailbox stamp {stamp.name} not written: {exc}")
+
+
+def make_event(
+    sid: str,
+    row: Dict[str, Any],
+    agent: str,
+    now: datetime,
+    *,
+    kind: str = KIND_SESSION_END,
+    excerpt: Optional[str] = None,
+    excerpt_unavailable: str = "session died without running a hook",
+    source: str = SOURCE_REAPER,
+) -> Dict[str, Any]:
+    """One v2 mailbox event for ``sid`` from its chief-managed registry ``row``."""
     dispatch_id = row.get("dispatch_id")
     repo = row.get("repo")
-    return {
+    event: Dict[str, Any] = {
         "v": EVENT_VERSION,
         "id": uuid.uuid4().hex,
-        "kind": KIND_SESSION_END,
-        "event": LEGACY_EVENT_NAME,
+        "kind": kind,
+        "event": LEGACY_EVENT_NAMES[kind],
         "launcher_sid": sid,
         "repo": repo if isinstance(repo, str) else None,
         "number": _number(row.get("number")),
         "agent": agent,
         "ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "dispatch_id": dispatch_id if isinstance(dispatch_id, str) and dispatch_id else None,
-        "excerpt": None,
-        "excerpt_source": None,
-        "excerpt_unavailable": "session died without running a hook",
-        "source": SOURCE_REAPER,
+        "excerpt": excerpt,
+        "excerpt_source": "transcript" if excerpt else None,
+        "source": source,
     }
+    if excerpt is None:
+        event["excerpt_unavailable"] = excerpt_unavailable
+    return event
 
 
 def publish(inbox: Path, event: Dict[str, Any], now_ms: Optional[int] = None) -> Path:
@@ -163,7 +203,8 @@ def publish_session_ends(
     inbox: Path,
     now: Optional[datetime] = None,
 ) -> List[Path]:
-    """Publish one ``session-end`` event per reaped session the registry names.
+    """Publish one ``session-end`` event per reaped session the registry names
+    and no earlier publish (the worker's own hook, a reconcile) has stamped.
 
     Per-event write failures are logged and skipped; the reaper keeps running.
     Returns the published paths.
@@ -171,7 +212,7 @@ def publish_session_ends(
     reaped = [s for s in sessions if getattr(s, "session_id", "")]
     if not reaped:
         return []
-    rows = _read_registry(registry)
+    rows = read_registry(registry)
     if rows is None:
         sids = ", ".join(s.session_id[:8] for s in reaped)
         logger.warning(
@@ -187,7 +228,11 @@ def publish_session_ends(
         row = rows.get(sid)
         if row is None:
             continue
-        event = _event(
+        stamp = stamp_path(inbox, KIND_SESSION_END, sid)
+        if stamp_mtime(stamp) is not None:
+            logger.info(f"ℹ️ chief session-end for {sid[:8]} already published; reaper skips it")
+            continue
+        event = make_event(
             sid, row if isinstance(row, dict) else {}, getattr(session, "agent", ""), moment
         )
         try:
@@ -195,6 +240,7 @@ def publish_session_ends(
         except OSError as exc:
             logger.warning(f"❌ chief session-end for {sid[:8]} not published: {exc}")
             continue
+        touch_stamp(stamp)
         logger.info(
             f"✅ chief session-end published for {sid[:8]} ({event['repo']}#{event['number']})"
         )

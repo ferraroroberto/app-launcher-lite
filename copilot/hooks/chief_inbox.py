@@ -42,7 +42,8 @@ EVENTS = {"agentStop": ("Stop", "turn-end"), "sessionEnd": ("SessionEnd", "sessi
 EXCERPT_CHARS = 1500
 # Enough of events.jsonl for the last reply without reading a long session whole.
 TRANSCRIPT_TAIL_BYTES = 256 * 1024
-# A second turn-end from one session inside this window is not written (contract rule).
+# A second turn-end from one session inside this window is not written (contract rule). Its stamp
+# keeps the first one's time, so the reconciler still publishes a real later turn end it suppressed.
 TURN_END_DEBOUNCE_SECONDS = 45
 
 NOT_LAUNCHER = "not-launcher"
@@ -100,19 +101,30 @@ def transcript_excerpt(path: str) -> Tuple[Optional[str], str]:
     return None, "no assistant reply in the transcript tail"
 
 
-def _debounced(directory: Path, sid: str, now: float) -> bool:
-    """True when this sid wrote a turn-end inside the window; otherwise stamps now."""
-    stamp = directory / f".turn-end-{sid}.stamp"
-    try:
-        if now - stamp.stat().st_mtime < TURN_END_DEBOUNCE_SECONDS:
-            return True
-    except OSError:
-        pass
+def stamp_path(directory: Path, kind: str, sid: str) -> Path:
+    """The marker whose mtime is when ``kind`` was last published for ``sid``. The reaper and the
+    reconciler (``src/chief_session_end.py``, ``src/chief_reconcile.py``) read and write the same
+    names, so one event is published once whichever of them sees it first."""
+    return directory / f".{kind}-{sid}.stamp"
+
+
+def _touch(stamp: Path) -> None:
     try:
         # runtime-write-exempt: the inbox under the user state dir (state_dir()), never this repo
         stamp.write_text("", encoding="utf-8")
     except OSError:
         pass
+
+
+def _debounced(directory: Path, sid: str, now: float) -> bool:
+    """True when this sid wrote a turn-end inside the window; otherwise stamps now."""
+    stamp = stamp_path(directory, "turn-end", sid)
+    try:
+        if now - stamp.stat().st_mtime < TURN_END_DEBOUNCE_SECONDS:
+            return True
+    except OSError:
+        pass
+    _touch(stamp)
     return False
 
 
@@ -176,6 +188,14 @@ def record(payload: Dict[str, Any], hook_event: str) -> Optional[Path]:
         logger.info("ℹ️ chief_inbox: turn-end for %s within %ss of the last -- skipped",
                     sid, TURN_END_DEBOUNCE_SECONDS)
         return None
+    if kind == "session-end":
+        stamp = stamp_path(directory, kind, sid)
+        if stamp.exists():
+            logger.info("ℹ️ chief_inbox: session-end for %s already published -- skipped", sid)
+            return None
+        published = _publish(directory, entry, now)
+        _touch(stamp)
+        return published
     return _publish(directory, entry, now)
 
 
