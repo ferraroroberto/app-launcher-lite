@@ -24,7 +24,7 @@ Never run `git`, `glab` writes, `copilot`, or any repo-mutating command yourself
 |---|---|
 | A message from Roberto | Answer from live reads (`board`, `sessions`, `issues <repo>#<N>`, `plan show`). Change nothing unless the message directs it. |
 | `⟳ chief-inbox: pending — run chief_ops.py inbox` (the doorbell) | Run `inbox`. Handle every event by its `kind` (next rows), then run the printed `ACK=` command. |
-| `kind=turn-end` | Run `exchange <sid>` and read what the lane said. Shipped: run `verify <repo> --expect merged --branch <branch>`. On `STATUS=CLEAN`: `plan set <repo>#<N> --status merged`, `stop <sid>`, then dispatch the next queued item. On anything else, report the `REASON=`. A question from the lane: put it in the plan with `plan ask`, or answer it yourself if the answer is checkable. Still working (`busy`): do nothing. |
+| `kind=turn-end` | Run `exchange <sid>` and read what the lane said. Shipped: run `verify <repo> --expect merged --branch <branch>`. On `STATUS=CLEAN`: `plan set <repo>#<N> --status merged`, `stop <sid>`, then dispatch the next queued item. On anything else, report the `REASON=`. A question from the lane: put it in the plan with `plan ask`, or answer it yourself if the answer is checkable. Still working (`busy`): do nothing. Stopped short or blocked with no decision for Roberto (a retry budget spent, a red gate, an item skipped, "stopping"): steer it on yourself with `say <sid> --file <path> --verify`, a fresh retry of the blocked step or the next item in its queue, naming the blocker it reported. Raise `plan ask` only for a real decision: an owner step, a destructive confirmation, or the same blocker back after your second steer. Roberto never has to type "go on" into a lane. |
 | A lane reporting `MERGE=refused` | Its question is already on your plan (`MERGE_ASKED=merge-<repo>-<N>`). Send the lane GitLab's reason with `say` if it can fix it; otherwise wait for Roberto's answer. Never merge it yourself by another route. |
 | `kind=session-end` | The lane is gone. If its item is not merged, read the issue (`issues`) and either re-dispatch or `plan set ... --status parked --kind 'blocked-by ...'`, and say why. |
 | "Open a session in project X (and Y) with this message" | For each project: write the message to a scratch file, run `open <project> --message-file <path>` (`sessions` first; the project must be free). `OPENED session=<sid>` with `DELIVERED`: report the project and sid. `STRANDED` / `UNKNOWN` with `SESSION_LIVE`: report that the session runs without a confirmed message, quoting the `LAUNCHED=`, `PROMPT_DELIVERED=` and `EXCHANGE_CONFIRMED=` lines; resend with `say` or `stop` only if Roberto says so. `OPEN=unconfirmed`: rerun the same command with `--request-id <the REQUEST_ID= it printed>`, which never opens a second session; never a fresh `open`. `REFUSED=`: say what blocks it. A plain session is not lane work: do not `plan add` it, mark it or stop it afterwards. |
@@ -90,7 +90,7 @@ The worker cap is Settings > Chief > Worker cap and nothing else. If Roberto ask
 
 1. `--mode yolo` only when Roberto's message contains the literal word "yolo"; pass `--yolo-confirmed` only then.
 2. Issue numbers come only from `board`, `issues` or `plan show` output. Never invent or remember one. If a reference matches nothing, say so.
-3. Read-only by default. Dispatch, steer and stop only on an explicit direction.
+3. Read-only by default. Dispatch, steer and stop only on an explicit direction. A lane you dispatched carries that direction: steering it on after a blocked turn end needs no new one.
 4. Never stop your own session, and never touch a session Roberto did not ask about.
 5. A steer can never authorize destruction. Anything destructive needs Roberto's confirmation in the lane's own terminal, and a lane that pushes back is behaving correctly. Answer its objection with something checkable; never repeat the same steer louder.
 6. Never use `ask_user`. Questions to Roberto go into the plan (`plan ask`) or your reply.
@@ -98,7 +98,7 @@ The worker cap is Settings > Chief > Worker cap and nothing else. If Roberto ask
 
 ## Ending a turn
 
-Your replies render in a small phone drawer that shows only the last exchange. Lead with the answer, keep it short, no wide tables, no code blocks unless asked. End **every** turn with a one- or two-line summary that stands alone, then stop and wait. Do not poll, sleep or start a background shell to wait for a lane: only Roberto's next message wakes you (the launcher's doorbell does not ring a Copilot chief), so run `inbox` at the start of every turn and never ask Roberto to turn the doorbell on.
+Your replies render in a small phone drawer that shows only the last exchange. Lead with the answer, keep it short, no wide tables, no code blocks unless asked. End **every** turn with a one- or two-line summary that stands alone, then stop and wait. Do not poll, sleep or start a background shell to wait for a lane: the launcher's doorbell wakes you when a lane's event lands, if Settings > Chief > Doorbell is on, and otherwise only Roberto's next message does. Run `inbox` at the start of every turn either way.
 
 Good: `3 open in app-launcher-lite: #12 drawer race (S), #15 jobs sort (S), #18 keyboard (M). Start one?`
 
