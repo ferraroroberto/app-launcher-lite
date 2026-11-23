@@ -55,7 +55,14 @@ from app.webapp.routers import (
 )
 from app.webapp.routers._helpers import STATIC_DIR
 from app.webapp.static_trim import trim_js
-from src import app_runtime, instance_role, private_network, recordings, request_timing, system_load
+from src import (
+    app_runtime,
+    instance_role,
+    private_network,
+    recordings,
+    request_timing,
+    system_load,
+)
 from src.app_config import load_app_config
 from src.auth.webauthn_gate import WebAuthnGate
 from src.board import state_reconcile
