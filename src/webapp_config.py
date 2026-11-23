@@ -170,6 +170,7 @@ class WebappConfig:
     # Self-hosted GitLab instance for those reads (glab's GITLAB_HOST). Empty
     # means glab's own default context.
     gitlab_host: str = ""
+    prevent_lock: bool = False  # Settings > Prevent lock (src/desktop/prevent_lock.py): pointer nudge + keep-awake, off
     # Speech to text (Settings): audio from every record button goes to
     # ``<speech_base_url>/audio/transcriptions`` in the OpenAI shape, so any
     # such server works, local or remote. ``speech_model`` and

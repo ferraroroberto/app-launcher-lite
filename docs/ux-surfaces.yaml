@@ -1483,7 +1483,7 @@ surfaces:
     holds:
       - Appearance - a Text size choice of Small, Default and Large; a Full screen on Edge switch with a hint line, shown only in Edge; an Install as app row that says whether this browser can install Lite and why not
       - Sessions - the Open in a new window switch, Window browser (Chrome, Edge, Default) and the Open in Chat switch, with a help line that explains all three
-      - This PC - the switches Start at log on and Awake with lid closed, each with a help line
+      - This PC - the switches Start at log on, Awake with lid closed and Prevent lock, each with a help line
     does:
       - a switch saves when tapped and shows ON or OFF
       - Full screen on Edge hides the address bar and toolbar, is remembered on this device, and comes back on the first tap after a reload; the switch is the one way to turn it off

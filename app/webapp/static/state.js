@@ -449,6 +449,7 @@ export const els = {
   lidKeepAwakeToggle: document.getElementById('lidKeepAwakeToggle'),
   lidKeepAwakeHelp: document.getElementById('lidKeepAwakeHelp'),
   lidKeepAwakeStatus: document.getElementById('lidKeepAwakeStatus'),
+  preventLockToggle: document.getElementById('preventLockToggle'),
   diagnosticsWindow: document.getElementById('diagnosticsWindow'),
   diagnosticsSave: document.getElementById('diagnosticsSave'),
   diagnosticsResult: document.getElementById('diagnosticsResult'),

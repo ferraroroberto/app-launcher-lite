@@ -409,6 +409,12 @@ interval_s = 3
 why        = "wakes the idle fleet chief when its mailbox fills, which must happen while nobody watches; off by default, and an empty mailbox stops each tick at two directory listings"
 
 [[request_budget.loops]]
+path       = "src/desktop/prevent_lock.py"
+function   = "tick_forever"
+interval_s = 15
+why        = "keeps the PC from locking while the Prevent lock switch is on, which must happen while nobody views the app; off by default, and while off each beat only reads the switch"
+
+[[request_budget.loops]]
 path       = "app/webapp/demand_cache.py"
 function   = "DemandCache.tick_forever"
 interval_s = 5

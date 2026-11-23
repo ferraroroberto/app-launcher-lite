@@ -27,7 +27,7 @@ from src.app_config import AppConfig
 from src.auth import tls_certificate
 from src.chief import skills_preflight
 from src.chief.launch_settings import chief_model_problem
-from src.desktop import lid_keep_awake
+from src.desktop import lid_keep_awake, prevent_lock
 from src.launching import copilot_remote
 from src.launching.flags import build_copilot_flags, missing_default_copilot_models
 from src.launching.presets import (
@@ -105,6 +105,8 @@ async def get_config(request: Request) -> Dict[str, Any]:
         "open_sessions_in_chat": cfg.open_sessions_in_chat,
         # Settings > Sessions > Window browser: where the PC window opens.
         "mirror_browser": cfg.mirror_browser,
+        # Settings > This PC > Prevent lock: the stored switch (off by default).
+        "prevent_lock": cfg.prevent_lock,
         # Settings › Terminal: trust the private network for the terminal-grade
         # routes, and (a second switch) for the screen view too.
         "terminal_allow_private_lan": cfg.terminal_allow_private_lan,
@@ -251,6 +253,7 @@ _SWITCH_KEYS = (
     "copilot_autopilot",
     "copilot_remote_session",
     "speech_enabled",
+    "prevent_lock",
     *PRIVATE_NETWORK_KEYS,
 )
 
@@ -266,6 +269,7 @@ _PATCH_KEYS = frozenset({
     "open_sessions_in_window",
     "open_sessions_in_chat",
     "mirror_browser",
+    "prevent_lock",
     *PRIVATE_NETWORK_KEYS,
     "apps_scan_root",
     "team_os_dir",
@@ -400,6 +404,9 @@ async def patch_config(request: Request) -> Any:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     request.app.state.webapp_config = new_cfg
+    if "prevent_lock" in patch:
+        # The loop applies the switch at once, so off releases the keep-awake request now.
+        prevent_lock.poke()
     if any(key in patch for key in performance.KEYS):
         perf_apply.apply(new_cfg)
     return {"ok": True, "copilot": copilot_payload(new_cfg)}

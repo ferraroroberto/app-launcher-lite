@@ -75,6 +75,9 @@ export async function fetchConfig(shouldApply) {
   if (els.openSessionsInChatToggle) {
     setSwitch(els.openSessionsInChatToggle, body.open_sessions_in_chat !== false);
   }
+  if (els.preventLockToggle) {
+    setSwitch(els.preventLockToggle, body.prevent_lock === true);
+  }
   renderMirrorBrowser(body);
   renderNetworkAccess(body);
   renderPerformance(body);
@@ -282,6 +285,7 @@ function wireAddDefaultModels() {
 export function wireClaudeOptions() {
   wireConfigSwitch(els.openSessionsInWindowToggle, 'open_sessions_in_window');
   wireConfigSwitch(els.openSessionsInChatToggle, 'open_sessions_in_chat');
+  wireConfigSwitch(els.preventLockToggle, 'prevent_lock', { label: 'Prevent lock' });
   wireConfigSwitch(els.copilotAutopilot, 'copilot_autopilot', { label: 'Autopilot' });
   wireConfigSwitch(els.copilotSkipPerms, 'copilot_skip_permissions', { label: 'Skip permission prompts' });
   wireConfigSwitch(els.copilotRemote, 'copilot_remote_session', { label: 'Remote session' });
