@@ -110,8 +110,8 @@ class _BarStubs:
 
 def _open_by_row(page: Page, base_url: str, sid: str) -> None:
     # The session-list row tap is the phone path: the ?terminal= deep link
-    # would classify this loopback open as a PC mirror window (#241) and hide
-    # parts of the bar, undercounting the row's real phone width.
+    # would classify this loopback open as a PC mirror window (#241), not the
+    # phone overlay this test measures.
     page.goto(base_url, wait_until="domcontentloaded")
     page.locator(
         f'#sessionsList li.session-item[data-session-id="{sid}"] .session-open'
@@ -124,8 +124,8 @@ def _check_mode(page: Page, mode: str, geometry: tuple) -> None:
     seg = "#sessionModeChat" if mode == "chat" else "#sessionModeTerminal"
     page.locator(seg).click()
     expect(page.locator("#terminalOverlay")).to_have_attribute("data-mode", mode)
-    # The loopback harness can hide a mount (PC mirror) or the mic (no voice
-    # backend); un-hide both so the full 2x2 grid is what gets measured.
+    # The loopback harness can hide a mount or the mic (no voice backend);
+    # un-hide both so the full 2x2 grid is what gets measured.
     page.evaluate(
         """(mount) => {
           const host = document.getElementById(mount);

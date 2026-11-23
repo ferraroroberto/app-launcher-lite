@@ -228,3 +228,22 @@ async (message) => {
 def set_terminal_status(page: Page, message: str | None) -> None:
     """Show ``message`` (None clears it) through the page's own ``setTerminalStatus``, with its leading icon."""
     page.evaluate(_SET_STATUS_JS, message)
+
+
+# Init script: records every resize frame the page sends into
+# window.__resizeFrames, before any app script runs (add_init_script).
+RECORD_RESIZE_FRAMES = r"""
+(() => {
+  window.__resizeFrames = [];
+  const send = WebSocket.prototype.send;
+  WebSocket.prototype.send = function (data) {
+    try {
+      const msg = JSON.parse(data);
+      if (msg && msg.type === 'resize') {
+        window.__resizeFrames.push({ rows: msg.rows, cols: msg.cols });
+      }
+    } catch (_) { /* not a JSON control frame */ }
+    return send.apply(this, arguments);
+  };
+})();
+"""

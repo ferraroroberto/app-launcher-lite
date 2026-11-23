@@ -380,11 +380,11 @@ function showUnreachableTerminal(session) {
 
 // Per-open chrome around the pane that doesn't depend on a terminal object.
 function syncPaneChrome(session, isMirror) {
-  // The composer (always docked) is phone-only — the
-  // PC mirror already has a real keyboard with full predictive support.
-  // Reset visible on every (non-mirror) open so a prior mirror open can't
-  // leave it stuck hidden.
-  els.terminalComposeBar.hidden = isMirror;
+  // The composer is always docked, on the phone and in the PC mirror window
+  // alike, so the Terminal view offers the same message box as the Chat view.
+  // The mirror's xterm keeps the phone's grid whatever room the composer
+  // leaves it, so docking it never resizes the PTY.
+  els.terminalComposeBar.hidden = false;
 
   // 🎤 dictation needs Settings > Speech to text on *and* MediaRecorder
   // support; 📷 screenshot OCR needs photo-ocr configured. Re-synced per open
