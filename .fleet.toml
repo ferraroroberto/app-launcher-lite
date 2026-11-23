@@ -1233,7 +1233,7 @@ derive = "usageState"
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "fa1e9f0d70183b843370dcc4d8de5ce6cb6ac316"
+synced_sha = "ba990c45259017fa4bdd350a798b5bbd6fae59e9"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
@@ -1390,3 +1390,11 @@ reason = "already present: Board and Jobs views load on first open"
 [[upstream.skipped]]
 sha = "99d224639b4e223e4f2f485a3c30d677d6c7819f"
 reason = "already present"
+
+[[upstream.skipped]]
+sha = "870ed43e7ac2256a7222432b9e94a3321e1fee41"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "13a44b341336aeecb217569f72860b23410598a9"
+reason = "Life OS is not carried in this repo"
