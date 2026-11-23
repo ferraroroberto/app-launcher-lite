@@ -10,7 +10,7 @@
  */
 
 import { els, state } from './state.js';
-import { apiFailToast, jsonApi, toast, logPollFailure } from './api.js';
+import { apiFailToast, copyText, jsonApi, toast, logPollFailure } from './api.js';
 import { renderHomeHead } from './home-head.js';
 import { fmtAgo } from './sessions.js';
 import { applyLaunchSizePayload } from './shared/launch-size.js';
@@ -23,12 +23,13 @@ import { listFilter } from './list-filter.js';
 import { nameLabel } from './shared/format.js';
 import { revealInCard } from './dom-utils.js';
 import {
-  copyText, copyUrl, fetchListeners, renderOtherPortsRow, wireListeners,
+  copyUrl, fetchListeners, renderOtherPortsRow, wireListeners,
 } from './apps/apps-listeners.js';
 import { createRowMenu } from './_vendored/row-menu/row-menu.js';
 import { avatar, chip } from './glance.js';
 import { confirmDialog } from './confirm-dialog.js';
 import { behindGate } from './apps/git-sync.js';
+import { appsReadAt, readApps } from './apps/apps-reads.js';
 import { failedFetchState, setAsyncState } from './async-state.js';
 import { WIDE_LAYOUT_QUERY, isWideLayout } from './layout.js';
 import { icon } from './_vendored/icons/icons.js';
@@ -100,8 +101,8 @@ function renderBatLists() {
 
   // The true-empty blocks only after a good read: before one, an empty list
   // is appsState's loading or error, not an empty registry.
-  els.registeredTraysEmpty.hidden = trayApps.length !== 0 || !appsReadAt;
-  els.appsEmpty.hidden = otherApps.length !== 0 || !appsReadAt;
+  els.registeredTraysEmpty.hidden = trayApps.length !== 0 || !appsReadAt();
+  els.appsEmpty.hidden = otherApps.length !== 0 || !appsReadAt();
   // The empty state offers the scan itself; the row would say it twice.
   els.appsScanRow.hidden = otherApps.length === 0;
   const autostart = trayApps.filter(function (a) { return a.autostart; }).length;
@@ -109,9 +110,9 @@ function renderBatLists() {
   els.traysSummaryMeta.textContent = trayApps.length + ' · ' + autostart + ' autostart';
   // The fold shows while a folder is configured, and while rows from an
   // earlier one remain so they can still be launched and removed.
-  const miniShown = miniApps.length !== 0 || (state.miniAppsEnabled && !!appsReadAt);
+  const miniShown = miniApps.length !== 0 || (state.miniAppsEnabled && !!appsReadAt());
   els.miniAppsCard.hidden = !miniShown;
-  els.miniAppsEmpty.hidden = miniApps.length !== 0 || !appsReadAt;
+  els.miniAppsEmpty.hidden = miniApps.length !== 0 || !appsReadAt();
   const miniAutostart = miniApps.filter(function (a) { return a.autostart; }).length;
   els.miniAppsSummaryMeta.hidden = miniApps.length === 0;
   els.miniAppsSummaryMeta.textContent = miniApps.length + ' · ' + miniAutostart + ' autostart';
@@ -397,55 +398,34 @@ async function removeApp(a) {
   }
 }
 
-// When the registry last read well: a failure before it is the
-// Apps card's error with Retry, one after it a stale line over the last list.
-let appsReadAt = 0;
-
+// A failure before the registry's first good read is the Apps card's error
+// with Retry, one after it a stale line over the last list.
 function retryApps() {
   fetchApps().catch(function () {});
 }
 
-export async function fetchApps() {
-  if (!appsReadAt) {
-    setAsyncState(els.appsState, 'loading', { message: 'Reading apps…' });
-    setAsyncState(els.traysState, 'loading', { message: 'Reading trays…' });
-  }
-  let body;
-  try {
-    body = await jsonApi('/api/apps');
-  } catch (exc) {
-    // The Trays card reads the same registry, so it fails with it.
-    failedFetchState(els.appsState, !!appsReadAt, appsReadAt, 'the apps', retryApps);
-    failedFetchState(els.traysState, !!appsReadAt, appsReadAt, 'the trays', retryApps);
-    throw exc;
-  }
-  appsReadAt = Date.now();
+// The Apps and Trays cards once a read has landed: also run when this code
+// loads after the boot's read did (a boot that reopened on the Board).
+export function showAppsRead() {
   setAsyncState(els.appsState, 'ready');
   setAsyncState(els.traysState, 'ready');
-  state.apps = body.apps || [];
-  state.miniAppsEnabled = !!body.mini_apps_enabled;
   renderApps();
 }
 
-// Coding-agent detection — which CLIs are installed. Drives the
-// enabled/disabled state of the Coding tab's per-tile launch buttons.
-// Best-effort: on failure state.agents keeps its conservative fallback.
-export async function fetchAgents() {
-  try {
-    const body = await jsonApi('/api/agents');
-    if (Array.isArray(body.agents) && body.agents.length) {
-      state.agents = body.agents;
-    }
-    // Rides on the same payload — the VS Code button isn't an agent,
-    // but it's detected the same way. Guarded on the type so an older server
-    // that omits the field leaves the conservative fallback in place rather
-    // than coercing `undefined` to a hard `false`.
-    if (typeof body.vscode_available === 'boolean') {
-      state.vscodeAvailable = body.vscode_available;
-    }
-  } catch (exc) {
-    logPollFailure('agents fetch failed', exc);
+export async function fetchApps() {
+  if (!appsReadAt()) {
+    setAsyncState(els.appsState, 'loading', { message: 'Reading apps…' });
+    setAsyncState(els.traysState, 'loading', { message: 'Reading trays…' });
   }
+  try {
+    await readApps();
+  } catch (exc) {
+    // The Trays card reads the same registry, so it fails with it.
+    failedFetchState(els.appsState, !!appsReadAt(), appsReadAt(), 'the apps', retryApps);
+    failedFetchState(els.traysState, !!appsReadAt(), appsReadAt(), 'the trays', retryApps);
+    throw exc;
+  }
+  showAppsRead();
 }
 
 // -------------------------------------------------- the Running card
@@ -669,4 +649,5 @@ export function wireApps() {
     const btn = document.getElementById(id);
     if (btn) btn.addEventListener('click', scanApps);
   });
+  if (appsReadAt()) showAppsRead();
 }

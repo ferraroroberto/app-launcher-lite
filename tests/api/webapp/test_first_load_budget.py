@@ -11,9 +11,11 @@ renderer, the Apps dialogs and the shared composer) load
 on that tap (lazy-views.js), and what only runs once boot has settled (the
 new-build prompt, the build readout and restart sheet, the copy button of
 rendered Markdown, the terminal scripts' loader) loads then; a static import
-that pulls one back into the first load fails here too. A boot that reopens
-on the Board preloads only what its lanes draw: the card drawer, the answer
-sheets, the plan note sheet and the journal card load after.
+that pulls one back into the first load fails here too. The first load
+measured here is a Code-first boot: main.js's graph plus the Code and Apps
+tabs' code it evaluates before its wiring. A boot that reopens on the Board
+preloads only what its lanes draw: the Code and Apps tabs' code, the card
+drawer, the answer sheets, the plan note sheet and the journal card load after.
 """
 
 from __future__ import annotations
@@ -25,8 +27,8 @@ from typing import Dict, List
 MAX_RESPONSE_BYTES = 100 * 1024
 # The page and its one stylesheet block the first paint (55 KB together, gzipped).
 RENDER_BLOCKING_BYTES = 70 * 1024
-# Page, stylesheet and every module main.js reaches statically (135 KB now).
-FIRST_LOAD_BYTES = 145 * 1024
+# Page, stylesheet, main.js's static graph and the Code tab's code (136 KB now).
+FIRST_LOAD_BYTES = 140 * 1024
 # Loaded on first open, never by the first load.
 LAZY_VIEWS = (
     "/static/terminal.js",
@@ -70,6 +72,15 @@ LAZY_VIEWS = (
 )
 # Never preloaded by a Board-first boot: none of it draws the lanes.
 BOARD_LATER = (
+    "/static/apps.js",
+    "/static/apps/apps-coding.js",
+    "/static/apps/apps-listeners.js",
+    "/static/apps/git-sync.js",
+    "/static/launch-toolbar.js",
+    "/static/list-filter.js",
+    "/static/shared/launch-presets.js",
+    "/static/lightbox.js",
+    "/static/_vendored/sign-in/sign-in.js",
     "/static/board/drawer.js",
     "/static/markdown.js",
     "/static/board/board-answers.js",
@@ -82,6 +93,8 @@ BOARD_LATER = (
 
 _STATIC_IMPORT_RE = re.compile(r"""from\s*['"](\.\.?/[^'"?]+\.js)(\?v=[^'"]*)?['"]""")
 _ENTRY_RE = re.compile(r'<script type="module" src="(/static/main\.js[^"]*)"')
+# The Code tab's code: the first link of the page's apps preload.
+_APPS_ENTRY_RE = re.compile(r'<template id="appsPreload">\s*<link rel="modulepreload" href="([^"]+)">')
 _STYLESHEET_RE = re.compile(r'<link rel="stylesheet" href="(/static/[^"]+)"')
 
 
@@ -97,7 +110,8 @@ def _first_load(client) -> Dict[str, int]:
     sizes = {"/": page.num_bytes_downloaded}
     for url in _STYLESHEET_RE.findall(page.text):
         sizes[url] = _wire_bytes(client, url)
-    queue: List[str] = _ENTRY_RE.findall(page.text)
+    queue: List[str] = _ENTRY_RE.findall(page.text) + _APPS_ENTRY_RE.findall(page.text)
+    assert len(queue) == 2, "the page lost its module entry or its Code tab preload"
     while queue:
         url = queue.pop()
         if url in sizes:
@@ -114,7 +128,7 @@ def _first_load(client) -> Dict[str, int]:
 def test_no_first_load_response_passes_100_kb(webapp_client):
     client, _, _ = webapp_client
     sizes = _first_load(client)
-    assert len(sizes) > 50, "the module graph walk found too little to be the real page"
+    assert len(sizes) > 40, "the module graph walk found too little to be the real page"
     over = {url: size for url, size in sizes.items() if size > MAX_RESPONSE_BYTES}
     assert not over, over
 
@@ -138,6 +152,7 @@ def test_the_views_a_tap_opens_stay_out_of_the_first_load(webapp_client):
 _TEMPLATE_RE = r'<template id="{}">(.*?)</template>'
 _PRELOAD_RE = re.compile(r'<link rel="modulepreload" href="([^"]+)">')
 _BOARD_IMPORT_RE = re.compile(r"""import\(\s*['"]\./board\.js(\?v=[^'"]*)?['"]""")
+_APPS_IMPORT_RE = re.compile(r"""import\(\s*['"]\./apps\.js(\?v=[^'"]*)?['"]""")
 
 
 def _preloads(page: str, template_id: str) -> List[str]:
@@ -152,9 +167,11 @@ def test_the_page_preloads_exactly_the_first_load_modules(webapp_client):
     client, _, _ = webapp_client
     page = client.get("/").text
     preloads = _preloads(page, "modulePreload")
+    apps = _preloads(page, "appsPreload")
     modules = [url for url in _first_load(client) if ".js" in url]
     assert len(preloads) == len(set(preloads))
-    assert sorted(preloads) == sorted(modules)
+    assert not set(preloads).intersection(apps)
+    assert sorted(preloads + apps) == sorted(modules)
 
 
 def test_a_board_first_boot_preloads_the_instance_lazy_views_imports(webapp_client):
@@ -175,5 +192,18 @@ def test_a_board_first_boot_preloads_the_instance_lazy_views_imports(webapp_clie
 def test_a_board_first_boot_preloads_only_what_the_lanes_draw(webapp_client):
     client, _, _ = webapp_client
     page = client.get("/").text
-    board = {url.split("?")[0] for url in _preloads(page, "boardPreload")}
+    preloaded = _preloads(page, "modulePreload") + _preloads(page, "boardPreload")
+    board = {url.split("?")[0] for url in preloaded}
     assert not board.intersection(BOARD_LATER), sorted(board.intersection(BOARD_LATER))
+
+
+def test_any_other_boot_preloads_the_code_tab_instance_lazy_views_imports(webapp_client):
+    """main.js and lazy-views.js import apps.js by the same URL the page
+    preloads, or the Code tab would load twice as two module instances."""
+    client, _, _ = webapp_client
+    page = client.get("/").text
+    apps = _preloads(page, "appsPreload")
+    for module in ("/static/main.js", "/static/lazy-views.js"):
+        stamps = _APPS_IMPORT_RE.findall(client.get(module).text)
+        assert stamps, f"{module} no longer imports the Code tab's code"
+        assert apps[0] == "/static/apps.js" + stamps[0]

@@ -15,7 +15,7 @@
  */
 
 import { els, state } from '../state.js';
-import { apiFailToast, jsonApi, toast, logPollFailure } from '../api.js';
+import { apiFailToast, copyText, jsonApi, toast, logPollFailure } from '../api.js';
 import { ACTION_ROW_MENU, actionRow } from '../action-rows.js';
 import { createRowMenu } from '../_vendored/row-menu/row-menu.js';
 import { confirmDialog } from '../confirm-dialog.js';
@@ -26,63 +26,6 @@ const listenerMenu = createRowMenu({ className: 'project-menu', placement: ACTIO
 // Parent rows with dependent children keep them collapsed behind a tap
 // Module-level so the expand state survives the poll's re-renders.
 const expandedListenerPorts = new Set();
-
-// The one copy every Apps-tab menu uses: `what` names the thing copied
-// ("Link", "Path") in the toast; `opts.host` is the toast host of a sheet that
-// carries its own (a modal dialog hides the page's toast).
-export async function copyText(text, what, opts) {
-  try {
-    await writeClipboard(text, opts);
-    toast(what + ' copied', 'good', opts);
-  } catch (exc) {
-    logPollFailure('clipboard write failed', exc);
-    toast('Could not copy the ' + what.replace(/^(?=[A-Z][a-z])./, (c) => c.toLowerCase())
-      + '. Copy it by hand instead', 'error', opts);
-  }
-}
-
-// `writeText` needs a secure context and a focused document, and rejects
-// (or is missing) where the page is served over plain http. The fallback is a
-// selected hidden textarea copied with `execCommand`, still inside the tap's
-// user activation. It lives inside the toast host's modal <dialog> when there
-// is one: the rest of the page is inert while a modal is open, so a textarea
-// outside it can never take focus.
-async function writeClipboard(text, opts) {
-  let failure = null;
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return;
-    } catch (exc) {
-      failure = exc;
-    }
-  }
-  if (!copyWithSelection(text, opts)) {
-    throw failure || new Error('the browser blocked the clipboard');
-  }
-}
-
-function copyWithSelection(text, opts) {
-  const root = (opts && opts.host && opts.host.closest('dialog')) || document.body;
-  const area = document.createElement('textarea');
-  area.value = text;
-  area.setAttribute('readonly', '');
-  area.setAttribute('aria-hidden', 'true');
-  area.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
-  const previous = document.activeElement;
-  root.appendChild(area);
-  try {
-    area.focus();
-    area.select();
-    area.setSelectionRange(0, text.length);
-    return document.execCommand('copy');
-  } catch (exc) {
-    return false;
-  } finally {
-    area.remove();
-    if (previous && previous.focus) previous.focus();
-  }
-}
 
 // The one Copy URL every Apps-tab menu uses (Running, Apps, Other ports).
 export function copyUrl(url) {

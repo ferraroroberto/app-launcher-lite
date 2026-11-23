@@ -9,7 +9,6 @@
 
 import { api, apiFailToast, authHeaders } from '../api.js';
 import { ensureTerminalToken } from '../webauthn.js';
-import { openTextPreview } from '../lightbox.js';
 import { chip } from '../glance.js';
 
 // The row's meta-line chips: "no proof" when a UI PR shipped without a report,
@@ -33,7 +32,9 @@ async function openProof(card, btn) {
       throw new Error(res.status === 404 ? 'no proof report is stored for that MR' : 'status ' + res.status);
     }
     // Named as the store names it; the viewer's Download saves it under that name.
-    openTextPreview(card.repo + '-' + card.proof_pr + '.html', await res.text(), 'html', btn);
+    // The viewer's code loads with the first report opened, not with the lanes.
+    const [text, viewer] = await Promise.all([res.text(), import('../lightbox.js')]);
+    viewer.openTextPreview(card.repo + '-' + card.proof_pr + '.html', text, 'html', btn);
   } catch (exc) {
     apiFailToast('Could not open the proof report', exc);
   } finally {

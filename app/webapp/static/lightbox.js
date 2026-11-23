@@ -9,6 +9,9 @@
  * stays application/octet-stream, so no same-origin text/html URL exists.
  * The Changes panel's Preview feeds the same viewer a file's text: HTML in
  * that frame, Markdown as the sanitising renderer's output.
+ *
+ * Nothing in the first load imports it: the views that open either one do,
+ * and it wires both when it is first evaluated, before any can open.
  */
 
 import { els } from './state.js';
@@ -27,7 +30,7 @@ function closeLightbox() {
   els.imageLightboxImage.removeAttribute('src');
 }
 
-export function wireImageLightbox() {
+function wireImageLightbox() {
   if (els.imageLightbox) {
     els.imageLightbox.addEventListener('click', closeLightbox);
   }
@@ -211,7 +214,7 @@ function onViewerClosed() {
   viewerReturn = null;
 }
 
-export function wireHtmlViewer() {
+function wireHtmlViewer() {
   const dlg = els.htmlViewer;
   if (!dlg) return;
   dlg.addEventListener('close', onViewerClosed);
@@ -227,3 +230,6 @@ export function wireHtmlViewer() {
     if (dlg.open) dlg.close();
   });
 }
+
+wireImageLightbox();
+wireHtmlViewer();

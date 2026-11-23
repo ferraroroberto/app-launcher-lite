@@ -12,11 +12,8 @@ import { wireUsageLog } from './usage.js';
 import { fetchConfig, wireClaudeOptions } from './settings/claude-options.js';
 import { fetchSessions, wireSessions } from './sessions.js';
 import { fetchSystemLoad, wireSystemLoad } from './system-load.js';
-import { fetchAgents, fetchApps, fetchRunningApps, wireApps } from './apps.js';
-import { refreshGitStatus } from './apps/apps-coding.js';
-import { fetchListeners } from './apps/apps-listeners.js';
-import { wireHtmlViewer, wireImageLightbox } from './lightbox.js';
-import { adoptBoard, fetchBoard, fetchJobs, fetchSkills, markMirrorWindowEarly, openBoardCard, openScreenWindow, openTerminal, prefetchViews, renderBoard, startSessionViews, wireViewOpeners } from './lazy-views.js';
+import { fetchAgents } from './apps/apps-reads.js';
+import { adoptApps, adoptBoard, fetchApps, fetchBoard, fetchJobs, fetchListeners, fetchRunningApps, fetchSkills, markMirrorWindowEarly, openBoardCard, openScreenWindow, openTerminal, prefetchViews, refreshGitStatus, renderBoard, startSessionViews, wireViewOpeners } from './lazy-views.js';
 import { fetchWebauthnStatus, wireWebauthn, writeTerminalToken } from './webauthn.js';
 import { renderSettingsHead } from './home-head.js';
 import { isWideLayout } from './layout.js';
@@ -372,21 +369,33 @@ function armPolls(first) {
 }
 
 // --------------------------------------------------------- wire + go
-// A boot that reopens on the Board, or lands on a ?board= link (the same
-// test as index.html's preload script, which already asked for its modules),
-// evaluates the Board's code before the wiring below and wires it where it
-// was wired when it was part of this graph: after wireTabs(), whose tab click
-// must run before the Board's. Drawing the Board waits for that code either
-// way, and handing the module over directly skips an import() whose
+// The tab a boot opens on decides which view code main.js evaluates before
+// its wiring (the same test as index.html's preload script, which already
+// asked for those modules). A boot that reopens on the Board, or lands on a
+// ?board= link, evaluates the Board's code; every other boot but the Screen
+// pop-out evaluates the Code and Apps tabs' code, which a Board-first boot
+// loads after the lanes draw. Each is wired where it was wired when it was
+// part of this graph: after wireTabs(), whose tab click must run before
+// theirs. Handing the modules over directly skips an import() whose
 // resolution would queue behind boot()'s other tasks.
-function opensOnBoard() {
+function bootView() {
   const params = new URLSearchParams(window.location.search);
-  if (params.has('screen') || params.has('terminal') || params.has('session')) return false;
-  if (params.has('board')) return true;
-  try { return localStorage.getItem('app-launcher.tab') === 'board'; } catch (e) { return false; }
+  if (params.has('screen')) return 'screen';
+  if (params.has('terminal') || params.has('session')) return 'session';
+  if (params.has('board')) return 'board';
+  try { return localStorage.getItem('app-launcher.tab') === 'board' ? 'board' : 'code'; } catch (e) { return 'code'; }
 }
-// A failed load is retried, and reported, by the Board's first visit.
-const boardFirst = opensOnBoard() ? await import('./board.js').catch(function () { return null; }) : null;
+const view = bootView();
+// A failed load is retried, and reported, by the view's first use.
+const [boardFirst, appsFirst] = await Promise.all([
+  view === 'board' ? import('./board.js').catch(function () { return null; }) : null,
+  view === 'board' || view === 'screen' ? null
+    : Promise.all([
+      import('./apps.js'), import('./apps/apps-coding.js'), import('./apps/apps-listeners.js'),
+    ]).then(function (m) {
+      return { apps: m[0], coding: m[1], listeners: m[2] };
+    }, function () { return null; }),
+]);
 
 setSignInHandler(boot);
 wireUsageLog();
@@ -394,11 +403,9 @@ wireTabs();
 wireClaudeOptions();
 wireSessions();
 wireSystemLoad();
-wireApps();
+if (appsFirst) adoptApps(appsFirst);
 openDesktopColumns();
 if (boardFirst) adoptBoard(boardFirst);
-wireImageLightbox();
-wireHtmlViewer();
 wireViewOpeners();
 wireWebauthn();
 wireSettings();

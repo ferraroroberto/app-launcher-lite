@@ -12,6 +12,7 @@
  * it comes back when the model does.
  */
 
+import { state as appState } from '../state.js';
 import { el } from '../dom-utils.js';
 import { wireModelCombo } from './model-combo.js';
 
@@ -101,11 +102,12 @@ function ensurePicker(key, state) {
 }
 
 // Hand a surface the element its dropdown is drawn into (hidden until a
-// preset is offered).
+// preset is offered). A config read before this code loaded draws it now.
 export function mountLaunchPresets(key, slot) {
   const state = stateFor(key);
   state.slot = slot;
   slot.hidden = true;
+  if (appState.config) syncLaunchPresets(appState.config);
 }
 
 // The preset in force on a surface, or null for Default.
@@ -115,8 +117,10 @@ export function activeLaunchPreset(key) {
   return state.offered.find(function (p) { return p.id === state.activeId; }) || null;
 }
 
-// Redraw every mounted dropdown from `config`. Called whenever the config lands.
-export function syncLaunchPresets(config) {
+// Redraw every mounted dropdown from `config`: on every config read, which
+// claude-options.js announces as `launcher:config` so that the first load,
+// which mounts no toolbar, never loads this code.
+function syncLaunchPresets(config) {
   surfaces.forEach(function (state, key) {
     state.offered = offeredPresets(config);
     if (!state.offered.length) {
@@ -139,3 +143,7 @@ export function syncLaunchPresets(config) {
     state.controller.setValue(state.activeId || DEFAULT_VALUE);
   });
 }
+
+document.addEventListener('launcher:config', function () {
+  syncLaunchPresets(appState.config);
+});

@@ -38,8 +38,9 @@ iPhone PWA never serves a stale asset against fresh HTML, or vice versa.
   keeping `/*! */` banners. Comments are about two thirds of the bundle's
   gzipped bytes and a quarter of the page's. `tests/api/webapp/test_first_load_budget.py`
   holds every first-load response under 100 KB on the wire, the page plus its
-  stylesheet under 70 KB, and the whole first load (page, stylesheet and every
-  module `main.js` reaches statically) under 145 KB.
+  stylesheet under 70 KB, and the whole first load of a Code-first boot (page,
+  stylesheet, every module `main.js` reaches statically and the Code tab's
+  code) under 140 KB.
 - The views a tap opens load on that tap, not with the page
   (`app/webapp/static/lazy-views.js`): Chat, the terminal, the changes overlay,
   Links, Screen, Progress, the Jobs, Team OS and Board tabs, the Settings
@@ -51,12 +52,15 @@ iPhone PWA never serves a stale asset against fresh HTML, or vice versa.
   draws the shell or the session list. What runs only once the list has drawn
   or boot has settled loads then, from `main.js`: the new-build prompt, the
   build readout and its restart sheet, the copy button of rendered Markdown,
-  the time formatter and the terminal scripts' loader. Every caller of a view
+  the time formatter and the terminal scripts' loader. The sign-in sheet loads
+  on the first 401, and the image and HTML viewer (`lightbox.js`) with the
+  first view that opens one. Every caller of a view
   goes through `lazy-views.js`,
   which loads and wires each group once. Once the session list has drawn, the
   session views load straight away and the rest when the phone goes idle, so a
-  later first open finds them parsed. A tap on the Jobs, Team OS, Board or
-  Settings pane that beats its code is held and replayed, a Board card opened
+  later first open finds them parsed. A tap on the Jobs, Team OS, Board, Apps or
+  Settings pane, or on the Code tab's projects card, that beats its code is
+  held and replayed, a Board card opened
   before the drawer's code shows a loading drawer, and a deep link (`?terminal=`,
   `?session=`, `?screen=1`) starts its view's load at boot. The predicates the
   session list draws from (which modes a session offers, the one it opens in)
@@ -79,8 +83,16 @@ iPhone PWA never serves a stale asset against fresh HTML, or vice versa.
   hands the module to `lazy-views.js`. Those are only what the lanes draw: the
   card drawer, the answer sheets (`board/owner-answer.js` draws an owner check's
   block there), the plan note sheet and the journal card load after the lanes,
-  through `lazy-views.js`. Over HTTP/1.1 each module costs a slot on one of six
-  connections, so the module count, more than the bytes, sets when the lanes draw. The preloads follow the import graph as
+  through `lazy-views.js`. Every other boot but the Screen pop-out adds the Code
+  and Apps tabs' code instead (the `apps.js` marker minus `main.js`'s), which
+  `main.js` evaluates the same way; a Board-first boot loads it after the lanes
+  draw, or on the first visit to either tab. The registry and agent reads the
+  Board keys on run without it (`apps/apps-reads.js`), and the launch toolbars'
+  preset pickers redraw on a `launcher:config` event, so no first-load module
+  imports that code. Over HTTP/1.1 each module costs a slot on one of six
+  connections, so the module count, more than the bytes, sets when the lanes
+  draw; over HTTP/2 the modules share one connection and arrive at about the
+  line rate, so the bytes do. The preloads follow the import graph as
   it was at the first page render after a restart.
 - The page starts its first reads before the module graph has loaded. An
   inline script in `index.html` fetches `/api/config`, `/api/agents`,

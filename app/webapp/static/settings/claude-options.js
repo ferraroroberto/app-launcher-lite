@@ -17,7 +17,6 @@ import {
   renderLaunchPresetsEditor, renderLidKeepAwake, renderMirrorBrowser, renderNetworkAccess, renderPerformance,
   renderSettingsValues, renderSpeech, setTeamOsModelOptions,
 } from '../lazy-views.js';
-import { syncLaunchPresets } from '../shared/launch-presets.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
 
 export async function fetchConfig(shouldApply) {
@@ -143,7 +142,8 @@ function remoteStateText(c) {
 
 export function renderClaudeOptions() {
   setTeamOsModelOptions();
-  syncLaunchPresets(state.config);
+  // The launch toolbars' preset pickers redraw (shared/launch-presets.js).
+  document.dispatchEvent(new CustomEvent('launcher:config'));
   const c = state.config && state.config.copilot;
   if (!c) return;
   fillSelect(
