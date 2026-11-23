@@ -98,8 +98,9 @@ MAX_SPEECH_KEEP_RECORDINGS_HOURS = 720
 VALID_SERVE_OVER = ("auto", "https", "http", "both")
 DEFAULT_SERVE_OVER = "auto"
 # The plain-HTTP port in "both" mode: HTTP and HTTPS cannot share one port,
-# and 8467 sits beside the webapp (8465) and session-host (8466) ports.
-DEFAULT_SERVE_HTTP_PORT = 8467
+# and 8475 is a port no fleet app declares in its .fleet.toml (8443-8467 are
+# in use). A start still copes with any other holder of the port.
+DEFAULT_SERVE_HTTP_PORT = 8475
 
 # The Usage card's monthly Copilot allowance, in AI credits. The account's
 # plan cannot be read from this machine, so the size is a setting; 300 is the

@@ -193,6 +193,7 @@ export const els = {
   servingHttpPortRow: document.getElementById('servingHttpPortRow'),
   servingHttpPortHelp: document.getElementById('servingHttpPortHelp'),
   servingNow: document.getElementById('servingNow'),
+  servingBind: document.getElementById('servingBind'),
   servingCert: document.getElementById('servingCert'),
   servingCreateCert: document.getElementById('servingCreateCert'),
   tabBoard: document.getElementById('tabBoard'),

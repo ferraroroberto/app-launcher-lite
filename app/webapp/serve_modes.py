@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
+import socket
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +40,13 @@ from app.webapp import serve
 logger = logging.getLogger(__name__)
 
 SERVE_MODES_MODULE = "app.webapp.serve_modes"
+
+# The serving process records whether the plain-HTTP port bound, for the
+# Settings row: the server child is the process that answers /api/config, so
+# its own environment is the one place that cannot go stale across a restart.
+HTTP_BIND_ENV = "LAUNCHER_HTTP_BIND"
+HTTP_BOUND = "bound"
+HTTP_BIND_FAILED = "failed"
 
 
 @dataclass(frozen=True)
@@ -71,17 +80,54 @@ def serve_plan(mode: str, http_port: int, certs: Optional[Tuple[Path, Path]]) ->
     return ServePlan(certs=certs)
 
 
+def http_port_free(host: str, http_port: int) -> Optional[str]:
+    """``None`` when ``host:http_port`` can be bound, else why it cannot.
+
+    A plain bind with no ``SO_REUSEADDR``: Windows lets a reuse-flagged bind
+    share a listening port, which would hand the second listener a port another
+    app is serving. This only probes; it never touches the process holding it.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind((host, http_port))
+    except OSError as exc:
+        return str(exc)
+    return None
+
+
+def http_bind_state() -> Tuple[Optional[str], Optional[int]]:
+    """What this process's start did with the plain-HTTP port: ``(state, port)``.
+
+    ``(None, None)`` when this start never asked for a second port.
+    """
+    state, _, port = os.environ.get(HTTP_BIND_ENV, "").partition(":")
+    if state in (HTTP_BOUND, HTTP_BIND_FAILED) and port.isdigit():
+        return state, int(port)
+    return None, None
+
+
 def add_http_port(http_port: int) -> None:
     """Make this process's ``serve.run`` also bind plain HTTP on ``http_port`` beside TLS.
 
     Hypercorn binds ``insecure_bind`` only when TLS is on; without it the one
-    ``bind`` is plain HTTP already.
+    ``bind`` is plain HTTP already. A taken ``http_port`` is probed first: the
+    start then serves HTTPS alone and logs one warning, because hypercorn would
+    otherwise fail the whole start (HTTPS included) on the second bind.
     """
     build = serve.build_config
 
     def build_config(host: str, port: int, *args: Any, **kwargs: Any) -> Any:
         cfg = build(host, port, *args, **kwargs)
-        cfg.insecure_bind = [f"{host}:{http_port}"]
+        busy = http_port_free(host, http_port)
+        if busy is None:
+            cfg.insecure_bind = [f"{host}:{http_port}"]
+            os.environ[HTTP_BIND_ENV] = f"{HTTP_BOUND}:{http_port}"
+        else:
+            os.environ[HTTP_BIND_ENV] = f"{HTTP_BIND_FAILED}:{http_port}"
+            logger.warning(
+                f"⚠️ plain HTTP port {http_port} is in use ({busy}); serving HTTPS only. "
+                "Pick another port in Settings > Connections > Serve over."
+            )
         return cfg
 
     serve.build_config = build_config  # type: ignore[assignment]

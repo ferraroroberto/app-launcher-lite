@@ -93,7 +93,8 @@ def _assert_groups_render_with_values_matching_the_saved_config(authed_page: Pag
         " · ".join(p for p in (cfg["gitlab_group"], cfg["gitlab_host"]) if p) or "Not set"
     )
     expect(_value(authed_page, "serving")).to_have_text(
-        {"auto": "Automatic", "https": "HTTPS", "http": "HTTP", "both": "Both"}[cfg["serving"]["mode"]]
+        {"auto": "Automatic", "https": "HTTPS", "http": "HTTP",
+         "both": f"Both · HTTP {cfg['serving']['http_port']}"}[cfg["serving"]["mode"]]
     )
     expect(_value(authed_page, "terminal")).to_have_text(
         f"{cfg['terminal_history_lines']} lines · {cfg['large_upload_max_mb']} MB"

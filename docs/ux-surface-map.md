@@ -1543,6 +1543,7 @@ flowchart LR
   - Automatic, HTTPS, HTTP and Both, one of them pressed
   - a line saying whether this page is on a secure address
   - HTTP port, shown only for Both
+  - a line, shown only when the last start could not bind that port, saying plain HTTP is off and HTTPS is still served
   - the certificate on this PC, with Create certificate when there is none
   - help on what a self-signed certificate still blocks and the no-install routes to a trusted one
   - Done
@@ -1550,7 +1551,7 @@ flowchart LR
   - a mode or port saves at once and applies when the app restarts
   - Create certificate writes a self-signed pair for this PC's names into webapp/certificates/ and never replaces one
 - **States:**
-  - the Settings row reads Automatic, HTTPS, HTTP or Both
+  - the Settings row reads Automatic, HTTPS, HTTP or Both, and Both adds the HTTP port
   - the certificate line reads No certificate, a self-signed certificate or a certificate, with its expiry date
 
 ### `settings.preset-menu` Launch preset menu

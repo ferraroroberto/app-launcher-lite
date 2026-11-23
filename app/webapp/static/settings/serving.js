@@ -19,7 +19,16 @@ function modeButtons() {
 
 // What the Settings row shows: the saved choice.
 export function servingValue(s) {
-  return s ? (MODE_WORD[s.mode] || s.mode) : '';
+  if (!s) return '';
+  const word = MODE_WORD[s.mode] || s.mode;
+  return s.mode === 'both' ? word + ' · HTTP ' + s.http_port : word;
+}
+
+// What the last start did with the second port; empty unless it failed.
+function bindText(s) {
+  const b = s.http_bind;
+  if (!b || b.bound !== false) return '';
+  return 'The last start could not use port ' + b.port + ': another program is using it, so plain HTTP is off and HTTPS is still served. Pick another port and restart the app.';
 }
 
 function certText(cert) {
@@ -44,6 +53,10 @@ export function renderServing(cfg) {
     els.servingNow.textContent = window.isSecureContext
       ? 'This page is on a secure address: recording can work here.'
       : 'This page is on plain HTTP: recording needs HTTPS.';
+  }
+  if (els.servingBind) {
+    els.servingBind.textContent = bindText(s);
+    els.servingBind.hidden = !els.servingBind.textContent;
   }
   if (els.servingCert) els.servingCert.textContent = certText(s.cert);
   if (els.servingCreateCert) els.servingCreateCert.hidden = !!(s.cert && s.cert.present);
