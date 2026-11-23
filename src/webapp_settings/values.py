@@ -92,6 +92,14 @@ MAX_LARGE_UPLOAD_MAX_MB = 10240
 DEFAULT_SPEECH_KEEP_RECORDINGS_HOURS = 24
 MIN_SPEECH_KEEP_RECORDINGS_HOURS = 0
 MAX_SPEECH_KEEP_RECORDINGS_HOURS = 720
+# How the webapp is served at its next start (app/webapp/serve_modes.py).
+# "auto" is HTTPS when webapp/certificates/ holds a pair and HTTP otherwise,
+# which is how Lite served before the setting existed.
+VALID_SERVE_OVER = ("auto", "https", "http", "both")
+DEFAULT_SERVE_OVER = "auto"
+# The plain-HTTP port in "both" mode: HTTP and HTTPS cannot share one port,
+# and 8467 sits beside the webapp (8465) and session-host (8466) ports.
+DEFAULT_SERVE_HTTP_PORT = 8467
 
 # The Usage card's monthly Copilot allowance, in AI credits. The account's
 # plan cannot be read from this machine, so the size is a setting; 300 is the

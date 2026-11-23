@@ -24,25 +24,28 @@ class WebappCommand(BaseCommand):
         # Lazy imports so a plain `webapp` subcommand doesn't drag pystray in.
         from app.webapp import serve
         from app.webapp.event_loop import selector_loop_factory
-        from app.webapp.manager import cert_paths
+        from app.webapp.manager import current_serve_plan
+        from app.webapp.serve_modes import add_http_port
         from src.webapp_config import load_webapp_config
 
         cfg = load_webapp_config()
         host = args.host or cfg.host
         port = args.port or cfg.port
 
-        certs = cert_paths()
+        plan = current_serve_plan()
+        if plan.warning:
+            logger.warning(f"⚠️ {plan.warning}")
         kwargs = {"log_level": "info", "loop_factory": selector_loop_factory}
-        if certs is not None:
-            cert, key = certs
+        if plan.certs is not None:
+            cert, key = plan.certs
             kwargs["certfile"] = str(cert)
             kwargs["keyfile"] = str(key)
-            scheme = "https"
-        else:
-            scheme = "http"
+        if plan.http_port is not None:
+            add_http_port(plan.http_port)
+            logger.info(f"ℹ️ plain HTTP also on port {plan.http_port}")
 
         logger.info(
-            f"🚀 launcher webapp on {scheme}://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}"
+            f"🚀 launcher webapp on {plan.scheme}://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}"
         )
         serve.run(host, port, **kwargs)
         return 0

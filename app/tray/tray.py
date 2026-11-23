@@ -47,7 +47,6 @@ from app.webapp.manager import (
     HEALTH_BOUND_NOT_ANSWERING,
     OWNERSHIP_OURS,
     WebappManager,
-    cert_paths,
     load_config,
 )
 from src import AppConfig, runtime_files
@@ -568,7 +567,7 @@ class TrayApp:
                 or "Couldn't resolve a tailnet address — see webapp/tailscale_debug.log.",
             )
             return
-        scheme = "https" if cert_paths() else "http"
+        scheme = self.manager.scheme
         url = f"{scheme}://{host}:{self.manager.config.port}"
         webapp_cfg = load_webapp_config()
         url = append_auth_token(url, webapp_cfg.auth_token)
@@ -616,7 +615,7 @@ class TrayApp:
         device to the terminal whitelist a conscious act.
         """
         def _do_enroll():
-            scheme = "https" if cert_paths() else "http"
+            scheme = self.manager.scheme
             url = (
                 f"{scheme}://127.0.0.1:{self.manager.config.port}"
                 "/api/webauthn/enroll/window"

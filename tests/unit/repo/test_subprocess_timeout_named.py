@@ -36,7 +36,6 @@ SPAWN_ATTRS = {"run", "Popen", "call", "check_output", "check_call"}
 #: remove an entry in its own PR rather than growing this set.
 BASELINE = {
     ("src/session_hosting/remote.py", 344),  # taskkill on a detached session's kill
-    ("app/webapp/manager.py", 127),     # tray subprocess readiness probe
     ("app/tray/tailscale.py", 58),
 }
 

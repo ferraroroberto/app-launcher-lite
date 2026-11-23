@@ -22,7 +22,7 @@ Settings, Appearance, **Install as app** reports where the browser stands: **Ins
 
 ## HTTPS is required
 
-Chrome offers installation, and grants a service worker, WebAuthn passkeys and clipboard access, only on a secure origin. Serve the launcher over HTTPS with a certificate the phone trusts: `scripts/gen_tailscale_cert.py` provisions one for a Tailscale MagicDNS name, or drop any trusted `cert.pem` and `key.pem` pair into `webapp/certificates/`. A self-signed certificate the phone does not trust blocks install and the passkey gate. The passkey relying party (`webauthn_rp_id`) must be the exact hostname the phone browses to.
+Chrome offers installation, and grants a service worker, WebAuthn passkeys and clipboard access, only on a secure origin. Serve the launcher over HTTPS with a certificate the phone trusts: `scripts/gen_tailscale_cert.py` provisions one for a Tailscale MagicDNS name, or drop any trusted `cert.pem` and `key.pem` pair into `webapp/certificates/`. A self-signed certificate the phone does not trust blocks install and the passkey gate, but not the microphone: Settings > Connections > **Serve over** can create one, and once the phone's browser is past its warning (Advanced, Proceed) the page is a secure origin and dictation records. Over plain HTTP the record button says that HTTPS is needed. The passkey relying party (`webauthn_rp_id`) must be the exact hostname the phone browses to.
 
 ## What to check on a device
 

@@ -180,6 +180,44 @@
       </div>
     </dialog>
 
+    <!-- Serve over: how the phone reaches this app, applied at the next
+         restart; serving.js saves the choice and creates a certificate. -->
+    <dialog id="servingSheet" data-surface="settings.serving" class="detail-dialog settings-sheet" data-track-view="sheet.serving" aria-labelledby="servingSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="serving.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="servingSheetTitle" tabindex="-1" autofocus>Serve over</h2>
+          <button data-track="serving.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <div class="segmented" id="servingMode" role="group" aria-label="Serve over" aria-describedby="servingModeHelp">
+            <button type="button" class="segmented-item" data-mode="auto" data-track="serving.mode-auto" aria-pressed="false">Automatic</button>
+            <button type="button" class="segmented-item" data-mode="https" data-track="serving.mode-https" aria-pressed="false">HTTPS</button>
+            <button type="button" class="segmented-item" data-mode="http" data-track="serving.mode-http" aria-pressed="false">HTTP</button>
+            <button type="button" class="segmented-item" data-mode="both" data-track="serving.mode-both" aria-pressed="false">Both</button>
+          </div>
+          <p id="servingModeHelp" class="field-help">A phone's browser only opens the microphone on an HTTPS page, so recording needs HTTPS. Automatic serves HTTPS when this PC has a certificate and HTTP when it has none. Both adds plain HTTP on a second port. A change applies when the app restarts (tray menu, Restart webapp).</p>
+          <p id="servingNow" class="field-help" role="status" aria-live="polite"></p>
+          <label class="stacked" id="servingHttpPortRow">
+            <span>HTTP port (Both)</span>
+            <input data-track="serving.http-port" id="servingHttpPort" type="number" class="input-native" inputmode="numeric" min="1" max="65535" step="1" aria-describedby="servingHttpPortHelp">
+          </label>
+          <p id="servingHttpPortHelp" class="field-help">Plain HTTP answers here while HTTPS keeps the app's own port.</p>
+          <div class="row">
+            <span>Certificate</span>
+            <button data-track="serving.create-cert" type="button" id="servingCreateCert" class="button-tint" hidden>Create certificate</button>
+          </div>
+          <p id="servingCert" class="field-help" role="status" aria-live="polite"></p>
+          <p id="servingCertHelp" class="field-help">Create certificate makes a self-signed certificate for this PC's names and addresses. Nothing is installed on the phone: its browser warns once, and after Advanced, Proceed the page is HTTPS and the microphone works. A self-signed certificate still blocks install as app (full-screen), the offline service worker and passkeys. For a certificate the phone trusts with nothing installed, use a Tailscale certificate (scripts/gen_tailscale_cert.py) or the Cloudflare named tunnel. An existing certificate is never replaced.</p>
+        </div>
+        <div class="detail-actions">
+          <button data-track="serving.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
+        </div>
+      </div>
+    </dialog>
+
     <!-- The chief (#1435): model and worker cap from the Board's old
          dialog (PUT /api/board/chief/settings, passkey-gated), the
          auto-compact threshold (#1298) and the doorbell switch

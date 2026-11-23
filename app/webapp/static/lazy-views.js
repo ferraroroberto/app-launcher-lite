@@ -200,8 +200,9 @@ const settingsPane = group(function () {
     import('./settings/network-access.js'),
     import('./settings/mirror-browser.js'),
     import('./settings/launch-presets-settings.js'),
+    import('./settings/serving.js'),
   ]).then(function (m) {
-    const s = { sheets: m[0], performance: m[1], lid: m[2], speech: m[10], network: m[11], mirror: m[12], presets: m[13] };
+    const s = { sheets: m[0], performance: m[1], lid: m[2], speech: m[10], network: m[11], mirror: m[12], presets: m[13], serving: m[14] };
     const fetchConfig = m[9].fetchConfig;
     s.network.wireNetworkAccess(fetchConfig);
     s.presets.wireLaunchPresets(m[9].savePresets);
@@ -222,6 +223,7 @@ const settingsPane = group(function () {
       s.lid.renderLidKeepAwake(state.config);
       s.performance.renderPerformance(state.config);
       s.speech.renderSpeech(state.config);
+      s.serving.renderServing(state.config);
       s.mirror.renderMirrorBrowser(state.config);
       s.network.renderNetworkAccess(state.config);
       s.presets.renderLaunchPresetsEditor();
@@ -454,6 +456,11 @@ export function renderLidKeepAwake(body) {
 export function renderSpeech(cfg) {
   const s = settingsPane.loaded();
   if (s) s.speech.renderSpeech(cfg);
+}
+
+export function renderServing(cfg) {
+  const s = settingsPane.loaded();
+  if (s) s.serving.renderServing(cfg);
 }
 
 export function renderMirrorBrowser(body) {

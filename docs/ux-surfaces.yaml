@@ -1458,6 +1458,8 @@ surfaces:
         via: GitLab
       - to: settings.performance
         via: Speed limits
+      - to: settings.serving
+        via: Serve over
       - to: settings.speech
         via: Speech to text
       - to: settings.tokens
@@ -1594,6 +1596,26 @@ surfaces:
       - the Settings row reads Off, On or No URL
       - a take reads Recording, Transcribed, Failed (with the reason), Not transcribed or Incomplete (its page closed mid-take)
       - with nothing kept the list reads No recordings kept; a list that could not be read says so
+
+  - id: settings.serving
+    area: settings
+    title: Serve over sheet
+    root: data-surface
+    reach:
+      - Serve over in Connections
+    holds:
+      - Automatic, HTTPS, HTTP and Both, one of them pressed
+      - a line saying whether this page is on a secure address
+      - HTTP port, shown only for Both
+      - the certificate on this PC, with Create certificate when there is none
+      - help on what a self-signed certificate still blocks and the no-install routes to a trusted one
+      - Done
+    does:
+      - a mode or port saves at once and applies when the app restarts
+      - Create certificate writes a self-signed pair for this PC's names into webapp/certificates/ and never replaces one
+    states:
+      - the Settings row reads Automatic, HTTPS, HTTP or Both
+      - the certificate line reads No certificate, a self-signed certificate or a certificate, with its expiry date
 
   - id: settings.preset-menu
     area: settings

@@ -21,7 +21,7 @@ Walked 2026-11-18 against build `52a7d40`, at widths 390, 1280, themes light, da
 | [Jobs](#jobs) | 10 |
 | [Team OS](#team-os) | 7 |
 | [Board](#board) | 15 |
-| [Settings](#settings) | 16 |
+| [Settings](#settings) | 17 |
 | [Keys and gestures](#keys-and-gestures) | 4 |
 
 ## Chrome
@@ -223,7 +223,7 @@ flowchart LR
   s27(["Rename session · Terminal"])
   s6(["Confirm dialog · Chrome"])
   s89(["Chief sheet · Settings"])
-  s95(["Folders sheet · Settings"])
+  s96(["Folders sheet · Settings"])
   s24(["Overlay session menu · Terminal"])
   s33(["Turn cards and step lines · Chat"])
   s0 -->|"Code"| s10
@@ -243,7 +243,7 @@ flowchart LR
   s15 -->|"preset dropdown"| s16
   s15 -->|"Sync all"| s18
   s15 -->|"History"| s19
-  s15 -->|"Open Settings"| s95
+  s15 -->|"Open Settings"| s96
   s15 -->|"row tap"| s22
   s17 -->|"Show changes"| s20
   s20 -->|"file kebab"| s21
@@ -456,7 +456,7 @@ flowchart LR
   s20(["Changes overlay · Code"])
   s6(["Confirm dialog · Chrome"])
   s80(["Session drawer · Board"])
-  s104(["Composer keys · Keys and gestures"])
+  s105(["Composer keys · Keys and gestures"])
   s12 -->|"row tap"| s22
   s13 -->|"Links"| s28
   s13 -->|"Rename"| s27
@@ -473,7 +473,7 @@ flowchart LR
   s24 -->|"Changed files"| s20
   s24 -->|"Stop and kill"| s6
   s80 -->|"Terminal"| s22
-  s104 -->|"keys button"| s29
+  s105 -->|"keys button"| s29
 ```
 
 ### `terminal.overlay` Session overlay
@@ -702,12 +702,12 @@ flowchart LR
   s39["Quality sheet"]
   s40["Readout"]
   s2(["PC load sheet · Chrome"])
-  s103(["Screen view keys · Keys and gestures"])
+  s104(["Screen view keys · Keys and gestures"])
   s2 -->|"Screen View live"| s37
   s37 -->|"Quality"| s39
   s37 -->|"Paste to PC"| s38
   s37 -->|"readout switch"| s40
-  s103 -->|"Screen view"| s37
+  s104 -->|"Screen view"| s37
 ```
 
 ### `screen.view` Screen view
@@ -1057,14 +1057,14 @@ flowchart LR
   s68["Skill file"]
   s69["Weekly recap"]
   s0(["Primary navigation · Chrome"])
-  s95(["Folders sheet · Settings"])
+  s96(["Folders sheet · Settings"])
   s6(["Confirm dialog · Chrome"])
   s0 -->|"Team"| s63
   s63 -->|"Skills"| s64
   s63 -->|"Weekly recap"| s69
   s64 -->|"model picker"| s65
   s64 -->|"row kebab"| s66
-  s64 -->|"Open Settings"| s95
+  s64 -->|"Open Settings"| s96
   s66 -->|"Read"| s67
   s67 -->|"a file"| s68
   s68 -->|"Delete log"| s6
@@ -1372,14 +1372,15 @@ flowchart LR
   s90["Chief model menu"]
   s91["GitLab sheet"]
   s92["Speech to text sheet"]
-  s93["Launch preset menu"]
-  s94["API tokens sheet"]
-  s95["Folders sheet"]
-  s96["Chat folder menu"]
-  s97["Passkeys sheet"]
-  s98["Terminal sheet"]
-  s99["Performance sheet"]
-  s100["Diagnostics sheet"]
+  s93["Serve over sheet"]
+  s94["Launch preset menu"]
+  s95["API tokens sheet"]
+  s96["Folders sheet"]
+  s97["Chat folder menu"]
+  s98["Passkeys sheet"]
+  s99["Terminal sheet"]
+  s100["Performance sheet"]
+  s101["Diagnostics sheet"]
   s1(["Tab header · Chrome"])
   s13(["Session menu · Code"])
   s14(["Stopped chief menu · Code"])
@@ -1388,23 +1389,24 @@ flowchart LR
   s1 -->|"gear"| s85
   s13 -->|"Chief settings"| s89
   s14 -->|"Chief settings"| s89
-  s15 -->|"Open Settings"| s95
-  s64 -->|"Open Settings"| s95
+  s15 -->|"Open Settings"| s96
+  s64 -->|"Open Settings"| s96
   s85 -->|"the groups"| s86
   s85 -->|"a document row"| s87
   s85 -->|"Coding agent"| s88
   s85 -->|"Chief"| s89
   s85 -->|"GitLab"| s91
-  s85 -->|"Speed limits"| s99
+  s85 -->|"Speed limits"| s100
+  s85 -->|"Serve over"| s93
   s85 -->|"Speech to text"| s92
-  s85 -->|"API tokens"| s94
-  s85 -->|"Folders"| s95
-  s85 -->|"Passkeys"| s97
-  s85 -->|"Terminal"| s98
-  s85 -->|"Diagnostics"| s100
-  s88 -->|"preset kebab"| s93
+  s85 -->|"API tokens"| s95
+  s85 -->|"Folders"| s96
+  s85 -->|"Passkeys"| s98
+  s85 -->|"Terminal"| s99
+  s85 -->|"Diagnostics"| s101
+  s88 -->|"preset kebab"| s94
   s89 -->|"model"| s90
-  s95 -->|"a folder's kebab"| s96
+  s96 -->|"a folder's kebab"| s97
 ```
 
 ### `settings.pane` Settings
@@ -1421,6 +1423,7 @@ flowchart LR
   - [Chief sheet](#settingschief-chief-sheet) (Chief)
   - [GitLab sheet](#settingsgitlab-gitlab-sheet) (GitLab)
   - [Performance sheet](#settingsperformance-performance-sheet) (Speed limits)
+  - [Serve over sheet](#settingsserving-serve-over-sheet) (Serve over)
   - [Speech to text sheet](#settingsspeech-speech-to-text-sheet) (Speech to text)
   - [API tokens sheet](#settingstokens-api-tokens-sheet) (API tokens)
   - [Folders sheet](#settingsfolders-folders-sheet) (Folders)
@@ -1532,6 +1535,24 @@ flowchart LR
   - a take reads Recording, Transcribed, Failed (with the reason), Not transcribed or Incomplete (its page closed mid-take)
   - with nothing kept the list reads No recordings kept; a list that could not be read says so
 
+### `settings.serving` Serve over sheet
+
+- **Root:** `data-surface`
+- **Reach:** Serve over in Connections
+- **Holds:**
+  - Automatic, HTTPS, HTTP and Both, one of them pressed
+  - a line saying whether this page is on a secure address
+  - HTTP port, shown only for Both
+  - the certificate on this PC, with Create certificate when there is none
+  - help on what a self-signed certificate still blocks and the no-install routes to a trusted one
+  - Done
+- **Does:**
+  - a mode or port saves at once and applies when the app restarts
+  - Create certificate writes a self-signed pair for this PC's names into webapp/certificates/ and never replaces one
+- **States:**
+  - the Settings row reads Automatic, HTTPS, HTTP or Both
+  - the certificate line reads No certificate, a self-signed certificate or a certificate, with its expiry date
+
 ### `settings.preset-menu` Launch preset menu
 
 - **Root:** `data-surface`
@@ -1625,14 +1646,14 @@ Inputs that are not elements.
 
 ```mermaid
 flowchart LR
-  s101["Swipe a row"]
-  s102["Long-press hint"]
-  s103["Screen view keys"]
-  s104["Composer keys"]
+  s102["Swipe a row"]
+  s103["Long-press hint"]
+  s104["Screen view keys"]
+  s105["Composer keys"]
   s37(["Screen view · Screen"])
   s29(["On-screen keys · Terminal"])
-  s103 -->|"Screen view"| s37
-  s104 -->|"keys button"| s29
+  s104 -->|"Screen view"| s37
+  s105 -->|"keys button"| s29
 ```
 
 ### `keys.swipe-row` Swipe a row
@@ -1783,6 +1804,7 @@ flowchart LR
 | [Settings](#settingspane-settings) | Chief | [Chief sheet](#settingschief-chief-sheet) |
 | [Settings](#settingspane-settings) | GitLab | [GitLab sheet](#settingsgitlab-gitlab-sheet) |
 | [Settings](#settingspane-settings) | Speed limits | [Performance sheet](#settingsperformance-performance-sheet) |
+| [Settings](#settingspane-settings) | Serve over | [Serve over sheet](#settingsserving-serve-over-sheet) |
 | [Settings](#settingspane-settings) | Speech to text | [Speech to text sheet](#settingsspeech-speech-to-text-sheet) |
 | [Settings](#settingspane-settings) | API tokens | [API tokens sheet](#settingstokens-api-tokens-sheet) |
 | [Settings](#settingspane-settings) | Folders | [Folders sheet](#settingsfolders-folders-sheet) |

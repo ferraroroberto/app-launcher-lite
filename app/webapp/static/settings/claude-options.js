@@ -15,7 +15,7 @@ import { els, state } from '../state.js';
 import { apiFailToast, jsonApi, toast } from '../api.js';
 import {
   renderLaunchPresetsEditor, renderLidKeepAwake, renderMirrorBrowser, renderNetworkAccess, renderPerformance,
-  renderSettingsValues, renderSpeech, setTeamOsModelOptions,
+  renderServing, renderSettingsValues, renderSpeech, setTeamOsModelOptions,
 } from '../lazy-views.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
 
@@ -34,6 +34,7 @@ export async function fetchConfig(shouldApply) {
   setFieldValue(els.gitlabGroup, body.gitlab_group || '');
   setFieldValue(els.gitlabHost, body.gitlab_host || '');
   renderSpeech(body);
+  renderServing(body);
   if (els.terminalHistoryLines) {
     if (body.terminal_history_lines_min != null) {
       els.terminalHistoryLines.min = body.terminal_history_lines_min;

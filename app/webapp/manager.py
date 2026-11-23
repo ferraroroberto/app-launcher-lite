@@ -38,6 +38,7 @@ import requests
 from app.tray.single_instance import cross_process_lock
 from app.webapp.event_loop import LOOP_FACTORY
 from app.webapp.serve import HYPERCORN, SERVERS
+from app.webapp.serve_modes import SERVE_MODES_MODULE, ServePlan, serve_plan
 from src.app_config import DEFAULT_WEBAPP_PORT, webapp_port
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
 
@@ -53,6 +54,9 @@ HEALTH_BOUND_NOT_ANSWERING = "bound_not_answering"  # port accepts, /healthz doe
 HEALTH_DOWN = "down"                      # nothing is listening
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+# A renewal asks Tailscale for a new certificate over the network; 90 s is an
+# admitted guess at the slowest renewal worth waiting for before startup.
+TAILSCALE_CERT_CHECK_TIMEOUT_S = 90
 
 
 @dataclass(frozen=True)
@@ -111,6 +115,14 @@ def cert_paths(project_root: Optional[Path] = None) -> Optional[tuple[Path, Path
     return None
 
 
+def current_serve_plan() -> ServePlan:
+    """What the next start serves: Settings > Serve over and the pair on disk."""
+    from src.webapp_config import load_webapp_config
+
+    cfg = load_webapp_config()
+    return serve_plan(cfg.serve_over, cfg.serve_http_port, cert_paths())
+
+
 def _probe_url(scheme: str, host: str, port: int) -> str:
     return f"{scheme}://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}"
 
@@ -128,7 +140,7 @@ def check_tailscale_cert() -> None:
             [sys.executable, str(script), "--check"],
             capture_output=True,
             text=True,
-            timeout=90,
+            timeout=TAILSCALE_CERT_CHECK_TIMEOUT_S,
             cwd=str(PROJECT_ROOT),
             creationflags=NO_WINDOW,
         )
@@ -143,6 +155,7 @@ class WebappManager:
     def __init__(self, config: Optional[WebappManagerConfig] = None) -> None:
         self.config = config or WebappManagerConfig()
         self._proc: Optional[subprocess.Popen] = None
+        self._plan: Optional[ServePlan] = None
         self._session = requests.Session()
         self._session.verify = False
         try:
@@ -154,9 +167,14 @@ class WebappManager:
             pass
 
     @property
+    def scheme(self) -> str:
+        # The plan this manager spawned with; an adopted webapp's is not
+        # observable, so it reads what a start would serve now.
+        return (self._plan or current_serve_plan()).scheme
+
+    @property
     def base_url(self) -> str:
-        scheme = "https" if cert_paths() else "http"
-        return _probe_url(scheme, self.config.host, self.config.port)
+        return _probe_url(self.scheme, self.config.host, self.config.port)
 
     def is_reachable(self) -> bool:
         for scheme in ("https", "http"):
@@ -396,11 +414,19 @@ class WebappManager:
         )
 
     def _build_command(self) -> List[str]:
+        plan = current_serve_plan()
+        self._plan = plan
+        if plan.warning:
+            logger.warning(f"⚠️ {plan.warning}")
+        module = "app.webapp.serve"
+        if plan.http_port is not None:
+            module = SERVE_MODES_MODULE
+            logger.info(f"ℹ️ serving HTTPS on {self.config.port} and plain HTTP on {plan.http_port}")
         py = sys.executable
         cmd: List[str] = [
             py,
             "-m",
-            "app.webapp.serve",
+            module,
             "--host",
             self.config.host,
             "--port",
@@ -412,17 +438,11 @@ class WebappManager:
             "--loop",
             LOOP_FACTORY,
         ]
-        certs = cert_paths()
-        if certs is not None:
-            cert, key = certs
-            cmd.extend(
-                [
-                    "--ssl-keyfile",
-                    str(key),
-                    "--ssl-certfile",
-                    str(cert),
-                ]
-            )
+        if plan.certs is not None:
+            cert, key = plan.certs
+            cmd.extend(["--ssl-keyfile", str(key), "--ssl-certfile", str(cert)])
+        if plan.http_port is not None:
+            cmd.extend(["--http-port", str(plan.http_port)])
         return cmd
 
     def _await_answer(self) -> WebappStatus:
