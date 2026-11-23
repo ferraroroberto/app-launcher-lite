@@ -5,6 +5,7 @@ unchanged file is never parsed twice."""
 from __future__ import annotations
 
 import asyncio
+import itertools
 import os
 import threading
 import time
@@ -59,12 +60,23 @@ def scans(tmp_path: Path, monkeypatch) -> List[int]:
     return calls
 
 
+# Every listing change gets its own mtime from a counter, far past any real
+# one. Deriving it from the folder's current mtime repeats a stamp when two
+# changes land inside one filesystem timestamp tick, and the cache then treats
+# the second change as no change.
+_LISTING_STAMPS = itertools.count(4_102_444_800_000_000_000, 1_000_000_000)
+
+
+def _touch_listing(state: Path) -> None:
+    stamp = next(_LISTING_STAMPS)
+    os.utime(state, ns=(stamp, stamp))
+
+
 def _bump(state: Path, name: str) -> None:
     """Add an unrelated folder and push the listing's mtime forward, as a
     new launch elsewhere does."""
     (state / name).mkdir()
-    stamp = state.stat().st_mtime_ns + 5_000_000_000
-    os.utime(state, ns=(stamp, stamp))
+    _touch_listing(state)
 
 
 def test_exact_id_resolution_never_scans_the_state_folder(tmp_path: Path, monkeypatch):
@@ -95,8 +107,7 @@ def test_an_unresolved_session_is_not_rescanned_until_the_state_changes(scans, m
     assert len(scans) == 1, "an unchanged miss must cost a stat, not a scan"
     # A new folder in the window is a real change: it is found.
     wanted = _folder(state, "aaaa", "2026-11-20T10:00:04Z")
-    stamp = state.stat().st_mtime_ns + 5_000_000_000
-    os.utime(state, ns=(stamp, stamp))
+    _touch_listing(state)
     assert tl.find_copilot_transcript(_session()) == wanted
     assert len(scans) == 2
     # An expired miss TTL looks again even when the listing held.
