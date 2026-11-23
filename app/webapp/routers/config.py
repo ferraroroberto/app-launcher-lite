@@ -20,9 +20,10 @@ from app.webapp.routers._helpers import (
     cert_present,
     maybe_json,
 )
-from src import boot_autostart, password, private_network, tls_certificate
+from src import boot_autostart, password, private_network
 from src.agents import AGENTS, DEFAULT_AGENT
 from src.app_config import AppConfig
+from src.auth import tls_certificate
 from src.chief import skills_preflight
 from src.chief.launch_settings import chief_model_problem
 from src.desktop import lid_keep_awake

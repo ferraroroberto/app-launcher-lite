@@ -16,7 +16,7 @@ import pytest
 from app.webapp import manager as manager_mod
 from app.webapp.manager import WebappManager, WebappManagerConfig, cert_paths
 from app.webapp.serve_modes import SERVE_MODES_MODULE, serve_plan
-from src import tls_certificate
+from src.auth import tls_certificate
 from src.subprocess_flags import NO_WINDOW
 from src.webapp_config import WebappConfig, _validate
 
