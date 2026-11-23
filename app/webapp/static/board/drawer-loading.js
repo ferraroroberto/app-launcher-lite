@@ -11,6 +11,7 @@
 import { state } from '../state.js';
 import { loadBoardDrawer } from '../lazy-views.js';
 import { renderBoard } from '../board.js';
+import { exchangeState } from './exchange-state.js';
 
 // The open drawer's id, which its card header's aria-controls names.
 export function drawerId(card) {
@@ -25,7 +26,7 @@ export function loadingDrawer(card) {
   drawer.id = drawerId(card);
   const exchange = document.createElement('div');
   exchange.className = 'board-exchange';
-  exchange.dataset.state = 'loading';
+  exchange.dataset.state = exchangeState(null);
   exchange.setAttribute('role', 'status');
   exchange.setAttribute('aria-live', 'polite');
   exchange.textContent = 'Reading last exchange…';
