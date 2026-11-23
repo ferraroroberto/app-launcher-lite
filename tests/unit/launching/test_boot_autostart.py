@@ -120,9 +120,48 @@ def test_disable_when_never_enabled_is_a_noop(tmp_path: Path):
 
 def test_startup_dir_requires_appdata_env(monkeypatch):
     monkeypatch.delenv("APPDATA", raising=False)
+    monkeypatch.delenv(boot_autostart.STARTUP_DIR_ENV, raising=False)
     try:
         boot_autostart._startup_dir()
     except RuntimeError as exc:
         assert "APPDATA" in str(exc)
     else:
         raise AssertionError("expected RuntimeError when APPDATA is unset")
+
+
+def test_a_machine_with_no_startup_folder_reads_as_not_enabled(monkeypatch):
+    # The Settings read must degrade to "off", not fail the whole page.
+    monkeypatch.delenv("APPDATA", raising=False)
+    monkeypatch.delenv(boot_autostart.STARTUP_DIR_ENV, raising=False)
+    assert boot_autostart.is_enabled() is False
+
+
+def test_the_startup_dir_override_redirects_every_call(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv(boot_autostart.STARTUP_DIR_ENV, str(tmp_path / "Startup"))
+    assert boot_autostart.wrapper_bat_path() == tmp_path / "Startup" / boot_autostart.STARTUP_BAT_NAME
+
+
+# The full app-launcher drops its own wrapper into the same per-user Startup
+# folder under this name; a machine can run both.
+FULL_APP_WRAPPER_NAME = "AppLauncher.bat"
+
+
+def test_the_two_apps_wrappers_never_overwrite_each_other(tmp_path: Path):
+    startup_dir = tmp_path / "Startup"
+    startup_dir.mkdir()
+    other_wrapper = startup_dir / FULL_APP_WRAPPER_NAME
+    other_wrapper.write_bytes(b"@echo off\r\nrem the other app's wrapper\r\n")
+    tray_bat = tmp_path / "repo" / "tray.bat"
+    tray_bat.parent.mkdir(parents=True)
+    tray_bat.write_text("@echo off\r\n", encoding="utf-8")
+
+    assert boot_autostart.STARTUP_BAT_NAME != FULL_APP_WRAPPER_NAME
+    assert boot_autostart.is_enabled(startup_dir) is False, "the other app's wrapper is not ours"
+
+    boot_autostart.enable(tray_bat=tray_bat, startup_dir=startup_dir)
+    assert other_wrapper.read_bytes() == b"@echo off\r\nrem the other app's wrapper\r\n"
+    assert boot_autostart.is_enabled(startup_dir) is True
+
+    assert boot_autostart.disable(startup_dir) is True
+    assert other_wrapper.is_file(), "turning ours off leaves the other app's on"
+    assert boot_autostart.is_enabled(startup_dir) is False
