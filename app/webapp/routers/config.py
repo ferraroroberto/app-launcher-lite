@@ -21,8 +21,8 @@ from app.webapp.routers._helpers import (
     maybe_json,
 )
 from src import boot_autostart, password, private_network, tls_certificate
-from src.app_config import AppConfig
 from src.agents import AGENTS, DEFAULT_AGENT
+from src.app_config import AppConfig
 from src.chief import skills_preflight
 from src.chief.launch_settings import chief_model_problem
 from src.desktop import lid_keep_awake
