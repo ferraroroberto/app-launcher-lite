@@ -124,7 +124,8 @@ function setStatus(row, status, error) {
   word.dataset.status = status;
   word.textContent = _STATUS_WORD[status] || status;
   const err = row.querySelector('.speech-recording-error');
-  err.textContent = status === 'failed' ? (error || '') : '';
+  // The server keeps an error only on a failed take (src/recordings.py).
+  err.textContent = error || '';
   err.hidden = !err.textContent;
 }
 
