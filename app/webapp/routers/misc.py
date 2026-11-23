@@ -20,6 +20,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.webapp.demand_cache import DemandCache
 from app.webapp.module_preload import expand_preloads
+from app.webapp.route_pools import APP_PROBES, OUTBOUND, SESSION_HOST, run_on
 from app.webapp.routers._helpers import PROJECT_ROOT, STATIC_DIR, maybe_json
 from app.webapp.shell_html import assemble_shell, shell_stat_key, trim_shell
 from src import instance_role, system_load
@@ -187,11 +188,11 @@ async def _build_version_facts(port: int) -> Dict[str, Any]:
     sha and the session-host's identity. The staleness verdict can spawn
     ``git diff``, so it runs off the loop with the rest."""
     head_sha, deployed_sha, host_identity = await asyncio.gather(
-        asyncio.to_thread(resolve_git_sha),
-        asyncio.to_thread(resolve_deployed_sha),
-        asyncio.to_thread(session_client.identity, port),
+        run_on(OUTBOUND, resolve_git_sha),
+        run_on(OUTBOUND, resolve_deployed_sha),
+        run_on(SESSION_HOST, session_client.identity, port),
     )
-    session_host = await asyncio.to_thread(_session_host_freshness, host_identity, deployed_sha)
+    session_host = await run_on(OUTBOUND, _session_host_freshness, host_identity, deployed_sha)
     return {"head_sha": head_sha, "session_host": session_host}
 
 
@@ -380,7 +381,7 @@ async def desktop_session(request: Request) -> Dict[str, Any]:
     another computer keeps the generic message. The page shows the hint only
     for ``remote`` plus ``this_pc``.
     """
-    state = await asyncio.to_thread(session_kind.read)
+    state = await run_on(OUTBOUND, session_kind.read)
     return {"state": state, "this_pc": _is_this_pc(request)}
 
 
@@ -399,7 +400,7 @@ async def _listener_url(tailnet_host: str, pid: int, port: int) -> Optional[str]
     key = (pid, port)
     scheme = _LISTENER_SCHEMES.get(key)
     if scheme is None:
-        scheme = await asyncio.to_thread(detect_local_scheme, port)
+        scheme = await run_on(APP_PROBES, detect_local_scheme, port)
         _LISTENER_SCHEMES[key] = scheme
     return f"{scheme}://{tailnet_host}:{port}/"
 
@@ -427,7 +428,7 @@ async def open_link_on_pc(request: Request) -> Dict[str, Any]:
         _log.info("ℹ️ open-url: disposable instance, not opening a browser")
         return {"opened": False, "browser": "none"}
     cfg: WebappConfig = request.app.state.webapp_config
-    browser = await asyncio.to_thread(open_url, url, cfg.desktop_browser)
+    browser = await run_on(OUTBOUND, open_url, url, cfg.desktop_browser)
     return {"opened": True, "browser": browser}
 
 
@@ -445,7 +446,7 @@ async def probe_ports(request: Request) -> Dict[str, Any]:
     # psutil's socket + process scan takes ~1 s. On the event loop it stalled
     # every other request the webapp was serving, and the Apps tab polls
     # this route every 5 s.
-    owners = await asyncio.to_thread(list_app_listeners)
+    owners = await run_on(APP_PROBES, list_app_listeners)
     pid_to_port = {o.pid: o.port for o in owners}
     tailnet_host = (request.app.state.app_config.tailnet_host or "").strip()
     live = {(o.pid, o.port) for o in owners}
@@ -478,10 +479,10 @@ async def kill_port(port: int) -> Dict[str, Any]:
     if port < 1 or port > 65535:
         raise HTTPException(status_code=400, detail="port out of range")
     # The same psutil scan as the probe, plus the kills: off the loop.
-    pids = await asyncio.to_thread(find_pids_on_port, port)
+    pids = await run_on(APP_PROBES, find_pids_on_port, port)
     if not pids:
         return {"port": port, "killed": [], "detail": "nothing was listening"}
-    killed, errors = await asyncio.to_thread(kill_pids, pids)
+    killed, errors = await run_on(OUTBOUND, kill_pids, pids)
     return {"port": port, "killed": killed, "errors": errors}
 
 
