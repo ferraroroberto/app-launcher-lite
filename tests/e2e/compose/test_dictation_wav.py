@@ -5,7 +5,8 @@ Chromium's fake microphone feeds the real MediaRecorder and Web Audio path of
 `tests/fake_speech_backend.py`, which answers an opaque HTTP 500 to anything
 but that WAV. With Web Audio removed the page uploads the recorder's own
 container: the server then converts it (ffmpeg on PATH) or says the format is
-unsupported, never a bare HTTP 500.
+unsupported, never a bare HTTP 500. On a page that is not a secure origin a tap
+says HTTPS is needed instead of recording.
 """
 
 from __future__ import annotations
@@ -85,18 +86,15 @@ def test_dictation_uploads_wav_a_strict_backend_transcribes(
         else:
             expect(page.locator("#toast")).to_contain_text("Unsupported audio format")
         expect(page.locator("#toast")).not_to_contain_text("HTTP 500")
+
+        # Loopback is a secure origin, so the page is told it is not one, as
+        # when a phone opens Lite over plain HTTP: a tap says HTTPS is needed.
+        page.add_init_script("Object.defineProperty(window, 'isSecureContext', { get: () => false })")
+        page.goto(base_url, wait_until="domcontentloaded")
+        page.evaluate(_MOUNT)
+        page.evaluate("() => window.__dictation.toggle()")
+        expect(page.locator("#toast")).to_contain_text("Recording needs HTTPS")
+        assert page.evaluate("() => window.__dictation.isRecording()") is False
     finally:
         set_speech(base_url, auth_token, speech_enabled=False, speech_base_url="")
         serve.close()
-
-
-def test_a_tap_on_a_plain_http_page_says_https_is_needed(authed_page: Page, base_url: str) -> None:
-    """The e2e page is on loopback, a secure origin, so the page is told it is
-    not one, as it is when a phone opens Lite over plain HTTP."""
-    page = authed_page
-    page.add_init_script("Object.defineProperty(window, 'isSecureContext', { get: () => false })")
-    page.goto(base_url, wait_until="domcontentloaded")
-    page.evaluate(_MOUNT)
-    page.evaluate("() => window.__dictation.toggle()")
-    expect(page.locator("#toast")).to_contain_text("Recording needs HTTPS")
-    assert page.evaluate("() => window.__dictation.isRecording()") is False
