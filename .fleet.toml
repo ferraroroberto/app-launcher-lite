@@ -43,7 +43,8 @@ depends_on = ["app-launcher", "fleet-config-lite"]
 extra_junctions = ["webapp/certificates"]
 
 [vendored]
-icons = { src = "app/webapp/static/_vendored/icons", sha = "5d460bd1d9d44eed955c5357d1c9f622f2550ad8", dest = "app/webapp/static/_vendored/icons" }
+icons = { src = "app/webapp/static/_vendored/icons", sha = "e14844faa70acbd89dc43011c5bc98025052c2c3", dest = "app/webapp/static/_vendored/icons" }
+fullscreen = { src = "app/webapp/static/_vendored/fullscreen", sha = "e14844faa70acbd89dc43011c5bc98025052c2c3", dest = "app/webapp/static/_vendored/fullscreen" }
 switch = { src = "app/webapp/static/_vendored/switch", sha = "8f15c49560adbc076d24a8a63dd671868ffa7a4e", dest = "app/webapp/static/_vendored/switch" }
 button = { src = "app/webapp/static/_vendored/button", sha = "f2464e89c902bd302291bb7af7b44c3ffa594323", dest = "app/webapp/static/_vendored/button" }
 card = { src = "app/webapp/static/_vendored/card", sha = "8f15c49560adbc076d24a8a63dd671868ffa7a4e", dest = "app/webapp/static/_vendored/card" }

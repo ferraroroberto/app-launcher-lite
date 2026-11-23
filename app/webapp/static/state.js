@@ -431,8 +431,6 @@ export const els = {
   performanceHealth: document.getElementById('performanceHealth'),
   largeUploadMaxMb: document.getElementById('largeUploadMaxMb'),
   bootAutostartToggle: document.getElementById('bootAutostartToggle'),
-  fullscreenToggle: document.getElementById('fullscreenToggle'),
-  fullscreenStatus: document.getElementById('fullscreenStatus'),
   installReadinessRow: document.getElementById('installReadinessRow'),
   installReadinessValue: document.getElementById('installReadinessValue'),
   installReadinessStatus: document.getElementById('installReadinessStatus'),

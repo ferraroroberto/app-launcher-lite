@@ -1,15 +1,16 @@
-"""Settings > Appearance: Full screen and Install as app.
+"""Settings > Appearance: Full screen on Edge and Install as app.
 
 A browser tab keeps its address bar and toolbar on a phone, and a managed
 phone's browser will not install a page served with a certificate it does not
-trust. Settings now carries a Full screen switch (Fullscreen API, kept per
-device, re-entered on the first tap after a reload, left by the switch or the
-back gesture) and an Install as app row that says whether the browser can
+trust. Settings carries the fleet's vendored "Full screen on Edge" row (shown
+only in Edge, kept per device, re-entered on the first tap after a reload,
+left by the switch) and an Install as app row that says whether the browser can
 install Lite and why not.
 
-Both checks share one page load and so one node. Runs on both projections: whether the engine offers full screen at all is
-part of what is under test, so the test reads it and asserts the matching
-contract (a working switch, or a disabled one that says why).
+Both checks share one page load and so one node. Runs on both projections:
+whether the engine offers full screen at all is part of what is under test, so
+the test reads it and asserts the matching contract (a working switch, or a
+row that stays hidden).
 """
 
 from __future__ import annotations
@@ -22,10 +23,15 @@ from tests.e2e.fixtures.waits import wait_until
 
 pytestmark = [pytest.mark.smoke, pytest.mark.iphone]
 
-_SWITCH = "#fullscreenToggle"
-_KEY = "launcher.fullscreen"
-_IN_FULLSCREEN = "!!(document.fullscreenElement || document.webkitFullscreenElement)"
-_SUPPORTED = "!!(document.fullscreenEnabled || document.webkitFullscreenEnabled)"
+_ROW = "#fullscreenRow"
+_SWITCH = "#fullscreenRow [data-fullscreen-toggle]"
+_KEY = "app-launcher.fullscreen"
+_IN_FULLSCREEN = "!!document.fullscreenElement"
+_SUPPORTED = "!!document.fullscreenEnabled"
+# The row is shown only in Edge, which the test cannot run on, so the page is
+# told it is Edge before any script reads the user agent.
+_EDGE_UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36 EdgA/130.0"
+_AS_EDGE = f"Object.defineProperty(navigator, 'userAgent', {{get: () => '{_EDGE_UA}'}});"
 
 
 def _stored(page: Page):
@@ -74,46 +80,53 @@ def test_full_screen_and_install_readiness(
     _open(page, base_url)
     page.evaluate(f"localStorage.removeItem('{_KEY}')")
     _install_row_says_where_it_stands(page)
+
+    # Any browser that is not Edge never shows the row.
+    expect(page.locator(_ROW)).to_be_hidden()
+
+    page.add_init_script(_AS_EDGE)
+    page.reload(wait_until="domcontentloaded")
+    open_settings(page)
     switch = page.locator(_SWITCH)
-    expect(switch).to_be_visible()
 
     if not page.evaluate(_SUPPORTED):
-        # A browser with no full screen for web pages says so; it never shows
-        # a switch that looks live and does nothing.
-        expect(switch).to_be_disabled()
-        expect(page.locator("#fullscreenStatus")).to_contain_text("doesn't offer full screen")
+        # An engine with no full screen for web pages keeps the row hidden
+        # even in Edge: it never shows a switch that does nothing.
+        expect(page.locator(_ROW)).to_be_hidden()
         return
 
-    # The switch enters full screen and remembers the choice.
+    # In Edge the row is there, off, with no "tap anywhere" sentence yet.
+    expect(page.locator(_ROW)).to_be_visible()
+    expect(page.locator(_ROW)).to_contain_text("Full screen on Edge")
     expect(switch).to_have_attribute("aria-checked", "false")
+    expect(page.locator(f"{_ROW} .fullscreen-armed")).to_be_hidden()
+
+    # The switch enters full screen and remembers the choice.
     switch.click()
     _wait_fullscreen(page, True)
     expect(switch).to_have_attribute("aria-checked", "true")
     assert _stored(page) == "1"
 
-    # The back gesture (an exit the page did not ask for) is a choice: the
-    # switch turns off and the next reload does not pull the person back in.
+    # The back gesture is not a choice to turn it off: the setting stays on
+    # and says the next tap goes back in.
     page.evaluate("document.exitFullscreen()")
     _wait_fullscreen(page, False)
-    expect(switch).to_have_attribute("aria-checked", "false")
-    assert _stored(page) is None
+    expect(switch).to_have_attribute("aria-checked", "true")
+    expect(page.locator(f"{_ROW} .fullscreen-armed")).to_be_visible()
+    assert _stored(page) == "1"
 
-    # Turning it on, then off with the switch, leaves full screen too.
-    switch.click()
-    _wait_fullscreen(page, True)
-    switch.click()
-    _wait_fullscreen(page, False)
+    # Turning it off with the switch clears the choice and leaves full screen.
+    page.locator(_SWITCH).click()
     expect(switch).to_have_attribute("aria-checked", "false")
     assert _stored(page) is None
+    _wait_fullscreen(page, False)
 
     # A stored choice survives a reload, which leaves full screen; the switch
-    # stays on, says a tap re-enters, and the first tap anywhere does.
+    # stays on and the first tap anywhere enters again.
     page.evaluate(f"localStorage.setItem('{_KEY}', '1')")
     page.reload(wait_until="domcontentloaded")
     expect(switch).to_have_attribute("aria-checked", "true")
-    expect(page.locator("#fullscreenStatus")).to_contain_text("Tap anywhere")
     assert page.evaluate(_IN_FULLSCREEN) is False
     open_settings(page)  # the gear tap is the first tap anywhere
     _wait_fullscreen(page, True)
-    expect(page.locator("#fullscreenStatus")).to_be_hidden()
     page.evaluate("document.exitFullscreen()")

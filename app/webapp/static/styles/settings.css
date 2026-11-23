@@ -141,6 +141,14 @@ button.settings-row:active { background: var(--card-2); }
   flex-direction: column;
   gap: 2px;
 }
+/* The vendored fullscreen row's hint line; settings-group is not vendored
+   here, so the row's second line is styled like .settings-row-sub. */
+.settings-row-hint {
+  min-width: 0;
+  font-size: var(--font-body-sm);
+  font-weight: 400;
+  color: var(--muted);
+}
 .settings-row-sub {
   min-width: 0;
   overflow: hidden;
