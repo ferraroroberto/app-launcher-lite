@@ -114,6 +114,9 @@ instruction_repeats = { src = "scripts/instruction_repeats.py", sha = "c5535ac32
 tray_watchdog = { src = "app/tray/watchdog.py", sha = "072d7355da45001255c3d53db00f80c3a3393900", dest = "app/tray/watchdog.py" }
 toast = { src = "app/webapp/static/_vendored/toast", sha = "e56c8330f8500b83635773033a09de6fc3cba342", dest = "app/webapp/static/_vendored/toast" }
 build-watch = { src = "app/webapp/static/_vendored/build-watch", sha = "2d871dd5a6a3ee6fe12a3c5c6439d2c53a93c2c4", dest = "app/webapp/static/_vendored/build-watch" }
+request_budget_ratchet = { src = "scripts/request_budget_ratchet.py", sha = "78df565389899bdb33b7f676b7e216fda39acb42", dest = "scripts/request_budget_ratchet.py" }
+request_budget_scan = { src = "scripts/request_budget_scan.py", sha = "78df565389899bdb33b7f676b7e216fda39acb42", dest = "scripts/request_budget_scan.py" }
+poll = { src = "app/webapp/static/_vendored/poll", sha = "78df565389899bdb33b7f676b7e216fda39acb42", dest = "app/webapp/static/_vendored/poll" }
 
 # ---------------------------------------------------------------------------
 # [verify] -- the launch recipe the generated verify-app-launcher skill reads
@@ -367,6 +370,18 @@ builders = [
   "app/webapp/static/changes/changes-overlay.js:toolButton",
   "app/webapp/static/chat/ask-option.js:askOption",
 ]
+
+# [request_budget_ratchet] -- scripts/request_budget_ratchet.py (with its reader
+# scripts/request_budget_scan.py) fails when a fixed-rate browser poll that reaches the
+# server, a poll under the 2 s floor, an undeclared fast server loop, a directory walk in a
+# request handler, a submit to the event loop's shared default pool, or a web app without
+# the request-timing middleware is new beyond .request-budget-ratchet-baseline.json. Request
+# handlers live under app/webapp/routers. Exit 3 is "not confirmed", never clean.
+# Mechanism: project-scaffolding docs/request-budget-ratchet.md; the rules and why:
+# docs/polling-budget.md.
+[request_budget_ratchet]
+enabled      = true
+handler_dirs = ["app/webapp/routers"]
 
 [test_weight]
 ratio_ceiling = "1.0034"

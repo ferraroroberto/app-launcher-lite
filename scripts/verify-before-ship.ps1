@@ -182,6 +182,10 @@ $ratchetStages = @(
     @{ Name = "ux surface"; Argv = @("scripts/ux_surface_ratchet.py")
        NotConfirmed = "git was unusable, or a web file or the map could not be read, so the surfaces were not checked"
        Failed = "a rule's hits rose above .ux-surface-ratchet-baseline.json, or docs/ux-surface-map.md is not what scripts/ux_surface_map.py generates from docs/ux-surfaces.yaml; see the named surface above." }
+    # Polling and background-loop waste only goes down: a new fixed-rate poll, sub-2 s poll, fast server loop, shared-pool submit or handler scan fails the ship.
+    @{ Name = "request budget"; Argv = @("scripts/request_budget_ratchet.py")
+       NotConfirmed = "a browser or Python file could not be read or parsed, its JS never closed, or git was unusable"
+       Failed = "a file's count for a request budget rule rose above .request-budget-ratchet-baseline.json; see the named rule and lines above." }
 )
 # ratchet-stages:end
 
