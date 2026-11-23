@@ -94,7 +94,7 @@ def split_scope(findings: Iterable[chief_sweep.Finding], named: Set[str]) -> Tup
 
 
 def cmd_sweep(args: argparse.Namespace) -> int:
-    root = Path(args.root) if args.root else chief_sweep.default_root()
+    root = Path(args.root) if args.root else launcher.REPOS_ROOT
     cards: Optional[List[Dict[str, Any]]] = None
     try:
         cards = chief_sweep.board_cards(launcher._request(args.base_url, "/api/board"))

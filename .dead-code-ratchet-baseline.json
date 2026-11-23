@@ -1,6 +1,7 @@
 {
   "version": 1,
   "entries": [
+    {"key": "copilot/skills/_lib/chief/chief_sweep.py", "names": ["default_root"]},
     {"key": "copilot/skills/_lib/fleet_core/fleet_repo_scan.py", "names": ["is_linked_worktree", "iter_fleet_repos"]},
     {"key": "copilot/skills/_lib/fleet_core/fleet_toml.py", "names": ["load_checked", "positive_int", "validate_layout"]},
     {"key": "copilot/skills/_lib/fleet_core/runtime_files.py", "names": ["connect_read_only", "copy_file", "copy_tree"]},
