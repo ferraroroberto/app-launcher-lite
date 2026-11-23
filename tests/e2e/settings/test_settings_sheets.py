@@ -15,7 +15,9 @@ full-width primary, Done. Contract:
     on and the screen one follows the first (``_private_network.py``);
   * every ``openSettingsAt`` caller lands inside the sheet that holds its
     field (the Code and Team OS empty states, the Code tab's chief row);
-  * no Save button is left: fields save as they change.
+  * no Save button is left: fields save as they change;
+  * the pane's code loads on first open, and a row tapped before it lands
+    opens its sheet once it has (held and replayed, never dropped).
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ from tests.e2e.fixtures.ui import (
     open_settings,
     open_settings_sheet,
 )
+from tests.e2e.fixtures.waits import wait_until
 from tests.e2e.settings._launch_presets import walk_launch_presets
 from tests.e2e.settings._performance import walk_performance_sheet
 from tests.e2e.settings._private_network import walk_private_network_switches
@@ -148,12 +151,24 @@ def test_copilot_sheet_saves_a_model_and_shows_the_flags(
     POSTs ``copilot_model`` and the flags line follows the server's answer;
     Effort stands down on Default, where the server sends no ``--effort``.
     The GitLab sheet's two fields save as they change. The autouse fixture
-    puts the config back."""
+    puts the config back. The pane's code is held on the way in, so the row
+    tap that opens the sheet always beats it and must be replayed."""
     page = authed_page
     cfg = _config(base_url, auth_token)
     models = cfg["copilot"]["models_available"]
+    held: list = []
+    code = re.compile(r".*/static/settings/settings-sheets\.js(\?.*)?$")
+    page.route(code, lambda route: held.append(route))
     page.goto(base_url, wait_until="domcontentloaded")
-    open_agent_sheet(page)
+    open_settings(page)
+    wait_until(page, lambda: bool(held), "the Settings code request")
+    page.locator('#paneSettings [data-sheet="copilotSheet"]').click()
+    expect(page.locator("#copilotSheet")).to_be_hidden()
+    for route in held:
+        route.continue_()
+    # The launch-presets walk below reloads the page, whose code must load.
+    page.unroute(code)
+    expect(page.locator("#copilotSheet")).to_be_visible()
     options = page.locator("select#copilotModel > option")
     expect(options).to_have_text(["Default", *models])
     pick = models[-1]

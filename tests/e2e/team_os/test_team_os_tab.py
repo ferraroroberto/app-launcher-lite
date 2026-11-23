@@ -19,6 +19,7 @@ from playwright.sync_api import Page, Route, expect
 from tests.e2e.fixtures.pages import loopback
 from tests.e2e.fixtures.sessions import auth_headers
 from tests.e2e.fixtures.ui import open_row_menu
+from tests.e2e.fixtures.waits import wait_until
 
 pytestmark = pytest.mark.smoke
 
@@ -67,10 +68,21 @@ def test_team_os_lists_skills_launches_with_the_picked_model_and_reads_files(
     launches = _mock(page)
     models = loopback("GET", base_url + "/api/config",
                       headers=auth_headers(auth_token)).json()["copilot"]["models_available"]
+    # The tab's code loads on its first visit: held here, the visit draws no
+    # rows until it lands, then reads the skills itself.
+    held: list = []
+    code = re.compile(r".*/static/team-os\.js(\?.*)?$")
+    page.route(code, lambda route: held.append(route))
     page.goto(f"{base_url}/", wait_until="domcontentloaded")
     page.locator("#tabTeamOS").click()
 
     rows = page.locator("#teamOsList li.teamos-item")
+    expect(page.locator("#paneTeamOS")).to_be_visible()
+    wait_until(page, lambda: bool(held), "the Team OS code request")
+    expect(rows).to_have_count(0)
+    for route in held:
+        route.continue_()
+    page.unroute(code)
     expect(rows).to_have_count(2)
     # A to Z, each with its description as the context line.
     expect(rows.locator(".action-row-title")).to_have_text(["standup", "weekly-plan"])
