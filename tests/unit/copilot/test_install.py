@@ -14,6 +14,7 @@ import os
 import subprocess
 import sys
 import threading
+import venv
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Iterator, List, Optional
@@ -88,7 +89,7 @@ class Lite:
         (self.copilot / "hooks").mkdir(parents=True)
         (self.copilot / "skills" / "_lib").mkdir(parents=True)
         (self.repo / "config").mkdir()
-        for name in ("install.py", "install.ps1"):
+        for name in ("install.py", "install.ps1", "install.bat"):
             (self.copilot / name).write_bytes((_COPILOT / name).read_bytes())
         for template in (_COPILOT / "hooks").glob("*.template.json"):
             (self.copilot / "hooks" / template.name).write_bytes(template.read_bytes())
@@ -113,6 +114,17 @@ class Lite:
         return subprocess.run(
             [sys.executable, str(self.copilot / "install.py"), "--skip-checklist", *flags],
             capture_output=True, text=True, timeout=180, env=env, input=answer or "", creationflags=NO_WINDOW,
+        )
+
+    def env(self) -> dict:
+        return {**os.environ, "COPILOT_HOME": str(self.home), "USERPROFILE": str(self.profile)}
+
+    def run_bat(self, *flags: str, env: Optional[dict] = None) -> subprocess.CompletedProcess:
+        """``install.bat`` started straight from the checkout's ``copilot`` folder, the way a person would."""
+        return subprocess.run(
+            [str(self.copilot / "install.bat"), "--skip-checklist", *flags],
+            capture_output=True, text=True, timeout=180, env=env or self.env(), stdin=subprocess.DEVNULL,
+            creationflags=NO_WINDOW,
         )
 
     def ok(self, *flags: str) -> str:
@@ -332,6 +344,92 @@ def test_install_ps1_only_forwards_its_switches_to_install_py(lite: Lite) -> Non
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert not any(p.exists() for p in old_hooks)
     assert (lite.hooks / "app-launcher-lite-session-state.json").exists() and (lite.skills / "demo").is_junction()
+
+
+def test_install_bat_forwards_every_argument_unchanged_and_returns_the_exit_code(tmp_path: Path) -> None:
+    """A stub ``install.py`` records the argv it received, so the batch file's own quoting is what is under test."""
+    copilot = tmp_path / "repo" / "copilot"
+    copilot.mkdir(parents=True)
+    (copilot / "install.bat").write_bytes((_COPILOT / "install.bat").read_bytes())
+    seen = tmp_path / "argv.json"
+    (copilot / "install.py").write_text(
+        "import json, os, sys\n"
+        "json.dump({'argv': sys.argv[1:], 'cwd': os.getcwd()}, open(os.environ['ARGV_OUT'], 'w'))\n"
+        "sys.exit(7)\n", encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    args = ["--migrate", "--yes", "--what-if", "two words", "--flag=a b"]
+    proc = subprocess.run(
+        [str(copilot / "install.bat"), *args], capture_output=True, text=True, timeout=60, cwd=elsewhere,
+        env={**os.environ, "ARGV_OUT": str(seen)}, stdin=subprocess.DEVNULL, creationflags=NO_WINDOW,
+    )
+    assert proc.returncode == 7, proc.stdout + proc.stderr
+    got = json.loads(seen.read_text(encoding="utf-8"))
+    assert got["argv"] == args
+    assert Path(got["cwd"]).resolve() == (tmp_path / "repo").resolve(), "the batch file changes to the repository root"
+
+
+def test_install_bat_prefers_the_repo_venv_and_says_so_when_there_is_no_python(tmp_path: Path) -> None:
+    """A stub ``install.py`` reports which interpreter ran it, so only the batch file's choice is under test."""
+    copilot = tmp_path / "repo" / "copilot"
+    copilot.mkdir(parents=True)
+    (copilot / "install.bat").write_bytes((_COPILOT / "install.bat").read_bytes())
+    (copilot / "install.py").write_text("import sys\nprint(sys.prefix)\n", encoding="utf-8")
+    # Only System32 on PATH: no py launcher and no python, so a pass can only come from the repo's own venv.
+    bare = {**os.environ, "PATH": r"C:\Windows\System32"}
+
+    def run() -> subprocess.CompletedProcess:
+        return subprocess.run([str(copilot / "install.bat")], capture_output=True, text=True, timeout=60, env=bare,
+                              stdin=subprocess.DEVNULL, creationflags=NO_WINDOW)
+
+    missing = run()
+    assert missing.returncode == 1 and "no Python found" in missing.stdout, missing.stdout + missing.stderr
+    venv.create(tmp_path / "repo" / ".venv", with_pip=False)
+    proc = run()
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert Path(proc.stdout.strip()).resolve() == (tmp_path / "repo" / ".venv").resolve()
+
+
+def test_install_bat_migrates_like_install_py(lite: Lite) -> None:
+    state = lite.seed_state()
+    old_hooks = lite.seed_old_install()
+    proc = lite.run_bat("--migrate", "--yes")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert not any(p.exists() for p in old_hooks)
+    assert (lite.hooks / "app-launcher-lite-session-state.json").exists()
+    assert (lite.hooks / "app-launcher-lite-chief-guard.json").exists()
+    assert (lite.skills / "demo").is_junction() and (lite.copilot / "skills" / "demo" / "SKILL.md").exists()
+    assert state.read_text(encoding="utf-8") == _STATE_BODY
+
+
+def test_install_bat_runs_from_powershell_under_allsigned_and_passes_the_exit_code_back(lite: Lite) -> None:
+    """The per-process flag only: the machine's and the user's policy are never touched."""
+    old_hooks = lite.seed_old_install()
+    roots = (lite.profile, lite.repo / "config")
+    before = _snapshot(*roots)
+
+    def under_allsigned(*flags: str) -> subprocess.CompletedProcess:
+        command = f"& '{lite.copilot / 'install.bat'}' {' '.join(flags)}; exit $LASTEXITCODE"
+        return subprocess.run(
+            [_POWERSHELL, "-NoProfile", "-ExecutionPolicy", "AllSigned", "-Command", command],
+            capture_output=True, text=True, timeout=180, env=lite.env(), stdin=subprocess.DEVNULL,
+            creationflags=NO_WINDOW,
+        )
+
+    blocked = subprocess.run(
+        [_POWERSHELL, "-NoProfile", "-ExecutionPolicy", "AllSigned", "-File", str(lite.copilot / "install.ps1"),
+         "-SkipChecklist", "-WhatIf"],
+        capture_output=True, text=True, timeout=180, env=lite.env(), stdin=subprocess.DEVNULL,
+        creationflags=NO_WINDOW,
+    )
+    assert blocked.returncode != 0, "AllSigned must refuse the unsigned .ps1, or this test proves nothing"
+
+    proc = under_allsigned("--what-if", "--skip-checklist")
+    assert proc.returncode == 0 and "WhatIf: nothing was changed" in proc.stdout, proc.stdout + proc.stderr
+    assert _snapshot(*roots) == before and all(p.exists() for p in old_hooks)
+
+    declined = under_allsigned("--migrate", "--skip-checklist")  # stdin closed: nobody to confirm
+    assert declined.returncode == 1 and "migration declined" in declined.stdout, declined.stdout + declined.stderr
 
 
 def test_a_link_into_a_sibling_checkout_whose_name_extends_this_one_is_still_foreign(lite: Lite) -> None:
