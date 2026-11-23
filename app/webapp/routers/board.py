@@ -33,7 +33,7 @@ neither imports the other through.
 ``GET /api/board`` is the 5s poll target, so it does only cheap work: the live
 session list from the session-host, one state-file read, one jobs-runs walk
 (all in worker threads, gathered concurrently) and a pure memory read of the
-GitHub cache. The ``gh`` subprocesses run in a background refresh: the ↻ tap's
+GitLab cache. The ``glab`` subprocesses run in a background refresh: the ↻ tap's
 POST, or, when a visible Board tab's poll carries the view header, the one
 server-wide refresh :mod:`src.board.view_refresh` starts once per TTL however
 many tabs are open. Column assembly is pure logic in :mod:`src.board`.
