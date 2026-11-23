@@ -1233,7 +1233,7 @@ derive = "usageState"
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "a6009396649fc8e3f4a302d8f40a92ac49fd8e15"
+synced_sha = "10eec6118aa72053a686f402827b37c23590426d"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
@@ -1378,3 +1378,15 @@ reason = "local request timing keeps resizable pools for Settings Performance, w
 [[upstream.skipped]]
 sha = "1c969cfb613d10dcce976a39958cba6105746ecf"
 reason = "Life OS is not carried in this repo"
+
+[[upstream.skipped]]
+sha = "4a1d0e6f32f6a679467ee8d615addf2c997fa049"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "5707ae8ce21efcd38e5f1235b8cda566158b8abb"
+reason = "already present: Board and Jobs views load on first open"
+
+[[upstream.skipped]]
+sha = "99d224639b4e223e4f2f485a3c30d677d6c7819f"
+reason = "already present"
