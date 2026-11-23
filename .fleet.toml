@@ -104,7 +104,8 @@ single_instance = { src = "app/tray/single_instance.py", sha = "a37f157cda14dda4
 shot_capture = { src = "tests/e2e/_shot.py", sha = "160b54e2e0bcf76541d0a5f9bb4d6265dd493c31", dest = "tests/e2e/_shot.py" }
 shot_baseline = { src = "scripts/shot_baseline.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/shot_baseline.py" }
 layout_lint = { src = "tests/e2e/_layout_lint.py", sha = "2d65d6c193cbda0b1f71165c22f50dcdda944a17", dest = "tests/e2e/_layout_lint.py" }
-page-foot = { src = "app/webapp/static/_vendored/page-foot", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "app/webapp/static/_vendored/page-foot" }
+page-foot = { src = "app/webapp/static/_vendored/page-foot", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "app/webapp/static/_vendored/page-foot" }
+self_restart = { src = "src/self_restart.py", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "src/self_restart.py" }
 login_lockout = { src = "src/login_lockout.py", sha = "ea4e1e80f83c4f5a1a6b33e8a029e46ca63150c5", dest = "src/login_lockout.py" }
 login_alert = { src = "src/login_alert.py", sha = "ce64203b017ba636c82737ee7f768c9ef6f422cd", dest = "src/login_alert.py" }
 password = { src = "src/password.py", sha = "1fab1b600964581c3df51a9f916f1fb4795ac286", dest = "src/password.py" }
@@ -445,7 +446,11 @@ time_budget_s         = 1200
 # a fake strict speech backend, a setup no existing node shares. 302: the
 # polling test wraps fetch in an init script to count requests in flight and
 # holds routes open, which would taint any page it shared with another node.
-test_budget = 302
+# 303: the build readout's restart sheet route-mocks /api/restart before boot
+# and changes the live session count between load and tap; no existing node
+# opens that sheet, and the refresh, the no-post first tap, the confirmed post
+# and the failed-run report all ride that one node.
+test_budget = 303
 
 # --- static assets under the webapp's static dir -> Chromium smoke ----------
 [[e2e.rule]]
@@ -947,6 +952,12 @@ reason = "#screenView is the full-viewport Screen viewer (inset 0, 100dvh), not 
 record = "https://github.com/ferraroroberto/app-launcher/issues/1634"
 
 # Declared state machines: the state rules never report a module listed here.
+[[state_machines]]
+name   = "self-restart run"
+module = "src/self_restart.py"
+type   = "RestartState"
+derive = "derive_restart_state"
+
 [[state_machines]]
 name   = "board-card-status"
 module = "src/board/card_status.py"

@@ -12,6 +12,7 @@ import { wireUsageLog } from './usage.js';
 import { initBuildWatch } from './_vendored/build-watch/build-watch.js';
 import { bindTextSize } from './_vendored/text-size/text-size.js';
 import { buildReadoutText } from './_vendored/page-foot/page-foot.js';
+import { wireBuildRestart } from './shared/build-restart.js';
 import { fetchConfig, wireClaudeOptions } from './settings/claude-options.js';
 import { fetchSessions, wireSessions } from './sessions.js';
 import { fetchSystemLoad, wireSystemLoad } from './system-load.js';
@@ -247,7 +248,8 @@ async function boot() {
   const listeners = safe(fetchListeners);
   const running = safe(fetchRunningApps);
   const load = safe(fetchSystemLoad);
-  const others = [safe(fetchVersion)];
+  // The readout's restart sheet reads /api/restart once; no targets, no button.
+  const others = [safe(fetchVersion), safe(function () { return wireBuildRestart(els.buildReadout); })];
   // The Board card link fetches the Board itself, so it needs none of these.
   if (boardSid) openBoardCard(boardSid).catch(function () {});
   // A reload restores the last tab without a tap, and the Board and Jobs

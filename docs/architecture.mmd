@@ -62,6 +62,7 @@ flowchart TB
       R_SPEECH["speech.py — /api/transcribe, /api/speech/test\ndictation proxy to an OpenAI-shaped endpoint"]
       R_WEBAUTHN["webauthn.py — passkey ceremonies"]
       R_USAGE["src/usage_log.py (vendored) — /api/usage\nlocal view/tap log"]
+      R_RESTART["restart_targets.py + src/self_restart.py (vendored) — /api/restart\nthe build readout's restart sheet: the app, or the session-host\n(its warning counts the live sessions; POST is passkey or loopback)"]
     end
   end
   WEBAPPCMD --> MGR
