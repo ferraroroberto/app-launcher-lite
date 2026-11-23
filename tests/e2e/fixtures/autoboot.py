@@ -61,6 +61,7 @@ from tests.e2e.fixtures.processes import (
     spawn,
 )
 from tests.e2e.stub_session import write_claude_shim as _write_claude_shim
+from tests.host._synthetic_host import synthetic_host_env
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,11 @@ class Isolation:
     runtime_data_dir: Path
     host_state_dir: Path
     shim_dir: Path
+    # Synthetic account name and home folder for the webapp only (git, pip and
+    # Playwright keep the real home), so a page that renders either fails the
+    # screenshot privacy check on this machine, not first on another host. Not the
+    # session-host: the real agent it spawns finds its login under the real home.
+    host_env: dict
     run_started_at: float
 
 
@@ -212,6 +218,7 @@ def prepare_isolation(tmp_path_factory: pytest.TempPathFactory, auth_token: str)
         runtime_data_dir=runtime_data_dir,
         host_state_dir=host_state_dir,
         shim_dir=shim_dir,
+        host_env=synthetic_host_env({}, tmp_path_factory.mktemp("synthetic-host")),
         run_started_at=time.time(),
     )
 
@@ -279,6 +286,7 @@ def boot_webapp(iso: Isolation, servers: Servers, sh_port: int) -> str:
             wa_cmd,
             wa_log,
             extra_env={
+                **iso.host_env,
                 SESSION_HOST_PORT_ENV: str(sh_port),
                 WEBAPP_CONFIG_PATH_ENV: str(iso.cfg_copy),
                 STARTUP_DIR_ENV: str(iso.startup_dir),

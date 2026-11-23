@@ -59,8 +59,8 @@ def test_the_chiefs_folder_defaults_to_this_repos_copilot_tree() -> None:
     assert webapp_config.WebappConfig().fleet_config_dir == str(REPO_ROOT / "copilot")
 
 
-def test_session_and_chief_state_default_under_the_copilot_hook_state_dir() -> None:
-    state = Path.home() / ".copilot" / "hooks" / "state"
+def test_session_and_chief_state_default_under_the_copilot_hook_state_dir(synthetic_host) -> None:
+    state = synthetic_host.home / ".copilot" / "hooks" / "state"
     cfg = webapp_config.WebappConfig()
     for field in ("sessions_state_file", "chief_plan_file", "chief_managed_file", "chief_inbox_dir"):
         assert Path(getattr(cfg, field)).parent == state, field

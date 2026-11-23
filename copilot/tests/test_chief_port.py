@@ -49,9 +49,11 @@ class ProvenanceTests(unittest.TestCase):
 
 class StateDirTests(unittest.TestCase):
     def test_default_is_copilot_and_env_overrides(self) -> None:
-        with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop(hooks_state.STATE_DIR_ENV_VAR, None)
-            self.assertEqual(hooks_state.state_dir(), Path.home() / ".copilot" / "hooks" / "state")
+        with tempfile.TemporaryDirectory() as fake_home:
+            # Path.home() reads USERPROFILE on Windows and HOME elsewhere; point both at a fake home.
+            with mock.patch.dict(os.environ, {"HOME": fake_home, "USERPROFILE": fake_home}, clear=False):
+                os.environ.pop(hooks_state.STATE_DIR_ENV_VAR, None)
+                self.assertEqual(hooks_state.state_dir(), Path(fake_home) / ".copilot" / "hooks" / "state")
         with mock.patch.dict(os.environ, {"COPILOT_HOOKS_STATE_DIR": "X"}):
             self.assertEqual(hooks_state.state_dir(), Path("X"))
 

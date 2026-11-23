@@ -205,6 +205,91 @@ def browser_loop_hits(tree: ast.Module, rules: frozenset[str]) -> list[tuple[ast
     return walker.hits
 
 
+HOST_IDENTITY_RULE = "host-identity"
+#: Calls that answer with the account running the process; no environment override reaches the last two.
+_ACCOUNT_CALLS = frozenset({"getpass.getuser", "os.getlogin"})
+#: The environment variables that name the account or its home folder, on Windows and POSIX.
+HOST_IDENTITY_VARS = frozenset({"USERNAME", "USER", "LOGNAME", "LNAME", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH"})
+_HOST_MODULES = frozenset({"getpass", "os", "os.path", "pwd", "pathlib"})
+_HOST_FIX = "read it through the synthetic_host fixture (tests/host/_synthetic_host.py)"
+
+
+def _str_arg(call: ast.Call) -> str | None:
+    first = call.args[0] if call.args else None
+    return first.value if isinstance(first, ast.Constant) and isinstance(first.value, str) else None
+
+
+class _HostIdentity(ast.NodeVisitor):
+    """Reads of the real account name or home folder: calls, `~` expansions and environment lookups."""
+
+    def __init__(self) -> None:
+        self.aliases: dict[str, str] = {}  # local name -> `module` or `module.attr`
+        self.hits: list[tuple[ast.AST, str, str]] = []
+
+    def _resolve(self, node: ast.expr) -> str:
+        head, _, rest = _dotted(node).partition(".")
+        target = self.aliases.get(head)
+        if target is None:
+            return ""
+        return f"{target}.{rest}" if rest else target
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            if alias.asname and alias.name in _HOST_MODULES:
+                self.aliases[alias.asname] = alias.name
+            elif not alias.asname and alias.name.split(".")[0] in _HOST_MODULES:
+                self.aliases[alias.name.split(".")[0]] = alias.name.split(".")[0]
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.module in _HOST_MODULES and not node.level:
+            for alias in node.names:
+                self.aliases[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+
+    def _hit(self, node: ast.AST, what: str) -> None:
+        self.hits.append((node, HOST_IDENTITY_RULE, f"{what} reads the real host's identity; {_HOST_FIX}"))
+
+    def _env_name(self, node: ast.expr) -> str | None:
+        name = node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
+        return name if name is not None and name.upper() in HOST_IDENTITY_VARS else None
+
+    def visit_Subscript(self, node: ast.Subscript) -> None:
+        if isinstance(node.ctx, ast.Load) and self._resolve(node.value) == "os.environ":
+            name = self._env_name(node.slice)
+            if name:
+                self._hit(node, f"`os.environ[{name!r}]`")
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        name = self._resolve(node.func)
+        func = node.func
+        env = node.args[0] if node.args else None
+        if name in _ACCOUNT_CALLS or name.startswith("pwd.getpw"):
+            self._hit(node, f"`{name}()`")
+        elif name.startswith("pathlib.") and name.endswith(".home"):
+            self._hit(node, f"`{name.split('.', 1)[1]}()`")
+        elif name == "os.path.expanduser" and (_str_arg(node) or "").startswith("~"):
+            self._hit(node, f"`os.path.expanduser({_str_arg(node)!r})`")
+        elif (isinstance(func, ast.Attribute) and func.attr == "expanduser" and isinstance(func.value, ast.Call)
+              and (_str_arg(func.value) or "").startswith("~")):
+            self._hit(node, f"`.expanduser()` on {_str_arg(func.value)!r}")
+        elif env is not None and (name == "os.getenv" or name == "os.environ.get") and self._env_name(env):
+            self._hit(node, f"`{name}({self._env_name(env)!r})`")
+        self.generic_visit(node)
+
+
+def host_identity_hits(tree: ast.Module, rules: frozenset[str]) -> list[tuple[ast.AST, str, str]]:
+    """`(node, rule, message)` for every direct read of the account name or home folder, when the rule is on.
+
+    Writes are not reads: `monkeypatch.setenv("HOME", ...)` and `os.environ["HOME"] = ...` are how a test
+    fakes the host. A value the code cannot see (a variable passed to `expanduser`, a copied `env` dict)
+    is missed, never invented.
+    """
+    walker = _HostIdentity()
+    if HOST_IDENTITY_RULE in rules:
+        walker.visit(tree)
+    return walker.hits
+
+
 #: The vendored lock-out module's name, wherever the app copied it.
 LOCKOUT_MODULE = "login_lockout"
 
@@ -393,3 +478,21 @@ def matches_any(text: str, globs: tuple[str, ...]) -> bool:
 def _under(path: str, prefix: str) -> bool:
     prefix = prefix.replace("\\", "/").strip("/")
     return path == prefix or path.startswith(prefix + "/")
+
+
+def parse_exclude_by_rule(raw: object, enabled: tuple[str, ...]) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """`exclude_by_rule = { rule = [globs] }` -> (rule, globs) pairs; a typo'd or unlisted rule is a `ValueError`."""
+    where = "[conventions_ratchet] exclude_by_rule"
+    if not isinstance(raw, dict):
+        raise ValueError(f"{where} must be a table of rule = [globs]")
+    for rule, globs in raw.items():
+        if rule not in enabled:
+            raise ValueError(f"{where}: {rule!r} is not a rule listed in rules ({', '.join(enabled)})")
+        if not isinstance(globs, list) or not all(isinstance(g, str) and g for g in globs):
+            raise ValueError(f"{where}: {rule} must be a list of non-empty strings")
+    return tuple((rule, tuple(g.replace("\\", "/") for g in globs)) for rule, globs in raw.items())
+
+
+def rules_skipped(path: str, by_rule: tuple[tuple[str, tuple[str, ...]], ...]) -> set[str]:
+    """The rules whose `exclude_by_rule` globs match `path`."""
+    return {rule for rule, globs in by_rule if matches_any(path, globs)}
