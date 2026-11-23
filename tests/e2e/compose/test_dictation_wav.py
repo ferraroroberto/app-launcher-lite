@@ -35,7 +35,7 @@ _MOUNT = """async () => {
 }"""
 
 
-# True once a kept take with audio in it reads transcribed (voice-keep.js).
+# True once a kept take with audio in it reads transcribed (shared/voice-keep.js).
 _KEPT_TRANSCRIBED = """async () => {
   const hit = performance.getEntriesByType('resource').find(e => /\\/api\\.js/.test(e.name));
   const api = await import(hit ? hit.name : '/static/api.js');

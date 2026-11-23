@@ -11,8 +11,8 @@
  * and dropped.
  */
 
-import { apiRaw, apiRawJson } from './api.js';
-import { readTerminalToken } from './webauthn.js';
+import { apiRaw, apiRawJson } from '../api.js';
+import { readTerminalToken } from '../webauthn.js';
 
 const _BASE = '/api/transcribe/recordings';
 // How much audio a crash can cost: the slice still in the recorder.

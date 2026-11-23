@@ -18,7 +18,7 @@
  * the upload is simply dropped.
  *
  * Beside the upload, a copy of each take goes to disk while it is recorded
- * (voice-keep.js), so a crash or a failed transcription loses no audio.
+ * (shared/voice-keep.js), so a crash or a failed transcription loses no audio.
  */
 
 import { AuthRequiredError, apiFailToast, apiRaw, apiRawJson, readToken, toast } from './api.js';
@@ -31,7 +31,7 @@ import { usage } from './usage.js';
 import { attachMicNotice } from './_vendored/mic-notice/mic-notice.js';
 import { REMOTE_MIC_HINT, inRemoteDesktopSession } from './voice-remote.js';
 import { watchForPause } from './voice-autostop.js';
-import { keepTake } from './voice-keep.js';
+import { keepTake } from './shared/voice-keep.js';
 
 const _CHUNK_MS = 1000;
 // A chunk upload that fails (network error or non-2xx) is retried this many
