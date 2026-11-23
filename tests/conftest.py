@@ -82,6 +82,9 @@ from tests._progress_log import (  # noqa: E402,F401
     pytest_runtest_logstart,
 )
 
+# Tests read host identity (account name, home folder) only through this fixture (host-identity rule).
+from tests.host._synthetic_host import synthetic_host  # noqa: E402,F401
+
 # --- tests/ source-mutation guard (#822) -------------------------------------
 #
 # A test that silently rewrites a tracked source file and still reports green is
