@@ -278,6 +278,14 @@ async function terminalPrereqs() {
 
 // Connect (or warm-resume) the terminal pane for `session` inside the
 // already-shown overlay shell.
+// Whether the overlay still wants this session's terminal. The prerequisites
+// take a while on a cold load; a Back, another session or a switch to Chat in
+// that time means showing the terminal now would reopen a closed view.
+function showsTerminalOf(sid) {
+  const view = state.sessionView;
+  return !!view && view.session.session_id === sid && view.mode === 'terminal';
+}
+
 export async function attachTerminalPane(session) {
   const sid = session.session_id;
   if (!sid) return;
@@ -292,7 +300,7 @@ export async function attachTerminalPane(session) {
   }
 
   const tt = await terminalPrereqs();
-  if (tt === null) return;
+  if (tt === null || !showsTerminalOf(sid)) return;
   stashActiveTerminal();
   pruneTermCache();
   showSessionShell(session);
