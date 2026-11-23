@@ -9,8 +9,8 @@
  * `input` channel. The compose bar was born here as a normal
  * <textarea> with default predictive/autocorrect so iOS/Android keyboards
  * offer suggestions — which they can't inside xterm's per-keystroke-wiped
- * helper textarea — and it is always docked: no ✏️ toggle, the
- * PC mirror window is the only place it hides (terminal.js).
+ * helper textarea — and it is always docked: no ✏️ toggle, and the PC
+ * mirror window's Terminal view shows it too (terminal.js).
  */
 
 import { els, state } from '../state.js';

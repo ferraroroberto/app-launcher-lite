@@ -19,10 +19,9 @@ uploads with ``?inline=1`` so the session-host returns the stored path
 the text — review before send.
 
 The e2e harness connects from loopback, so every terminal open is detected
-as the PC mirror (``isMirror`` true). That is itself the case issue #37
-verification step 4 pins: the composer must be hidden in the mirror. To
-exercise the handlers we un-hide the composer and drive them — the logic is
-not mirror-gated, only the composer's visibility is.
+as the PC mirror (``isMirror`` true). The composer is docked in the mirror
+window too (#534, pinned in the first test below), so the
+handlers below are driven on it directly.
 
 Predictive suggestions themselves are an OS-keyboard behaviour and can
 only be confirmed on a real phone; this test pins the wiring underneath.
@@ -36,7 +35,8 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
-from tests.e2e.fixtures.ui import set_terminal_status
+from tests.e2e import _fake_clock
+from tests.e2e.fixtures.ui import RECORD_RESIZE_FRAMES, set_terminal_status
 from tests.e2e.fixtures.waits import OVERLAY_OPEN_MS, stable_read
 from tests.e2e.settings._speech import set_speech
 
@@ -100,6 +100,23 @@ _STATUS_STRIP_JS = r"""
 """
 
 
+# The page loads its modules under a ?v= stamp, so a bare import of
+# /static/state.js would be a second, empty instance: reuse the stamp.
+_MIRROR_GRID_JS = r"""
+() => {
+  const stamp = new URL(document.querySelector('script[type=module]').src).search;
+  return import('/static/state.js' + stamp).then((m) => {
+    const t = m.state.terminal;
+    return t && t.mirror ? [t.term.cols, t.term.rows] : null;
+  });
+}
+"""
+
+# The mirror re-syncs to the phone's size on this poll (terminal.js
+# wireSizeTracking); jumping it proves the composer survives a re-sync.
+_MIRROR_SIZE_POLL_MS = 2500
+
+
 def _open_terminal(page: Page, base_url: str, sid: str) -> None:
     page.goto(f"{base_url}/?terminal={sid}", wait_until="domcontentloaded")
     page.wait_for_selector("#terminalOverlay:not([hidden])", timeout=OVERLAY_OPEN_MS)
@@ -110,10 +127,25 @@ def _open_terminal(page: Page, base_url: str, sid: str) -> None:
     )
 
 
-def _show_composer(page: Page) -> None:
-    """Un-hide the composer (mirror trick — see module docstring)."""
-    page.evaluate("document.getElementById('terminalComposeBar').hidden = false")
+def _open_mirror(page: Page, base_url: str, sid: str) -> list:
+    """Open the session as the mirror window with the composer docked; return its xterm grid."""
+    _fake_clock.install(page)
+    page.add_init_script(RECORD_RESIZE_FRAMES)
+    _open_terminal(page, base_url, sid)
     expect(page.locator(COMPOSER)).to_be_visible()
+    grid = page.evaluate(_MIRROR_GRID_JS)
+    assert grid, "the open was not classified as a mirror: the checks below prove nothing"
+    return grid
+
+
+def _assert_mirror_keeps_phone_size(page: Page, grid: list) -> None:
+    """A size re-sync with the composer docked sends no resize frame and keeps the grid."""
+    _fake_clock.wait_for_interval(page, _MIRROR_SIZE_POLL_MS, "applySize")
+    _fake_clock.advance(page, _MIRROR_SIZE_POLL_MS)
+    assert page.evaluate("window.__resizeFrames") == [], (
+        "the mirror put a resize frame on the socket: the phone is the only PTY size authority"
+    )
+    assert page.evaluate(_MIRROR_GRID_JS) == grid, "showing the composer changed the mirror's terminal grid"
 
 
 def _spy_on_ws_input_frames(authed_page: Page) -> None:
@@ -161,7 +193,9 @@ def test_compose_send_forwards_text_to_pty(
     r"""One terminal open, the composer's whole send contract (#1515 folded
     four tests that each paid for their own stub launch and overlay open):
 
-    * Loopback open is the PC mirror — the composer must stay hidden (#37).
+    * Loopback open is the PC mirror — the composer is docked there too (#534),
+      and docking it puts no resize frame on the socket and leaves the xterm
+      grid at the phone's size: the phone is the only PTY size authority.
     * #980: today's shape on every surface — textarea + 2×2 grid, in the order
       mic · keys / image · send, with no Compose toggle, no OCR button of its
       own, and none of the folded controls left in the bar.
@@ -183,11 +217,9 @@ def test_compose_send_forwards_text_to_pty(
       focus-report input frames before or after that pair.
     """
     sid = launched_pty_session
-    _open_terminal(authed_page, base_url, sid)
-    expect(authed_page.locator(COMPOSER)).to_be_hidden()
+    mirror_grid = _open_mirror(authed_page, base_url, sid)
 
     _spy_on_ws_input_frames(authed_page)
-    _show_composer(authed_page)
 
     order = authed_page.eval_on_selector_all(
         f"{COMPOSER} .compose-tools > button",
@@ -233,6 +265,8 @@ def test_compose_send_forwards_text_to_pty(
         "— the text never reached the live PTY session"
     )
 
+    _assert_mirror_keeps_phone_size(authed_page, mirror_grid)
+
     _assert_mic_follows_the_speech_setting(authed_page, base_url, auth_token, sid)
 
 
@@ -247,7 +281,7 @@ def _assert_mic_follows_the_speech_setting(page: Page, base_url: str, auth_token
         ):
             set_speech(base_url, auth_token, **patch)
             _open_terminal(page, base_url, sid)
-            _show_composer(page)
+            expect(page.locator(COMPOSER)).to_be_visible()
             expect(mic).to_be_visible() if visible else expect(mic).to_be_hidden()
     finally:
         set_speech(base_url, auth_token, speech_enabled=False, speech_base_url="")
@@ -262,7 +296,7 @@ def test_compose_attach_appends_at_end_with_blank_line(
     fine."""
     sid = launched_pty_session
     _open_terminal(authed_page, base_url, sid)
-    _show_composer(authed_page)
+    expect(authed_page.locator(COMPOSER)).to_be_visible()
 
     # Type text, then park the caret at position 0 — the append must ignore it.
     compose = authed_page.locator(INPUT)
@@ -373,7 +407,7 @@ def test_compose_send_and_attach_stay_put_during_autogrow(
     under an iPhone's home-indicator inset (emulated on Chromium)."""
     sid = launched_pty_session
     _open_terminal(authed_page, base_url, sid)
-    _show_composer(authed_page)
+    expect(authed_page.locator(COMPOSER)).to_be_visible()
 
     send = authed_page.locator(SEND)
     attach = authed_page.locator(f"{COMPOSER} .composer-image")
