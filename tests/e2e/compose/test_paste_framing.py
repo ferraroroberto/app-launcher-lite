@@ -31,7 +31,7 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page
 
-pytestmark = pytest.mark.smoke
+pytestmark = [pytest.mark.smoke, pytest.mark.unbundled]
 
 # Evaluate framePaste in the page against stub terminal objects, so the only
 # variable is term.modes.bracketedPasteMode. framePaste is framing-only (no

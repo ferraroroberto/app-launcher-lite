@@ -53,7 +53,7 @@ from app.webapp.routers import (
     tokens,
     webauthn,
 )
-from app.webapp.routers._helpers import STATIC_DIR
+from app.webapp.routers._helpers import PROJECT_ROOT, STATIC_DIR
 from app.webapp.static_trim import trim_js
 from src import (
     app_runtime,
@@ -73,6 +73,8 @@ from src.jobs import snapshot as jobs_snapshot
 from src.launching import launcher
 from src.middleware import BearerTokenMiddleware
 from src.runtime_data import runtime_db_path
+from src.static_bundles.js_bundle import BUNDLE_DIR as JS_BUNDLE_DIR
+from src.static_bundles.js_bundle import BundleError, JsBundle, build_js_bundle
 from src.static_versioning import (
     compute_asset_hashes,
     fleet_hash_of,
@@ -193,6 +195,47 @@ def _load_stylesheet_bundle(app: FastAPI, asset_hashes: Dict[str, str]) -> Optio
     app.add_api_route(f"/static/{BUNDLE_RELPATH}", _serve_bundle, include_in_schema=False)
     _log.info("ℹ️ Stylesheets bundled into /static/%s (%d bytes)", BUNDLE_RELPATH, len(bundle))
     return bundle
+
+
+def _load_js_bundle(app: FastAPI, asset_hashes: Dict[str, str]) -> Optional[JsBundle]:
+    """Bundle the ES modules and register the route that serves them, or ``None``.
+
+    Built (or read from its cache) under ``webapp/js-bundle/``. Every bundle
+    file takes the fleet hash, so the index's entry script and chunk preloads
+    are stamped like the chunk imports. On ``None`` the index keeps loading
+    ``main.js`` and its graph module by module.
+    """
+    if not asset_hashes:
+        return None
+    fleet = app.state.asset_fleet_hash
+    try:
+        bundle = build_js_bundle(STATIC_DIR, PROJECT_ROOT / "webapp" / JS_BUNDLE_DIR, fleet)
+    except (BundleError, OSError, ValueError) as exc:
+        _log.warning("⚠️ could not bundle the ES modules; serving them separately: %s", exc)
+        return None
+    if bundle is None:
+        return None
+    for name in bundle.files:
+        if name.endswith(".js"):
+            asset_hashes[f"{JS_BUNDLE_DIR}/{name}"] = fleet
+
+    def _serve_js_bundle(name: str) -> Response:
+        if name not in bundle.files:
+            return Response(status_code=404)
+        body, media_type = bundle.files[name]
+        return Response(body, media_type=media_type, headers={"Cache-Control": _LONG_CACHE})
+
+    app.add_api_route(f"/static/{JS_BUNDLE_DIR}/{{name}}", _serve_js_bundle, include_in_schema=False)
+    size = sum(len(body) for name, (body, _) in bundle.files.items() if name.endswith(".js"))
+    _log.info("ℹ️ ES modules bundled into /static/%s/ (%d files, %d bytes of JS)",
+              JS_BUNDLE_DIR, len(bundle.files), size)
+    return bundle
+
+
+def _load_bundles(app: FastAPI, asset_hashes: Dict[str, str]) -> None:
+    """Build the stylesheet and ES-module bundles onto ``app.state``; either may be ``None``."""
+    app.state.stylesheet_bundle = _load_stylesheet_bundle(app, asset_hashes)
+    app.state.js_bundle = _load_js_bundle(app, asset_hashes)
 
 
 async def _reconcile_orphan_mirror_windows(app: FastAPI) -> None:
@@ -532,7 +575,7 @@ def create_app() -> FastAPI:
             len(asset_hashes),
         )
 
-    app.state.stylesheet_bundle = _load_stylesheet_bundle(app, asset_hashes)
+    _load_bundles(app, asset_hashes)
 
     if STATIC_DIR.exists():
         app.mount(

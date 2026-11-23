@@ -61,7 +61,7 @@ INPUT = f"{COMPOSER} .composer-input"
 SEND = f"{COMPOSER} .composer-send"
 ATTACH_INPUT = f"{COMPOSER} .composer-attach-input"
 
-pytestmark = [pytest.mark.smoke, pytest.mark.iphone]
+pytestmark = [pytest.mark.smoke, pytest.mark.iphone, pytest.mark.unbundled]
 
 # The home-indicator inset of a Face ID iPhone in portrait, in CSS px (the
 # ~34px the #1099 note in .fleet.toml measures), and a probe of what

@@ -13,14 +13,19 @@ closure (``import ... from './x.js'``, never a dynamic ``import()``), minus the
 closure of every ``-``-prefixed module, so the page asks for the whole graph at
 once. The links are unstamped here; ``rewrite_index_html`` stamps them with the
 same ``?v=`` the imports carry, so each preload is the instance an import uses.
+
+When the page loads the ES-module bundle the same markers name the bundle's
+chunks instead: ``closure`` maps an entry to the chunks it needs, read from
+the bundle's chunk graph.
 """
 
 from __future__ import annotations
 
 import posixpath
 import re
+from functools import partial
 from pathlib import Path
-from typing import List, Set
+from typing import Callable, List, Optional, Set
 
 from app.webapp.static_trim import trim_js
 
@@ -55,8 +60,14 @@ def static_import_closure(static_dir: Path, entry: str) -> List[str]:
     return order
 
 
-def expand_preloads(shell: str, static_dir: Path) -> str:
-    """``shell`` with every module-preload marker replaced by its links."""
+def expand_preloads(shell: str, static_dir: Path,
+                    closure: Optional[Callable[[str], List[str]]] = None) -> str:
+    """``shell`` with every module-preload marker replaced by its links.
+
+    ``closure`` maps an entry to the static-dir-relative files it loads; the
+    default follows the source modules' static imports.
+    """
+    resolve = closure or partial(static_import_closure, static_dir)
 
     def _sub(match: re.Match) -> str:
         indent, spec = match.group(1), match.group(2).split()
@@ -64,10 +75,10 @@ def expand_preloads(shell: str, static_dir: Path) -> str:
         exclude: Set[str] = set()
         for name in spec:
             if name.startswith("-"):
-                exclude.update(static_import_closure(static_dir, name[1:]))
+                exclude.update(resolve(name[1:]))
         modules: List[str] = []
         for name in include:
-            modules += [m for m in static_import_closure(static_dir, name)
+            modules += [m for m in resolve(name)
                         if m not in exclude and m not in modules]
         return "\n".join(f'{indent}<link rel="modulepreload" href="/static/{m}">' for m in modules)
 

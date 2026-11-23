@@ -13,6 +13,7 @@ import requests
 import urllib3
 from playwright.sync_api import Browser, BrowserContext, Page
 
+from src.static_bundles.js_bundle import UNBUNDLED_COOKIE
 from tests.e2e._shared_context import PROPERTY, SharedContexts, install_taint_guard
 from tests.e2e._shot import CHROMIUM_CAPTURE_ARGS
 from tests.e2e.fixtures.env import TOKEN_KEY, autoboot_enabled
@@ -109,6 +110,27 @@ def context(
     _artifacts_recorder.on_will_close_browser_context(ctx)
     outcome = _shared_contexts.release(ctx, key, base_url)
     request.node.user_properties.append((PROPERTY, outcome))
+
+
+def lazy_module_url(path: str) -> re.Pattern[str]:
+    """A route pattern for the lazily loaded module ``path`` (static-relative), bundled or not.
+
+    Under the bundle the module is its own chunk, ``js-bundle/<file stem>-<hash>.js``.
+    """
+    stem = re.escape(path.rsplit("/", 1)[-1].removesuffix(".js"))
+    return re.compile(rf".*/static/(?:{re.escape(path)}|js-bundle/{stem}-[A-Z0-9]+\.js)(\?.*)?$")
+
+
+@pytest.fixture(autouse=True)
+def _unbundled_page(request: pytest.FixtureRequest, context: BrowserContext) -> None:
+    # A test marked `unbundled` reaches into the page's live modules with
+    # `import('/static/<module>.js')`; under the bundle that URL is a second
+    # instance with its own state, so its page loads the modules one by one.
+    # The shared context's reset clears the cookie after the test.
+    if request.node.get_closest_marker("unbundled") is None:
+        return
+    base = request.getfixturevalue("base_url")
+    context.add_cookies([{"name": UNBUNDLED_COOKIE, "value": "off", "url": base}])
 
 
 @pytest.fixture(autouse=True)

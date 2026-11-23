@@ -28,7 +28,7 @@ import pytest
 from playwright.sync_api import Page, expect
 
 from tests.e2e._surface import surface
-from tests.e2e.fixtures.pages import loopback
+from tests.e2e.fixtures.pages import lazy_module_url, loopback
 from tests.e2e.fixtures.sessions import auth_headers
 from tests.e2e.fixtures.ui import (
     close_settings_sheets,
@@ -157,7 +157,7 @@ def test_copilot_sheet_saves_a_model_and_shows_the_flags(
     cfg = _config(base_url, auth_token)
     models = cfg["copilot"]["models_available"]
     held: list = []
-    code = re.compile(r".*/static/settings/settings-sheets\.js(\?.*)?$")
+    code = lazy_module_url("settings/settings-sheets.js")
     page.route(code, lambda route: held.append(route))
     page.goto(base_url, wait_until="domcontentloaded")
     open_settings(page)

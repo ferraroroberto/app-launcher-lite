@@ -37,7 +37,7 @@ from tests.e2e.fixtures.waits import OVERLAY_OPEN_MS
 # among them. They are the suite's most load-sensitive pins (#678: the #444
 # replay pin drives a real Claude process; #58: reconnect input delivery), and
 # at 4 workers the real agent's cold boot overran its budget.
-pytestmark = [pytest.mark.smoke, pytest.mark.serial]
+pytestmark = [pytest.mark.smoke, pytest.mark.serial, pytest.mark.unbundled]
 
 # How long to wait for a typed marker to echo back through a REAL Claude Code
 # process's composer (issue #678). Unlike the UI-transition budgets this is
