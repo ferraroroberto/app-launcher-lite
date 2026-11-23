@@ -43,6 +43,7 @@ depends_on = ["app-launcher", "fleet-config-lite"]
 extra_junctions = ["webapp/certificates"]
 
 [vendored]
+windows_only_ratchet = { src = "scripts/windows_only_ratchet.py", sha = "5ba99b0a04b1b5d7b3689f8f7a59bd3fe625a9bc", dest = "scripts/windows_only_ratchet.py" }
 icons = { src = "app/webapp/static/_vendored/icons", sha = "e14844faa70acbd89dc43011c5bc98025052c2c3", dest = "app/webapp/static/_vendored/icons" }
 fullscreen = { src = "app/webapp/static/_vendored/fullscreen", sha = "e14844faa70acbd89dc43011c5bc98025052c2c3", dest = "app/webapp/static/_vendored/fullscreen" }
 switch = { src = "app/webapp/static/_vendored/switch", sha = "8f15c49560adbc076d24a8a63dd671868ffa7a4e", dest = "app/webapp/static/_vendored/switch" }
@@ -383,6 +384,15 @@ builders = [
 [request_budget_ratchet]
 enabled      = true
 handler_dirs = ["app/webapp/routers"]
+
+# [windows_only_ratchet] -- scripts/windows_only_ratchet.py fails when a test that needs
+# Windows (a Windows-only module or API, a Windows-only environment variable read, or a
+# planted .exe under a redirected install folder) has no `windows_only` marker beyond
+# .windows-only-ratchet-baseline.json. The Mac nightly's unit leg deselects the marker, so
+# an unmarked test passes here and turns the night red. Exit 3 is "not confirmed", never
+# clean. Mechanism: project-scaffolding docs/windows-only-ratchet.md.
+[windows_only_ratchet]
+enabled = true
 
 [test_weight]
 ratio_ceiling = "1.0034"
