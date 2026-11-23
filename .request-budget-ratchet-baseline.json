@@ -2,17 +2,11 @@
   "version": 1,
   "entries": [
     {"key": "app/webapp/chief_doorbell.py", "counts": {"default-pool": 6}},
-    {"key": "app/webapp/routers/apps.py", "counts": {"default-pool": 11}},
     {"key": "app/webapp/routers/config.py", "counts": {"default-pool": 4}},
     {"key": "app/webapp/routers/copilot_usage.py", "counts": {"default-pool": 1}},
     {"key": "app/webapp/routers/desktop_screen.py", "counts": {"default-pool": 3}},
     {"key": "app/webapp/routers/diagnostics.py", "counts": {"default-pool": 2}},
     {"key": "app/webapp/routers/documents.py", "counts": {"default-pool": 2}},
-    {"key": "app/webapp/routers/jobs.py", "counts": {"default-pool": 27}},
-    {"key": "app/webapp/routers/jobs_outbox_routes.py", "counts": {"default-pool": 7}},
-    {"key": "app/webapp/routers/jobs_run.py", "counts": {"default-pool": 7}},
-    {"key": "app/webapp/routers/jobs_run_store_routes.py", "counts": {"default-pool": 5}},
-    {"key": "app/webapp/routers/misc.py", "counts": {"default-pool": 10}},
     {"key": "app/webapp/routers/progress.py", "counts": {"default-pool": 1}},
     {"key": "app/webapp/routers/speech.py", "counts": {"default-pool": 2}},
     {"key": "app/webapp/routers/team_os.py", "counts": {"scan-per-request": 2}},
@@ -25,7 +19,6 @@
     {"key": "src/board/state_reconcile.py", "counts": {"default-pool": 1}},
     {"key": "src/chief/reconcile.py", "counts": {"default-pool": 1}},
     {"key": "src/desktop/capture.py", "counts": {"default-pool": 2}},
-    {"key": "src/jobs/snapshot.py", "counts": {"default-pool": 2}},
     {"key": "src/session_view/vt_screen.py", "counts": {"default-pool": 1}},
     {"key": "src/system_load.py", "counts": {"default-pool": 1}}
   ]

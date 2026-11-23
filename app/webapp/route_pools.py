@@ -1,4 +1,4 @@
-"""Named thread pools for the Board and session routes' blocking work.
+"""Named thread pools for the routes' blocking work.
 
 The event loop's default executor is one shared pool: a transcript read
 stalled under on-access antivirus scanning, a slow ``glab`` call or a
@@ -40,6 +40,11 @@ SESSION_FILES = TimedExecutor("session-files", max_workers=8)
 SESSION_HOST = TimedExecutor("session-host-calls", max_workers=8)
 OUTBOUND = TimedExecutor("route-outbound", max_workers=6)
 AUDIT = TimedExecutor("audit-writes", max_workers=2)
+JOBS_FILES = TimedExecutor("jobs-files", max_workers=6)
+# A fire is one short spawn hop; a few cover a burst of taps and webhooks.
+JOB_SPAWNS = TimedExecutor("job-spawns", max_workers=4)
+# The Apps poll probes several tunnels' health at once, each up to 3 s.
+APP_PROBES = TimedExecutor("app-probes", max_workers=8)
 
 
 async def run_on(pool: TimedExecutor, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> T:
