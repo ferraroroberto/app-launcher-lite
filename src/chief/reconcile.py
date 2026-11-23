@@ -21,6 +21,12 @@ than :data:`GRACE_SECONDS` that the lane's mailbox stamp does not already
 cover gets one event, published and stamped exactly as the hook would, so the
 doorbell rings once for it.
 
+A turn whose last model round closed without a reply is published as
+``turn-failed`` instead (:mod:`src.transcript_flavors.copilot_turn`), dated by
+that round's close when no turn-end marker followed it, so a failed turn the
+hook never reported still reaches the chief. It shares the turn-end stamp, so
+the hook's own ``turn-failed`` is never repeated as a plain turn end.
+
 An active lane never gets an event: a ``user.message`` or
 ``assistant.turn_start`` after the last turn end means a turn is running. A
 plain session is never in the registry and is never read.
@@ -44,6 +50,7 @@ from src.board.state import read_sessions_state
 from src.chief_session_end import (
     KIND_SESSION_END,
     KIND_TURN_END,
+    KIND_TURN_FAILED,
     make_event,
     publish,
     read_registry,
@@ -52,6 +59,7 @@ from src.chief_session_end import (
     touch_stamp,
 )
 from src.request_timing import TimedExecutor
+from src.transcript_flavors.copilot_turn import turn_end_from_text
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +87,9 @@ class Evidence:
     turn_ended_at: Optional[float] = None
     shutdown_at: Optional[float] = None
     excerpt: Optional[str] = None
+    #: The newest turn ended without a reply; ``error`` is Copilot's message for it, if logged.
+    failed: bool = False
+    error: Optional[str] = None
 
 
 def _epoch(raw: Any) -> Optional[float]:
@@ -137,7 +148,14 @@ def transcript_evidence(path: Path) -> Optional[Evidence]:
             content = (entry.get("data") or {}).get("content")
             if isinstance(content, str) and content.strip():
                 excerpt = content.strip()[-EXCERPT_CHARS:]
-    return Evidence(turn_ended_at=turn_ended_at, shutdown_at=shutdown_at, excerpt=excerpt)
+    turn = turn_end_from_text(tail)
+    failed = bool(turn.failed) and shutdown_at is None
+    if failed and turn_ended_at is None:
+        turn_ended_at = _epoch(turn.failed_at)
+    return Evidence(
+        turn_ended_at=turn_ended_at, shutdown_at=shutdown_at, excerpt=excerpt,
+        failed=failed, error=turn.error if failed else None,
+    )
 
 
 def _lane_transcripts(state_rows: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
@@ -157,21 +175,24 @@ def _lane_transcripts(state_rows: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[s
 def _publish_once(
     inbox: Path, sid: str, reg_row: Dict[str, Any], agent: str, kind: str, evidence: Evidence,
 ) -> Optional[Path]:
+    turn = kind != KIND_SESSION_END
     event = make_event(
         sid, reg_row, agent, datetime.now(timezone.utc), kind=kind,
-        excerpt=evidence.excerpt if kind == KIND_TURN_END else None,
+        excerpt=evidence.excerpt if turn else None,
         excerpt_unavailable=(
-            "no assistant reply in the transcript tail" if kind == KIND_TURN_END
+            "no assistant reply in the transcript tail" if turn
             else "session ended; no reply on this event"
         ),
         source=SOURCE_RECONCILE,
     )
+    if kind == KIND_TURN_FAILED:
+        event["error"] = evidence.error
     try:
         path = publish(inbox, event)
     except OSError as exc:
         logger.warning(f"❌ chief reconcile: {kind} for {sid[:8]} not published: {exc}")
         return None
-    touch_stamp(stamp_path(inbox, kind, sid))
+    touch_stamp(stamp_path(inbox, KIND_TURN_END if turn else KIND_SESSION_END, sid))
     logger.info(
         f"✅ chief reconcile: {kind} published for {sid[:8]} "
         f"({event['repo']}#{event['number']}); its hook never reported it"
@@ -211,7 +232,8 @@ def reconcile(
         if ended is not None and ended <= moment - grace:
             stamped = stamp_mtime(stamp_path(inbox, KIND_TURN_END, sid))
             if stamped is None or stamped < ended:
-                path = _publish_once(inbox, sid, reg, agent, KIND_TURN_END, evidence)
+                kind = KIND_TURN_FAILED if evidence.failed else KIND_TURN_END
+                path = _publish_once(inbox, sid, reg, agent, kind, evidence)
                 if path is not None:
                     published.append(path)
         shut = evidence.shutdown_at

@@ -93,6 +93,49 @@ class MailboxTests(unittest.TestCase):
         self.assertNotIn("excerpt_unavailable", event)
         self.assertRegex(event["ts"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
 
+    def _recorded_lane(self, *extra: dict, drop_last: int = 0) -> Path:
+        """The live lane recording (a background sleep still running at its turn end), plus ``extra``."""
+        fixture = REPO.parent / "tests" / "fixtures" / "copilot_turn_background.jsonl"
+        lines = fixture.read_text(encoding="utf-8").splitlines()
+        lines = lines[:len(lines) - drop_last] + [json.dumps(e) for e in extra]
+        path = self.state / "lane.jsonl"
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return path
+
+    def test_a_turn_end_with_background_work_running_is_busy(self) -> None:
+        chief_managed.mark("sid-1", "fleet-config-lite", 102)
+        event = json.loads(chief_inbox.record({"transcript_path": str(self._recorded_lane())},
+                                              "agentStop").read_text(encoding="utf-8"))
+        self.assertEqual((event["kind"], event["busy"], event["excerpt"]),
+                         ("turn-end", True, "started background sleep"))
+
+    def test_a_clean_turn_end_is_not_busy_and_an_unread_one_says_nothing(self) -> None:
+        chief_managed.mark("sid-1", "fleet-config-lite", 102)
+        done = {"type": "system.notification", "data": {"kind": {"type": "shell_completed", "shellId": "0"}}}
+        event = json.loads(chief_inbox.record({"transcript_path": str(self._recorded_lane(done))},
+                                              "agentStop").read_text(encoding="utf-8"))
+        self.assertIs(event["busy"], False)
+        with mock.patch.object(chief_inbox, "TURN_READER", self.state / "missing.py"):
+            self.assertEqual(chief_inbox.turn_end_state(str(self.transcript)), ("turn-end", {}))
+
+    def test_a_turn_that_wrote_no_reply_is_published_as_turn_failed(self) -> None:
+        chief_managed.mark("sid-1", "fleet-config-lite", 102)
+        failed = self._recorded_lane(
+            {"type": "assistant.turn_start", "data": {}},
+            {"type": "session.error", "data": {"message": "No response was returned. Send your message again"}},
+            {"type": "assistant.turn_end", "data": {}, "timestamp": "2026-11-23T20:44:58.100Z"},
+            drop_last=4)
+        path = chief_inbox.record({"transcript_path": str(failed)}, "agentStop")
+        event = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual((event["kind"], event["event"]), ("turn-failed", "Stop"))
+        self.assertTrue(event["error"].startswith("No response was returned"))
+        self.assertNotIn("busy", event)
+        # One turn end, one event: a failed turn shares the turn-end debounce and stamp.
+        self.assertIsNone(chief_inbox.record({"transcript_path": str(failed)}, "agentStop"))
+        self.assertTrue(chief_inbox.stamp_path(self.inbox, "turn-end", "sid-1").exists())
+        code, out = _ops("inbox")
+        self.assertIn("kind=turn-failed", out)
+
     def test_second_turn_end_is_debounced_but_session_end_is_not(self) -> None:
         chief_managed.mark("sid-1", "fleet-config-lite", 102)
         self.assertIsNotNone(chief_inbox.record({}, "agentStop"))

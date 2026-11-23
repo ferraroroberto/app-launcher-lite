@@ -371,6 +371,16 @@ class OpenTests(StubbedLauncherCase):
         self.assertEqual(self.stub.posts, [])
         self.assertFalse((self.state / "chief-managed.json").exists())
 
+    def test_a_lane_skill_steered_into_an_unmanaged_session_is_refused(self) -> None:
+        """`say` is the other way to start lane work: into a session nobody marked, it never reports."""
+        steer = "Now run /upstream-sync --dry-run"
+        refusal = lite_lanes._unmanaged_lane_steer("plain-1", steer)
+        self.assertIsNotNone(refusal)
+        self.assertIn("chief_managed.py mark plain-1", refusal)
+        self.assertIsNone(lite_lanes._unmanaged_lane_steer("plain-1", "keep going with the gate"))
+        lite_lanes.chief_managed.mark("plain-1", "demo", 7)
+        self.assertIsNone(lite_lanes._unmanaged_lane_steer("plain-1", steer))
+
     def test_a_queue_lane_with_no_issue_is_managed_with_no_number(self) -> None:
         self.message.write_text("/upstream-sync", encoding="utf-8")
         self._user_turn("/upstream-sync")

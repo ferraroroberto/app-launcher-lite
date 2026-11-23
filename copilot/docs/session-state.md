@@ -36,7 +36,7 @@ The status is written by event name, and the rules for it (which event sets whic
 
 ## Who reads it
 
-The Board in app-launcher-lite, outside this repo, reads `sessions-state.json` and renders the three statuses. This module is the only writer, and the file's shape and the wire values are unchanged by the declaration.
+The Board in app-launcher-lite reads `sessions-state.json`. `needs-you` only records that a turn ended; whether that end needs a person is read from the session's `events.jsonl` (`src/board/copilot_status.py`): a background shell still running reads `waiting-on-task`, a turn that wrote no reply `turn-failed`, a pending `ask_user` `awaiting-decision`, a clean stop `idle-finished`, and an unreadable transcript `unknown`. The hook does not read the transcript for the row, because the Board re-reads it on every poll and so follows the shell's completion without another hook event. This module is the only writer, and the file's shape and the wire values are unchanged by the declaration.
 
 ## Adding a reader or an event
 

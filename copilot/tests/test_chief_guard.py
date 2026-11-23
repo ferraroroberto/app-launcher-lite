@@ -142,6 +142,26 @@ class GuardTests(unittest.TestCase):
             self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
         self.assertEqual(chief_guard.on_pre_tool_use(self._shell("gh issue view 5", "bash"), "lane-1")["permissionDecision"], "deny")
 
+    def test_the_chief_cannot_open_or_steer_a_lane_by_raw_launcher_call(self) -> None:
+        """A lane the chief opens by hand is never chief-managed, so nothing it does reaches the mailbox."""
+        base = "http://127.0.0.1:8465"
+        for command in (
+            f"Invoke-RestMethod -Method Post -Uri {base}/api/apps/team-os-mock/launch -Body $b",
+            f"Invoke-RestMethod -Method Post -Uri '{base}/api/claude-code/sessions/abc123/input' -Body $b",
+            f"curl -X POST {base}/api/board/issues/start -d @brief.json",
+        ):
+            denied = chief_guard.on_pre_tool_use({**self._shell(command), "cwd": CHIEF_CWD}, "chief-1")
+            self.assertEqual(denied["permissionDecision"], "deny", command)
+            self.assertIn("open <project> --lane", denied["permissionDecisionReason"])
+            self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
+        # chief_ops.py makes the same calls from Python, so its own command line is not one; nor is a read.
+        for command in ("python skills/_lib/chief_ops.py open team-os-mock --lane --message-file m.txt",
+                        f"Invoke-RestMethod {base}/api/board"):
+            self.assertIsNone(chief_guard.on_pre_tool_use({**self._shell(command), "cwd": CHIEF_CWD}, "chief-1"))
+        # A session that is not the chief (Roberto's own, or a lane) keeps the route.
+        raw = self._shell(f"Invoke-RestMethod -Method Post -Uri {base}/api/apps/x/launch")
+        self.assertIsNone(chief_guard.on_pre_tool_use(raw, "lane-1"))
+
     def test_lite_commands_and_other_sessions_are_left_alone(self) -> None:
         (self.state / "chief-managed.json").write_text(json.dumps({"lane-1": {}}), encoding="utf-8")
         for command in ("glab issue view 5", "git commit -m 'use gh later'", "ls E:/automation/fleet-config-lite/skills",

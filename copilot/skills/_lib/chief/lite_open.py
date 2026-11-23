@@ -9,7 +9,6 @@ session exists), `PROMPT_DELIVERED` (the launcher accepted the first input) and
 from __future__ import annotations
 
 import argparse
-import re
 import time
 import urllib.error
 import uuid
@@ -20,6 +19,7 @@ from chief.steer_delivery import DEFAULT_VERIFY_POLL_INTERVAL, INPUT_NEGATIVE_RE
 
 from . import launcher, rails
 from .lite_lanes import (
+    LANE_COMMAND,
     _transcript_copies,
     _transcript_has_user_turn,
     _worker_cap_inputs,
@@ -66,9 +66,6 @@ NO = "no"
 UNKNOWN = "unknown"
 NONE = "none"
 
-# Slash commands that start lane work. Their end must reach the chief's mailbox, which only a
-# chief-managed session's hooks write, so a plain `open` carrying one is refused.
-LANE_COMMAND = re.compile(r"(?<![\w/])/(issue-[a-z-]+|upstream-sync|downstream-sync|cleanup-fleet)\b")
 
 
 @dataclass

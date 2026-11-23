@@ -13,6 +13,15 @@ Copilot's ``agentStop`` payload carries no reply text, only ``transcriptPath``
 ``assistant.message`` content in a bounded tail of that file
 (``excerpt_source: transcript``).
 
+The same file says how the turn ended, read by the Lite checkout's one Copilot
+turn reader (``src/transcript_flavors/copilot_turn.py``, loaded by path so the
+hook never imports the webapp's ``src`` package). A turn whose last model round
+wrote no reply is published as ``kind: turn-failed``, with Copilot's error text
+when it logged one, so the chief re-sends instead of reading a silent stop as
+done. A turn end with a background shell or sub-agent still running carries
+``busy: true``, a clean one ``busy: false``; when the file cannot be read the
+flag is left out, which the contract reads as unknown.
+
 Called from ``session_state.main`` on the same hook invocation, so installing it
 needs no new hook registration. Cheap and fail-open: a session without
 ``APP_LAUNCHER_SESSION_ID`` returns before any I/O; an unreadable registry is
@@ -21,14 +30,17 @@ logged as undetermined and writes nothing, never folded into "not managed".
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import os
+import sys
 import tempfile
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Dict, Optional, Tuple
 
 import _lib
@@ -41,6 +53,9 @@ REGISTRY_FILENAME = "chief-managed.json"
 LAUNCHER_SESSION_ENV = "APP_LAUNCHER_SESSION_ID"
 # Copilot hook event -> (v1-compatible `event` name, v2 `kind`), per the contract.
 EVENTS = {"agentStop": ("Stop", "turn-end"), "sessionEnd": ("SessionEnd", "session-end")}
+KIND_TURN_FAILED = "turn-failed"
+# copilot/hooks -> the Lite checkout, whose turn reader is the one Board and reconciler use too.
+TURN_READER = Path(__file__).resolve().parents[2] / "src" / "transcript_flavors" / "copilot_turn.py"
 EXCERPT_CHARS = 1500
 # Enough of events.jsonl for the last reply without reading a long session whole.
 TRANSCRIPT_TAIL_BYTES = 256 * 1024
@@ -101,6 +116,34 @@ def transcript_excerpt(path: str) -> Tuple[Optional[str], str]:
         if isinstance(content, str) and content.strip():
             return content.strip()[-EXCERPT_CHARS:], ""
     return None, "no assistant reply in the transcript tail"
+
+
+def _turn_reader() -> Optional[ModuleType]:
+    """The checkout's Copilot turn reader, or None (logged) when it cannot be loaded."""
+    try:
+        spec = importlib.util.spec_from_file_location("lite_copilot_turn", TURN_READER)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"no loader for {TURN_READER}")
+        module = importlib.util.module_from_spec(spec)
+        # Registered first: its dataclasses resolve their annotations through sys.modules.
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+    except Exception as exc:  # noqa: BLE001 -- a missing reader leaves the turn's state unknown
+        logger.info("ℹ️ chief_inbox: turn reader unavailable (%s) -- turn state unknown", exc)
+        return None
+
+
+def turn_end_state(path: str) -> Tuple[str, Dict[str, Any]]:
+    """``(kind, extra fields)`` for a turn end: ``turn-failed`` with its error, else ``turn-end``
+    with ``busy`` when the transcript established it."""
+    reader = _turn_reader()
+    turn = reader.read_turn_end(path) if reader is not None and path else None
+    if turn is None:
+        return "turn-end", {}
+    if turn.failed:
+        return KIND_TURN_FAILED, {"error": turn.error}
+    return "turn-end", {"busy": bool(turn.background_pending)}
 
 
 def stamp_path(directory: Path, kind: str, sid: str) -> Path:
@@ -164,6 +207,10 @@ def record(payload: Dict[str, Any], hook_event: str) -> Optional[Path]:
     if row is None:
         return None
     event_name, kind = EVENTS[hook_event]
+    transcript = str(payload.get("transcript_path") or "")
+    extra: Dict[str, Any] = {}
+    if kind == "turn-end":
+        kind, extra = turn_end_state(transcript)
     now = datetime.now(timezone.utc)
     entry: Dict[str, Any] = {
         "v": SCHEMA_VERSION,
@@ -176,9 +223,10 @@ def record(payload: Dict[str, Any], hook_event: str) -> Optional[Path]:
         "agent": os.environ.get("APP_LAUNCHER_AGENT", "").strip().lower() or "copilot",
         "ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "dispatch_id": row.get("dispatch_id"),
+        **extra,
     }
-    if kind == "turn-end":
-        excerpt, unavailable = transcript_excerpt(str(payload.get("transcript_path") or ""))
+    if event_name == "Stop":
+        excerpt, unavailable = transcript_excerpt(transcript)
     else:
         excerpt, unavailable = None, "session ended; no reply on this event"
     entry["excerpt"] = excerpt
@@ -188,11 +236,13 @@ def record(payload: Dict[str, Any], hook_event: str) -> Optional[Path]:
     directory = state_dir() / INBOX_DIRNAME
     # runtime-write-exempt: the inbox under the user state dir (state_dir()), never this repo
     directory.mkdir(parents=True, exist_ok=True)
-    if kind == "turn-end" and _debounced(directory, sid, time.time()):
-        logger.info("ℹ️ chief_inbox: turn-end for %s within %ss of the last -- skipped",
-                    sid, TURN_END_DEBOUNCE_SECONDS)
+    # A failed turn is one kind of turn end: it shares the turn-end stamp and debounce, so the
+    # reconciler never republishes it as a plain turn end.
+    if event_name == "Stop" and _debounced(directory, sid, time.time()):
+        logger.info("ℹ️ chief_inbox: %s for %s within %ss of the last -- skipped",
+                    kind, sid, TURN_END_DEBOUNCE_SECONDS)
         _lib.note_decision(directory.parent, "mailbox",
-                           f"turn-end for {sid}: skipped, within {TURN_END_DEBOUNCE_SECONDS}s of the last")
+                           f"{kind} for {sid}: skipped, within {TURN_END_DEBOUNCE_SECONDS}s of the last")
         return None
     if kind == "session-end":
         stamp = stamp_path(directory, kind, sid)

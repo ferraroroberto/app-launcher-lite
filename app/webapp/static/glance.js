@@ -67,8 +67,9 @@ export function avatar(glyph, badge, extraClass) {
 
 // A session's Board status words (shared here so
 // the Board's rows and the Code tab's read one table). The hook-written
-// needs-you is split server-side into five caller-actionable values
-// (src/board/transcript.py::_refine_waiting_status), the raw "needs-you"
+// needs-you is split server-side into caller-actionable values
+// (src/board/transcript.py::_refine_waiting_status, and for Copilot
+// src/board/copilot_status.py, which adds turn-failed), the raw "needs-you"
 // string itself never reaches a card's status field. tool-pending is a
 // pending ordinary tool_use, genuinely ambiguous between "still executing" and
 // "permission-gated", so it renders as an ambient working-ish state. `cls` is
@@ -80,6 +81,7 @@ const STATUS_META = {
   stalled: { text: 'stalled', cls: 'is-stalled' },
   'awaiting-decision': { text: 'awaiting decision', cls: 'is-awaiting-decision' },
   'awaiting-input': { text: 'needs you', cls: 'is-awaiting-input' },
+  'turn-failed': { text: 'turn failed', cls: 'is-turn-failed' },
   'idle-finished': { text: 'finished', cls: 'is-idle-finished' },
   idle: { text: 'idle', cls: 'is-idle' },
   unknown: { text: '', cls: 'is-unknown' },

@@ -29,6 +29,7 @@ from src import audit
 from src._log_once import log_once
 from src.board import card_status
 from src.board.active_issue_claims import CLAIM_DEAD
+from src.board.copilot_status import copilot_waiting_status
 from src.board.state import STATE_STALE_AFTER, age_seconds, parse_iso, utc_now
 from src.board.transcript import (
     _ExchangeTail,
@@ -539,7 +540,9 @@ def derive_card_status(
     2. :func:`src.board.transcript._transcript_overlay` overrides a waiting
        stamp from the live title and the transcript;
     3. :func:`src.board.transcript._refine_waiting_status` splits
-       ``needs-you`` into a card value;
+       ``needs-you`` into a card value, or for a Copilot row
+       :func:`src.board.copilot_status.copilot_waiting_status`, which reads
+       Copilot's own event log;
     4. ``picker_on_screen`` (a live launcher PTY only; ``None`` means no
        screen to read) turns a :data:`~src.board.card_status.SCREEN_CHECKED`
        value into ``awaiting-decision``;
@@ -556,7 +559,10 @@ def derive_card_status(
         row, status, anchor, now=now, live_title=live_title,
         last_output_at=last_output_at, tail=tail, process_confirmed=process_confirmed,
     )
-    status = _refine_waiting_status(status, tail)
+    if status == card_status.NEEDS_YOU_STAMP and row and _row_agent(row) == "copilot":
+        status = copilot_waiting_status(row.get("transcript_path"))
+    else:
+        status = _refine_waiting_status(status, tail)
     if (
         picker_on_screen is not None
         and status in card_status.SCREEN_CHECKED

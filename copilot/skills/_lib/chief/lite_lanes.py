@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -41,6 +42,11 @@ from chief.steer_delivery import (
 )
 
 from . import digest, launcher, mailbox, rails
+
+# Slash commands that start lane work. Their end must reach the chief's mailbox, which only a
+# chief-managed session's hooks write, so a plain `open`, or a `say` into a session that is not
+# chief-managed, carrying one is refused.
+LANE_COMMAND = re.compile(r"(?<![\w/])/(issue-[a-z-]+|upstream-sync|downstream-sync|cleanup-fleet)\b")
 
 
 def note_lane_mark(sid: str, repo: str, number: Any, dispatch_id: str) -> None:
@@ -506,6 +512,18 @@ def cmd_chief_sid(args: argparse.Namespace) -> int:
     return 0 if sid else 1
 
 
+def _unmanaged_lane_steer(sid: str, text: str) -> Optional[str]:
+    """Why a steer that starts lane work cannot go to ``sid``: the session is not chief-managed, so
+    the lane's turn ends would never reach the mailbox. An unreadable registry reads as empty."""
+    command = LANE_COMMAND.search(text or "")
+    if command is None or sid in chief_managed.read_rows(chief_managed.state_file()):
+        return None
+    return (f"the steer runs lane work ({command.group(0)}) in session {sid[:8]}, which is not "
+            f"chief-managed, so its turn ends never reach the mailbox. Mark it first with "
+            f"`chief_managed.py mark {sid} <repo> <N>`, or open the lane with `open <project> --issue N` "
+            f"(`--lane` for a queue)")
+
+
 def cmd_say(args: argparse.Namespace) -> int:
     resolved_sid, reason = launcher.resolve_sid_via_board(args.base_url, args.sid)
     if reason is not None:
@@ -517,6 +535,10 @@ def cmd_say(args: argparse.Namespace) -> int:
     args.sid = resolved_sid
 
     text = read_brief(args.file)
+    refusal = _unmanaged_lane_steer(args.sid, text)
+    if refusal is not None:
+        print(f"REFUSED={refusal}")
+        return 2
 
     send_time = datetime.now(timezone.utc)
     if not args.verify:

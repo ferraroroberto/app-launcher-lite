@@ -81,9 +81,8 @@ def _backdate_rows(state_dir: Path, minutes: int) -> None:
     path.write_text(json.dumps(rows), encoding="utf-8")
 
 
-def _your_turn(state_dir: Path, cwd: Path) -> List[Dict[str, Any]]:
-    """The lane's Your turn column, built the way ``GET /api/board`` builds it."""
-    live = [{
+def _live(cwd: Path) -> List[Dict[str, Any]]:
+    return [{
         "session_id": _LAUNCHER_SID,
         "agent": "copilot",
         "kind": "pty",
@@ -93,8 +92,12 @@ def _your_turn(state_dir: Path, cwd: Path) -> List[Dict[str, Any]]:
         "live_title": "GitHub Copilot",
         "last_output_at": None,
     }]
+
+
+def _your_turn(state_dir: Path, cwd: Path) -> List[Dict[str, Any]]:
+    """The lane's Your turn column, built the way ``GET /api/board`` builds it."""
     rows = read_sessions_state(state_dir / "sessions-state.json")["rows"]
-    cards = merge_sessions(live, rows)
+    cards = merge_sessions(_live(cwd), rows)
     return build_board(cards, {}, [])["your_turn"]
 
 
@@ -126,7 +129,9 @@ def test_a_finished_subagent_leaves_its_working_lane_off_your_turn(lane: Dict[st
     assert _your_turn(state, cwd) == []
 
 
-def test_the_lane_s_own_turn_end_still_reads_needs_you(lane: Dict[str, Path]) -> None:
+def test_the_lane_s_own_turn_end_is_the_card_s_turn_end(lane: Dict[str, Path]) -> None:
+    """The lane's own ``agentStop`` claims the card; its transcript (an open round, no
+    background work) is no failure and nothing to wait on, so the card reads its turn ended."""
     cwd, state = lane["cwd"], lane["state"]
     _run_hook("userPromptSubmitted", _lane({"prompt": "go"}, cwd), state)
     _run_hook("userPromptSubmitted", _subagent({"prompt": "review the change"}, cwd), state)
@@ -135,9 +140,10 @@ def test_the_lane_s_own_turn_end_still_reads_needs_you(lane: Dict[str, Path]) ->
     _run_hook("agentStop", _lane(
         {"transcriptPath": str(lane["transcript"]), "stopReason": "end_turn"}, cwd), state)
 
-    your_turn = _your_turn(state, cwd)
-    assert [card["session_id"] for card in your_turn] == [_LAUNCHER_SID]
-    assert your_turn[0]["state_sid"] == _LANE_SID
+    rows = read_sessions_state(state / "sessions-state.json")["rows"]
+    assert rows[_LANE_SID]["status"] == "needs-you"
+    cards = [c for c in merge_sessions(_live(cwd), rows) if c["session_id"] == _LAUNCHER_SID]
+    assert [(c["state_sid"], c["status"]) for c in cards] == [(_LANE_SID, "idle-finished")]
 
 
 pytestmark = pytest.mark.timeout(4 * _HOOK_TIMEOUT_S + 30)

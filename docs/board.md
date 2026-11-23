@@ -14,7 +14,7 @@ Column assembly is pure logic in `src/board/__init__.py::build_board()`.
 | --- | --- |
 | **Backlog** | Open GitLab issues across every project of the configured group (`gitlab_group`, subgroups included). |
 | **Bot's turn** | Live session cards whose status is **not** in the needs-you family: `working`, `unknown`, `idle`, `idle-finished`, `tool-pending` or `waiting-on-task`, plus the chief's card when one exists. A session with nothing pending is still the bot holding a workspace, so it is shown here, dimmed client-side. |
-| **Your turn** | Session cards whose status is `stalled`, `awaiting-decision` or `awaiting-input` (the needs-you split below), excluding the chief; then the owner checks waiting on you (see Owner checks). |
+| **Your turn** | Session cards whose status is `stalled`, `awaiting-decision`, `awaiting-input` or `turn-failed` (the needs-you split below), excluding the chief; then the owner checks waiting on you (see Owner checks). |
 | **Other** | Open merge requests, then today's failed, unconfirmed or stuck job runs, then one row per project whose default-branch pipeline is red (`CI failed`) or unreadable (`CI unknown`); see [Red pipelines](#red-pipelines). An `unconfirmed` card is a run whose exit code says the scheduled-run adapter could not establish whether it delivered; it keeps its card with the attention accent and a `?` glyph rather than the failure red. See [jobs-tab.md](jobs-tab.md) for terminal outcomes. |
 | **Done** | Today's closed issues since local midnight, latest close first, sorted on `closed_at`. |
 
@@ -108,7 +108,7 @@ The hooks flip status only on a few events. Two resume paths fire no hook: answe
 
 **The rule** (`_transcript_overlay()`): only when the hook status is `needs-you` or `idle`, if real transcript activity is newer than the row's stamp by more than 10 s, the status becomes `working` and the card's age re-anchors to that activity. When the agent genuinely stops, the `agentStop` hook re-stamps the row after the final transcript write, so `needs-you` wins immediately. The probe is two-stage: a raw `os.stat` mtime pre-filter, then a bounded 8 KB tail read that finds the newest line carrying a conversation message. The 5 s poll therefore stays cheap.
 
-**Copilot transcript reader: planned.** The overlay and the needs-you split below were built around a structured transcript tail. Copilot's own transcript flavor (and context percent) is a planned port step; until it lands the structured-tail signals are absent for Copilot sessions and the classification falls to the safe generic `awaiting-input` rather than asserting anything. Copilot's `events.jsonl` `session.usage_record` carries `inputTokens` / `maxPromptTokens`, verified on CLI 1.0.105, but nothing in the Board reads it yet (not re-checked on 1.0.114).
+**A Copilot card is split from Copilot's own event log.** The overlay and the Claude Code split below read Claude's transcript shape, which a Copilot `events.jsonl` does not have. A Copilot row's `needs-you` therefore goes through `src/board/copilot_status.py` instead, which reads `src/transcript_flavors/copilot_turn.py`: a closed model round that wrote no reply is `turn-failed`, a pending `ask_user` is `awaiting-decision`, a background shell (`executionMode: async`, not detached) with no `shell_completed` notice or `stop_powershell` yet, or a non-`sync` sub-agent not yet completed, is `waiting-on-task`, another pending tool call is `tool-pending`, and a clean stop is `idle-finished`. A transcript that cannot be read is `unknown`, never `awaiting-input`. Copilot wakes an idle session itself when its background shell completes (seen live on CLI 1.0.114), so `waiting-on-task` ends in a new turn.
 
 ## The needs-you split
 
@@ -121,9 +121,10 @@ The hooks flip status only on a few events. Two resume paths fire no hook: answe
 | `awaiting-decision` | A pending question or plan-approval tool call with no result yet: the agent is blocked on a human picking an option. | Your turn |
 | `tool-pending` | An ordinary tool call is unresolved at the tail's end. Genuinely ambiguous (still running, or permission-gated), so reported as its own state rather than folded into either side. | Bot's turn |
 | `awaiting-input` | Everything else the split cannot classify, including no usable signal at all. The safe generic fallback. | Your turn |
+| `turn-failed` | Copilot only: the turn's last model round closed without a reply (Copilot's "No response was returned"). The session sits at its prompt until the message is sent again. | Your turn |
 | `idle-finished` | The turn ended clean with nothing pending and the session's repo has no still-open issue-workflow marker. | Bot's turn |
 
-`idle-finished` is downgraded to `awaiting-input` while the session's repo still has an open active-issue marker (a clean stop is an absence of evidence, not proof the work is done), and it requires positive evidence: "could not check" always falls back to `awaiting-input`. The `idle` raw status never goes through the split. Whether Copilot's `ask_user` tool surfaces as `awaiting-decision` through the transcript path is **unknown** until the Copilot transcript reader exists; `ask_user` blocking under autopilot is also an open probe.
+`idle-finished` is downgraded to `awaiting-input` while the session's repo still has an open active-issue marker (a clean stop is an absence of evidence, not proof the work is done), and it requires positive evidence: "could not check" always falls back to `awaiting-input`. The `idle` raw status never goes through the split. Whether `ask_user` blocks under autopilot is an open probe.
 
 ## Owner checks
 

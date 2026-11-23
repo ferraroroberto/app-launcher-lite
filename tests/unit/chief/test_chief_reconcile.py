@@ -249,3 +249,39 @@ def test_a_finished_subagent_is_not_the_lane_s_turn_end(lane: Lane) -> None:
                     _line("tool.execution_complete", T0 + 1, toolCallId="call_a"))
     assert lane.run(now=T0 + 600) == []
     assert not lane.inbox.exists()
+
+
+def _failed_turn(at: float = T0) -> list:
+    """A turn whose model round closed with no reply, and no agentStop line after it."""
+    return [_line("user.message", at - 30, content="/issue-start 7"),
+            _line("assistant.turn_start", at - 29),
+            _line("session.error", at - 1, errorType="query",
+                  message="No response was returned. Send your message again to retry"),
+            _line("assistant.turn_end", at)]
+
+
+def test_a_failed_turn_its_hook_never_reported_reaches_the_chief_as_turn_failed(lane: Lane) -> None:
+    lane.transcript(LANE, *_failed_turn())
+    assert lane.run(now=T0 + 10) == [], "inside the grace window the hook may still land"
+    assert len(lane.run(now=T0 + 600)) == 1
+    assert lane.run(now=T0 + 1200) == [], "deduplicated across ticks through the turn-end stamp"
+    [event] = lane.events()
+    assert (event["kind"], event["event"], event["source"]) == ("turn-failed", "Stop", "reconcile")
+    assert event["error"].startswith("No response was returned")
+
+
+def test_a_failed_turn_the_hook_published_is_not_repeated(lane: Lane) -> None:
+    lane.transcript(LANE, *_failed_turn())
+    lane.stamp("turn-end", LANE, T0 + 0.05)
+    assert lane.run(now=T0 + 600) == []
+
+
+def test_a_round_still_thinking_is_not_a_failed_turn(lane: Lane) -> None:
+    lane.transcript(LANE, _line("user.message", T0 - 30, content="go"), _line("assistant.turn_start", T0 - 29))
+    assert lane.run(now=T0 + 3600) == []
+
+
+def test_a_user_exit_mid_round_is_a_session_end_not_a_failed_turn(lane: Lane) -> None:
+    lane.transcript(LANE, *_failed_turn(), _line("session.shutdown", T0 + 1))
+    lane.run(now=T0 + 600)
+    assert [e["kind"] for e in lane.events()] == ["session-end"]

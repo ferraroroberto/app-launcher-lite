@@ -1,6 +1,6 @@
 """The Board session card's status set, declared once.
 
-A card's ``status`` is exactly one of the nine :class:`CardValue` members. Every grouping a
+A card's ``status`` is exactly one of the ten :class:`CardValue` members. Every grouping a
 consumer needs (the Your-turn lane, the chief's resting label, the doorbell's
 safe-to-type set, the plan-picker screen check) is derived from the
 properties declared here, so a status is added or regrouped in one place.
@@ -31,6 +31,7 @@ class CardValue(StrEnum):
     TOOL_PENDING = "tool-pending"
     IDLE_FINISHED = "idle-finished"
     AWAITING_INPUT = "awaiting-input"
+    TURN_FAILED = "turn-failed"
 
 
 # Plain strings, so a card dict, a JSON payload and a set lookup see the same value as before.
@@ -43,6 +44,7 @@ AWAITING_DECISION = CardValue.AWAITING_DECISION.value
 TOOL_PENDING = CardValue.TOOL_PENDING.value
 IDLE_FINISHED = CardValue.IDLE_FINISHED.value
 AWAITING_INPUT = CardValue.AWAITING_INPUT.value
+TURN_FAILED = CardValue.TURN_FAILED.value
 
 #: The raw hook stamp that the needs-you split turns into a card value.
 NEEDS_YOU_STAMP = "needs-you"
@@ -86,6 +88,10 @@ class CardStatus:
     ``working`` (a turn in flight) and ``unknown`` (no evidence either way)
     lack it.
 
+    ``turn-failed`` (Copilot only): the turn ended without a reply, so the
+    session sits at its prompt until someone sends the message again. A person
+    or the chief must act; the composer is free, so the doorbell may type.
+
     ``quit_safe``: a graceful quit loses nothing, because the turn ended clean
     with nothing running and nothing pending on screen. ``awaiting-input`` is
     left out: it is a clean stop that a repo with an open issue workflow
@@ -126,6 +132,7 @@ CARD_STATUSES: Dict[str, CardStatus] = {
             AWAITING_INPUT, needs_human=True, chief_resting=True,
             doorbell_idle=True, screen_checked=True, turn_ended=True,
         ),
+        CardStatus(TURN_FAILED, needs_human=True, doorbell_idle=True, turn_ended=True),
     )
 }
 
