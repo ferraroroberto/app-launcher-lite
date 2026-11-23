@@ -385,6 +385,191 @@ builders = [
 enabled      = true
 handler_dirs = ["app/webapp/routers"]
 
+# Server loops that wake faster than the ratchet's 5 s floor, or on an interval the
+# source does not fix. Each runs only while something waits on it (a request, a launch
+# or restart, a send, a live session, a running Job, a poll within the demand window)
+# or must act while nobody watches, and then idles cheaply.
+
+[[request_budget.loops]]
+path       = "app/cli/commands/run_job_supervision.py"
+function   = "ResourceSampler._loop"
+interval_s = 1
+why        = "samples a running Job's process tree for its CPU and memory report; it exists only while that Job runs"
+
+[[request_budget.loops]]
+path       = "app/tray/registered_trays.py"
+function   = "_wait_for_tray_ready"
+interval_s = 0.5
+why        = "bounded wait for a sister tray the owner just launched to bind its port; ends after 30 s"
+
+[[request_budget.loops]]
+path       = "app/webapp/chief_doorbell.py"
+function   = "tick_forever"
+interval_s = 3
+why        = "wakes the idle fleet chief when its mailbox fills, which must happen while nobody watches; off by default, and an empty mailbox stops each tick at a directory listing"
+
+[[request_budget.loops]]
+path       = "app/webapp/demand_cache.py"
+function   = "DemandCache.tick_forever"
+interval_s = 5
+why        = "rebuilds only while a read arrived within the demand window, and does nothing otherwise"
+
+[[request_budget.loops]]
+path       = "app/webapp/manager.py"
+function   = "WebappManager._await_answer"
+interval_s = 0.4
+why        = "bounded re-probe of a just-bound webapp port within the startup budget while the tray waits on it"
+
+[[request_budget.loops]]
+path       = "app/webapp/manager.py"
+function   = "WebappManager.wait_until_ready"
+interval_s = 0.4
+why        = "bounded wait for the webapp the tray just started to answer; ends at the startup budget"
+
+[[request_budget.loops]]
+path       = "app/webapp/routers/board_chief.py"
+function   = "_stop_chief_for_respawn"
+interval_s = 0.25
+why        = "bounded wait inside the owner's respawn request for the old chief to exit, so two chiefs never run; ends after 8 s"
+
+[[request_budget.loops]]
+path       = "app/webapp/routers/board_spawn.py"
+function   = "_await_dispatch_ready"
+interval_s = 0.25
+why        = "bounded wait inside a spawn request for the new agent's first output before typing into it; ends after 15 s"
+
+[[request_budget.loops]]
+path       = "app/webapp/routers/board_spawn.py"
+function   = "_await_pty_quiescent"
+interval_s = 0.5
+why        = "bounded wait inside a spawn request for the agent's prompt to settle before typing into it; ends after 30 s"
+
+[[request_budget.loops]]
+path       = "app/webapp/routers/jobs_run_store_routes.py"
+function   = "stream_job_run"
+interval_s = 0.1
+why        = "tails a Job run's output to the open websocket; it runs only while that client is connected and the run is live"
+
+[[request_budget.loops]]
+path       = "app/webapp/routers/session_folder_trust.py"
+function   = "session_folder_trust"
+interval_s = 0.5
+why        = "bounded wait inside the owner's folder-trust request for the dialog to close; ends after 6 s"
+
+[[request_budget.loops]]
+path       = "app/webapp/routers/session_screen.py"
+function   = "_wait_for_screen"
+interval_s = 0.5
+why        = "bounded re-read of a terminal inside the owner's request until the expected screen shows or the timeout passes"
+
+[[request_budget.loops]]
+path       = "app/webapp/routers/session_screen.py"
+function   = "_switch_claude"
+interval_s = 0.5
+why        = "bounded wait inside a model-switch request for the agent to confirm the new model; ends after 10 s"
+
+[[request_budget.loops]]
+path       = "app/webapp/routers/session_screen.py"
+function   = "_switch_codex"
+interval_s = 0.5
+why        = "bounded wait inside a model-switch request for the agent to confirm the new model; ends after 10 s"
+
+[[request_budget.loops]]
+path       = "app/webapp/routers/session_screen.py"
+function   = "_switch_copilot"
+interval_s = 0.5
+why        = "bounded wait inside a model-switch request for Copilot's log to confirm the new model; ends after 10 s"
+
+[[request_budget.loops]]
+path       = "app/webapp/server.py"
+function   = "_coverage_tick"
+interval_s = 60
+why        = "reaps stranded Job runs and pushes missed-schedule alerts, which must happen while nobody watches; canonical instance only, never faster than 60 s, interval set in Settings"
+
+[[request_budget.loops]]
+path       = "src/clients/session.py"
+function   = "_await_tui_ready"
+interval_s = 0.2
+why        = "bounded wait inside a send for a just-spawned agent to read its input; returns at once for an older session and ends after 15 s"
+
+[[request_budget.loops]]
+path       = "src/jobs/snapshot.py"
+function   = "tick_forever"
+interval_s = 3
+why        = "rebuilds the Jobs snapshot only while a poll asked within the demand window; an idle wake only reads a timestamp"
+
+[[request_budget.loops]]
+path       = "src/launching/app_refresh.py"
+function   = "stop_instance"
+interval_s = 0.25
+why        = "bounded wait inside a stop request for the killed app's process to be gone; ends after 8 s"
+
+[[request_budget.loops]]
+path       = "src/launching/launcher.py"
+function   = "_poll_for_mirror_hwnd"
+interval_s = 0.1
+why        = "bounded search for a just-opened mirror window so it can be closed; ends after 3 s"
+
+[[request_budget.loops]]
+path       = "src/launching/restart_check.py"
+function   = "verify"
+interval_s = 1
+why        = "bounded post-restart check that the new build answers; a command-line tool that ends at its timeout"
+
+[[request_budget.loops]]
+path       = "src/launching/restart_check.py"
+function   = "wait_session_host"
+interval_s = 1
+why        = "bounded check that the session-host answers after a start; a command-line tool that ends at its timeout"
+
+[[request_budget.loops]]
+path       = "src/session_host.py"
+function   = "PtySession._read_loop"
+interval_s = 0.01
+why        = "reads a live terminal's output; one per running session, and it ends when the session ends"
+
+[[request_budget.loops]]
+path       = "src/session_host.py"
+function   = "PtySession.stop"
+interval_s = 0.1
+why        = "bounded grace wait for a quitting agent to exit before it is killed"
+
+[[request_budget.loops]]
+path       = "src/session_host_input.py"
+function   = "InputProtocol._await_bulk_settle"
+interval_s = 0.05
+why        = "bounded wait for a pasted message to echo in a live terminal; runs only during a send"
+
+[[request_budget.loops]]
+path       = "src/session_host_input.py"
+function   = "InputProtocol._await_chip_cleared"
+interval_s = 0.05
+why        = "bounded wait during a send for the pasted-text chip to clear; ends after 1.5 s"
+
+[[request_budget.loops]]
+path       = "src/session_hosting/deferred_submit.py"
+function   = "DeferredSubmit._await_submit_moment"
+interval_s = 0.25
+why        = "bounded wait during a send for the agent to go quiet before pressing Enter; a newer write or the session's exit ends it"
+
+[[request_budget.loops]]
+path       = "src/session_hosting/deferred_submit.py"
+function   = "DeferredSubmit._confirm_typeahead_submit"
+interval_s = 0.05
+why        = "bounded wait during a send for the agent to show the message was queued; ends after 10 s"
+
+[[request_budget.loops]]
+path       = "src/session_hosting/deferred_submit.py"
+function   = "DeferredSubmit._confirm_bg_submit"
+interval_s = 0.05
+why        = "bounded wait during a send for the agent's turn to start; ends after 15 s"
+
+[[request_budget.loops]]
+path       = "src/system_load.py"
+function   = "tick_forever"
+interval_s = 1
+why        = "samples CPU and memory only while the header polled within the demand window; an idle wake only reads a timestamp"
+
 # [windows_only_ratchet] -- scripts/windows_only_ratchet.py fails when a test that needs
 # Windows (a Windows-only module or API, a Windows-only environment variable read, or a
 # planted .exe under a redirected install folder) has no `windows_only` marker beyond
