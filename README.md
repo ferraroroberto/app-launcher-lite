@@ -94,6 +94,8 @@ Directories (projects dir and ignore globs, apps scan root, team-os dir), GitLab
 
 **Diagnostics** saves the last 15 minutes, hour or 3 hours of every Lite log to one redacted, time-ordered text file on the PC and offers it for download; `.\.venv\Scripts\python.exe launcher.py diagnostics --minutes 60` does the same from the command line ([docs/diagnostics.md](docs/diagnostics.md)).
 
+**Prevent lock** (Settings › This PC, off by default) keeps the PC from locking for being idle: while on, Lite moves the pointer 1 px every 15 s and holds a keep-awake request; it never clicks, skips a beat after real input and changes no power setting ([docs/prevent-lock.md](docs/prevent-lock.md)).
+
 ### Speech to text
 
 Settings > Speech to text turns on the record button in the Board chat and the session composer: tap it, speak, tap again, and the transcript lands in the box for review before you send it. Audio goes to `<base URL>/audio/transcriptions` in the OpenAI shape, so the endpoint is whatever you set: the local LLM hub (`http://127.0.0.1:8000/v1`), another machine's server, or any OpenAI-compatible host, with an optional model name and API key. **Test connection** reports `reachable`, `refused` or `unknown` for the saved endpoint; it proves a server answers, and only a real recording proves transcription. With the switch off no record button shows. The browser needs microphone access, which on a phone means the secure (Tailscale HTTPS) address. The recorder offers mp4 before webm because the hub's parakeet and whisper backends cannot decode a browser's webm take; for the hub, set the model to `parakeet-tdt-0.6b-v3` (see its `GET /v1/models`).
@@ -217,6 +219,7 @@ app-launcher keeps growing. This repo tracks it through the `[upstream]` waterma
 | [docs/screen-view.md](docs/screen-view.md) | The live read-only desktop view. |
 | [docs/documents.md](docs/documents.md) | The Documents reader. |
 | [docs/lid-keep-awake.md](docs/lid-keep-awake.md) | Keeping the PC awake with the lid closed. |
+| [docs/prevent-lock.md](docs/prevent-lock.md) | Settings › Prevent lock: a 1 px pointer nudge and a keep-awake request. |
 | [docs/iphone-debugging.md](docs/iphone-debugging.md) | Debugging the PWA on an iPhone. |
 | [docs/cache-hygiene-asset-hashing.md](docs/cache-hygiene-asset-hashing.md) | Content-hash asset stamping and `/api/version` build identity. |
 | [docs/restart-and-liveness.md](docs/restart-and-liveness.md) | Restart recipes and how to tell a change is live. |

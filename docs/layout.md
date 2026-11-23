@@ -64,7 +64,7 @@ app-launcher-lite/
 │   ├── chief/                  # the chief's plan, journal, answers and dispatch briefs
 │   ├── session_view/           # a live session's views: transcript pages, changed files, the Chat outbox, plan and resume pickers
 │   ├── transcript_flavors/     # the Copilot transcript-line grammar (copilot.py, apply_patch.py) and its turn-end reader (copilot_turn.py)
-│   ├── desktop/                # the Screen view's PC side: capture, input, cursor, clipboard
+│   ├── desktop/                # the Screen view's PC side: capture, input, cursor, clipboard, the Prevent lock nudge (prevent_lock.py)
 │   ├── notify/                 # vendored provider package behind notifications.py (failure alerts)
 │   ├── jobs/, jobs_kinds/      # Jobs backend: config, scheduling, trigger, queue, reap, history, stats, coverage, webhooks,
 │   │                           #   secrets; per-kind executors (batch / http_check / inline_shell / powershell / python / shell_wsl)

@@ -77,6 +77,7 @@ from src.board import state_reconcile
 from src.chief import reconcile as chief_reconcile
 from src.clients import session as session_client
 from src.compression import StreamSafeGZipMiddleware
+from src.desktop import prevent_lock
 from src.jobs import snapshot as jobs_snapshot
 from src.launching import launcher
 from src.middleware import BearerTokenMiddleware
@@ -479,6 +480,10 @@ async def _lifespan(app: FastAPI):
         # Always started: it re-reads the chief_doorbell toggle every tick and
         # does nothing while it is off, so a Settings save arms it live.
         tasks.append(asyncio.create_task(chief_doorbell.tick_forever(app)))
+        # Always started: it reads the Prevent lock switch every beat and holds
+        # and sends nothing while it is off. Canonical instance only, so a
+        # disposable gate webapp never moves the real pointer.
+        tasks.append(asyncio.create_task(prevent_lock.tick_forever(app)))
         # A managed lane whose hook missed its turn end or exit still reaches
         # the mailbox. Canonical only: it writes the real chief inbox.
         tasks.append(asyncio.create_task(chief_reconcile.tick_forever(

@@ -42,6 +42,8 @@
   "gitlab_host": "",
   "_comment_speech": "Speech to text (Settings > Speech to text). speech_enabled shows the record button in every message box; off, none shows. speech_base_url is the base of any OpenAI-shaped speech server (audio goes to <base>/audio/transcriptions), e.g. http://127.0.0.1:8000/v1 for the local LLM hub. speech_model is sent as the model name when set; speech_api_key is sent as a bearer key when set and is never returned by the API.",
   "speech_enabled": false,
+  "_comment_prevent_lock": "Settings > This PC > Prevent lock. On, the app moves the pointer 1 px every 15 s and holds a keep-awake request so the PC does not lock for being idle; off (the default), nothing runs.",
+  "prevent_lock": false,
   "speech_base_url": "",
   "speech_model": "",
   "speech_api_key": "",
