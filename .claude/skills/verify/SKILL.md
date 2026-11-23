@@ -31,7 +31,7 @@ rendering of the actual changed JS/CSS, not a DOM-assertion-only test run.
 ## Alternative: the live tray webapp
 
 To see a change against your actual running instance instead of a disposable
-one: `tray.bat --restart` (see the repo CLAUDE.md's restart contract), then hit
+one: `.\.venv\Scripts\python.exe -m src.launching.restart_check restart` (see the repo CLAUDE.md's restart contract), then hit
 `https://127.0.0.1:8465` directly — loopback bypasses the bearer-token gate.
 Terminal-grade surfaces (Board drawer reply/dispatch, live PTY) additionally
 need a WebAuthn passkey unless `webauthn_rp_id` is unset in
