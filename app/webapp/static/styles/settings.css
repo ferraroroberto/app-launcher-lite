@@ -302,5 +302,6 @@ button.settings-row:active { background: var(--card-2); }
 .speech-recording-status[data-status="transcribed"] { color: var(--success-text); }
 .speech-recording-error { color: var(--muted); overflow-wrap: anywhere; }
 .speech-recording-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.speech-recording-actions > button { flex: 0 0 auto; width: auto; }
 .speech-recording audio { width: 100%; }
 .speech-recording-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
