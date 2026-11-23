@@ -264,3 +264,83 @@ def test_the_default_runner_spawns_without_a_window_and_with_a_timeout(monkeypat
 
 def test_the_saved_values_root_is_the_repo_root(project_root):
     assert lid.PROJECT_ROOT == project_root  # STATE_FILE itself is redirected by the autouse fixture
+
+
+def _fresh_copy(name: str, state_name: Optional[str] = None):
+    """A second load of the module: its own default ``STATE_FILE`` (the autouse
+    fixture only redirects the imported one), optionally pointed at a named file
+    to stand in for a sister app that shares this machine's power plan."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(name, lid.__file__)
+    other = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(other)
+    if state_name is not None:
+        other.STATE_FILE = lid.STATE_FILE.with_name(state_name)
+    return other
+
+
+def test_the_saved_values_file_defaults_to_the_repo_webapp_folder(project_root):
+    assert _fresh_copy("_lid_default").STATE_FILE == project_root / "webapp" / "lid-keep-awake.json"
+
+
+def test_two_apps_enabling_in_turn_never_save_each_others_zeros(fake):
+    other = _fresh_copy("_lid_second_app", "second-app-lid-keep-awake.json")
+    fake.plans[PLAN_A] = [1, 2]
+    lid.enable(fake)
+    writes = len(fake.writes())
+
+    other.enable(fake)
+    assert len(fake.writes()) == writes, "already on: the second app writes nothing"
+    assert not other.STATE_FILE.exists(), "and saves no values that are really the first app's zeros"
+
+    with pytest.raises(other.LidKeepAwakeError, match="No prior values are saved"):
+        other.disable(fake)
+    assert fake.plans[PLAN_A] == [0, 0], "the refusal changes nothing"
+
+    lid.disable(fake)
+    assert fake.plans[PLAN_A] == [1, 2], "the app that turned it on restores the true original"
+    assert not lid.STATE_FILE.exists()
+
+
+def test_two_apps_in_the_other_order_restore_the_true_original_too(fake):
+    other = _fresh_copy("_lid_second_app_b", "second-app-lid-keep-awake.json")
+    fake.plans[PLAN_A] = [2, 1]
+    other.enable(fake)
+
+    lid.enable(fake)
+    with pytest.raises(lid.LidKeepAwakeError, match="No prior values are saved"):
+        lid.disable(fake)
+    assert fake.plans[PLAN_A] == [0, 0]
+
+    other.disable(fake)
+    assert fake.plans[PLAN_A] == [2, 1]
+    assert lid.payload(fake)["state"] == "off"
+
+
+def test_powercfg_output_is_decoded_as_oem_only_on_windows(monkeypatch):
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["encoding"] = kwargs["encoding"]
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(lid.subprocess, "run", fake_run)
+    monkeypatch.setattr(lid.sys, "platform", "win32")
+    REAL_RUN_POWERCFG(["/q"])
+    assert seen["encoding"] == "oem"
+    monkeypatch.setattr(lid.sys, "platform", "linux")
+    REAL_RUN_POWERCFG(["/q"])
+    assert seen["encoding"] == "utf-8"
+
+
+def test_localised_powercfg_labels_still_read(fake):
+    def spanish(args):
+        return subprocess.CompletedProcess(args, 0, stdout=(
+            f"GUID del plan de energía: {PLAN_A}  (Equilibrado)\n"
+            "  GUID de subgrupo: 4f971e89-eebd-4455-a8de-9e59040e7347  (Botones de inicio y apagado)\n"
+            "    Índice de configuración de CA actual: 0x00000000\n"
+            "    Índice de configuración de CC actual: 0x00000001\n"
+        ), stderr="")
+
+    assert lid.read_values(spanish) == lid.Reading(PLAN_A, 0, 1)
