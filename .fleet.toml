@@ -1233,7 +1233,7 @@ derive = "usageState"
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "6f0c9480e4d377c3a910ca739af20220a726658a"
+synced_sha = "a6009396649fc8e3f4a302d8f40a92ac49fd8e15"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
@@ -1374,3 +1374,7 @@ reason = "already present"
 [[upstream.skipped]]
 sha = "2bba9c28cb067d2e17a9f219554eef686cd23324"
 reason = "local request timing keeps resizable pools for Settings Performance, which the shared middleware lacks"
+
+[[upstream.skipped]]
+sha = "1c969cfb613d10dcce976a39958cba6105746ecf"
+reason = "Life OS is not carried in this repo"

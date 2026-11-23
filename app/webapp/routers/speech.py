@@ -13,7 +13,6 @@ again. Those routes sit under ``/api/transcribe/`` to share its passkey gate.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any, Dict, Tuple
 
@@ -21,6 +20,7 @@ from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 
+from app.webapp.route_pools import SERVICE_CALLS, run_on
 from app.webapp.routers._helpers import audit_off_loop, client_ip
 from src import audit, recordings
 from src.clients import speech as speech_client
@@ -46,7 +46,8 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> Dict[str
     if not content:
         raise HTTPException(status_code=400, detail="empty recording")
     try:
-        result = await asyncio.to_thread(
+        result = await run_on(
+            SERVICE_CALLS,
             speech_client.transcribe_upload,
             cfg.speech_base_url,
             cfg.speech_model,
@@ -79,7 +80,8 @@ async def speech_test(request: Request) -> Dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
     if not cfg.speech_base_url:
         raise HTTPException(status_code=400, detail="Set a base URL first.")
-    return await asyncio.to_thread(
+    return await run_on(
+        SERVICE_CALLS,
         speech_client.check_connection, cfg.speech_base_url, cfg.speech_model, cfg.speech_api_key
     )
 

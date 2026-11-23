@@ -51,12 +51,16 @@ from src.chief_session_end import (
     stamp_path,
     touch_stamp,
 )
+from src.request_timing import TimedExecutor
 
 logger = logging.getLogger(__name__)
 
 SOURCE_RECONCILE = "reconcile"
 #: With :data:`GRACE_SECONDS` it bounds how long a dropped turn end waits: 45 s.
 TICK_SECONDS = 15.0
+# The tick's own thread: a stalled inbox or transcript read then stalls only the
+# reconcile, never a request on the loop's shared default pool.
+_TICK_POOL = TimedExecutor("chief-reconcile-tick", max_workers=1)
 #: A hook lands within a couple of seconds of the transcript line it reports
 #: (its ``timeoutSec`` is 10), so this leaves it every chance to win first.
 GRACE_SECONDS = 30.0
@@ -239,6 +243,6 @@ async def tick_forever(get_cfg: Callable[[], Any]) -> None:
         if cfg is None:
             continue
         try:
-            await asyncio.to_thread(reconcile_from_config, cfg)
+            await asyncio.get_running_loop().run_in_executor(_TICK_POOL, reconcile_from_config, cfg)
         except Exception:  # noqa: BLE001 -- never take the lifespan down
             logger.exception("❌ chief reconcile tick failed")

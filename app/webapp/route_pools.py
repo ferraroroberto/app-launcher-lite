@@ -16,7 +16,18 @@ fills only the pool of its kind:
 * :data:`SESSION_HOST`: loopback HTTP calls to the session-host;
 * :data:`OUTBOUND`: work that waits on another program or the network
   (a subprocess, ``glab`` and the GitLab API, opening a window on the PC);
-* :data:`AUDIT`: the audit log's appends, which every router makes.
+* :data:`AUDIT`: the audit log's appends, which every router makes;
+* :data:`JOBS_FILES`: the Jobs tab's reads and writes of job state (run
+  records, output tails, the run index, the runtime snapshot, a run's outbox);
+* :data:`JOB_SPAWNS`: handing a Job run to its detached executor, kept apart
+  from the reads so a fire never queues behind a stalled history walk;
+* :data:`APP_PROBES`: the Apps tab's registry reads, folder scans, listener
+  scans and local health or scheme probes;
+* :data:`SERVICE_CALLS`: HTTP calls to the sibling services (speech, the LLM
+  hub), which can each take seconds to minutes, kept apart so a long call never
+  starves the short subprocess and ``glab`` calls on :data:`OUTBOUND`;
+* :data:`MISC_FILES`: the smaller views' own files (Settings, Documents,
+  progress, the Copilot usage log, diagnostics).
 
 The pools are :class:`TimedExecutor`, so a request's ``Server-Timing``
 names the pool its time went to. A pool's threads start on first use.
@@ -45,6 +56,10 @@ JOBS_FILES = TimedExecutor("jobs-files", max_workers=6)
 JOB_SPAWNS = TimedExecutor("job-spawns", max_workers=4)
 # The Apps poll probes several tunnels' health at once, each up to 3 s.
 APP_PROBES = TimedExecutor("app-probes", max_workers=8)
+# A few cover a transcription, a summary and a probe in flight at once.
+SERVICE_CALLS = TimedExecutor("service-calls", max_workers=6)
+# Settings and the smaller sheets read a file or two per open, never in bulk.
+MISC_FILES = TimedExecutor("misc-files", max_workers=4)
 
 
 async def run_on(pool: TimedExecutor, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> T:

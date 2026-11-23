@@ -1,4 +1,4 @@
-"""A stalled session or Jobs read fills only its own pool: the Board's plan poll still answers.
+"""A stalled session, Jobs or misc read fills only its own pool: the Board's plan poll still answers.
 
 Each read below hangs on an injected event (no CPU burn), and there are more of
 them than its pool has threads, so that pool is full and queueing. The Board's
@@ -55,8 +55,9 @@ async def _until(check: Callable[[], bool], timeout: float = 3.0) -> None:
         ("src.session_view.outbox.listing", "/api/claude-code/sessions/s1/outbox",
          route_pools.SESSION_FILES, {"entries": []}),
         ("src.jobs.index.search_runs", "/api/jobs/runs/search?q=x", route_pools.JOBS_FILES, []),
+        ("src.documents.list_documents", "/api/documents", route_pools.MISC_FILES, []),
     ],
-    ids=["session-outbox", "jobs-search"],
+    ids=["session-outbox", "jobs-search", "documents"],
 )
 def test_stalled_reads_leave_the_board_plan_poll_free(webapp_client, monkeypatch, target, url, pool, answer):
     _, app, _ = webapp_client
@@ -116,9 +117,18 @@ def test_run_on_uses_the_named_pool_and_the_callers_context():
 
 
 def test_route_pools_appear_in_the_diagnostics_pool_report():
-    from src import request_timing
+    from src import request_timing, system_load
+    from src.board import state_reconcile
+    from src.chief import reconcile as chief_reconcile
+    from src.desktop import capture
     from src.jobs import snapshot
+    from src.session_view import vt_screen
 
     names = set(request_timing.pool_snapshot())
-    expected = {route_pools.JOBS_FILES, route_pools.JOB_SPAWNS, route_pools.APP_PROBES, snapshot._TICK_POOL}
+    expected = {
+        route_pools.JOBS_FILES, route_pools.JOB_SPAWNS, route_pools.APP_PROBES,
+        route_pools.SERVICE_CALLS, route_pools.MISC_FILES, snapshot._TICK_POOL,
+        state_reconcile._TICK_POOL, chief_reconcile._TICK_POOL, system_load._TICK_POOL,
+        capture.SCREEN_POOL, vt_screen._RENDER_POOL,
+    }
     assert {p.pool_name for p in expected} <= names

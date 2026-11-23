@@ -378,7 +378,7 @@ class TestCoverageCycle:
             calls.append("check")
             return []
 
-        monkeypatch.setattr(server.asyncio, "to_thread", _passthrough_to_thread)
+        monkeypatch.setattr(server, "run_on", _passthrough_run_on)
         monkeypatch.setattr("src.jobs.reap.reap_stranded_runs_all", _reap)
         monkeypatch.setattr("src.jobs.coverage.check_and_alert", _check)
 
@@ -387,7 +387,7 @@ class TestCoverageCycle:
         assert calls == ["reap", "check"]
 
     async def test_logs_when_something_was_reaped(self, monkeypatch, caplog):
-        monkeypatch.setattr(server.asyncio, "to_thread", _passthrough_to_thread)
+        monkeypatch.setattr(server, "run_on", _passthrough_run_on)
         monkeypatch.setattr(
             "src.jobs.reap.reap_stranded_runs_all",
             lambda: {"insights-weekly": [{"status": "failed"}]},
@@ -405,7 +405,7 @@ class TestCoverageCycle:
         ), caplog.text
 
     async def test_nothing_reaped_stays_quiet(self, monkeypatch, caplog):
-        monkeypatch.setattr(server.asyncio, "to_thread", _passthrough_to_thread)
+        monkeypatch.setattr(server, "run_on", _passthrough_run_on)
         monkeypatch.setattr(
             "src.jobs.reap.reap_stranded_runs_all", lambda: {}
         )
@@ -419,5 +419,5 @@ class TestCoverageCycle:
         assert caplog.records == []
 
 
-async def _passthrough_to_thread(fn, *a, **k):
+async def _passthrough_run_on(_pool, fn, *a, **k):
     return fn(*a, **k)
