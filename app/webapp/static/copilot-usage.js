@@ -16,6 +16,7 @@
 
 import { jsonApi } from './api.js';
 import { state } from './state.js';
+import { startPoll } from './_vendored/poll/poll.js';
 
 const POLL_MS = 60000;
 // The server's first read runs in the background; ask again shortly.
@@ -181,7 +182,7 @@ async function fetchUsage(retries) {
 export function wireCopilotUsage() {
   if (timer !== null) return;
   fetchUsage(PENDING_RETRIES);
-  timer = setInterval(function () { fetchUsage(0); }, POLL_MS);
+  timer = startPoll(function () { return fetchUsage(0); }, POLL_MS);
   document.addEventListener('launcher:tab', function (ev) {
     if (ev.detail && ev.detail.tab === 'claude') fetchUsage(PENDING_RETRIES);
   });

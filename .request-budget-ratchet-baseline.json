@@ -1,11 +1,4 @@
 {
   "version": 1,
-  "entries": [
-    {"key": "app/webapp/routers/team_os.py", "counts": {"scan-per-request": 2}},
-    {"key": "app/webapp/server.py", "counts": {"timing-middleware": 1}},
-    {"key": "app/webapp/static/board/drawer.js", "counts": {"fixed-rate-poll": 1}},
-    {"key": "app/webapp/static/copilot-usage.js", "counts": {"fixed-rate-poll": 1}},
-    {"key": "app/webapp/static/settings/performance.js", "counts": {"fixed-rate-poll": 1}},
-    {"key": "app/webapp/static/terminal.js", "counts": {"fixed-rate-poll": 2}}
-  ]
+  "entries": []
 }

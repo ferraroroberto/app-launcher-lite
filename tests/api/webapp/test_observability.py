@@ -12,7 +12,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.webapp.observability import SlowRequestLogMiddleware
+from app.webapp.observability import RequestTimingMiddleware
 from src.request_timing import RequestStats, TimedExecutor
 
 _SLOW_LOGGER = "launcher.slowreq"
@@ -30,7 +30,7 @@ def _make_client(slow_s: float = 0.05) -> TestClient:
         await asyncio.sleep(slow_s * 3)
         return {"ok": True}
 
-    app.add_middleware(SlowRequestLogMiddleware, slow_s=slow_s)
+    app.add_middleware(RequestTimingMiddleware, slow_s=slow_s)
     return TestClient(app)
 
 
@@ -57,7 +57,7 @@ def test_fast_request_stays_silent(caplog):
 def test_inflight_breadcrumb_thresholded_and_rate_limited(caplog):
     # Drive the in-flight logic directly: TestClient is serial, so real
     # concurrent requests can't populate the registry in a unit test.
-    mw = SlowRequestLogMiddleware(app=None, slow_s=999.0, inflight_warn=2)
+    mw = RequestTimingMiddleware(app=None, slow_s=999.0, inflight_warn=2)
 
     with caplog.at_level(logging.WARNING, logger=_SLOW_LOGGER):
         mw._inflight = {1: ("GET", "/a", 90.0), 2: ("GET", "/b", 95.0)}
@@ -81,7 +81,7 @@ def test_inflight_breadcrumb_thresholded_and_rate_limited(caplog):
 def test_env_defaults_applied(monkeypatch):
     monkeypatch.setenv("LAUNCHER_SLOW_REQUEST_S", "7.5")
     monkeypatch.setenv("LAUNCHER_INFLIGHT_WARN", "12")
-    mw = SlowRequestLogMiddleware(app=None)
+    mw = RequestTimingMiddleware(app=None)
     assert mw.slow_s == 7.5
     assert mw.inflight_warn == 12
 
@@ -103,7 +103,7 @@ def _timed_client(**mw_kwargs) -> TestClient:
     async def quiet():
         return {"ok": True}
 
-    app.add_middleware(SlowRequestLogMiddleware, slow_s=999.0, stats=RequestStats(), **mw_kwargs)
+    app.add_middleware(RequestTimingMiddleware, slow_s=999.0, stats=RequestStats(), **mw_kwargs)
     return TestClient(app)
 
 
