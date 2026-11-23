@@ -95,7 +95,7 @@ async function fetchJobChoices() {
   });
 }
 
-function ensureLoaded() {
+export function ensureLoaded() {
   if (loaded) return;
   loaded = true;
   fetchTokens().catch(function (exc) {

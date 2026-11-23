@@ -13,8 +13,6 @@
 
 import { els } from './state.js';
 import { icon } from './_vendored/icons/icons.js';
-import { renderMarkdown } from './markdown.js';
-import { renderMermaidIn } from './shared/mermaid-render.js';
 
 export function openImageLightbox(url, alt) {
   if (!url || !els.imageLightbox) return;
@@ -111,8 +109,15 @@ export async function fillHtmlCard(card, got, name) {
 // long report never builds its whole DOM in the transcript.
 const MD_PREVIEW_CHARS = 4000;
 
+// The Markdown renderer and its Mermaid pass draw only a Markdown file someone
+// opens, so they load with the first one, not with the page.
+function markdownKit() {
+  return Promise.all([import('./markdown.js'), import('./shared/mermaid-render.js')])
+    .then(function (m) { return { renderMarkdown: m[0].renderMarkdown, renderMermaidIn: m[1].renderMermaidIn }; });
+}
+
 export async function fillMarkdownCard(card, got, name) {
-  const text = await got.blob.text();
+  const [text, md] = await Promise.all([got.blob.text(), markdownKit()]);
   if (!card.isConnected) return;
   const btn = document.createElement('button');
   btn.dataset.track = 'lightbox.markdown-open';
@@ -130,7 +135,7 @@ export async function fillMarkdownCard(card, got, name) {
   box.className = 'tr-file-md-box';
   const body = document.createElement('div');
   body.className = 'tr-file-md tr-md';
-  body.innerHTML = renderMarkdown(cut ? text.slice(0, MD_PREVIEW_CHARS) : text);
+  body.innerHTML = md.renderMarkdown(cut ? text.slice(0, MD_PREVIEW_CHARS) : text);
   box.append(body, btn);
   card.appendChild(box);
   card.classList.add('tr-file-loaded');
@@ -145,11 +150,11 @@ let viewerOwnUrl = null;
 
 // The viewer's body for a document: a frame carrying its srcdoc (HTML), or the
 // renderer's escaped output in a scrolling box (Markdown).
-function viewerNode(kind, name, text) {
+function viewerNode(kind, name, text, md) {
   if (kind === 'markdown') {
     const box = document.createElement('div');
     box.className = 'html-viewer-md tr-md';
-    box.innerHTML = renderMarkdown(text);
+    box.innerHTML = md.renderMarkdown(text);
     return box;
   }
   const frame = sandboxedFrame('html-viewer-frame', name);
@@ -171,13 +176,14 @@ function openHtmlViewer(name, got, returnTo, kind) {
   // A new frame carrying its srcdoc before it is inserted: re-pointing one
   // frame would add a joint-history entry, which the back gesture would then
   // step through instead of closing the viewer.
-  got.blob.text().then(function (text) {
+  Promise.all([got.blob.text(), kind === 'markdown' ? markdownKit() : null]).then(function (r) {
     if (!dlg.open || viewerReturn !== returnTo) return;
-    const node = viewerNode(kind, name, text);
+    const md = r[1];
+    const node = viewerNode(kind, name, r[0], md);
     els.htmlViewerBody.replaceChildren(node);
     // Same renderer as the Documents sheet; a Markdown file's Mermaid fences
     // become diagrams once the box is in the page.
-    if (kind === 'markdown') renderMermaidIn(node);
+    if (md) md.renderMermaidIn(node);
   });
 }
 

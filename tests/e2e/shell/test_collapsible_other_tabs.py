@@ -73,15 +73,13 @@ def test_apps_life_and_jobs_panels_are_collapsible(
         "skills panel should open by default"
     )
 
+    # A tap that beats the lazily loaded Team OS code is held and replayed
+    # once it lands, so the panel toggles a moment after the click returns.
     title = authed_page.locator("#paneTeamOS details.teamos-list-card .collapse-title")
     title.click()
-    assert not _is_open(authed_page, "#paneTeamOS details.teamos-list-card"), (
-        "title tap should collapse the panel"
-    )
+    expect(skills, "title tap should collapse the panel").to_have_js_property("open", False)
     title.click()
-    assert _is_open(authed_page, "#paneTeamOS details.teamos-list-card"), (
-        "second title tap should re-expand it"
-    )
+    expect(skills, "second title tap should re-expand it").to_have_js_property("open", True)
 
     # -- was test_jobs_panel_is_collapsible_and_add_button_does_not_toggle
     # (last: it opens the modal #jobDialog) --

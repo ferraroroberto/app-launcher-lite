@@ -13,15 +13,12 @@
 
 import { els, state } from '../state.js';
 import { apiFailToast, jsonApi, toast } from '../api.js';
-import { setTeamOsModelOptions } from '../team-os.js';
+import { renderLidKeepAwake, renderPerformance, renderSettingsValues, setTeamOsModelOptions } from '../lazy-views.js';
 import { syncLaunchPresets } from '../shared/launch-presets.js';
 import { renderLaunchPresetsEditor, wireLaunchPresets } from './launch-presets-settings.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
-import { renderSettingsValues } from './settings-sheets.js';
 import { renderSpeech } from './speech-settings.js';
-import { renderLidKeepAwake } from './lid-keep-awake.js';
 import { renderNetworkAccess, wireNetworkAccess } from './network-access.js';
-import { renderPerformance } from './performance.js';
 import { renderMirrorBrowser } from './mirror-browser.js';
 
 export async function fetchConfig(shouldApply) {

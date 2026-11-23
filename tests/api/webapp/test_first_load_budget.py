@@ -6,7 +6,8 @@ pair (the page and its stylesheet) and the whole first load each stay under a
 budget with a little headroom over what they weigh now. The page and the
 stylesheet are sent without their comments; a change that sends them again
 fails here. The views a tap opens (chat, terminal, changes, links, Screen,
-Progress, the Jobs and Board tabs and the shared composer) load
+Progress, the Jobs, Team OS and Board tabs, the Settings pane, the Markdown
+renderer and the shared composer) load
 on that tap (lazy-views.js); a static import that pulls one back into the
 first load fails here too.
 """
@@ -20,8 +21,8 @@ from typing import Dict, List
 MAX_RESPONSE_BYTES = 100 * 1024
 # The page and its one stylesheet block the first paint (55 KB together, gzipped).
 RENDER_BLOCKING_BYTES = 70 * 1024
-# Page, stylesheet and every module main.js reaches statically (158 KB now).
-FIRST_LOAD_BYTES = 175 * 1024
+# Page, stylesheet and every module main.js reaches statically (151 KB now).
+FIRST_LOAD_BYTES = 160 * 1024
 # Loaded on first open, never by the first load.
 LAZY_VIEWS = (
     "/static/terminal.js",
@@ -38,6 +39,19 @@ LAZY_VIEWS = (
     "/static/board/drawer.js",
     "/static/composer.js",
     "/static/voice.js",
+    "/static/team-os.js",
+    "/static/team-os/team-os-content.js",
+    "/static/settings/settings-sheets.js",
+    "/static/settings/performance.js",
+    "/static/settings/documents.js",
+    "/static/settings/tokens.js",
+    "/static/settings/diagnostics.js",
+    "/static/settings/lid-keep-awake.js",
+    "/static/settings/install-readiness.js",
+    "/static/_vendored/fullscreen/fullscreen.js",
+    "/static/_vendored/text-size/text-size.js",
+    "/static/markdown.js",
+    "/static/shared/mermaid-render.js",
 )
 
 _STATIC_IMPORT_RE = re.compile(r"""from\s*['"](\.\.?/[^'"?]+\.js)(\?v=[^'"]*)?['"]""")
