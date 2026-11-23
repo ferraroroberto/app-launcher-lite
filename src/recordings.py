@@ -84,10 +84,11 @@ def _meta_path(take_id: str) -> Path:
 
 def _read_meta(take_id: str) -> Dict[str, Any]:
     path = _meta_path(take_id)
+    # Missing is a 404 and unreadable a 500, so this is not read_json_or.
+    if not path.is_file():
+        raise RecordingError("unknown recording", status=404)
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        raise RecordingError("unknown recording", status=404) from None
     except (OSError, ValueError) as exc:
         raise RecordingError(f"recording metadata unreadable ({type(exc).__name__})", status=500) from exc
 
