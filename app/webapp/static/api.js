@@ -1,4 +1,4 @@
-/* HTTP helpers + bearer-token plumbing + sign-in + toast.
+/* HTTP helpers + bearer-token plumbing + sign-in + toast + clipboard copy.
  *
  * Every module reaches the server through api()/jsonApi() so the
  * Authorization: Bearer header is attached once, and 401s open the
@@ -6,7 +6,6 @@
  */
 
 import { els, state, TOKEN_KEY } from './state.js';
-import { requestSignIn } from './_vendored/sign-in/sign-in.js';
 import { showToast as toast } from './_vendored/toast/toast.js';
 import { escapeHtml } from './dom-utils.js';
 
@@ -188,17 +187,20 @@ export async function apiRawJson(path, opts) {
 
 // --------------------------------------------------------------- sign-in
 // Called from every 401. The sheet hands every caller the same promise while
-// it is open, so the follow-up runs once per sign-in, not once per 401.
+// it is open, so the follow-up runs once per sign-in, not once per 401. Its
+// code loads on the first 401: a signed-in boot never draws it.
 let onSignedIn = null;
 let signInOpen = false;
 
 export function showLogin() {
   if (signInOpen) return;
   signInOpen = true;
-  requestSignIn({
-    endpoint: '/api/login',
-    hint: 'Enter the password to use the launcher.',
-    onToken: writeToken,
+  import('./_vendored/sign-in/sign-in.js').then(function (m) {
+    return m.requestSignIn({
+      endpoint: '/api/login',
+      hint: 'Enter the password to use the launcher.',
+      onToken: writeToken,
+    });
   }).then(function () {
     signInOpen = false;
     if (onSignedIn) onSignedIn();
@@ -244,4 +246,63 @@ export function apiFailToast(prefix, exc, opts) {
   if (exc && exc.status === 401) { showLogin(); return; }
   const msg = (exc && exc.message) || exc;
   toast(prefix ? prefix + ': ' + msg : String(msg), 'error', opts);
+}
+
+// --------------------------------------------------------------- clipboard
+// The one copy every menu uses (the Apps tab's, the PC load sheet's): `what`
+// names the thing copied ("Link", "Path") in the toast; `opts.host` is the
+// toast host of a sheet that carries its own (a modal dialog hides the page's
+// toast).
+export async function copyText(text, what, opts) {
+  try {
+    await writeClipboard(text, opts);
+    toast(what + ' copied', 'good', opts);
+  } catch (exc) {
+    logPollFailure('clipboard write failed', exc);
+    toast('Could not copy the ' + what.replace(/^(?=[A-Z][a-z])./, (c) => c.toLowerCase())
+      + '. Copy it by hand instead', 'error', opts);
+  }
+}
+
+// `writeText` needs a secure context and a focused document, and rejects
+// (or is missing) where the page is served over plain http. The fallback is a
+// selected hidden textarea copied with `execCommand`, still inside the tap's
+// user activation. It lives inside the toast host's modal <dialog> when there
+// is one: the rest of the page is inert while a modal is open, so a textarea
+// outside it can never take focus.
+async function writeClipboard(text, opts) {
+  let failure = null;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (exc) {
+      failure = exc;
+    }
+  }
+  if (!copyWithSelection(text, opts)) {
+    throw failure || new Error('the browser blocked the clipboard');
+  }
+}
+
+function copyWithSelection(text, opts) {
+  const root = (opts && opts.host && opts.host.closest('dialog')) || document.body;
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.setAttribute('aria-hidden', 'true');
+  area.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+  const previous = document.activeElement;
+  root.appendChild(area);
+  try {
+    area.focus();
+    area.select();
+    area.setSelectionRange(0, text.length);
+    return document.execCommand('copy');
+  } catch (exc) {
+    return false;
+  } finally {
+    area.remove();
+    if (previous && previous.focus) previous.focus();
+  }
 }

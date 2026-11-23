@@ -1,7 +1,8 @@
 /* The views a tap opens load on that first tap, not with the page.
  *
  * The chat, terminal, changes, links, Screen and Progress code, the Jobs,
- * Team OS and Board tabs, the Settings pane and the shared composer are most
+ * Team OS and Board tabs, the Code and Apps tabs' drawing on a boot that
+ * reopens on the Board, the Settings pane and the shared composer are most
  * of the app's JavaScript, and none of it draws the shell or the session
  * list. A phone with an empty
  * cache (a first visit, or any visit after a deploy, since one hash stamps
@@ -17,6 +18,7 @@
 import { state } from './state.js';
 import { opensInPcWindow, toast } from './api.js';
 import { fetchSessions } from './sessions.js';
+import { readApps } from './apps/apps-reads.js';
 
 // A group loads once; a failed load (a dropped connection) is retried by
 // the next call instead of staying failed.
@@ -99,6 +101,26 @@ function wireBoardModule(m) {
 const boardTab = group(function () {
   return import('./board.js').then(wireBoardModule);
 }, wireBoardModule);
+
+// The Code and Apps tabs' drawing: the project list, its toolbar and git
+// sync, and the Apps, Trays, Running and Other ports cards. Any boot but a
+// Board-first one hands over the modules main.js evaluated before its wiring
+// (adoptApps); a Board-first boot loads them after the lanes draw, or on the
+// first visit to either tab. The registry and agent reads the Board needs run without them
+// (apps/apps-reads.js), and loading draws what those reads brought.
+function wireAppsModules(m) {
+  m.apps.wireApps();
+  return m;
+}
+const appsView = group(function () {
+  return Promise.all([
+    import('./apps.js'),
+    import('./apps/apps-coding.js'),
+    import('./apps/apps-listeners.js'),
+  ]).then(function (m) {
+    return wireAppsModules({ apps: m[0], coding: m[1], listeners: m[2] });
+  });
+}, wireAppsModules);
 
 // The Board's answer sheet. The poll's last chief run state is replayed on
 // load, so a sheet opened later gates Done on it as before.
@@ -302,6 +324,47 @@ export function fetchBoard() {
   return use(boardTab, function (m) { return m.fetchBoard(); });
 }
 
+// The registry read: drawn by the Code and Apps tabs once their code has
+// loaded, read alone before (the Board keys its issue actions on it). Code
+// that lands while a lone read is in flight draws that read when it ends.
+export function fetchApps() {
+  const views = appsView.loaded();
+  if (views) return views.apps.fetchApps();
+  return readApps().then(function () {
+    const landed = appsView.loaded();
+    if (landed) landed.apps.showAppsRead();
+  });
+}
+
+// Self-gated to the Apps tab, like the module's own fetchRunningApps.
+export function fetchRunningApps() {
+  const views = appsView.loaded();
+  if (views) return views.apps.fetchRunningApps();
+  if (state.tab !== 'apps') return Promise.resolve();
+  return use(appsView, function (m) { return m.apps.fetchRunningApps(); });
+}
+
+// Self-gated to the Apps tab like the module's own fetchListeners: a visit
+// loads the code and reads.
+export function fetchListeners() {
+  const views = appsView.loaded();
+  return views ? views.listeners.fetchListeners() : Promise.resolve();
+}
+
+// Only the Code tab draws git flags: the boot, the poll and a visit call it
+// on that tab alone, so a call before the code has loaded loads it.
+export function refreshGitStatus(options) {
+  const views = appsView.loaded();
+  if (views) return views.coding.refreshGitStatus(options);
+  if (state.tab !== 'claude') return Promise.resolve();
+  return use(appsView, function (m) { return m.coding.refreshGitStatus(options); });
+}
+
+// main.js's boot on any tab but the Board, once the tabs are wired.
+export function adoptApps(mods) {
+  appsView.adopt(mods);
+}
+
 // Nothing is drawn before the Board's code has loaded.
 export function renderBoard() {
   const board = boardTab.loaded();
@@ -432,8 +495,8 @@ export function setTeamOsModelOptions() {
 // held and replayed once it has, never dropped. Held in the capture phase,
 // it reaches the usage log once: as the replay. The page head's buttons
 // (theme, Settings, load) are wired at boot and pass straight on.
-function holdPaneTaps(paneId, get) {
-  const pane = document.getElementById(paneId);
+function holdPaneTaps(selector, get) {
+  const pane = document.querySelector(selector);
   if (!pane) return;
   pane.addEventListener('click', function (ev) {
     if (get.loaded()) return;
@@ -446,7 +509,8 @@ function holdPaneTaps(paneId, get) {
 }
 
 // The openers that sit outside their own view: Progress's History button,
-// the PC load sheet's Screen row, and a first visit to the Jobs or Board tab.
+// the PC load sheet's Screen row, and a first visit to the Jobs, Board, Code
+// or Apps tab.
 export function wireViewOpeners() {
   document.addEventListener('launcher:tab', function (ev) {
     const tab = ev.detail && ev.detail.tab;
@@ -463,11 +527,24 @@ export function wireViewOpeners() {
       });
     }
     if (tab === 'settings' && !settingsPane.loaded()) prefetch(settingsPane);
+    // Once loaded, apps.js's own Apps tab listener reads on each visit; the
+    // Code tab's git read is main.js's tab listener, through refreshGitStatus.
+    if (tab === 'apps' && !appsView.loaded()) {
+      use(appsView, function (m) {
+        m.apps.fetchRunningApps().catch(function () {});
+        m.listeners.fetchListeners().catch(function () {});
+      });
+    }
+    if (tab === 'claude' && !appsView.loaded()) prefetch(appsView);
   });
-  holdPaneTaps('paneJobs', jobsTab);
-  holdPaneTaps('paneBoard', boardTab);
-  holdPaneTaps('paneTeamOS', teamOsTab);
-  holdPaneTaps('paneSettings', settingsPane);
+  holdPaneTaps('#paneJobs', jobsTab);
+  holdPaneTaps('#paneBoard', boardTab);
+  holdPaneTaps('#paneTeamOS', teamOsTab);
+  holdPaneTaps('#paneSettings', settingsPane);
+  holdPaneTaps('#paneApps', appsView);
+  // The Code tab's session list draws without that code; its projects card
+  // does not.
+  holdPaneTaps('#paneClaude .projects-card', appsView);
   const history = document.getElementById('historyOpen');
   if (history && document.getElementById('progressSheet')) {
     history.addEventListener('click', function () {
@@ -494,7 +571,8 @@ export function startSessionViews() {
 // that comes first, so its views start at once; the rest wait for the phone
 // to go idle. Safari has no requestIdleCallback; a short timer stands in.
 // On the Board the open tab's own code comes first: the list can draw before
-// it lands, and the session views would share the link with it.
+// it lands, and the session views would share the link with it. The Code and
+// Apps tabs' code, which a Board-first boot left out, leads the idle loads.
 const PREFETCH_IDLE_TIMEOUT_MS = 3000;
 const PREFETCH_FALLBACK_MS = 300;
 
@@ -506,7 +584,7 @@ export function prefetchViews() {
   const first = state.tab === 'board' ? prefetch(boardTab) : Promise.resolve();
   first.then(function () { prefetch(sessionViews); });
   const run = function () {
-    [boardTab, boardDrawer, planNoteSheet, appsDialogs, composerKit, answerSheet, jobsTab, teamOsTab, settingsPane, screenView,
+    [appsView, boardTab, boardDrawer, planNoteSheet, appsDialogs, composerKit, answerSheet, jobsTab, teamOsTab, settingsPane, screenView,
       progressSheet].forEach(prefetch);
   };
   if (typeof window.requestIdleCallback === 'function') {
