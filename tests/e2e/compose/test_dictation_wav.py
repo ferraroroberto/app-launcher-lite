@@ -18,7 +18,7 @@ from tests import fake_speech_backend
 from tests.e2e.settings._speech import set_speech
 
 # Chromium only: WebKit has no fake microphone.
-pytestmark = pytest.mark.smoke
+pytestmark = [pytest.mark.smoke, pytest.mark.unbundled]
 
 FIELD = "#e2eDictationText"
 

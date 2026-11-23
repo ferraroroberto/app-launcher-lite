@@ -29,7 +29,7 @@ from playwright.sync_api import Page, expect
 from tests.e2e._surface import surface
 from tests.e2e.fixtures.waits import OVERLAY_OPEN_MS
 
-pytestmark = pytest.mark.smoke
+pytestmark = [pytest.mark.smoke, pytest.mark.unbundled]
 
 _CLIPBOARD_MOCK = """
 (() => {

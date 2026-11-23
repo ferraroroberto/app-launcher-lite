@@ -94,6 +94,28 @@ iPhone PWA never serves a stale asset against fresh HTML, or vice versa.
   draw; over HTTP/2 the modules share one connection and arrive at about the
   line rate, so the bytes do. The preloads follow the import graph as
   it was at the first page render after a restart.
+- The served page loads the modules as one bundle. Even preloaded, each module
+  is its own response, and on the phone profile responses finish about 15 ms
+  apart whatever their size, so about 60 modules, not their bytes, set when the
+  Board's lanes draw. At start the server bundles `main.js`'s graph with a
+  pinned esbuild (`src/static_bundles/js_bundle.py`, run through `npx`) into an
+  entry, shared chunks and one chunk per module some code loads with
+  `import()`, so every lazy view above still loads on first open. The chunks
+  are minified for whitespace and syntax but keep their names, and source maps
+  are served beside them. The build is cached under `webapp/js-bundle/` per
+  fleet hash: any module edit rebuilds it on the next start, and a restart with
+  no edit reads the cache. Every bundle file takes the fleet hash, and each
+  chunk import carries it, because a chunk loaded under two URLs would be two
+  module instances. esbuild's metafile records which chunk each source module
+  became, so the same `@modulepreload` markers name the chunks a boot needs: a
+  Board-first boot asks for about 21 responses before its lanes instead of
+  about 60. Without Node, or when the build fails, the server logs a warning
+  and serves `main.js` and its modules separately, with the module preloads
+  above. A request carrying the cookie `launcher_js_bundle=off` gets the
+  separate modules too. On the phone profile (4x CPU, 150 ms round trip,
+  1.6 Mbps, median of 15 alternated cold loads) the bundle took the Board from
+  about 1.65 s to 1.38 s over HTTP/2 and from 2.63 s to 1.57 s over HTTP/1.1,
+  and the Code-first session list from 1.41 s to 1.40 s over HTTP/2.
 - The page starts its first reads before the module graph has loaded. An
   inline script in `index.html` fetches `/api/config`, `/api/agents`,
   `/api/apps` and `/api/claude-code/sessions`, plus the restored tab's own read
@@ -165,5 +187,5 @@ manual step this mechanism exists to kill.
 ## Out of scope (deliberately)
 
 - Service-worker offline cache — separate, much larger change.
-- Build-time bundler (Vite / esbuild) — vanilla JS by design.
+- A build-time bundler. The server bundles the ES modules itself at start (`src/static_bundles/js_bundle.py`), so contributors still run no build step.
 - CI hooks for a validation pipeline on this mechanism.

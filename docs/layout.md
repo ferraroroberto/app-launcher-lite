@@ -51,6 +51,7 @@ app-launcher-lite/
 │   ├── performance_health.py   # the read-only health line under Settings > Performance
 │   ├── static_versioning.py    # content-hash query strings for asset cache-busting
 │   ├── stylesheet_bundle.py    # the linked stylesheets concatenated into the one /static/bundle.css
+│   ├── static_bundles/         # js_bundle.py: main.js's module graph bundled at start by a pinned esbuild into /static/js-bundle/
 │   ├── subprocess_flags.py     # the NO_WINDOW spawn-flag convention (single source)
 │   ├── git_utils.py            # shared `git` subprocess runner; every git spawn goes through it
 │   ├── git_upstream/           # ahead/behind against origin and the guarded fast-forward

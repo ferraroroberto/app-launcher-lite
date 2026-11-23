@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import re
 
+from src.static_bundles.js_bundle import BUNDLE_DIR as JS_BUNDLE_DIR
+from src.static_bundles.js_bundle import UNBUNDLED_COOKIE, JsBundle
 from src.static_versioning import compute_asset_hashes, fleet_hash_of
 from src.stylesheet_bundle import BUNDLE_RELPATH, trim_css
 from tests._css import STATIC
@@ -82,6 +84,20 @@ class TestIndex:
         links = re.findall(r'<link rel="stylesheet" href="([^"]+)"', body)
         assert len(links) == 1
         assert re.fullmatch(r"/static/bundle\.css\?v=[a-f0-9]{8}", links[0])
+
+    def test_index_loads_the_js_bundle_unless_the_cookie_opts_out(self, webapp_client):
+        # The bundled page's entry and preloads name the bundle's chunks; the cookie gets the modules.
+        client, app, _ = webapp_client
+        app.state.js_bundle = JsBundle({"main.js": (b"", "text/javascript")}, {"main.js": "main.js"}, {})
+        app.state.asset_hashes[f"{JS_BUNDLE_DIR}/main.js"] = app.state.asset_fleet_hash
+        body = client.get("/").text
+        assert re.search(r'<script type="module" src="/static/js-bundle/main\.js\?v=[a-f0-9]{8}">', body)
+        assert re.search(r'<link rel="modulepreload" href="/static/js-bundle/main\.js\?v=[a-f0-9]{8}">', body)
+        assert 'href="/static/state.js' not in body and "/static/main.js" not in body
+        client.cookies.set(UNBUNDLED_COOKIE, "off")
+        body = client.get("/").text
+        assert re.search(r'<script type="module" src="/static/main\.js\?v=[a-f0-9]{8}">', body)
+        assert re.search(r'<link rel="modulepreload" href="/static/state\.js\?v=[a-f0-9]{8}">', body)
 
     def test_bundle_is_the_sheets_in_link_order(self, webapp_client):
         client, _, _ = webapp_client

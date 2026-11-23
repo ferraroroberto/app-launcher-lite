@@ -24,7 +24,7 @@ from tests.e2e.chat._support import (
 from tests.e2e.fixtures.ui import set_terminal_status
 from tests.e2e.fixtures.waits import OVERLAY_OPEN_MS, stable_eval
 
-pytestmark = pytest.mark.smoke
+pytestmark = [pytest.mark.smoke, pytest.mark.unbundled]
 
 
 def _check_the_line_is_a_centred_icon(page: Page, line, browser_name: str) -> None:

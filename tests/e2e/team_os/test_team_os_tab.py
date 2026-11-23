@@ -16,7 +16,7 @@ import re
 import pytest
 from playwright.sync_api import Page, Route, expect
 
-from tests.e2e.fixtures.pages import loopback
+from tests.e2e.fixtures.pages import lazy_module_url, loopback
 from tests.e2e.fixtures.sessions import auth_headers
 from tests.e2e.fixtures.ui import open_row_menu
 from tests.e2e.fixtures.waits import wait_until
@@ -71,7 +71,7 @@ def test_team_os_lists_skills_launches_with_the_picked_model_and_reads_files(
     # The tab's code loads on its first visit: held here, the visit draws no
     # rows until it lands, then reads the skills itself.
     held: list = []
-    code = re.compile(r".*/static/team-os\.js(\?.*)?$")
+    code = lazy_module_url("team-os.js")
     page.route(code, lambda route: held.append(route))
     page.goto(f"{base_url}/", wait_until="domcontentloaded")
     page.locator("#tabTeamOS").click()

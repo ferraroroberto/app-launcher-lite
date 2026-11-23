@@ -44,7 +44,7 @@ from playwright.sync_api import Page, expect
 from tests.e2e.fixtures.waits import wait_until
 
 # iPhone keyboard overlay, visualViewport and native touch-scroll probes.
-pytestmark = [pytest.mark.smoke, pytest.mark.iphone]
+pytestmark = [pytest.mark.smoke, pytest.mark.iphone, pytest.mark.unbundled]
 
 
 # ------------------------------------------------------------------ #383

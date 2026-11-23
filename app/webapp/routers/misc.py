@@ -12,7 +12,7 @@ import hashlib
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import psutil
 from fastapi import APIRouter, HTTPException, Request
@@ -40,6 +40,8 @@ from src.middleware import is_pc_itself, via_cloudflare
 from src.registry import load_registry
 from src.scanner import pretty_folder_name
 from src.session_host_paths import declared_session_host_paths, paths_touched_between
+from src.static_bundles.js_bundle import BUNDLE_DIR as JS_BUNDLE_DIR
+from src.static_bundles.js_bundle import UNBUNDLED_COOKIE, JsBundle, link_js_bundle
 from src.static_versioning import asset_hash_for, rewrite_index_html
 from src.stylesheet_bundle import link_bundle
 from src.webapp_config import WebappConfig
@@ -57,7 +59,7 @@ _CLAUDE_MD_PATH = PROJECT_ROOT / "CLAUDE.md"
 VERSION_TICK_S = 5.0
 
 
-def _stamped_index(app: Any) -> Tuple[str, str]:
+def _stamped_index(app: Any, bundled: bool) -> Tuple[str, str]:
     """The hash-stamped index.html and its ETag, re-rendered only on change.
 
     Every page load used to re-read the 135 KB file and regex-rewrite its
@@ -66,14 +68,22 @@ def _stamped_index(app: Any) -> Tuple[str, str]:
     disk is still picked up on the next load without a restart; the asset
     hashes are fixed per process, and so are the module-preload links, which
     follow the JS import graph as it was at the first render after a restart.
+    ``bundled`` picks the page that loads the ES-module bundle (its preload
+    links name the bundle's chunks) over the one that loads ``main.js``'s
+    graph module by module; each is cached on its own.
     """
     index_path = STATIC_DIR / "index.html"
+    js_bundle = getattr(app.state, "js_bundle", None) if bundled else None
     try:
         key = shell_stat_key(index_path)
-        cached = getattr(app.state, "index_cache", None)
-        if cached is not None and cached[0] == key:
-            return cached[1], cached[2]
-        shell = expand_preloads(assemble_shell(index_path), STATIC_DIR)
+        cached = getattr(app.state, "index_cache", None) or {}
+        if cached.get(bundled, (None,))[0] == key:
+            return cached[bundled][1], cached[bundled][2]
+        shell = assemble_shell(index_path)
+        if js_bundle is not None:
+            shell = link_js_bundle(expand_preloads(shell, STATIC_DIR, _bundle_closure(js_bundle)))
+        else:
+            shell = expand_preloads(shell, STATIC_DIR)
     except (OSError, ValueError):
         _log.exception("❌ could not assemble index.html")
         raise HTTPException(status_code=500, detail="index.html missing")
@@ -82,8 +92,20 @@ def _stamped_index(app: Any) -> Tuple[str, str]:
         shell = link_bundle(shell)
     stamped = trim_shell(rewrite_index_html(shell, asset_hashes))
     etag = '"' + hashlib.sha256(stamped.encode("utf-8")).hexdigest()[:20] + '"'
-    app.state.index_cache = (key, stamped, etag)
+    app.state.index_cache = {**cached, bundled: (key, stamped, etag)}
     return stamped, etag
+
+
+def _bundle_closure(js_bundle: JsBundle) -> Callable[[str], List[str]]:
+    """The preload closure over the bundle's chunks, as static-dir-relative paths."""
+    return lambda module: [f"{JS_BUNDLE_DIR}/{name}" for name in js_bundle.closure(module)]
+
+
+def _wants_js_bundle(request: Request) -> bool:
+    """Whether this page load gets the ES-module bundle: built, and not opted out by cookie."""
+    if getattr(request.app.state, "js_bundle", None) is None:
+        return False
+    return request.cookies.get(UNBUNDLED_COOKIE) != "off"
 
 
 def _etag_matches(header: str, etag: str) -> bool:
@@ -94,7 +116,7 @@ def _etag_matches(header: str, etag: str) -> bool:
 
 @router.get("/")
 async def index(request: Request) -> Response:
-    stamped, etag = _stamped_index(request.app)
+    stamped, etag = _stamped_index(request.app, _wants_js_bundle(request))
     # Force Safari (iPhone PWA especially) to revalidate the HTML on every
     # load. Without this, a stale cached index.html keeps pointing at a
     # `?v=<old hash>` script that no longer exists after a refactor — the

@@ -15,6 +15,7 @@ from tests.e2e.board._support import (
     _mock_exchange,
     _open_board,
 )
+from tests.e2e.fixtures.pages import lazy_module_url
 from tests.e2e.fixtures.ui import open_row_menu
 from tests.e2e.fixtures.waits import wait_until
 
@@ -44,7 +45,7 @@ def test_board_copilot_card_drawer_shows_agent_native_exchange(
         "assistant": {"text": "Copilot exchange resolved.", "timestamp": None},
     })
     held: list = []
-    code = re.compile(r".*/static/board/drawer\.js(\?.*)?$")
+    code = lazy_module_url("board/drawer.js")
     authed_page.route(code, lambda route: held.append(route))
     _open_board(authed_page, base_url)
     card = authed_page.locator(
