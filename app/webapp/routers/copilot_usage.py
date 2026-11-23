@@ -38,6 +38,11 @@ REFRESH_S = 30.0
 _Signature = Tuple[Tuple[float, int], ...]
 
 
+def _read_plan_here(cache_path: Path, now: datetime) -> copilot_usage.PlanReading:
+    """The plan read with this machine's Copilot CLI settings naming the signed-in account."""
+    return copilot_usage.read_plan(cache_path, now, copilot_usage.default_config_path())
+
+
 def _signature(db_path: Path, now: datetime) -> Optional[Tuple[str, _Signature]]:
     """The log's mtime and size (plus its WAL's) and the UTC day, or None if unstattable."""
     parts = []
@@ -61,7 +66,7 @@ class UsageSnapshot:
         reader: Callable[[Path, datetime], copilot_usage.Reading] = copilot_usage.read,
         clock: Callable[[], float] = time.monotonic,
         plan_path: Callable[[], Path] = copilot_usage.default_plan_cache_path,
-        plan_reader: Callable[[Path, datetime], copilot_usage.PlanReading] = copilot_usage.read_plan,
+        plan_reader: Callable[[Path, datetime], copilot_usage.PlanReading] = _read_plan_here,
     ) -> None:
         self._db_path = db_path
         self._reader = reader

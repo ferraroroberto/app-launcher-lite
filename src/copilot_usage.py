@@ -15,13 +15,17 @@ unlimited, silent on its billing unit or older than the last reset reads as
 ``unknown`` with the reason, so the card shows no percent rather than passing
 this machine's share off as the plan's.
 
-**Which entry.** The cache keeps one entry per signed-in account, under a
-hashed key, and the status line shows the account the CLI is signed in with.
-Telling that account apart would mean reading an account identifier, which
-this module never does. So an entry whose cycle has already reset is set
-aside (it cannot be this cycle's plan), one remaining entry is the plan, and
-several remaining entries read as ``unknown``, because the newest fetch can
-belong to another account.
+**Which entry.** The cache keeps one entry per refresh of each signed-in
+account, under a hashed key, and the status line shows the account the CLI is
+signed in with. An entry whose cycle has already reset is set aside (it cannot
+be this cycle's plan). Of the rest, the signed-in login the CLI keeps in its
+own ``~/.copilot/config.json`` (``lastLoggedInUser.login``) picks the entries
+of that account, and the newest fetch among them is the plan. A login is read
+only to compare it with each entry's own ``login`` and is never logged or
+returned. With no readable login, a login no entry carries, or several
+accounts and no login to choose between them, the card reads ``unknown`` with
+the reason, because the newest fetch can belong to another account. One
+remaining entry and no config is the plan, as before.
 
 **This machine** (the card's footnote): the Copilot CLI records every model
 call it bills in the ``assistant_usage_events`` table of
@@ -64,6 +68,11 @@ PLAN_QUOTA = "premium_interactions"
 
 def default_db_path() -> Path:
     return Path.home() / ".copilot" / "session-store.db"
+
+
+def default_config_path() -> Path:
+    """The Copilot CLI's own settings file, which names the signed-in account."""
+    return Path.home() / ".copilot" / "config.json"
 
 
 def default_plan_cache_path() -> Path:
@@ -194,8 +203,66 @@ def _cached_plans(entries: Dict[str, Any]) -> List[Tuple[Dict[str, Any], Dict[st
     return plans
 
 
-def _plan_quota(doc: Any, now: datetime) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any], str]:
-    """The one cached plan still in its cycle, its response and quota, or a reason there is none."""
+def _load_json(path: Path) -> Any:
+    """Parse a Copilot CLI JSON file, which it heads with ``//`` comment lines JSON does not allow."""
+    text = path.read_text(encoding="utf-8")
+    return json.loads("\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("//")))
+
+
+def _signed_in_login(config_path: Optional[Path]) -> Tuple[Optional[str], str]:
+    """The login the CLI is signed in with, or why it cannot be read. Never raises."""
+    if config_path is None:
+        return None, "the Copilot CLI settings were not given"
+    if not config_path.is_file():
+        return None, "the Copilot CLI settings file is missing"
+    try:
+        doc = _load_json(config_path)
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        logger.warning("⚠️ Copilot CLI settings %s unreadable: %s", config_path, exc)
+        return None, "the Copilot CLI settings could not be read"
+    last = doc.get("lastLoggedInUser") if isinstance(doc, dict) else None
+    login = last.get("login") if isinstance(last, dict) else None
+    if isinstance(login, str) and login.strip():
+        return login.strip(), ""
+    return None, "the Copilot CLI settings name no signed-in account"
+
+
+def _fetched_at(response: Dict[str, Any]) -> datetime:
+    return _parse_utc(response.get("_retrieved_at")) or datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _pick_signed_in(
+    current: List[Tuple[Dict[str, Any], Dict[str, Any]]], config_path: Optional[Path],
+) -> Tuple[Optional[Tuple[Dict[str, Any], Dict[str, Any]]], str]:
+    """The newest current entry of the signed-in account, or the reason there is none."""
+    login, login_reason = _signed_in_login(config_path)
+    if login is None:
+        if len(current) == 1:
+            return current[0], ""
+        return None, (
+            f"the Copilot CLI has {len(current)} cached plan entries and {login_reason}, "
+            "so the card can't tell which one is yours"
+        )
+    mine = [
+        pair for pair in current
+        if isinstance(pair[0].get("login"), str) and pair[0]["login"].casefold() == login.casefold()
+    ]
+    if mine:
+        return max(mine, key=lambda pair: _fetched_at(pair[0])), ""
+    # A lone entry that names no account cannot contradict the settings.
+    if len(current) == 1 and not isinstance(current[0][0].get("login"), str):
+        return current[0], ""
+    logger.info("ℹ️ Copilot plan cache: none of %d current entries matches the signed-in account", len(current))
+    return None, (
+        "the Copilot plan cache has no entry for the account the Copilot CLI is signed in with; "
+        "run Copilot CLI to refresh it"
+    )
+
+
+def _plan_quota(
+    doc: Any, now: datetime, config_path: Optional[Path] = None,
+) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any], str]:
+    """The signed-in account's cached plan still in its cycle (response, quota), or why there is none."""
     entries = doc.get("copilotUserCache") if isinstance(doc, dict) else None
     if not (isinstance(entries, dict) and entries):
         return None, {}, "the Copilot plan cache holds no plan"
@@ -210,12 +277,10 @@ def _plan_quota(doc: Any, now: datetime) -> Tuple[Optional[Dict[str, Any]], Dict
             current.append((response, quota))
     if not current:
         return None, {}, "the cached plan figure predates the last reset; run Copilot CLI to refresh it"
-    if len(current) > 1:
-        return None, {}, (
-            f"the Copilot CLI has {len(current)} Copilot accounts cached and the card "
-            "can't tell which one it is signed in with"
-        )
-    response, quota = current[0]
+    picked, reason = _pick_signed_in(current, config_path)
+    if picked is None:
+        return None, {}, reason
+    response, quota = picked
     return quota, response, ""
 
 
@@ -227,8 +292,12 @@ def _billed_in_credits(quota: Dict[str, Any], response: Dict[str, Any]) -> Optio
     return None
 
 
-def read_plan(cache_path: Path, now: datetime) -> PlanReading:
-    """The plan's used and allowance from the CLI's cached user response; never raises."""
+def read_plan(cache_path: Path, now: datetime, config_path: Optional[Path] = None) -> PlanReading:
+    """The plan's used and allowance from the CLI's cached user response; never raises.
+
+    ``config_path`` is the CLI's settings file naming the signed-in account;
+    without it only a cache with one current entry can be read.
+    """
     if not cache_path.is_file():
         return PlanReading("unknown", reason="the Copilot CLI has not cached your plan on this machine")
     try:
@@ -238,7 +307,7 @@ def read_plan(cache_path: Path, now: datetime) -> PlanReading:
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         logger.warning("⚠️ Copilot plan cache %s unreadable: %s", cache_path, exc)
         return PlanReading("unknown", reason=f"the Copilot plan cache could not be read: {exc}")
-    quota, response, reason = _plan_quota(doc, now)
+    quota, response, reason = _plan_quota(doc, now, config_path)
     if quota is None:
         return PlanReading("unknown", reason=reason)
     if quota.get("unlimited") is True:
