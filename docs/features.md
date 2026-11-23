@@ -22,7 +22,7 @@ The coding agent is **GitHub Copilot CLI** (`copilot`) and the forge is **GitLab
 
 - **Registry** — `config/apps.json`, one row per launcher `.bat`, each with a `kind`: `streamlit`, `webapp`, `tunnel` or `tray` ([Config](config.md#configappsjson)).
 - **Launch and Running** — one tap spawns the bat detached; the **Running** panel lists live instances with their listening ports and a per-instance stop. With `tailnet_host` set, each running app gets a remote **Open** URL (`<scheme>://<tailnet_host>:<port>/`, scheme auto-detected by a TLS probe).
-- **Scan** — **Scan for new apps** (Settings) walks `apps_scan_root` for candidate bats and shows a checklist diff before saving; a **Mini apps** group lists small helper bats from `mini_apps_root`.
+- **Scan** — **Scan for new apps** (Settings) walks `apps_scan_root` for candidate bats and shows a checklist diff before saving; a bat that names no app signature is read one level further, through the `.py` files it runs inside its own folder (read, never run), and a bat still unrecognised is logged at info level by its path under the scan root; a **Mini apps** group lists small helper bats from `mini_apps_root`.
 - **Registered trays** — `tray` rows with autostart on are started one at a time, waiting for each to report ready, whenever this tray boots; a sister tray is started, never managed. One whose `.fleet.toml` port did not answer is retried after 30 s, 60 s and 120 s while this tray runs, each retry checking first that the port is still silent and nothing is running it, so a slow tray is never started twice; `webapp/registered_trays.log` records each spawn, spawn failure, timeout, retry and final failure.
 - **Edit mode** reveals rename and remove.
 
