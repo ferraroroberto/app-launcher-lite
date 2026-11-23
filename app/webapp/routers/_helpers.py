@@ -5,7 +5,6 @@ lives here instead.
 from __future__ import annotations
 
 import asyncio
-import functools
 import logging
 import os
 import re
@@ -16,6 +15,7 @@ from urllib.parse import urlencode
 
 from fastapi import HTTPException, Request, WebSocket
 
+from app.webapp.route_pools import AUDIT, OUTBOUND, SESSION_HOST, run_on
 from src import audit, instance_role
 from src import jobs as jobs_mod
 from src.auth.webauthn_gate import WebAuthnGate
@@ -121,16 +121,11 @@ async def audit_off_loop(
     real fault worth surfacing — the failure semantics are exactly what they
     were before the hop off the loop.
 
-    ``_pool`` runs the write on that executor instead of the loop's default
-    one, for a route whose answer must not wait behind other routes' threads
-    (a message send, on its own input pool).
+    ``_pool`` runs the write on that executor instead of the audit pool,
+    for a route whose answer must not wait behind other routes' threads (a
+    message send, on its own input pool).
     """
-    if _pool is None:
-        await asyncio.to_thread(write, *args, **kwargs)
-        return
-    await asyncio.get_running_loop().run_in_executor(
-        _pool, functools.partial(write, *args, **kwargs)
-    )
+    await run_on(AUDIT if _pool is None else _pool, write, *args, **kwargs)
 
 
 async def maybe_json(request: Request) -> Dict[str, Any]:
@@ -311,7 +306,7 @@ def attach_provider_web_urls(sessions: List[Dict[str, Any]]) -> None:
 
     Every row gets a ``web_url`` key so the client never has to distinguish
     "no link" from "field absent"; only ``kind == "pty"`` rows are scanned.
-    Blocking file IO — callers wrap it in ``asyncio.to_thread``.
+    Blocking file IO — callers run it off the event loop.
     """
     for session in sessions:
         session["web_url"] = ""
@@ -452,7 +447,7 @@ async def spawn_session_or_400(
     same contract as ``audit_mod`` / ``mirror_fn`` below.
     """
     try:
-        return await asyncio.to_thread(spawn_fn, *args, **kwargs)
+        return await run_on(SESSION_HOST, spawn_fn, *args, **kwargs)
     except SessionHostError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc))
     except OSError as exc:
@@ -468,7 +463,7 @@ async def ensure_copilot_remote(cfg: WebappConfig, agent: str) -> None:
     :func:`src.launching.copilot_remote.apply`.
     """
     if agent == "copilot":
-        await asyncio.to_thread(copilot_remote.apply, cfg.copilot_remote_session)
+        await run_on(OUTBOUND, copilot_remote.apply, cfg.copilot_remote_session)
 
 
 async def spawn_launcher_session(
@@ -616,7 +611,7 @@ async def audit_session_start_and_maybe_mirror(
         # Pass sid so launcher tracks the mirror window's HWND for Stop &
         # Close to dismiss it later.
         asyncio.create_task(
-            asyncio.to_thread(mirror_fn, mirror_url(request, cfg, sid), sid)
+            run_on(OUTBOUND, mirror_fn, mirror_url(request, cfg, sid), sid)
         )
 
 

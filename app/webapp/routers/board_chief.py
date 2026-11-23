@@ -60,6 +60,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.webapp.route_pools import (
+    BOARD_FILES,
+    OUTBOUND,
+    SESSION_FILES,
+    SESSION_HOST,
+    run_on,
+)
 from app.webapp.routers._helpers import (
     audit_session_start_and_maybe_mirror,
     client_ip,
@@ -164,7 +171,8 @@ async def _mark_chief_managed(
     if not script.exists():
         return True
     try:
-        done = await asyncio.to_thread(
+        done = await run_on(
+            OUTBOUND,
             subprocess.run,
             [str(venv_python), str(script), "mark", sid, repo, str(number)],
             capture_output=True,
@@ -220,8 +228,8 @@ async def _live_sessions_with_chief_label(
     that acts on "no chief in the list" must not act on it then.
     """
     (live, host_error), state = await asyncio.gather(
-        asyncio.to_thread(read_live_sessions, cfg.session_host_port),
-        asyncio.to_thread(board.read_sessions_state, Path(cfg.sessions_state_file)),
+        run_on(SESSION_HOST, read_live_sessions, cfg.session_host_port),
+        run_on(BOARD_FILES, board.read_sessions_state, Path(cfg.sessions_state_file)),
     )
     reconciled = _reconcile_chief_labels(live, state["rows"], cfg.fleet_config_dir)
     return reconciled, state, host_error
@@ -277,7 +285,7 @@ def _note_chief_conversation(
         return
     _last_noted_chief_conversation = conversation
     asyncio.create_task(
-        asyncio.to_thread(
+        run_on(BOARD_FILES,
             chief_pointer.write_chief_pointer, conversation, transcript, "live"
         )
     )
@@ -463,7 +471,7 @@ def _refresh_chief_pointer_after_resume(
 ) -> None:
     """Re-stamp the pointer at the conversation a Resume just reattached.
 
-    Blocking IO — callers wrap in ``asyncio.to_thread``; this only ever runs on
+    Blocking IO — callers run it off the event loop; this only ever runs on
     the explicit ensure path, never on the board poll.
 
     The identification writer would eventually record the same id off the next
@@ -511,7 +519,7 @@ async def get_chief_journal(request: Request) -> Dict[str, Any]:
     plan file; the writer is fleet-config's ``chief_ops.py``.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    return await asyncio.to_thread(
+    return await run_on(BOARD_FILES,
         chief_journal.read_journal,
         chief_journal.journal_path(Path(cfg.chief_plan_file)), cfg.gitlab_group,
     )
@@ -524,7 +532,7 @@ async def post_chief_journal_looked(request: Request) -> Dict[str, Any]:
     ``/api/board/chief/`` route). Entries after the stamp read as new.
     """
     try:
-        at = await asyncio.to_thread(chief_journal.record_look)
+        at = await run_on(BOARD_FILES, chief_journal.record_look)
     except OSError as exc:
         logger.warning("⚠️ chief journal look not written: %s", exc)
         raise HTTPException(status_code=500, detail="last look not written")
@@ -555,7 +563,7 @@ async def get_chief_settings(request: Request) -> Dict[str, Any]:
 async def get_chief_skills(request: Request) -> Dict[str, Any]:
     """The four issue skills' preflight: source, folder, and found/missing/unknown each."""
     cfg: WebappConfig = request.app.state.webapp_config
-    return await asyncio.to_thread(
+    return await run_on(BOARD_FILES,
         skills_preflight.payload, cfg.skills_dir, cfg.fleet_config_dir)
 
 
@@ -601,14 +609,14 @@ async def put_chief_settings(request: Request) -> Dict[str, Any]:
     if not patch:
         raise HTTPException(status_code=400, detail="no chief settings in body")
     try:
-        new_cfg = await asyncio.to_thread(update_webapp_config, **patch)
+        new_cfg = await run_on(BOARD_FILES, update_webapp_config, **patch)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     old_cfg: WebappConfig = request.app.state.webapp_config
     request.app.state.webapp_config = new_cfg
     # Freed lane slots wake the chief through its mailbox; the writer logs and
     # swallows its own failure, so the save below never depends on it.
-    await asyncio.to_thread(publish_cap_raised, old_cfg, new_cfg)
+    await run_on(BOARD_FILES, publish_cap_raised, old_cfg, new_cfg)
     return {"settings": _chief_settings_payload(new_cfg)}
 
 
@@ -616,20 +624,20 @@ async def _stop_chief_for_respawn(port: int, sid: str) -> None:
     """Gracefully quit the old chief, escalating to kill after the bounded
     wait — a fresh respawn must never end up with two chiefs."""
     try:
-        await asyncio.to_thread(session_client.stop, port, sid, "quit")
+        await run_on(SESSION_HOST, session_client.stop, port, sid, "quit")
     except session_client.SessionHostError as exc:
         logger.debug(f"chief respawn: quit failed ({exc}); will kill")
     deadline = time.monotonic() + CHIEF_STOP_WAIT_S
     while time.monotonic() < deadline:
         try:
-            info = await asyncio.to_thread(session_client.get_session, port, sid)
+            info = await run_on(SESSION_HOST, session_client.get_session, port, sid)
         except session_client.SessionHostError:
             return  # gone — the host dropped it
         if not info.get("alive"):
             return
         await asyncio.sleep(CHIEF_STOP_POLL_S)
     try:
-        await asyncio.to_thread(session_client.stop, port, sid, "kill")
+        await run_on(SESSION_HOST, session_client.stop, port, sid, "kill")
     except session_client.SessionHostError:
         pass
 
@@ -713,7 +721,7 @@ async def ensure_chief(request: Request) -> Dict[str, Any]:
         session, sid = await _spawn_chief(
             cfg, request, body, state["rows"], resumed_session_id, rows=rows, cols=cols,
         )
-        skills = await asyncio.to_thread(skills_preflight.log_report, cfg.skills_dir, cfg.fleet_config_dir)
+        skills = await run_on(BOARD_FILES, skills_preflight.log_report, cfg.skills_dir, cfg.fleet_config_dir)
         # The branch ensure took, paired with the "kept" line above:
         # a chief that disappears and comes back is diagnosable from here.
         logger.info(
@@ -740,7 +748,8 @@ async def _resume_target(
     state_rows: Dict[str, Any], chief_dir: str, preferred_sid: str
 ) -> str:
     """The chief conversation a resume reattaches, ``""`` for none, read off the loop."""
-    return await asyncio.to_thread(
+    return await run_on(
+        SESSION_FILES,
         _find_resumable_chief_session_id, state_rows, chief_dir,
         preferred_sid=preferred_sid,
     )
@@ -803,7 +812,7 @@ async def _spawn_chief(
         label=_CHIEF_LABEL,
     )
     if resumed_session_id:
-        await asyncio.to_thread(
+        await run_on(BOARD_FILES,
             _refresh_chief_pointer_after_resume,
             state_rows, resumed_session_id,
         )
@@ -822,7 +831,7 @@ async def _spawn_chief(
         await _await_dispatch_ready(cfg.session_host_port, sid)
     except HTTPException:
         try:
-            await asyncio.to_thread(
+            await run_on(SESSION_HOST,
                 session_client.stop, cfg.session_host_port, sid, "kill"
             )
         except session_client.SessionHostError:
@@ -835,7 +844,7 @@ async def _spawn_chief(
     # runs this wait, but by then boot has already settled here.
     await _await_pty_quiescent(cfg.session_host_port, sid)
     try:
-        await asyncio.to_thread(
+        await run_on(SESSION_HOST,
             session_client.rename,
             cfg.session_host_port, sid, _CHIEF_TITLE,
         )

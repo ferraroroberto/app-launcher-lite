@@ -35,6 +35,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
 
+from app.webapp.route_pools import SESSION_HOST, run_on
 from src import agents
 from src.clients import session as session_client
 from src.launching.flags import build_copilot_flags, unknown_model_detail
@@ -231,7 +232,7 @@ async def _await_dispatch_ready(port: int, sid: str) -> None:
     """
     deadline = time.monotonic() + DISPATCH_READY_CAP_S
     while True:
-        info = await asyncio.to_thread(session_client.get_session, port, sid)
+        info = await run_on(SESSION_HOST, session_client.get_session, port, sid)
         if not info.get("alive"):
             raise HTTPException(
                 status_code=504, detail="session died during startup"
@@ -254,7 +255,7 @@ async def _await_dispatch_ready(port: int, sid: str) -> None:
             )
         await asyncio.sleep(DISPATCH_POLL_S)
     await asyncio.sleep(DISPATCH_SETTLE_S)
-    info = await asyncio.to_thread(session_client.get_session, port, sid)
+    info = await run_on(SESSION_HOST, session_client.get_session, port, sid)
     if not info.get("alive"):
         raise HTTPException(status_code=504, detail="session died during startup")
 
@@ -279,7 +280,7 @@ async def _await_pty_quiescent(port: int, sid: str) -> None:
     stable_since = time.monotonic()
     while time.monotonic() < deadline:
         try:
-            info = await asyncio.to_thread(session_client.get_session, port, sid)
+            info = await run_on(SESSION_HOST, session_client.get_session, port, sid)
         except session_client.SessionHostError:
             return
         chars = info.get("output_chars")
@@ -319,12 +320,12 @@ async def _type_into_session(port: int, sid: str, command: str) -> None:
     try:
         await _await_dispatch_ready(port, sid)
         await _await_pty_quiescent(port, sid)
-        await asyncio.to_thread(
+        await run_on(SESSION_HOST,
             session_client.send_input, port, sid, command, True,
         )
     except (HTTPException, session_client.SessionHostError) as exc:
         try:
-            await asyncio.to_thread(session_client.stop, port, sid, "kill")
+            await run_on(SESSION_HOST, session_client.stop, port, sid, "kill")
         except session_client.SessionHostError:
             pass
         if isinstance(exc, HTTPException):

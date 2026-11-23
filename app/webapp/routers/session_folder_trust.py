@@ -19,7 +19,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.webapp.hot_poll import run_on_default_executor
+from app.webapp.hot_poll import run_on_session_files
 from app.webapp.routers._helpers import audit_off_loop
 from app.webapp.routers.board_spawn import SESSION_HOST_UNREACHABLE, read_live_sessions
 from app.webapp.routers.session_screen import (
@@ -46,14 +46,14 @@ async def _folder_trust_prompt(
 ) -> Tuple[Optional[Dict[str, Any]], Optional[folder_trust.FolderTrustPrompt]]:
     """``(session, prompt)`` for ``sid``: the session as the host lists it
     (``None`` when it is gone) and the dialog it shows now (``None``: none)."""
-    live, host_error = await run_on_default_executor(
+    live, host_error = await run_on_session_files(
         "read_live_sessions", read_live_sessions, cfg.session_host_port
     )
     _refuse_if_host_unreachable(SESSION_HOST_UNREACHABLE if host_error else None)
     session = next((s for s in live if str(s.get("session_id")) == str(sid)), None)
     if session is None:
         return None, None
-    prompt = await run_on_default_executor(
+    prompt = await run_on_session_files(
         "read_capture_tail", folder_trust.pending_for_session, session
     )
     return session, prompt
