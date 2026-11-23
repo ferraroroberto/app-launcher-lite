@@ -23,6 +23,7 @@ import datetime
 import logging
 import socket
 import subprocess
+import threading
 import time
 import tomllib
 from pathlib import Path
@@ -30,7 +31,7 @@ from typing import Optional
 
 from src import runtime_files
 from src.launching.bat_running import find_running_target
-from src.registry import RegistryReadError, load_registry
+from src.registry import Registry, RegistryReadError, load_registry
 from src.scanner import KIND_MINI, KIND_TRAY
 from src.subprocess_flags import NO_WINDOW
 
@@ -53,6 +54,11 @@ _TRAY_FALLBACK_DELAY_S = 5.0
 # not meaningfully delay the webapp becoming usable.
 _REGISTRY_LOAD_ATTEMPTS = 3
 _REGISTRY_LOAD_RETRY_DELAY_S = 1.0
+
+# Retries for an autostart tray the first pass could not confirm ready: a
+# login-time port-bind race clears within seconds to a couple of minutes, and
+# three spaced attempts cover that without a loop that outlives the boot.
+_RETRY_DELAYS_S = (30.0, 60.0, 120.0)
 
 
 def _log_path() -> Path:
@@ -124,13 +130,15 @@ def _fleet_toml_port(repo_dir: Path) -> Optional[int]:
     return None
 
 
-def _spawn_tray_bat_detached(bat_path: Path) -> None:
-    """Quiet-launch a Registered Trays entry's ``tray.bat``.
+def _spawn_tray_bat_detached(bat_path: Path) -> Optional[int]:
+    """Quiet-launch a Registered Trays entry's ``tray.bat``; return the pid of
+    the ``cmd`` that starts it, for the breadcrumb.
 
     Detached the same way as the main tray's own session-host spawn —
     re-parented out of this tray's process subtree via ``cmd /c start`` —
     so a later ``tray.bat --restart`` on THIS machine never touches it (it
-    isn't this repo's process to manage beyond starting it).
+    isn't this repo's process to manage beyond starting it). That ``cmd``
+    exits within a second, so its pid identifies the attempt, not the tray.
     """
     cmd = ["cmd", "/c", "start", "", "/b", str(bat_path)]
     kw: dict = dict(
@@ -139,7 +147,7 @@ def _spawn_tray_bat_detached(bat_path: Path) -> None:
         stderr=subprocess.DEVNULL,
         creationflags=NO_WINDOW,
     )
-    subprocess.Popen(cmd, **kw)
+    return subprocess.Popen(cmd, **kw).pid
 
 
 def _wait_for_tray_ready(repo_dir: Path) -> bool:
@@ -162,24 +170,43 @@ def _wait_for_tray_ready(repo_dir: Path) -> bool:
     return False
 
 
-def launch_all() -> None:
-    """Walk autostart-enabled Registered Trays entries one at a time,
-    waiting for each to report ready before starting the next — avoids
-    a boot-time CPU/disk spike from launching several sister
-    Python/Streamlit processes concurrently. The registry's existing
-    alphabetical order (see :func:`src.registry.persist_additions`) is
-    the "fixed order" the issue accepts for v1 — no UI reordering.
+def _note(level: int, name: str, msg: str) -> None:
+    """One outcome line for an entry, to the logger and the breadcrumb log."""
+    logger.log(level, f"Registered Trays: {name}: {msg}")
+    _log_breadcrumb(f"{name}: {msg}")
 
-    One entry failing to launch, or its readiness check timing out,
-    is logged and does NOT abort the rest of the sequence — this
-    function itself must never raise into its caller (``TrayApp._start``).
+
+def _spawn_and_wait(name: str, bat_path: Path, port: Optional[int], label: str) -> bool:
+    """Spawn ``bat_path`` and wait for its port; True only when it answered.
+
+    The breadcrumb tells the three misses apart: the spawn itself raised, the
+    port never answered, or there is no port to confirm readiness with.
     """
-    registry = None
+    _note(logging.INFO, name, f"{label}{bat_path}")
+    try:
+        pid = _spawn_tray_bat_detached(bat_path)
+    except OSError as exc:
+        _note(logging.WARNING, name, f"spawn failed: {type(exc).__name__}: {exc}")
+        return False
+    _note(logging.INFO, name, f"spawned (launcher pid {pid})" if pid else "spawned")
+    if _wait_for_tray_ready(bat_path.parent):
+        return True
+    if port is None:
+        _note(logging.WARNING, name, "readiness unconfirmed (no .fleet.toml port) — continuing")
+    else:
+        _note(
+            logging.WARNING, name,
+            f"readiness timed out (:{port} not answering after {_TRAY_READY_TIMEOUT_S:.0f}s)",
+        )
+    return False
+
+
+def _load_registry_with_retry() -> Optional[Registry]:
+    """The registry, or ``None`` after logging why it could not be read."""
     last_exc: Optional[Exception] = None
     for attempt in range(1, _REGISTRY_LOAD_ATTEMPTS + 1):
         try:
-            registry = load_registry(strict=True)
-            break
+            return load_registry(strict=True)
         except RegistryReadError as exc:
             last_exc = exc
             logger.warning(
@@ -194,16 +221,36 @@ def launch_all() -> None:
         except Exception as exc:  # noqa: BLE001 — unexpected, not retried
             logger.warning(f"⚠️  Registered Trays: could not load registry: {exc}")
             _log_breadcrumb(f"could not load registry: {exc}")
-            return
+            return None
+    logger.warning(
+        f"⚠️  Registered Trays: registry unreadable after "
+        f"{_REGISTRY_LOAD_ATTEMPTS} attempts — giving up: {last_exc}"
+    )
+    _log_breadcrumb(
+        f"registry unreadable after {_REGISTRY_LOAD_ATTEMPTS} attempts "
+        f"— giving up: {last_exc}"
+    )
+    return None
+
+
+def launch_all(stop: Optional[threading.Event] = None) -> None:
+    """Walk autostart-enabled Registered Trays entries one at a time,
+    waiting for each to report ready before starting the next — avoids
+    a boot-time CPU/disk spike from launching several sister
+    Python/Streamlit processes concurrently. The registry's existing
+    alphabetical order (see :func:`src.registry.persist_additions`) is
+    the "fixed order" the issue accepts for v1 — no UI reordering.
+
+    A tray with a ``.fleet.toml`` port that the first pass could not confirm
+    ready then gets the bounded retries of :func:`_reconcile`, which ``stop``
+    (the tray's Quit event) cuts short.
+
+    One entry failing to launch, or its readiness check timing out,
+    is logged and does NOT abort the rest of the sequence — this
+    function itself must never raise into its caller (``TrayApp._start``).
+    """
+    registry = _load_registry_with_retry()
     if registry is None:
-        logger.warning(
-            f"⚠️  Registered Trays: registry unreadable after "
-            f"{_REGISTRY_LOAD_ATTEMPTS} attempts — giving up: {last_exc}"
-        )
-        _log_breadcrumb(
-            f"registry unreadable after {_REGISTRY_LOAD_ATTEMPTS} attempts "
-            f"— giving up: {last_exc}"
-        )
         return
     trays = [
         a for a in registry.apps if a.kind in (KIND_TRAY, KIND_MINI) and a.autostart
@@ -212,43 +259,73 @@ def launch_all() -> None:
         return
     logger.info(f"🧭 Registered Trays: launching {len(trays)} autostart entr{'y' if len(trays) == 1 else 'ies'}")
     _log_breadcrumb(f"launching {len(trays)} autostart entr{'y' if len(trays) == 1 else 'ies'}")
+    pending: list = []
     for entry in trays:
         if not entry.bat_path:
-            logger.warning(f"⚠️  Registered Trays: {entry.name} has no bat_path — skipped")
-            _log_breadcrumb(f"{entry.name}: no bat_path — skipped")
+            _note(logging.WARNING, entry.name, "no bat_path — skipped")
             continue
         bat_path = Path(entry.bat_path)
         if not bat_path.is_file():
-            logger.warning(f"⚠️  Registered Trays: {entry.name} bat not found at {bat_path} — skipped")
-            _log_breadcrumb(f"{entry.name}: bat not found at {bat_path} — skipped")
-            continue
-        mini = entry.kind == KIND_MINI
-        if mini and _already_running(entry.name, bat_path):
+            _note(logging.WARNING, entry.name, f"bat not found at {bat_path} — skipped")
             continue
         try:
-            logger.info(f"🚀 Registered Trays: launching {entry.name}")
-            _log_breadcrumb(f"{entry.name}: launching {bat_path}")
-            _spawn_tray_bat_detached(bat_path)
-            if mini:
+            if entry.kind == KIND_MINI:
                 # A mini app declares no port, so there is nothing to wait on.
+                if not _already_running(entry.name, bat_path):
+                    _note(logging.INFO, entry.name, f"launching {bat_path}")
+                    _spawn_tray_bat_detached(bat_path)
                 continue
-            ready = _wait_for_tray_ready(bat_path.parent)
-            if ready:
-                logger.info(f"✅ Registered Trays: {entry.name} ready")
-                _log_breadcrumb(f"{entry.name}: ready")
-            else:
-                logger.warning(
-                    f"⚠️  Registered Trays: {entry.name} readiness unconfirmed "
-                    "(timed out or no .fleet.toml port) — continuing"
-                )
-                _log_breadcrumb(
-                    f"{entry.name}: readiness unconfirmed (timed out or no "
-                    ".fleet.toml port) — continuing"
-                )
+            port = _fleet_toml_port(bat_path.parent)
+            if port is not None and port_listening(port):
+                _note(logging.INFO, entry.name, f":{port} already answering — not launched")
+                continue
+            if _spawn_and_wait(entry.name, bat_path, port, "launching "):
+                _note(logging.INFO, entry.name, "ready")
+            elif port is not None:
+                pending.append((entry.name, bat_path, port))
         except Exception as exc:  # noqa: BLE001
-            logger.warning(f"⚠️  Registered Trays: {entry.name} failed to launch: {exc}")
-            _log_breadcrumb(f"{entry.name}: failed to launch: {exc}")
-            continue
+            _note(logging.WARNING, entry.name, f"failed to launch: {exc}")
+    if pending:
+        _reconcile(pending, stop if stop is not None else threading.Event())
+
+
+def _reconcile(pending: list, stop: threading.Event) -> None:
+    """Retry each ``(name, bat_path, port)`` not confirmed ready after the
+    first pass, on the :data:`_RETRY_DELAYS_S` backoff, then give up.
+
+    Every retry checks first, and launches only when the port is silent and
+    no process is running the entry: a duplicate tray is worse than a missed
+    one, so an unreadable process table means no launch that round.
+    """
+    total = len(_RETRY_DELAYS_S)
+    for n, delay in enumerate(_RETRY_DELAYS_S, start=1):
+        if stop.wait(delay):
+            _log_breadcrumb(f"tray stopping — retries abandoned for {len(pending)} pending")
+            return
+        pending = [p for p in pending if not _retry_one(*p, f"retry {n}/{total}")]
+        if not pending:
+            return
+    for name, _bat, _port in pending:
+        _note(logging.WARNING, name, f"failed after {total} retries")
+
+
+def _retry_one(name: str, bat_path: Path, port: int, label: str) -> bool:
+    """One retry for one entry; True once it needs no further retry."""
+    if port_listening(port):
+        _note(logging.INFO, name, f"{label}: :{port} answering — ready, not relaunched")
+        return True
+    try:
+        pid = find_running_target(bat_path)
+    except RuntimeError as exc:
+        _note(logging.WARNING, name, f"{label}: could not check it is not running ({exc}) — not relaunched")
+        return False
+    if pid is not None:
+        _note(logging.INFO, name, f"{label}: already running (pid {pid}) — not relaunched")
+        return True
+    if _spawn_and_wait(name, bat_path, port, f"{label}: relaunching "):
+        _note(logging.INFO, name, f"ready on {label}")
+        return True
+    return False
 
 
 def _already_running(name: str, bat_path: Path) -> bool:
