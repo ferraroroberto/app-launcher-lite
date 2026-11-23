@@ -542,7 +542,6 @@ def create_app() -> FastAPI:
     app.include_router(team_os.router)
     app.include_router(speech.router)
     app.include_router(webauthn.router)
-    # The build readout's restart sheet: the app, and the session-host.
     app.include_router(build_restart_router(app))
     # Local-only view/tap log. Behind the bearer-token middleware like
     # every /api route; static/usage.js hands the vendored client the bearer
