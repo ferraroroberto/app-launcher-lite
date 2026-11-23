@@ -55,6 +55,7 @@ from src.launching.flags import (
     unknown_model_detail,
 )
 from src.launching.launcher import open_local_terminal_window, spawn_claude_session
+from src.life_os.stat_cache import DirListingCache
 from src.scanner import Skill, scan_skills, skills_dir_for
 from src.webapp_config import WebappConfig
 
@@ -111,6 +112,8 @@ _RECAP_COMMAND = "weekly-recap"
 _RECAP_LEDGER_REL = ".claude/skills/_recap/memory/ledger.json"
 # Headless drafts awaiting review land here (gitignored on the team-os side).
 _RECAP_PROPOSALS_REL = ".claude/skills/_recap/proposals"
+# The tile polls recap-status; the proposals folder changes once a week.
+_proposals_cache = DirListingCache()
 # Staleness thresholds in days: amber past DUE, red past OVERDUE.
 _RECAP_DUE_DAYS = 7
 _RECAP_OVERDUE_DAYS = 14
@@ -312,7 +315,9 @@ async def recap_status(request: Request) -> Dict[str, Any]:
     try:
         pdir = team_os_dir / _RECAP_PROPOSALS_REL
         if pdir.is_dir():
-            names = sorted((p.name for p in pdir.glob("*.md")), reverse=True)
+            names = _proposals_cache.get(
+                pdir, "*.md", lambda: sorted((p.name for p in pdir.glob("*.md")), reverse=True)
+            )
             proposal_name = names[0] if names else None
     except OSError:
         pass
@@ -449,9 +454,9 @@ async def list_skill_files(skill_id: str, request: Request) -> Dict[str, Any]:
     skill = _resolve_skill(cfg, skill_id)
 
     files: List[Dict[str, str]] = []
-    files.extend(_walk_files(skill.skill_dir, team_os_root, category=None))
+    files.extend(walk_files(skill.skill_dir, team_os_root, category=None))
     files.extend(
-        _walk_files(team_os_dir / "identity", team_os_root, category="identity")
+        walk_files(team_os_dir / "identity", team_os_root, category="identity")
     )
     return {
         "skill": _skill_to_api(skill, team_os_root),
@@ -622,6 +627,28 @@ def _is_conversation_file(team_os_dir: Path, resolved: Path) -> bool:
 
 
 # --------------------------------------------------------------- walk
+
+
+_walk_cache = DirListingCache()
+
+
+def walk_files(
+    root: Path, team_os_root: Path, category: Optional[str]
+) -> List[Dict[str, str]]:
+    """The tree listing of :func:`_walk_files`, kept while no folder in it changed.
+
+    A listing only changes when an entry is added, removed or renamed, which
+    moves its folder's mtime, so an unchanged tree costs one ``stat`` per
+    folder instead of a walk. Each call gets its own copy of the rows.
+    """
+    rows = _walk_cache.get(
+        root,
+        (str(team_os_root), category),
+        lambda: _walk_files(root, team_os_root, category),
+        recursive=True,
+        skip=_BROWSE_SKIP_DIRS,
+    )
+    return [dict(row) for row in rows]
 
 
 def _walk_files(

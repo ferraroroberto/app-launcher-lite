@@ -24,6 +24,7 @@ import { terminalJsonApi } from '../webauthn.js';
 import { CHIEF_KILL_CONFIRM } from '../shared/session-kinds.js';
 import { confirmDialog } from '../confirm-dialog.js';
 import { createRowMenu } from '../_vendored/row-menu/row-menu.js';
+import { startPoll } from '../_vendored/poll/poll.js';
 import { exchangeState } from './exchange-state.js';
 import { isChiefCard } from './board-dispatch.js';
 import { markLooked } from './journal-look.js';
@@ -161,11 +162,11 @@ export function buildDrawer(card) {
   drawer.appendChild(exchange);
   loadExchange(card, exchange);
   if (isChiefCard(card)) {
-    chiefExchangeTimer = setInterval(function () {
+    chiefExchangeTimer = startPoll(function () {
       // Defensive: a tab switch doesn't re-render the board, so gate on
       // the drawer actually still being the visible one.
-      if (state.tab !== 'board' || state.boardExpanded !== card.session_id) return;
-      loadExchange(card, exchange);
+      if (state.tab !== 'board' || state.boardExpanded !== card.session_id) return null;
+      return loadExchange(card, exchange);
     }, CHIEF_EXCHANGE_POLL_MS);
   }
   // A session that has ended has nothing to reply to or act on.
@@ -383,7 +384,7 @@ export function syncDrawerLifecycle(openItem) {
   if (!openItem) {
     drawerComposerHost = null;
     if (chiefExchangeTimer) {
-      clearInterval(chiefExchangeTimer);
+      chiefExchangeTimer.stop();
       chiefExchangeTimer = null;
     }
     if (drawerComposer) {

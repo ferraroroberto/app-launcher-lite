@@ -21,6 +21,7 @@ import { els, state } from '../state.js';
 import { apiFailToast, jsonApi, toast } from '../api.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
 import { fetchConfig } from './claude-options.js';
+import { startPoll } from '../_vendored/poll/poll.js';
 
 const PRESET_NAMES = { standard: 'Standard', light: 'Light machine', custom: 'Custom' };
 const GROUP_TITLES = {
@@ -234,16 +235,14 @@ async function refreshHealth() {
 }
 
 function stopHealth() {
-  window.clearInterval(healthTimer);
+  if (healthTimer) healthTimer.stop();
   healthTimer = null;
 }
 
 function startHealth() {
   stopHealth();
   refreshHealth();
-  healthTimer = window.setInterval(function () {
-    if (!document.hidden) refreshHealth();
-  }, HEALTH_POLL_MS);
+  healthTimer = startPoll(refreshHealth, HEALTH_POLL_MS);
 }
 
 export function wirePerformance() {

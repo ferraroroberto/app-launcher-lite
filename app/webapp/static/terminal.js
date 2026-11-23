@@ -29,6 +29,7 @@ import { apiFailToast, jsonApi } from './api.js';
 import { fetchSessions, sessionTitle } from './sessions.js';
 import { enableNativeTouchScroll } from './terminal/terminal-touch.js';
 import { loadXterm } from './terminal/xterm-loader.js';
+import { startPoll } from './_vendored/poll/poll.js';
 import {
   announceMirrorWindow,
   dropEarlyMirrorMarker,
@@ -195,8 +196,8 @@ function disposeTerminal(t) {
   }
   _termCache.delete(t.sid);
   clearTerminalReconnect(t);
-  if (t.sizeTimer) clearInterval(t.sizeTimer);
-  if (t.titleTimer) clearInterval(t.titleTimer);
+  if (t.sizeTimer) t.sizeTimer.stop();
+  if (t.titleTimer) t.titleTimer.stop();
   if (t.disposeTouch) { try { t.disposeTouch(); } catch (_) {} }
   if (t.disposeLatest) { try { t.disposeLatest(); } catch (_) {} }
   if (t.onWindowResize) window.removeEventListener('resize', t.onWindowResize);
@@ -528,9 +529,9 @@ function registerWarmTerminal(t) {
 // overlay is open or closed — just a direct fetch with no Running-sessions
 // list re-render, which is what the main poll's pause deliberately avoids.
 function startTitleRefresh(t) {
-  t.titleTimer = setInterval(function () {
-    if (t !== state.terminal) return;
-    jsonApi('/api/claude-code/sessions').then(function (body) {
+  t.titleTimer = startPoll(function () {
+    if (t !== state.terminal) return null;
+    return jsonApi('/api/claude-code/sessions').then(function (body) {
       if (t !== state.terminal) return;
       const s = (body.sessions || []).find(function (x) {
         return x.session_id === t.sid;
@@ -703,8 +704,8 @@ function wireSizeTracking(t) {
   const applySize = t.applySize;
   if (t.mirror) {
     // The phone may rotate or resize — re-sync to its size periodically.
-    t.sizeTimer = setInterval(function () {
-      fetchSessions().then(applySize).catch(function () {});
+    t.sizeTimer = startPoll(function () {
+      return fetchSessions().then(applySize).catch(function () {});
     }, 2500);
     return;
   }

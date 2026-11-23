@@ -202,7 +202,7 @@ def _with_server_timing(
     return {**message, "headers": [*message.get("headers", []), header]}
 
 
-class SlowRequestLogMiddleware:
+class RequestTimingMiddleware:
     """ASGI middleware: log slow requests + high in-flight counts, and stamp
     ``Server-Timing`` on every ``/api/`` response."""
 

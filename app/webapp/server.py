@@ -23,7 +23,7 @@ from starlette.types import Scope
 
 from app.webapp import chief_doorbell, loop_lag, perf_apply
 from app.webapp.observability import (
-    SlowRequestLogMiddleware,
+    RequestTimingMiddleware,
     ensure_autostart_log_handler,
     ensure_chief_events_log_handler,
     ensure_doorbell_log_handler,
@@ -559,7 +559,7 @@ def create_app() -> FastAPI:
         get_config=lambda: app.state.webapp_config,
     )
     # Outside the auth middleware, so the timing covers it.
-    app.add_middleware(SlowRequestLogMiddleware, get_budget_overrides=_budget_overrides(app))
+    app.add_middleware(RequestTimingMiddleware, get_budget_overrides=_budget_overrides(app))
     # Added last → outermost, so an auth failure or a bodyless 304 passes
     # through it unchanged. No bypass path: the SSE stream is
     # `text/event-stream`, skipped by content type.
