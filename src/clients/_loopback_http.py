@@ -55,7 +55,8 @@ SESSION.mount("https://", _adapter)
 
 
 def pooled_request(
-    method: str, url: str, *, timeout: float, verify: bool = True, **kwargs: Any
+    method: str, url: str, *, timeout: float, verify: bool = True,
+    retry_dropped: bool = True, **kwargs: Any
 ) -> requests.Response:
     """One call over the shared keep-alive pool, retried once on a dropped
     connection.
@@ -69,10 +70,16 @@ def pooled_request(
     non-idempotent methods — the failed attempt never left the client — so a
     session-host restart surfaces as a clean reconnect rather than a spurious
     error on the next poll.
+
+    ``retry_dropped=False`` is for a call that must never run twice: a
+    connection the peer drops after reading the body raises the same error,
+    and a second message send would type the text again.
     """
     try:
         return SESSION.request(method, url, timeout=timeout, verify=verify, **kwargs)
     except requests.exceptions.ConnectionError:
+        if not retry_dropped:
+            raise
         return SESSION.request(method, url, timeout=timeout, verify=verify, **kwargs)
 
 
@@ -111,6 +118,7 @@ def request(
     verify: bool = True,
     allow_empty: bool = True,
     read_timeout_status: Optional[int] = None,
+    retry_dropped: bool = True,
     **kwargs: Any,
 ) -> Any:
     """Make one loopback HTTP call and apply the shared error mapping.
@@ -123,11 +131,14 @@ def request(
     of the transport failures: a *read* timeout — the peer accepted the call and
     never answered in time — raises that status with a "still working" message
     instead of the 503 "unreachable" a refused or timed-out connect gets, for a
-    caller whose upstream legitimately runs long (photo-ocr). ``**kwargs`` (``json``, ``params``, ``files``, ``data``,
+    caller whose upstream legitimately runs long (photo-ocr). ``retry_dropped``
+    rides to :func:`pooled_request`. ``**kwargs`` (``json``, ``params``, ``files``, ``data``,
     ``headers``, ...) flow straight to ``requests.request``.
     """
     try:
-        resp = pooled_request(method, url, timeout=timeout, verify=verify, **kwargs)
+        resp = pooled_request(
+            method, url, timeout=timeout, verify=verify, retry_dropped=retry_dropped, **kwargs
+        )
     except requests.exceptions.ReadTimeout as exc:
         if read_timeout_status is None:
             raise error(f"{service} unreachable at {url} ({exc})", status=503) from exc

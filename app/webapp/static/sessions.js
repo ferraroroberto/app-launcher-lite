@@ -598,7 +598,7 @@ export function detachedSendRefused(s) {
 export async function sendSessionMessage(sid, text) {
   return terminalJsonApi(
     sessionRoute(sid, '/input'),
-    { method: 'POST', body: { data: text, submit: true } }
+    { method: 'POST', body: { data: text, submit: true }, timeToken: true }
   );
 }
 

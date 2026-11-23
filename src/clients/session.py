@@ -295,7 +295,10 @@ def _refuse_if_awaiting_trust(session_id: str, info: Dict[str, Any]) -> None:
     raise FolderTrustPending(session_id, prompt.folder)
 
 
-def send_input(port: int, session_id: str, data: str, submit: bool = True) -> Dict[str, Any]:
+def send_input(
+    port: int, session_id: str, data: str, submit: bool = True,
+    stages: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Write ``data`` and, if ``submit``, submit it.
 
     A just-spawned Copilot session is waited for first (:func:`_await_tui_ready`):
@@ -319,14 +322,41 @@ def send_input(port: int, session_id: str, data: str, submit: bool = True) -> Di
     composer and its submit is with a background watcher — the final verdict
     lands on the session's ``last_input``, not on this response. The status
     code itself is not surfaced here; the ``reason`` field is the contract.
+
+    The call is made once, never retried: a connection dropped after the host
+    read the body would otherwise type the text twice. A dropped or refused
+    connection is a 503; a host that took the call and did not answer within
+    ``_INPUT_TIMEOUT`` is a 504 saying the text may already be there.
+
+    ``stages``, when given, gains ``ready_ms`` (the readiness wait) and
+    ``host_ms`` (the session-host call), each set as soon as it is known.
     """
-    info = _await_tui_ready(port, session_id)
+    started = time.monotonic()
+    try:
+        info = _await_tui_ready(port, session_id)
+    finally:
+        if stages is not None:
+            stages["ready_ms"] = (time.monotonic() - started) * 1000
     if info is not None:
         _refuse_if_awaiting_trust(session_id, info)
-    return _request(
-        "POST", port, f"/sessions/{session_id}/input",
-        json={"data": data, "submit": submit}, timeout=_INPUT_TIMEOUT,
-    )
+    started = time.monotonic()
+    try:
+        return _request(
+            "POST", port, f"/sessions/{session_id}/input",
+            json={"data": data, "submit": submit}, timeout=_INPUT_TIMEOUT,
+            read_timeout_status=504, retry_dropped=False,
+        )
+    except SessionHostError as exc:
+        if exc.status == 504:
+            raise SessionHostError(
+                f"session-host took the send and gave no answer within {_INPUT_TIMEOUT:.0f}s: "
+                f"the text may already be in the session, check it before sending again",
+                status=504,
+            ) from exc
+        raise
+    finally:
+        if stages is not None:
+            stages["host_ms"] = (time.monotonic() - started) * 1000
 
 
 def discard_pending_input(port: int, session_id: str, entry_id: str) -> Dict[str, Any]:

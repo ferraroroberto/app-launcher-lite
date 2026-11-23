@@ -5,9 +5,11 @@ lives here instead.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import os
 import re
+from concurrent.futures import Executor
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
@@ -96,7 +98,7 @@ def known_run_dir(job_id: str, run_id: str) -> Optional[Path]:
 
 
 async def audit_off_loop(
-    write: Callable[..., None], *args: Any, **kwargs: Any
+    write: Callable[..., None], *args: Any, _pool: Optional[Executor] = None, **kwargs: Any
 ) -> None:
     """Run one ``src.audit`` write off the event loop.
 
@@ -118,8 +120,17 @@ async def audit_off_loop(
     already swallow their own ``OSError``, and ``audit_event`` going bang is a
     real fault worth surfacing — the failure semantics are exactly what they
     were before the hop off the loop.
+
+    ``_pool`` runs the write on that executor instead of the loop's default
+    one, for a route whose answer must not wait behind other routes' threads
+    (a message send, on its own input pool).
     """
-    await asyncio.to_thread(write, *args, **kwargs)
+    if _pool is None:
+        await asyncio.to_thread(write, *args, **kwargs)
+        return
+    await asyncio.get_running_loop().run_in_executor(
+        _pool, functools.partial(write, *args, **kwargs)
+    )
 
 
 async def maybe_json(request: Request) -> Dict[str, Any]:

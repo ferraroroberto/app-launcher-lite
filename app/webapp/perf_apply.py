@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.webapp import hot_poll
+from app.webapp import hot_poll, input_pool
 from app.webapp.routers import claude_code
 from src import request_timing
 from src.board import tail_cache
@@ -23,12 +23,13 @@ logger = logging.getLogger(__name__)
 def apply(cfg: Any) -> None:
     """Resize each pool and the tail cache to ``cfg``'s limits (``pool_sends`` 0 = automatic)."""
     hot_poll.resize_pools(cfg.pool_hot_poll, cfg.pool_session_reads)
+    input_pool.resize(cfg.pool_input)
     claude_code.resize_git_status_pool(cfg.pool_git_status)
     request_timing.resize_default_executor(cfg.pool_sends)
     tail_cache.set_budget_mb(cfg.transcript_tail_cache_mb)
     logger.info(
-        "ℹ️ performance limits applied: hot-poll=%s session-reads=%s git-status=%s sends=%s "
+        "ℹ️ performance limits applied: hot-poll=%s session-reads=%s input=%s git-status=%s other=%s "
         "tail-cache=%sMB",
-        cfg.pool_hot_poll, cfg.pool_session_reads, cfg.pool_git_status,
+        cfg.pool_hot_poll, cfg.pool_session_reads, cfg.pool_input, cfg.pool_git_status,
         cfg.pool_sends or "auto", cfg.transcript_tail_cache_mb,
     )

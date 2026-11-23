@@ -83,9 +83,14 @@ KNOBS: Tuple[Knob, ...] = (
              "other chats sooner.",
     ),
     Knob(
-        "pool_sends", "Sends and other requests", GROUP_POOLS, KIND_INT, 0, 8, 4, 64, "threads",
+        "pool_input", "Sends", GROUP_POOLS, KIND_INT, 4, 2, 1, 16, "threads",
+        help="Threads that deliver a message to a session. Each send holds one while the session "
+             "takes the text, a few seconds at most, so a send never waits behind page reads.",
+    ),
+    Knob(
+        "pool_sends", "Other requests", GROUP_POOLS, KIND_INT, 0, 8, 4, 64, "threads",
         auto_zero=True,
-        help="Threads behind sending to a session and every route without its own pool. "
+        help="Threads behind every route without its own pool. "
              "0 picks from the CPU count (CPUs + 4, at most 32).",
     ),
     Knob(
