@@ -145,6 +145,16 @@ def _request_lines(stats: Optional[Dict[str, Any]], why: str) -> List[str]:
             f"  {name}: {counts.get('ok', 0)} ok, {counts.get('over', 0)} over soft, "
             f"{counts.get('breach', 0)} breach"
         )
+    pools = stats.get("pools")
+    if not isinstance(pools, dict):
+        out.append("thread pools: unknown (this webapp does not report them)")
+        return out
+    out.append("thread pools:")
+    for name, pool in sorted(pools.items()):
+        out.append(
+            f"  {name}: limit {pool.get('limit')} of {pool.get('ceiling')} threads, "
+            f"{pool.get('running')} running, {pool.get('waiting')} waiting"
+        )
     return out
 
 

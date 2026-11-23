@@ -86,7 +86,7 @@ Each request class has a **soft** and a **hard** limit, in seconds:
 
 Past soft, the log gets a `⏱️ over budget` line; past hard, a `🚨 budget breach` line. Settings > Performance scales every class at once with `request_budget_scale` ([performance](performance.md)). To change a class, set it in `request_budgets` in `config/webapp_config.json`, for example `{"board": [1.0, 3.0]}`; the other classes keep their defaults, an entry that is not `[soft_s, hard_s]` with `0 < soft_s <= hard_s` is ignored with a warning, and a save applies live.
 
-`GET /api/request-stats` (`?window_s=300`) reads the same counters: requests in flight now, the highest in-flight count in the window, the verdicts per class since boot, the budgets in force and the age of the last git-status scan. It reads counters and a cache and starts no work.
+`GET /api/request-stats` (`?window_s=300`) reads the same counters: requests in flight now, the highest in-flight count in the window, the verdicts per class since boot, the budgets in force, the age of the last git-status scan, and under `pools` each thread pool's `limit` (the Settings > Performance size in force), `ceiling` (its most threads) and the calls `running` on it and `waiting` for it now. It reads counters and a cache and starts no work.
 
 ## Benchmark
 
@@ -98,4 +98,4 @@ One open page asks for each read once at a time. The polls in `app/webapp/static
 
 ## Health snapshot
 
-`.\.venv\Scripts\python.exe launcher.py health` writes `webapp/health/health-<date>-<time>.txt`: the webapp, session-host and tray processes, available memory, the top CPU processes over one second, the running agent processes, the lane marks and session rows, requests in flight and verdicts per class, the git-status cache age and the last 20 lines of the slow-request log, redacted like the diagnostics file. It changes nothing: no process is signalled and no scan is started. A part it cannot establish (the webapp down, no psutil) reads `unknown (<why>)`, never an idle or zero figure.
+`.\.venv\Scripts\python.exe launcher.py health` writes `webapp/health/health-<date>-<time>.txt`: the webapp, session-host and tray processes, available memory, the top CPU processes over one second, the running agent processes, the lane marks and session rows, requests in flight and verdicts per class, the git-status cache age, each thread pool's limit and the calls running and waiting on it, and the last 20 lines of the slow-request log, redacted like the diagnostics file. It changes nothing: no process is signalled and no scan is started. A part it cannot establish (the webapp down, no psutil) reads `unknown (<why>)`, never an idle or zero figure.

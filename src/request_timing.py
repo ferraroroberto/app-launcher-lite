@@ -87,6 +87,17 @@ current: "contextvars.ContextVar[Optional[RequestTiming]]" = contextvars.Context
 )
 
 
+#: Every pool by name, so diagnostics can report each one's size and load. A
+#: pool built again under the same name (the default pool, once per app
+#: lifespan) replaces the old entry.
+_POOLS: Dict[str, "TimedExecutor"] = {}
+
+
+def pool_snapshot() -> Dict[str, Dict[str, int]]:
+    """Each pool's :meth:`TimedExecutor.occupancy`, keyed by pool name."""
+    return {name: _POOLS[name].occupancy() for name in sorted(_POOLS)}
+
+
 class TimedExecutor(ThreadPoolExecutor):
     """A thread pool that reports queue and worker time to the submitting request.
 
@@ -106,6 +117,8 @@ class TimedExecutor(ThreadPoolExecutor):
         self._gate = threading.Condition()
         self._limit = max_workers
         self._running = 0
+        self._waiting = 0
+        _POOLS[pool_name] = self
 
     @property
     def limit(self) -> int:
@@ -124,6 +137,14 @@ class TimedExecutor(ThreadPoolExecutor):
             self._gate.notify_all()
         return limit
 
+    def occupancy(self) -> Dict[str, int]:
+        """The limit in force, the thread ceiling, and the calls running and waiting now."""
+        with self._gate:
+            return {
+                "limit": self._limit, "ceiling": self.ceiling,
+                "running": self._running, "waiting": self._waiting,
+            }
+
     def submit(self, fn: Callable[..., Any], /, *args: Any, **kwargs: Any) -> "Future[Any]":
         timing = current.get()
         queued = time.monotonic()
@@ -132,6 +153,7 @@ class TimedExecutor(ThreadPoolExecutor):
             with self._gate:
                 while self._running >= self._limit:
                     self._gate.wait()
+                self._waiting -= 1
                 self._running += 1
             started = time.monotonic()
             try:
@@ -143,7 +165,14 @@ class TimedExecutor(ThreadPoolExecutor):
                 if timing is not None:
                     timing.record(self.pool_name, started - queued, time.monotonic() - started)
 
-        return super().submit(gated)
+        with self._gate:
+            self._waiting += 1
+        try:
+            return super().submit(gated)
+        except BaseException:
+            with self._gate:
+                self._waiting -= 1
+            raise
 
 
 #: The one pool :func:`default_executor` made, so a settings save can resize it.

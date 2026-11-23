@@ -38,7 +38,7 @@ A save outside a range is refused with the rule it broke ("Board refresh must be
 ## How a change takes effect
 
 - **Poll spacings and the hidden-tab pause** are read from the page's copy of the config at each re-arm, so a running poll picks up a change at its next tick. A page that has not loaded its config yet uses the defaults.
-- **Pools** are `TimedExecutor`s (`src/request_timing.py`) built once with a fixed thread ceiling and a live concurrency limit. A save resizes the limit (`app/webapp/perf_apply.py`); a call already running finishes, so a smaller limit is met as running calls end. The session-host is never touched.
+- **Pools** are `TimedExecutor`s (`src/request_timing.py`) built once with a fixed thread ceiling and a live concurrency limit. A save resizes the limit (`app/webapp/perf_apply.py`); a call already running finishes, so a smaller limit is met as running calls end. The session-host is never touched. Static files and `/healthz` use none of these pools, so a full one never delays them. `GET /api/request-stats` and the health snapshot show each pool's limit and its running and waiting calls ([diagnostics](diagnostics.md#request-timings-and-budgets)).
 - **Caches, budgets and the git TTL** are read off the config on each use, except the transcript tail cache, which lives below the routes and is resized by the same `perf_apply` call as the pools.
 
 ## The health line

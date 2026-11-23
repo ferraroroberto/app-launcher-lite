@@ -59,7 +59,8 @@ async def request_stats(
     ``max_inflight`` is the highest in-flight count in the last ``window_s``
     seconds, the number a benchmark reports beside its latencies. ``budgets``
     is the table in force, defaults with the config's ``request_budgets``
-    laid over them.
+    laid over them. ``pools`` gives each thread pool's limit and ceiling and
+    the calls running on it and waiting for it now.
     """
     cfg: WebappConfig = request.app.state.webapp_config
     budgets = request_timing.resolve_budgets(
@@ -71,6 +72,7 @@ async def request_stats(
             name: {"soft_s": b.soft_s, "hard_s": b.hard_s} for name, b in budgets.items()
         },
         "git_status_age_s": _git_status_age_s(request),
+        "pools": request_timing.pool_snapshot(),
     }
 
 
