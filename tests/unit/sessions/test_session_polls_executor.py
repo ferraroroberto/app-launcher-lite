@@ -262,3 +262,68 @@ def test_mixed_concurrent_polls_exhaust_no_pool_and_answer_in_bound(
     assert hot_s < _HANG_S / 2, f"the Board and session list took {hot_s:.1f}s behind stalled Chat reads"
     assert free_s < _FREE_S, f"a to_thread call waited {free_s:.2f}s: a pool is exhausted"
     assert sent_status == 200
+
+
+@pytest.fixture
+def small_poll_pools():
+    """Both poll pools at four threads, so 20 polls certainly fill them."""
+    from src.webapp_settings import performance
+
+    hot_poll.resize_pools(4, 4)
+    yield
+    hot_poll.resize_pools(performance.default("pool_hot_poll"), performance.default("pool_session_reads"))
+
+
+def test_twenty_stalled_hot_polls_leave_sends_healthz_and_static_unaffected(
+    chat_app, monkeypatch, tmp_path, small_poll_pools
+):
+    """20 hot polls at once, every build stalled: two Board, two session-list
+    and 16 transcript ticks on distinct cursors. Both poll pools fill and
+    queue; a send, ``/healthz`` and a static asset still answer at once, and
+    the diagnostics pool report shows the queue where it is."""
+    from src import board as board_mod
+    from src import request_timing
+    from src.board import owner_checks
+
+    board_stall, list_stall = _Stall([]), _Stall(None)
+    monkeypatch.setattr(board_mod, "jobs_attention", board_stall)
+    monkeypatch.setattr(owner_checks, "needs_count", list_stall)
+    tail_stall = _stall_transcript(monkeypatch, tmp_path)
+    paths = ["/api/board"] * 2 + ["/api/claude-code/sessions"] * 2
+    paths += [f"/api/claude-code/sessions/s1/transcript?after=0&size=0&limit={n}" for n in range(1, 17)]
+    stalls = (board_stall, list_stall, tail_stall)
+
+    async def timed(client, method: str, path: str, **kwargs: Any) -> tuple:
+        started = time.perf_counter()
+        resp = await client.request(method, path, **kwargs)
+        return resp.status_code, time.perf_counter() - started
+
+    async def run():
+        transport = httpx.ASGITransport(app=chat_app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            polls = [asyncio.create_task(client.get(path)) for path in paths]
+            try:
+                for stall in stalls:
+                    await _until(stall.entered.is_set)
+                await _until(lambda: request_timing.pool_snapshot()["session-reads"]["waiting"] > 0)
+                pools = request_timing.pool_snapshot()
+                answers = {
+                    "send": await timed(client, "POST", "/api/claude-code/sessions/s1/input",
+                                        json={"data": "hi", "submit": True}),
+                    "healthz": await timed(client, "GET", "/healthz"),
+                    "static": await timed(client, "GET", "/static/api.js"),
+                }
+                still_polling = sum(not p.done() for p in polls)
+            finally:
+                for stall in stalls:
+                    stall.release.set()
+                await asyncio.gather(*polls, return_exceptions=True)
+        return pools, answers, still_polling
+
+    pools, answers, still_polling = asyncio.run(run())
+    for name, (status, elapsed) in answers.items():
+        assert status == 200, f"{name} answered {status} behind stalled polls"
+        assert elapsed < _SEND_BOUND_S, f"{name} took {elapsed:.2f}s behind 20 stalled hot polls"
+    assert still_polling == len(paths), "a poll finished early, so the pools were never full"
+    assert pools["session-reads"]["running"] == pools["session-reads"]["limit"] == 4
+    assert pools["hot-poll"]["running"] >= 2

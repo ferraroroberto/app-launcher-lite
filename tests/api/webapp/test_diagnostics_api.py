@@ -78,6 +78,8 @@ def test_request_stats_reports_the_table_and_the_cache_age_without_scanning(diag
     assert body["max_inflight"] >= 1  # this very request
     assert body["git_status_age_s"] is None  # no scan has run, and asking started none
     assert getattr(app.state, "git_status_cache", None) in (None, {})
+    for name in ("hot-poll", "session-reads", "input", "git-status"):
+        assert set(body["pools"][name]) == {"limit", "ceiling", "running", "waiting"}
     assert client.get("/api/request-stats", params={"window_s": 0}).status_code == 422
 
 

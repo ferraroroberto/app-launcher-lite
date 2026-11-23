@@ -23,6 +23,7 @@ ROWS = [
 STATS = {
     "inflight": 2, "max_inflight": 17, "window_s": 300.0, "uptime_s": 99.0,
     "verdicts": {"board": {"ok": 3, "over": 1, "breach": 2}}, "git_status_age_s": 41.5,
+    "pools": {"session-reads": {"limit": 4, "ceiling": 48, "running": 4, "waiting": 12}},
 }
 
 
@@ -51,6 +52,7 @@ def test_report_names_load_agents_lanes_requests_and_the_tail(sources):
     assert "peak 17" in text
     assert "git-status cache age: 41.5s" in text
     assert "board: 3 ok, 1 over soft, 2 breach" in text
+    assert "session-reads: limit 4 of 48 threads, 4 running, 12 waiting" in text
     assert "  a slow line" in text
     assert "memory:" in text
 
@@ -69,6 +71,11 @@ def test_a_down_webapp_reads_unknown_never_idle(sources):
 def test_missing_psutil_rows_read_unknown(sources):
     text = _text(sources, rows=None)
     assert "top CPU: unknown" in text and "agent processes: unknown" in text
+
+
+def test_a_webapp_without_the_pool_report_reads_unknown(sources):
+    stats = {k: v for k, v in STATS.items() if k != "pools"}
+    assert "thread pools: unknown" in _text(sources, stats=stats)
 
 
 def test_a_scan_that_has_not_run_is_not_a_zero_age(sources):

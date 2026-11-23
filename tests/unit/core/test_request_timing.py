@@ -166,3 +166,26 @@ def test_the_default_executor_stand_in_is_charged_to_the_default_pool():
 
     asyncio.run(work())
     assert timing.pool == rt.DEFAULT_POOL and timing.calls == 1
+
+
+def test_a_pool_reports_its_limit_and_the_calls_running_and_waiting():
+    pool = rt.TimedExecutor("probe-occupancy", max_workers=1, ceiling=3)
+    started, release = threading.Event(), threading.Event()
+
+    def hold() -> None:
+        started.set()
+        release.wait(5)
+
+    try:
+        first, second = pool.submit(hold), pool.submit(hold)
+        assert started.wait(3)
+        assert rt.pool_snapshot()["probe-occupancy"] == {
+            "limit": 1, "ceiling": 3, "running": 1, "waiting": 1,
+        }
+        release.set()
+        first.result(3), second.result(3)
+        assert pool.occupancy() == {"limit": 1, "ceiling": 3, "running": 0, "waiting": 0}
+    finally:
+        release.set()
+        pool.shutdown(wait=True)
+        rt._POOLS.pop("probe-occupancy", None)
