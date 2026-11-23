@@ -14,6 +14,21 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8465
 # Loopback port the PTY session-host binds. Never network-reachable.
 DEFAULT_SESSION_HOST_PORT = 8466
+# The browser a session's PC window opens in. "chrome" and "edge" open an app window in that
+# browser, falling back to the other and then to the Windows default when it is not installed;
+# "system" hands the page to the Windows default browser as an ordinary tab.
+VALID_MIRROR_BROWSERS = ("chrome", "edge", "system")
+DEFAULT_MIRROR_BROWSER = "chrome"
+
+
+def check_mirror_browser(choice: object) -> None:
+    """Raise ValueError unless ``choice`` is one of the session-window browsers."""
+    if choice not in VALID_MIRROR_BROWSERS:
+        raise ValueError(
+            f"mirror_browser must be one of {VALID_MIRROR_BROWSERS}; got {choice!r}"
+        )
+
+
 # Env override for the session-host port. Set ONLY by the e2e pre-ship gate's
 # autoboot so a disposable webapp can be pointed at a disposable, free-port
 # session-host instead of the live :8466 a running tray owns. This is what

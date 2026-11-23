@@ -89,6 +89,7 @@ The `.sample` file carries a `copilot_models` default list; a per-launch model (
 | `webauthn_rp_name` | `Launcher` | Display name in the passkey prompt. |
 | `claude_show_local_window` | `true` | Allow the dedicated PC window at all, for a launch and for a row's **Open in new window**. (The key name predates the Copilot-only fork.) |
 | `open_sessions_in_window` | `false` | Open every new launch's terminal in the dedicated PC window. Off, it renders in the page. Needs `claude_show_local_window`. |
+| `mirror_browser` | `chrome` | The browser a session's PC window opens in: `chrome` or `edge` open a dedicated app window in that browser, found through App Paths and then Program Files, and fall back to the other one and then the Windows default when it is not installed; `system` opens the page in the Windows default browser. The window runs on its own browser profile folder under the app's runtime data, so a browser already open does not swallow the window's flags. Edited from Settings › Sessions › Window browser. |
 | `open_sessions_in_chat` | `true` | A session never opened before starts in Chat. Off, it starts in Terminal. |
 | `desktop_browser` | `chrome` | Where a link tapped in Chat opens when the page runs on the PC itself: `chrome` (falls back to the Windows default) or `system`. |
 | `terminal_history_lines` | `10000` | Scrollback the session-host replays on (re)connect, 200–50000. |

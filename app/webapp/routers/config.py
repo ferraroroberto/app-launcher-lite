@@ -77,6 +77,8 @@ async def get_config(request: Request) -> Dict[str, Any]:
         # Where the SPA opens a session: the PC window, and Chat first.
         "open_sessions_in_window": cfg.open_sessions_in_window,
         "open_sessions_in_chat": cfg.open_sessions_in_chat,
+        # Settings > Sessions > Window browser: where the PC window opens.
+        "mirror_browser": cfg.mirror_browser,
         # Settings › Terminal: trust the private network for the terminal-grade
         # routes, and (a second switch) for the screen view too.
         "terminal_allow_private_lan": cfg.terminal_allow_private_lan,
@@ -234,6 +236,7 @@ _PATCH_KEYS = frozenset({
     "launch_presets",
     "open_sessions_in_window",
     "open_sessions_in_chat",
+    "mirror_browser",
     *PRIVATE_NETWORK_KEYS,
     "apps_scan_root",
     "team_os_dir",

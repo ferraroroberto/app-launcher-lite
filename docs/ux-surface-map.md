@@ -1415,7 +1415,7 @@ flowchart LR
 - **Reach:** the Settings pane
 - **Holds:**
   - Appearance - a Text size choice of Small, Default and Large; a Full screen switch with a help line; an Install as app row that says whether this browser can install Lite and why not
-  - Sessions - the switches Open in a new window and Open in Chat, with a help line that explains both
+  - Sessions - the Open in a new window switch, Window browser (Chrome, Edge, Default) and the Open in Chat switch, with a help line that explains all three
   - This PC - the switches Start at log on and Awake with lid closed, each with a help line
 - **Does:**
   - a switch saves when tapped and shows ON or OFF
