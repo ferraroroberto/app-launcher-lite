@@ -9,6 +9,7 @@
 /app/webapp/static/_vendored/card
 /app/webapp/static/_vendored/disclosure
 /app/webapp/static/_vendored/empty-state
+/app/webapp/static/_vendored/fullscreen
 /app/webapp/static/_vendored/home-head
 /app/webapp/static/_vendored/icon-button
 /app/webapp/static/_vendored/icons
@@ -16,6 +17,7 @@
 /app/webapp/static/_vendored/modal
 /app/webapp/static/_vendored/nav
 /app/webapp/static/_vendored/page-foot
+/app/webapp/static/_vendored/poll
 /app/webapp/static/_vendored/rec-wave
 /app/webapp/static/_vendored/row-menu
 /app/webapp/static/_vendored/segmented
@@ -50,6 +52,7 @@
 /scripts/usage_track_scan.py
 /scripts/ux_surface_map.py
 /scripts/ux_surface_ratchet.py
+/scripts/windows_only_ratchet.py
 /src/build_info.py
 /src/compression.py
 /src/login_alert.py
@@ -57,6 +60,7 @@
 /src/notify
 /src/password.py
 /src/runtime_data.py
+/src/self_restart.py
 /src/usage_log.py
 /tests/e2e/_browser_sweep.py
 /tests/e2e/_geometry.py
@@ -64,4 +68,5 @@
 /tests/e2e/_paced_browser.py
 /tests/e2e/_shot.py
 /tests/e2e/_surface.py
+/tests/host/_synthetic_host.py
 # END vendored-copies
