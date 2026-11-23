@@ -1,10 +1,12 @@
-/* The Code tab's Usage card: the Copilot allowance used this month.
+/* The Code tab's Usage card: the Copilot plan's allowance used this month.
  *
- * One row: a 6px bar filled to the share of the monthly allowance used, a
- * 2px tick at the share of the month gone, the percent and the reset date.
- * Colour follows pace, not raw percent: accent on or under pace, attention
- * ahead of it, danger at 90% or more. A source nobody could read shows
- * "unknown" with its reason, never 0%.
+ * One row: a 6px bar filled to the share of the plan's monthly allowance
+ * used (the figure the Copilot CLI's own status line shows), a 2px tick at
+ * the share of the month gone, the percent and the reset date. Colour
+ * follows pace, not raw percent: accent on or under pace, attention ahead of
+ * it, danger at 90% or more. A plan nobody could read shows "unknown" with
+ * its reason, never 0% and never this machine's share in its place; the
+ * footnote keeps this machine's credits today either way.
  *
  * main.js imports this module only after the session list has drawn, so it
  * is not part of the first load, and the server answers from memory
@@ -21,8 +23,8 @@ const PENDING_RETRY_MS = 2000;
 const PENDING_RETRIES = 5;
 const DANGER_PCT = 90;
 
-// The reading's state, as GET /api/copilot-usage sends it
-// (src/copilot_usage.py::payload): OK (a reading), UNKNOWN (the log could
+// The plan reading's state, as GET /api/copilot-usage sends it
+// (src/copilot_usage.py::payload): OK (a reading), UNKNOWN (the plan could
 // not be read; `reason` says why) or PENDING (the server's first read is
 // still running). usageState() is the one rule reading the field.
 export const UsageState = Object.freeze({
@@ -64,19 +66,39 @@ export function formatCredits(n) {
   return n < 10 ? (Math.round(n * 10) / 10).toString() : Math.round(n).toLocaleString('en-US');
 }
 
+// This machine's line: its credits today, or why its log could not be read.
+function machineText(body) {
+  if (body.today_credits != null) return formatCredits(body.today_credits) + ' credits today on this machine.';
+  if (body.today_state === UsageState.UNKNOWN) {
+    return 'This machine: unknown, ' + (body.today_reason || 'the usage log could not be read') + '.';
+  }
+  return '';
+}
+
 export function footerText(body) {
   if (!body || usageState(body) === UsageState.PENDING) return '–';
-  if (usageState(body) !== UsageState.OK) return 'Unknown: ' + (body.reason || 'the usage log could not be read') + '.';
-  return formatCredits(body.today_credits) + ' credits today on ' + body.scope + '.';
+  const parts = [];
+  if (usageState(body) !== UsageState.OK) {
+    parts.push('Plan usage unknown: ' + (body.reason || 'the plan could not be read') + '.');
+  }
+  const machine = machineText(body);
+  if (machine) parts.push(machine);
+  return parts.join(' ') || '–';
 }
 
 export function rowTitle(body) {
   const lines = [];
   if (usageState(body) === UsageState.OK) {
-    lines.push(formatCredits(body.used_credits) + ' of ' + body.allowance + ' AI credits used this month.');
+    lines.push(formatCredits(body.used_credits) + ' of ' + formatCredits(body.allowance)
+      + ' AI credits used this month on the plan.');
+  } else {
+    lines.push('Plan usage unknown. Allowance from Settings: ' + formatCredits(body.allowance) + ' AI credits.');
   }
   lines.push(body.pace_pct + '% of the month gone.');
-  lines.push('Source: ' + body.source + ', ' + body.scope + ' only.');
+  if (body.machine_month_credits != null) {
+    lines.push(formatCredits(body.machine_month_credits) + ' credits this month on this machine.');
+  }
+  lines.push('Source: ' + body.source + ', counting ' + body.scope + '.');
   return lines.join('\n');
 }
 
@@ -109,7 +131,7 @@ export function renderUsage(body) {
   tick.style.left = body.pace_pct + '%';
   bar.appendChild(tick);
   bar.setAttribute('role', 'meter');
-  bar.setAttribute('aria-label', 'Copilot allowance used this month');
+  bar.setAttribute('aria-label', 'Copilot plan allowance used this month');
   bar.setAttribute('aria-valuemin', '0');
   bar.setAttribute('aria-valuemax', '100');
   if (ok) {

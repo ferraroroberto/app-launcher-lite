@@ -37,7 +37,13 @@ def _blocked_snapshot(tmp_path: Path):
 
     db = tmp_path / "session-store.db"
     db.write_bytes(b"")
-    return usage_router.UsageSnapshot(db_path=lambda: db, reader=reader), release, calls
+    def plan_reader(_path: Path, _now) -> copilot_usage.PlanReading:
+        return copilot_usage.PlanReading("ok", used_credits=30.0, allowance=300.0)
+
+    snapshot = usage_router.UsageSnapshot(
+        db_path=lambda: db, reader=reader, plan_path=lambda: db, plan_reader=plan_reader,
+    )
+    return snapshot, release, calls
 
 
 async def test_a_stalled_read_never_holds_the_route_or_the_loop(tmp_path: Path) -> None:

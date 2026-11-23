@@ -1,12 +1,15 @@
-"""The Copilot usage reader (``src.copilot_usage``) against a temporary log.
+"""The Copilot usage readers (``src.copilot_usage``) against temporary files.
 
-Synthetic rows only. Pins the month and today sums, the UTC billing month and
-its pace, and that every unreadable log (missing, wrong shape, locked) reads
-as ``unknown`` with a reason, never as 0 credits.
+Synthetic rows and a fake plan cache only. Pins the month and today sums, the
+UTC billing month and its pace, that every unreadable log (missing, wrong
+shape, locked) reads as ``unknown`` with a reason, never as 0 credits, and
+that the card's percent and pace come from the plan's own used and
+allowance, or read unknown, never this machine's share over a guessed one.
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from datetime import datetime, timezone
@@ -111,10 +114,109 @@ def test_pace_follows_the_month_length() -> None:
     assert copilot_usage.pace_pct(feb_start, feb_start, feb_reset) == 0.0
 
 
-def test_payload_applies_the_allowance_and_never_claims_zero_when_unknown() -> None:
-    ok = copilot_usage.payload(copilot_usage.Reading("ok", 75.0, 3.0), 300, NOW)
-    assert (ok["state"], ok["used_pct"], ok["allowance"], ok["reset_at"][:10]) == ("ok", 25.0, 300, "2026-12-01")
-    assert ok["scope"] == "this machine"
-    unknown = copilot_usage.payload(copilot_usage.Reading("unknown", reason="locked"), 300, NOW)
-    assert (unknown["used_pct"], unknown["used_credits"], unknown["reason"]) == (None, None, "locked")
-    assert copilot_usage.payload(None, 300, NOW)["state"] == "pending"
+def _plan_cache(path: Path, *, entitlement=1000, remaining=750.5, unlimited=False,
+                reset="2026-12-01T00:00:00.000Z", retrieved="2026-11-22T09:00:00.000Z",
+                extra_entries: dict | None = None) -> Path:
+    """A fake CLI user cache: ``//`` header lines, then entries keyed by sign-in."""
+    entry = {
+        "schemaVersion": 1,
+        "retrievedAt": retrieved,
+        "response": {
+            "login": "someone",
+            "quota_reset_date_utc": reset,
+            "quota_snapshots": {
+                "chat": {"entitlement": 0, "quota_remaining": 0, "unlimited": True},
+                "premium_interactions": {
+                    "entitlement": entitlement, "quota_remaining": remaining,
+                    "unlimited": unlimited, "timestamp_utc": "2026-11-22T09:00:00.0000000Z",
+                },
+            },
+        },
+    }
+    doc = {"copilotUserCache": {"v1:a": entry, **(extra_entries or {})}}
+    path.write_text("// Disposable cache, safe to delete.\n// Settings live elsewhere.\n" + json.dumps(doc),
+                    encoding="utf-8")
+    return path
+
+
+def test_plan_reads_used_as_entitlement_minus_remaining(tmp_path: Path) -> None:
+    plan = copilot_usage.read_plan(_plan_cache(tmp_path / "c.json"), NOW)
+    assert (plan.state, plan.used_credits, plan.allowance) == ("ok", 249.5, 1000.0)
+    assert plan.reset_at == datetime(2026, 12, 1, tzinfo=timezone.utc)
+    assert plan.as_of.startswith("2026-11-22T09:00")
+
+
+def test_plan_takes_the_newest_sign_in(tmp_path: Path) -> None:
+    older = {"retrievedAt": "2026-11-01T00:00:00.000Z", "response": {"quota_snapshots": {
+        "premium_interactions": {"entitlement": 50, "quota_remaining": 0}}}}
+    plan = copilot_usage.read_plan(_plan_cache(tmp_path / "c.json", extra_entries={"v1:b": older}), NOW)
+    assert plan.allowance == 1000.0
+
+
+@pytest.mark.parametrize("kwargs, reason", [
+    ({"unlimited": True}, "no monthly limit"),
+    ({"entitlement": 0}, "no usable allowance"),
+    ({"remaining": None}, "no usable allowance"),
+    ({"reset": "2026-11-01T00:00:00.000Z"}, "predates the last reset"),
+])
+def test_plan_that_cannot_give_a_percent_is_unknown(tmp_path: Path, kwargs: dict, reason: str) -> None:
+    plan = copilot_usage.read_plan(_plan_cache(tmp_path / "c.json", **kwargs), NOW)
+    assert plan.state == "unknown" and reason in plan.reason
+    assert plan.used_credits is None
+
+
+@pytest.mark.parametrize("content, reason", [
+    (None, "has not cached your plan"),
+    ("// header only\nnot json", "could not be read"),
+    ('{"copilotUserCache": {}}', "holds no plan"),
+    ('{"copilotUserCache": {"v1:a": {"response": {"quota_snapshots": {}}}}}', "no premium_interactions quota"),
+])
+def test_unreadable_plan_cache_is_unknown(tmp_path: Path, content, reason: str) -> None:
+    path = tmp_path / "c.json"
+    if content is not None:
+        path.write_text(content, encoding="utf-8")
+    plan = copilot_usage.read_plan(path, NOW)
+    assert plan.state == "unknown" and reason in plan.reason
+
+
+def test_month_before_clamps_to_the_shorter_month() -> None:
+    utc = timezone.utc
+    assert copilot_usage.month_before(datetime(2026, 3, 31, tzinfo=utc)) == datetime(2026, 2, 28, tzinfo=utc)
+    assert copilot_usage.month_before(datetime(2027, 1, 15, tzinfo=utc)) == datetime(2026, 12, 15, tzinfo=utc)
+
+
+def test_payload_percent_and_pace_follow_the_plan_not_this_machine() -> None:
+    machine = copilot_usage.Reading("ok", used_credits=500.0, today_credits=3.0)
+    plan = copilot_usage.PlanReading("ok", used_credits=250.0, allowance=1000.0,
+                                     reset_at=datetime(2026, 12, 1, tzinfo=timezone.utc), as_of="t")
+    body = copilot_usage.payload(machine, plan, 300, NOW)
+    assert (body["state"], body["used_pct"], body["used_credits"]) == ("ok", 25.0, 250.0)
+    assert (body["allowance"], body["allowance_source"]) == (1000.0, "plan")
+    assert (body["cycle_start"][:10], body["reset_at"][:10]) == ("2026-11-01", "2026-12-01")
+    assert body["pace_pct"] == copilot_usage.pace_pct(NOW, *copilot_usage.billing_month(NOW))
+    assert (body["today_credits"], body["machine_month_credits"]) == (3.0, 500.0)
+
+
+def test_payload_pace_follows_a_plan_reset_off_the_first() -> None:
+    plan = copilot_usage.PlanReading("ok", used_credits=10.0, allowance=100.0,
+                                     reset_at=datetime(2026, 12, 15, tzinfo=timezone.utc))
+    body = copilot_usage.payload(None, plan, 300, NOW)
+    assert (body["cycle_start"][:10], body["reset_at"][:10]) == ("2026-11-15", "2026-12-15")
+    assert body["today_state"] == "pending" and body["today_credits"] is None
+
+
+def test_payload_with_the_plan_unknown_shows_no_percent_but_keeps_this_machine() -> None:
+    machine = copilot_usage.Reading("ok", used_credits=75.0, today_credits=3.0)
+    plan = copilot_usage.PlanReading("unknown", reason="no plan cached")
+    body = copilot_usage.payload(machine, plan, 300, NOW)
+    assert (body["state"], body["used_pct"], body["used_credits"], body["reason"]) == (
+        "unknown", None, None, "no plan cached")
+    assert (body["allowance"], body["allowance_source"]) == (300, "config")
+    assert body["today_credits"] == 3.0
+    assert body["reset_at"][:10] == "2026-12-01"
+
+
+def test_payload_never_claims_zero_when_this_machine_is_unknown() -> None:
+    body = copilot_usage.payload(copilot_usage.Reading("unknown", reason="locked"), None, 300, NOW)
+    assert (body["state"], body["today_state"], body["today_credits"], body["today_reason"]) == (
+        "pending", "unknown", None, "locked")

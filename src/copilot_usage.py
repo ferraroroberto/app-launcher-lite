@@ -1,15 +1,25 @@
-"""Copilot's AI credits billed this month on this machine, from the CLI's own usage log.
+"""Copilot's plan usage this month, and this machine's share of it.
 
-The Copilot CLI records every model call it bills in the
-``assistant_usage_events`` table of ``~/.copilot/session-store.db``, sub-agents
-included, with the cost in ``total_nano_aiu`` (one AI credit is 1e9 nano) and a
-UTC ``created_at``. That covers this machine's CLI only: VS Code chat and other
-machines spend from the same allowance without appearing here, which is why
-the payload names its ``scope``.
+**The plan** (the card's bar, percent and pace) comes from the same place as
+the Copilot CLI's own "Plan: used/allowance" status line: GitHub's Copilot
+user response, which the CLI fetches with its own sign-in and caches in
+``%LOCALAPPDATA%/copilot/copilot-user-cache.json``. Its
+``quota_snapshots.premium_interactions`` entry holds the plan-wide
+``entitlement`` and ``quota_remaining`` (used is the difference), every
+machine and VS Code included, and the response names the next reset in
+``quota_reset_date_utc``. Reading that file needs no credential of ours. A
+cache that is missing, unparseable, unlimited or older than the last reset
+reads as ``unknown`` with the reason, so the card shows no percent rather
+than passing this machine's share off as the plan's.
 
-The billing month starts on the 1st at 00:00 UTC. A file that is missing,
+**This machine** (the card's footnote): the Copilot CLI records every model
+call it bills in the ``assistant_usage_events`` table of
+``~/.copilot/session-store.db``, sub-agents included, with the cost in
+``total_nano_aiu`` (one AI credit is 1e9 nano) and a UTC ``created_at``. That
+covers this machine's CLI only, which is why the payload names each figure's
+scope. Its month starts on the 1st at 00:00 UTC. A log that is missing,
 locked or shaped differently reads as ``unknown`` with the reason, never as 0
-credits, because a card showing 0% would claim a fact nobody established.
+credits, because a card showing 0 would claim a fact nobody established.
 
 Reads are synchronous and bounded (a 1 s lock timeout); the webapp runs them
 in a worker thread, off the request path (``app/webapp/routers/copilot_usage.py``).
@@ -17,7 +27,9 @@ in a worker thread, off the request path (``app/webapp/routers/copilot_usage.py`
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -34,19 +46,41 @@ NANO_PER_CREDIT = 1_000_000_000
 LOCK_TIMEOUT_S = 1.0
 SOURCE = "Copilot CLI usage log (~/.copilot/session-store.db)"
 SCOPE = "this machine"
+PLAN_SOURCE = "your Copilot plan, as the Copilot CLI last fetched it"
+PLAN_SCOPE = "every machine and editor on the plan"
+PLAN_QUOTA = "premium_interactions"
 
 
 def default_db_path() -> Path:
     return Path.home() / ".copilot" / "session-store.db"
 
 
+def default_plan_cache_path() -> Path:
+    """Where the Copilot CLI caches its user response on Windows."""
+    base = os.environ.get("LOCALAPPDATA")
+    root = Path(base) if base else Path.home() / "AppData" / "Local"
+    return root / "copilot" / "copilot-user-cache.json"
+
+
 @dataclass(frozen=True)
 class Reading:
-    """What the log says, before the allowance and the clock are applied."""
+    """What this machine's log says, before the clock is applied."""
 
     state: str  # "ok" | "unknown"
     used_credits: Optional[float] = None
     today_credits: Optional[float] = None
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class PlanReading:
+    """The plan's own used and allowance, the figures the CLI's status line shows."""
+
+    state: str  # "ok" | "unknown"
+    used_credits: Optional[float] = None
+    allowance: Optional[float] = None
+    reset_at: Optional[datetime] = None
+    as_of: str = ""
     reason: str = ""
 
 
@@ -56,6 +90,14 @@ def billing_month(now: datetime) -> Tuple[datetime, datetime]:
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     reset = (start + timedelta(days=32)).replace(day=1)
     return start, reset
+
+
+def month_before(moment: datetime) -> datetime:
+    """The same day and time one month earlier, clamped to that month's last day."""
+    year, month = (moment.year - 1, 12) if moment.month == 1 else (moment.year, moment.month - 1)
+    first_of_next = (moment.replace(year=year, month=month, day=1) + timedelta(days=32)).replace(day=1)
+    last_day = (first_of_next - timedelta(days=1)).day
+    return moment.replace(year=year, month=month, day=min(moment.day, last_day))
 
 
 def pace_pct(now: datetime, start: datetime, reset: datetime) -> float:
@@ -69,6 +111,20 @@ def _day_key(moment: datetime) -> str:
     # ``created_at`` is ISO (``2026-11-21T15:18:17.971Z``) or SQLite's own
     # ``2026-11-21 15:18:17``; both sort after a bare date prefix of their day.
     return moment.strftime("%Y-%m-%d")
+
+
+def _parse_utc(text: Any) -> Optional[datetime]:
+    if not isinstance(text, str) or not text:
+        return None
+    try:
+        moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def read(db_path: Path, now: datetime) -> Reading:
@@ -113,27 +169,100 @@ def read(db_path: Path, now: datetime) -> Reading:
     )
 
 
-def payload(reading: Optional[Reading], allowance: int, now: datetime) -> Dict[str, Any]:
-    """The ``/api/copilot-usage`` body: the reading against the allowance and the month.
+def _plan_quota(doc: Any) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any], str]:
+    """The newest cache entry's response and its plan quota, or a reason there is none."""
+    entries = doc.get("copilotUserCache") if isinstance(doc, dict) else None
+    candidates = [e for e in (entries or {}).values() if isinstance(e, dict)] if isinstance(entries, dict) else []
+    if not candidates:
+        return None, {}, "the Copilot plan cache holds no plan"
+    # One entry per sign-in; the newest fetch is the one the CLI's status line shows.
+    entry = max(candidates, key=lambda e: str(e.get("retrievedAt", "")))
+    response = entry.get("response")
+    snapshots = response.get("quota_snapshots") if isinstance(response, dict) else None
+    quota = snapshots.get(PLAN_QUOTA) if isinstance(snapshots, dict) else None
+    if not isinstance(quota, dict):
+        return None, {}, f"the Copilot plan cache has no {PLAN_QUOTA} quota"
+    return quota, {**response, "_retrieved_at": entry.get("retrievedAt")}, ""
 
-    ``reading`` is None while the first read is still running (``state: pending``).
+
+def read_plan(cache_path: Path, now: datetime) -> PlanReading:
+    """The plan's used and allowance from the CLI's cached user response; never raises."""
+    if not cache_path.is_file():
+        return PlanReading("unknown", reason="the Copilot CLI has not cached your plan on this machine")
+    try:
+        text = cache_path.read_text(encoding="utf-8")
+        # The CLI heads the file with ``//`` comment lines, which JSON does not allow.
+        doc = json.loads("\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("//")))
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        logger.warning("⚠️ Copilot plan cache %s unreadable: %s", cache_path, exc)
+        return PlanReading("unknown", reason=f"the Copilot plan cache could not be read: {exc}")
+    quota, response, reason = _plan_quota(doc)
+    if quota is None:
+        return PlanReading("unknown", reason=reason)
+    if quota.get("unlimited") is True:
+        return PlanReading("unknown", reason="the plan has no monthly limit")
+    entitlement, remaining = quota.get("entitlement"), quota.get("quota_remaining")
+    if not (_is_number(entitlement) and _is_number(remaining)) or entitlement <= 0:
+        return PlanReading("unknown", reason="the Copilot plan cache has no usable allowance")
+    reset = _parse_utc(response.get("quota_reset_date_utc"))
+    if reset is not None and reset <= now.astimezone(timezone.utc):
+        return PlanReading(
+            "unknown",
+            reason="the cached plan figure predates the last reset; run Copilot CLI to refresh it",
+        )
+    return PlanReading(
+        "ok",
+        used_credits=round(max(0.0, float(entitlement) - float(remaining)), 2),
+        allowance=float(entitlement),
+        reset_at=reset,
+        as_of=str(quota.get("timestamp_utc") or response.get("_retrieved_at") or ""),
+    )
+
+
+def payload(
+    reading: Optional[Reading], plan: Optional[PlanReading], allowance: int, now: datetime,
+) -> Dict[str, Any]:
+    """The ``/api/copilot-usage`` body: the plan's month, and this machine's share.
+
+    ``state``, ``used_pct`` and ``reason`` describe the plan (the bar). A plan
+    nobody could read leaves ``used_pct`` None, never this machine's credits
+    over a guessed allowance. ``allowance`` is the plan's when known, else the
+    Settings value, as ``allowance_source`` says. ``today_*`` and
+    ``machine_month_credits`` are this machine's log. Either reading is None
+    while its first read runs (``pending``).
     """
-    start, reset = billing_month(now)
+    plan_ok = plan is not None and plan.state == "ok" and plan.used_credits is not None and bool(plan.allowance)
+    if plan_ok and plan.reset_at is not None:
+        start, reset = month_before(plan.reset_at), plan.reset_at
+    else:
+        start, reset = billing_month(now)
     body: Dict[str, Any] = {
-        "state": "pending" if reading is None else reading.state,
+        "state": "pending" if plan is None else plan.state,
         "used_credits": None,
-        "today_credits": None,
         "used_pct": None,
         "allowance": allowance,
+        "allowance_source": "config",
         "pace_pct": pace_pct(now, start, reset),
         "cycle_start": start.isoformat(),
         "reset_at": reset.isoformat(),
-        "source": SOURCE,
-        "scope": SCOPE,
-        "reason": "" if reading is None else reading.reason,
+        "source": PLAN_SOURCE,
+        "scope": PLAN_SCOPE,
+        "as_of": "",
+        "reason": "" if plan is None else plan.reason,
+        "today_state": "pending" if reading is None else reading.state,
+        "today_credits": None,
+        "machine_month_credits": None,
+        "today_source": SOURCE,
+        "today_scope": SCOPE,
+        "today_reason": "" if reading is None else reading.reason,
     }
-    if reading is not None and reading.state == "ok" and reading.used_credits is not None:
-        body["used_credits"] = reading.used_credits
+    if plan_ok:
+        body["used_credits"] = plan.used_credits
+        body["allowance"] = plan.allowance
+        body["allowance_source"] = "plan"
+        body["used_pct"] = round(100.0 * plan.used_credits / plan.allowance, 1)
+        body["as_of"] = plan.as_of
+    if reading is not None and reading.state == "ok":
         body["today_credits"] = reading.today_credits
-        body["used_pct"] = round(100.0 * reading.used_credits / allowance, 1)
+        body["machine_month_credits"] = reading.used_credits
     return body
