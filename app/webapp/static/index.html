@@ -52,7 +52,11 @@
       var headers = token ? { Authorization: 'Bearer ' + token } : {};
       var store = window.__bootPrefetch = {};
       paths.forEach(function (path) {
-        store[path] = { at: performance.now(), res: fetch(path, { headers: headers }) };
+        var own = Object.assign({}, headers);
+        // A Board-first boot in a visible page is a Board view: the server
+        // may start its once-per-TTL forge refresh (board.js readBoard).
+        if (path === '/api/board' && !document.hidden) own['X-Board-View'] = '1';
+        store[path] = { at: performance.now(), res: fetch(path, { headers: own }) };
       });
     })();
   </script>

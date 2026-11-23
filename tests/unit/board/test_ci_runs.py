@@ -114,6 +114,14 @@ def test_an_unnamed_default_branch_is_unknown_and_reads_no_pipelines(monkeypatch
     assert not [p for p in fake.paths if "/pipelines" in p]
 
 
+def test_the_sweep_names_each_default_branch_from_the_project_list(monkeypatch):
+    # One list call plus one pipelines read per project: no default-branch
+    # lookup of its own, and no git (a git argv has no "api" and would raise).
+    fake, got = _read(monkeypatch, [_project(7, "a"), _project(8, "b", default_branch="trunk")], {})
+    assert len(fake.paths) == 3
+    assert got["grp/b"]["branch"] == "trunk" and any("ref=trunk" in p for p in fake.paths)
+
+
 def test_a_project_with_ci_off_is_not_read(monkeypatch):
     fake, got = _read(monkeypatch, [_project(7, "tool", builds_access_level="disabled")], {})
     assert got == {} and not [p for p in fake.paths if "/pipelines" in p]
