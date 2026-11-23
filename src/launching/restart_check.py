@@ -1,4 +1,4 @@
-"""Proof that a ``tray.bat --restart`` replaced the webapp process.
+r"""Proof that a ``tray.bat --restart`` replaced the webapp process.
 
 A matching ``git_sha`` does not prove a restart: a restart that never ran
 leaves the old process serving, and when that process already loaded ``HEAD``
@@ -9,10 +9,18 @@ so the check records it before the restart (``snapshot``) and, afterwards
 (no baseline, no pid in the answer, nothing answering) is its own failure,
 never a pass.
 
-Run from the repo root, around the restart::
+``restart`` is the one command to run, identical from Git Bash, PowerShell and cmd::
+
+    .venv\Scripts\python.exe -m src.launching.restart_check restart
+
+It takes the snapshot, runs this checkout's ``tray.bat --restart`` by absolute path, then verifies,
+and exits 0 only on a new ``pid`` serving ``HEAD``. A bare ``tray.bat`` name is not
+reachable from any shell on a machine that sets ``NoDefaultCurrentDirectoryInExePath``, and
+``cmd.exe /c "tray.bat --restart"`` from Git Bash never enters the script yet exits 0: the
+check is what turns either of those into a failure. The three steps also run on their own::
 
     python -m src.launching.restart_check snapshot
-    tray.bat --restart          # from PowerShell, not ``cmd.exe /c`` in Git Bash
+    .\tray.bat --restart        # PowerShell; ./tray.bat in Git Bash
     python -m src.launching.restart_check verify
 
 ``session-host`` is the wait ``scripts/restart-session-host.ps1`` runs after the
@@ -27,6 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -38,13 +47,19 @@ import requests
 from src import runtime_files
 from src.build_info import resolve_git_sha
 from src.clients._loopback_http import pooled_request
+from src.subprocess_flags import NO_WINDOW
 
 _log = logging.getLogger(__name__)
 
-_WEBAPP_DIR = Path(__file__).resolve().parent.parent.parent / "webapp"
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_WEBAPP_DIR = _REPO_ROOT / "webapp"
 RESTART_LOG = _WEBAPP_DIR / "restart.log"
 BASELINE_FILE = _WEBAPP_DIR / "restart-baseline.json"
+TRAY_BAT = _REPO_ROOT / "tray.bat"
 DEFAULT_VERIFY_TIMEOUT_S = 60.0
+# tray_lifecycle.ps1 stops the old tray, waits up to 5 s per held port, sleeps 2 s, then polls the
+# new build for 30 s; 180 s is that chain with margin, and a tray.bat past it is hung, not slow.
+TRAY_RESTART_TIMEOUT_S = 180.0
 # A cold session-host answers /healthz about 2.3 s after its spawn (measured on this box); the
 # webapp then reports it only from its /api/version snapshot, which can be up to 15 s old
 # (3 x VERSION_TICK_S), and the tray restart before the poll adds its own start-up. 45 s covers
@@ -140,6 +155,57 @@ def verify(port: int, timeout_s: float = DEFAULT_VERIFY_TIMEOUT_S) -> int:
     return 1
 
 
+def _std_handle(stream: Any) -> Any:
+    """The caller's own std handle for the child, or DEVNULL when it has none.
+
+    The child runs with NO_WINDOW, so a handle left to default would be a hidden console and
+    tray.bat's output would never reach the caller.
+    """
+    try:
+        return stream.fileno()
+    except (AttributeError, OSError, ValueError):
+        return subprocess.DEVNULL
+
+
+def restart(
+    port: int,
+    timeout_s: float = DEFAULT_VERIFY_TIMEOUT_S,
+    *,
+    run: Callable[..., "subprocess.CompletedProcess[Any]"] = subprocess.run,
+) -> int:
+    """Snapshot, run this checkout's ``tray.bat --restart`` by absolute path, then verify.
+
+    ``0`` only when ``verify`` sees a new process on ``HEAD``. The bat is started with its
+    full path, never the bare name, so no shell has to find it on its search path or
+    rewrite its arguments; a bat that exits non-zero or hangs fails here with its own
+    message instead of leaving ``verify`` to time out on the old process.
+    """
+    if not TRAY_BAT.is_file():
+        _log_line(f"restart NOT CONFIRMED: {TRAY_BAT} does not exist")
+        return 2
+    snapshot(port)
+    _log_line(f"restart running {TRAY_BAT} --restart")
+    sys.stdout.flush()
+    try:
+        done = run(
+            [str(TRAY_BAT), "--restart"],
+            cwd=str(TRAY_BAT.parent),
+            stdin=subprocess.DEVNULL,
+            stdout=_std_handle(sys.stdout),
+            stderr=_std_handle(sys.stderr),
+            timeout=TRAY_RESTART_TIMEOUT_S,
+            creationflags=NO_WINDOW,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        _log_line(f"restart FAILED: tray.bat did not complete ({exc})")
+        return 1
+    if done.returncode != 0:
+        _log_line(f"restart FAILED: tray.bat exited {done.returncode}, so the old process was not replaced")
+        return 1
+    return verify(port, timeout_s)
+
+
 def classify_session_host(body: Optional[Dict[str, Any]]) -> Tuple[str, str]:
     """``(state, detail)`` for one ``/api/version`` answer.
 
@@ -204,7 +270,7 @@ def wait_session_host(
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m src.launching.restart_check", description=__doc__)
-    parser.add_argument("action", choices=("snapshot", "verify", "session-host"))
+    parser.add_argument("action", choices=("snapshot", "verify", "restart", "session-host"))
     parser.add_argument("--port", type=int, default=None, help="webapp port (default: the configured one)")
     parser.add_argument("--timeout", type=float, default=None)
     args = parser.parse_args(argv)
@@ -217,7 +283,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         return snapshot(port)
     if args.action == "session-host":
         return wait_session_host(port, SESSION_HOST_WAIT_S if args.timeout is None else args.timeout)
-    return verify(port, DEFAULT_VERIFY_TIMEOUT_S if args.timeout is None else args.timeout)
+    timeout = DEFAULT_VERIFY_TIMEOUT_S if args.timeout is None else args.timeout
+    if args.action == "restart":
+        return restart(port, timeout)
+    return verify(port, timeout)
 
 
 if __name__ == "__main__":

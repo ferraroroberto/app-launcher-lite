@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 
 import pytest
 
@@ -88,6 +89,62 @@ class TestVerify:
         monkeypatch.setattr(restart_check, "fetch_version", lambda _p: None)
         restart_check.snapshot(8465)
         assert json.loads((files / "baseline.json").read_text(encoding="utf-8"))["pid"] is None
+
+
+class _FakeTray:
+    """Stands in for ``subprocess.run`` of tray.bat: records the call, serves ``pid`` after it."""
+
+    def __init__(self, served, returncode=0, raises=None):
+        self.served, self.returncode, self.raises = served, returncode, raises
+        self.argv = None
+        self.kwargs = None
+
+    def __call__(self, argv, **kwargs):
+        self.argv, self.kwargs = argv, kwargs
+        if self.raises:
+            raise self.raises
+        self.served["pid"] = 200 if self.returncode == 0 else self.served["pid"]
+        return subprocess.CompletedProcess(argv, self.returncode)
+
+
+class TestRestart:
+    @pytest.fixture
+    def tray(self, files, monkeypatch):
+        bat = files / "tray.bat"
+        bat.write_text("@echo off\n", encoding="utf-8")
+        monkeypatch.setattr(restart_check, "TRAY_BAT", bat)
+        served = {"pid": 100}
+        monkeypatch.setattr(restart_check, "fetch_version", lambda _p: _version(served["pid"]))
+        return served
+
+    def test_new_pid_after_the_bat_passes_and_runs_it_by_absolute_path(self, files, tray):
+        fake = _FakeTray(tray)
+        assert restart_check.restart(8465, timeout_s=0, run=fake) == 0
+        assert fake.argv == [str(files / "tray.bat"), "--restart"]
+        assert fake.kwargs["creationflags"] == restart_check.NO_WINDOW
+        assert fake.kwargs["timeout"] == restart_check.TRAY_RESTART_TIMEOUT_S
+
+    def test_a_bat_that_exits_zero_without_replacing_the_process_fails(self, files, tray):
+        # The reported defect: the call exits 0, nothing restarts, the old pid keeps serving.
+        def noop(argv, **_kwargs):
+            return subprocess.CompletedProcess(argv, 0)
+
+        assert restart_check.restart(8465, timeout_s=0, run=noop) == 1
+        assert "same process still serving" in (files / "restart.log").read_text(encoding="utf-8")
+
+    def test_a_nonzero_bat_fails_without_waiting_on_verify(self, files, tray):
+        assert restart_check.restart(8465, timeout_s=0, run=_FakeTray(tray, returncode=3)) == 1
+        log = (files / "restart.log").read_text(encoding="utf-8")
+        assert "tray.bat exited 3" in log and "verify" not in log
+
+    def test_a_hung_bat_fails_with_its_own_message(self, files, tray):
+        hung = _FakeTray(tray, raises=subprocess.TimeoutExpired("tray.bat", 1))
+        assert restart_check.restart(8465, timeout_s=0, run=hung) == 1
+        assert "did not complete" in (files / "restart.log").read_text(encoding="utf-8")
+
+    def test_a_missing_bat_is_not_confirmed(self, files, monkeypatch):
+        monkeypatch.setattr(restart_check, "TRAY_BAT", files / "nope.bat")
+        assert restart_check.restart(8465, timeout_s=0, run=_FakeTray({"pid": 1})) == 2
 
 
 def _host(reachable=True, freshness="fresh"):

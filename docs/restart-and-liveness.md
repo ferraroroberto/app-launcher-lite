@@ -33,27 +33,35 @@ process is restarted.
    does not list is never claimed), stops their trays with the primary's, and
    names the checkout of each process it reclaims. When git cannot list the
    worktrees it says so and claims none.
-4. Run the restart from **PowerShell**, wrapped by the replacement check:
+4. Run the restart as **one command**, the same from Git Bash, PowerShell and cmd:
 
    ```
-   .\.venv\Scripts\python.exe -m src.launching.restart_check snapshot
-   tray.bat --restart
-   .\.venv\Scripts\python.exe -m src.launching.restart_check verify
+   .\.venv\Scripts\python.exe -m src.launching.restart_check restart
    ```
 
-   `verify` polls `GET /api/version` (60 s by default) and exits 0 only when
-   the answer carries a **different `pid`** than the snapshot **and** a
-   `git_sha` matching `HEAD`. A matching `git_sha` alone proves nothing: a
+   It takes the snapshot, runs this checkout's `tray.bat --restart` by absolute
+   path (no shell has to find the bat or parse its arguments), then runs
+   `verify`. `verify` polls `GET /api/version` (60 s by default) and exits 0
+   only when the answer carries a **different `pid`** than the snapshot **and**
+   a `git_sha` matching `HEAD`. A matching `git_sha` alone proves nothing: a
    restart that never ran leaves the old process serving, and when that
    process already loaded `HEAD` the sha matches anyway. Exit 1 = the process
-   was not replaced (or nothing answers); exit 2 = no baseline, so a restart
-   cannot be confirmed. Neither is a pass. Report the `verify` line.
-5. From Git Bash, `cmd.exe /c "tray.bat --restart"` never enters the script:
-   MSYS rewrites `/c`, cmd opens an interactive prompt, and the call exits 0
-   with no output and nothing restarted. Use PowerShell (or `cmd.exe //c`).
-   `tray.bat` appends `entered` and `helper exit=<code>` lines to
-   `webapp/restart.log`, as does `restart_check`, so a restart with no
-   `entered` line was never run.
+   was not replaced (a `tray.bat` that exited non-zero or hung is reported by
+   name; or nothing answers); exit 2 = no baseline or no `tray.bat`, so a
+   restart cannot be confirmed. Neither is a pass. Report the last line.
+   `snapshot` and `verify` also run alone, around a hand-run restart.
+5. **Never type a bare `tray.bat --restart`.** This machine sets
+   `NoDefaultCurrentDirectoryInExePath`, so the current folder is not searched:
+   Git Bash answers `command not found` (exit 127), PowerShell errors but leaves
+   `$LASTEXITCODE` at its previous value (often 0), and `cmd /c tray.bat` says
+   it is not recognised. The spellings that do reach the script are
+   `.\tray.bat --restart` (PowerShell) and `./tray.bat --restart` (Git Bash).
+   From Git Bash, `cmd.exe /c "tray.bat --restart"` never enters the script
+   at all: MSYS rewrites `/c`, cmd opens an interactive prompt, and the call
+   exits 0 with a banner and nothing restarted (`cmd.exe //c` avoids it). The
+   `restart` command above makes all of these moot, and `restart_check` appends a
+   line per step to `webapp/restart.log`, so a restart with no
+   `restart running` line was never run.
 6. `built_at` is the webapp process's start time, captured at import; it moves
    only when a webapp process starts. It does not distinguish a tray restart
    from a webapp-only restart (the tray's Restart webapp item, a self-heal),
