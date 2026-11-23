@@ -1458,14 +1458,15 @@ surfaces:
     reach:
       - the Settings pane
     holds:
-      - Appearance - a Text size choice of Small, Default and Large; a Full screen switch with a help line; an Install as app row that says whether this browser can install Lite and why not
+      - Appearance - a Text size choice of Small, Default and Large; a Full screen on Edge switch with a hint line, shown only in Edge; an Install as app row that says whether this browser can install Lite and why not
       - Sessions - the Open in a new window switch, Window browser (Chrome, Edge, Default) and the Open in Chat switch, with a help line that explains all three
       - This PC - the switches Start at log on and Awake with lid closed, each with a help line
     does:
       - a switch saves when tapped and shows ON or OFF
-      - Full screen hides the browser's address bar and toolbar, is remembered on this device, and comes back on the first tap after a reload; the back gesture or the switch leaves it
+      - Full screen on Edge hides the address bar and toolbar, is remembered on this device, and comes back on the first tap after a reload; the switch is the one way to turn it off
     states:
-      - Full screen is disabled with a reason in a browser that has no full screen for web pages
+      - Full screen on Edge is absent in any browser that is not Edge or has no full screen for web pages
+      - Full screen on Edge, on but out of full screen after a reload or the back gesture, adds a Tap anywhere to go full screen line
       - Install as app shows Installed, Ready, Blocked, Not offered or Unavailable, with a sentence under the group
       - Awake with lid closed is hidden on a machine that cannot set it, and shows its own status line
 
