@@ -27,7 +27,8 @@ import { createRowMenu } from '../_vendored/row-menu/row-menu.js';
 import { exchangeState } from './exchange-state.js';
 import { isChiefCard } from './board-dispatch.js';
 import { markLooked } from './journal-look.js';
-import { drawerId, fetchBoard, noteBoardEdit, renderBoard, sessionLabel } from '../board.js';
+import { fetchBoard, noteBoardEdit, renderBoard, sessionLabel } from '../board.js';
+import { drawerId } from './drawer-loading.js';
 
 // Chief-only exchange refresh: loadExchange is one-shot, fine for a
 // worker drawer you glance at — but a chat conversation needs the chief's

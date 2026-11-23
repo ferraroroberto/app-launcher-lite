@@ -239,22 +239,7 @@ async function boot() {
   else others.push(safe(fetchBoard), safe(fetchJobs));
 
   armPolls({ lists, listeners, running, webauthn, load, git });
-  // The views a tap opens load once the list has drawn (lazy-views.js), and
-  // with them what no first screen draws: the copy button of rendered
-  // Markdown, which only a lazily loaded view renders, and the new-build
-  // prompt, which checks every few minutes.
-  lists.then(prefetchViews);
-  lists.then(function () {
-    return Promise.all([import('./quote-copy.js'), import('./_vendored/build-watch/build-watch.js')]);
-  }).then(function (m) {
-    m[0].wireQuoteCopy();
-    m[1].initBuildWatch();
-  }).catch(function (exc) { console.warn('boot: a deferred module did not load', exc); });
-  // The Usage card's code too: it is no part of the first load, and its read
-  // is answered from server memory, so it can never hold up the list.
-  lists.then(function () { return import('./copilot-usage.js'); })
-    .then(function (mod) { mod.wireCopilotUsage(); })
-    .catch(function (exc) { console.warn('usage card did not load', exc); });
+  lists.then(loadAfterList);
 
   if (deepLinkSid) {
     await Promise.all([lists, status, webauthn]);
@@ -267,6 +252,24 @@ async function boot() {
   // boot fetch has settled.
   await Promise.all([lists, skills, status, webauthn, git, listeners, running, load].concat(others));
   warmSessionOpen();
+}
+
+// What loads once the list has drawn: the views a tap opens (lazy-views.js),
+// and what no first screen draws: the copy button of rendered Markdown, which
+// only a lazily loaded view renders, the new-build prompt, which checks every
+// few minutes, and the Usage card, whose read is answered from server memory
+// so it can never hold up the list.
+function loadAfterList() {
+  prefetchViews();
+  Promise.all([import('./quote-copy.js'), import('./_vendored/build-watch/build-watch.js')])
+    .then(function (m) {
+      m[0].wireQuoteCopy();
+      m[1].initBuildWatch();
+    })
+    .catch(function (exc) { console.warn('boot: a deferred module did not load', exc); });
+  import('./copilot-usage.js')
+    .then(function (mod) { mod.wireCopilotUsage(); })
+    .catch(function (exc) { console.warn('usage card did not load', exc); });
 }
 
 // Once boot has settled, pay in idle time for what opening a session would

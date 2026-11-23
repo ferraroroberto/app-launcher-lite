@@ -54,7 +54,8 @@ import { setTab } from './tabs.js';
 import { sessionTitle } from './sessions.js';
 import { applyLaunchSizePayload } from './shared/launch-size.js';
 import { SensitiveOutcome, runSensitiveAction } from './shared/sensitive-action.js';
-import { boardDrawerLoaded, loadBoardDrawer, openTerminal, pollJournal } from './lazy-views.js';
+import { boardDrawerLoaded, openTerminal, pollJournal } from './lazy-views.js';
+import { drawerId, loadingDrawer } from './board/drawer-loading.js';
 import { emptyStateEl } from './_vendored/empty-state/empty-state.js';
 import { icon } from './_vendored/icons/icons.js';
 import { terminalJsonApi } from './webauthn.js';
@@ -252,37 +253,6 @@ function renderSessionCard(card, openItem) {
   li.dataset.drawerShape = drawer.drawerShape(card);
   li.appendChild(drawer.buildDrawer(card));
   return li;
-}
-
-// The open drawer's id, which its card header's aria-controls names.
-export function drawerId(card) {
-  return 'board-drawer-' + card.session_id;
-}
-
-// A card opened before the drawer's code has loaded shows the drawer's own
-// first state, its exchange being read, then the drawer once the code lands;
-// a failed load folds the card again (the toast says why).
-let drawerAsked = false;
-function loadingDrawer(card) {
-  const drawer = document.createElement('div');
-  drawer.className = 'board-drawer board-drawer-loading';
-  drawer.id = drawerId(card);
-  const exchange = document.createElement('div');
-  exchange.className = 'board-exchange';
-  exchange.dataset.state = 'loading';
-  exchange.setAttribute('role', 'status');
-  exchange.setAttribute('aria-live', 'polite');
-  exchange.textContent = 'Reading last exchange…';
-  drawer.appendChild(exchange);
-  if (!drawerAsked) {
-    drawerAsked = true;
-    loadBoardDrawer().then(function (ok) {
-      drawerAsked = false;
-      if (!ok) state.boardExpanded = null;
-      renderBoard();
-    });
-  }
-  return drawer;
 }
 
 // ---------------------------------------------------- one-tap issue start
