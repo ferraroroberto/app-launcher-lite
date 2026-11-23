@@ -186,6 +186,10 @@ $ratchetStages = @(
     @{ Name = "request budget"; Argv = @("scripts/request_budget_ratchet.py")
        NotConfirmed = "a browser or Python file could not be read or parsed, its JS never closed, or git was unusable"
        Failed = "a file's count for a request budget rule rose above .request-budget-ratchet-baseline.json; see the named rule and lines above." }
+    # The Mac nightly deselects `windows_only`, so a test that needs Windows and carries no marker turns the night red a day after it passed here.
+    @{ Name = "windows only"; Argv = @("scripts/windows_only_ratchet.py")
+       NotConfirmed = "git was unusable, or a test module cannot be read, is not UTF-8 or does not parse"
+       Failed = "a test that needs Windows has no windows_only marker beyond .windows-only-ratchet-baseline.json; see the named test above and mark it @pytest.mark.windows_only." }
 )
 # ratchet-stages:end
 
