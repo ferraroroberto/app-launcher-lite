@@ -44,13 +44,13 @@ from src.webapp_settings.values import (  # noqa: F401 — re-exported for webap
     DEFAULT_CHIEF_AUTO_COMPACT_THRESHOLD, DEFAULT_CHIEF_MODEL, DEFAULT_CHIEF_WORKER_CAP,
     DEFAULT_CHIEF_WORKER_CAP_SCOPE, DEFAULT_COPILOT_CONTEXT, DEFAULT_COPILOT_EFFORT,
     DEFAULT_COPILOT_MODEL, DEFAULT_COPILOT_MODELS, DEFAULT_COPILOT_MONTHLY_CREDITS, DEFAULT_HOST, DEFAULT_LARGE_UPLOAD_MAX_MB,
-    DEFAULT_PORT, DEFAULT_SESSION_HOST_PORT, DEFAULT_TERMINAL_HISTORY_LINES,
+    DEFAULT_MIRROR_BROWSER, DEFAULT_PORT, DEFAULT_SESSION_HOST_PORT, DEFAULT_TERMINAL_HISTORY_LINES,
     MAX_CHIEF_AUTO_COMPACT_THRESHOLD, MAX_CHIEF_WORKER_CAP, MAX_COPILOT_MONTHLY_CREDITS,
     MAX_LARGE_UPLOAD_MAX_MB,
     MAX_TERMINAL_HISTORY_LINES, MIN_CHIEF_AUTO_COMPACT_THRESHOLD, MIN_CHIEF_WORKER_CAP,
     MIN_COPILOT_MONTHLY_CREDITS, MIN_LARGE_UPLOAD_MAX_MB, MIN_TERMINAL_HISTORY_LINES, SESSION_HOST_PORT_ENV,
     VALID_CHIEF_WORKER_CAP_SCOPES, VALID_COPILOT_CONTEXTS, VALID_COPILOT_EFFORTS,
-    WEBAPP_CONFIG_PATH_ENV,
+    WEBAPP_CONFIG_PATH_ENV, check_mirror_browser,
 )
 # isort: on
 
@@ -271,11 +271,9 @@ class WebappConfig:
     # interactive terminal window for it on the PC (over loopback, so it
     # bypasses the Tailscale + passkey gate). Input works from both sides.
     claude_show_local_window: bool = True
-    # Whether sessions get the dedicated PC Edge window. Off (the default),
-    # a row tap and every launch (any surface, the chief and API callers
-    # included) render in the page and open no window; on, a full-control
-    # session's terminal gets the window. The session kebab's "Open in new
-    # window" reaches the window either way.
+    # Whether sessions get the dedicated PC window. Off (the default), a row tap and every launch
+    # (any surface, the chief and API callers included) render in the page and open no window;
+    # on, a full-control session's terminal gets it. The kebab's "Open in new window" always does.
     open_sessions_in_window: bool = False
     # A session with no remembered view opens in Chat wherever Chat exists,
     # on the phone too; off restores Terminal on the phone. An explicit
@@ -286,6 +284,8 @@ class WebappConfig:
     # Paths, falling back to the default when absent) or "system" (the
     # Windows default browser, which is how the links opened before).
     desktop_browser: str = "chrome"
+    # The browser a session's PC window opens in: "chrome", "edge" or "system" (the default browser).
+    mirror_browser: str = DEFAULT_MIRROR_BROWSER
     # Bounded scrollback: how many lines of a
     # full-screen (ratatui) agent's history the session-host retains and
     # replays on a (re)connect. See DEFAULT_TERMINAL_HISTORY_LINES for the
@@ -727,6 +727,7 @@ def _validate(cfg: WebappConfig) -> None:
         raise ValueError(f"session_host_port out of range: {cfg.session_host_port}")
     if cfg.session_host_port == cfg.port:
         raise ValueError("session_host_port must differ from the webapp port")
+    check_mirror_browser(cfg.mirror_browser)
     if not (MIN_TERMINAL_HISTORY_LINES <= cfg.terminal_history_lines <= MAX_TERMINAL_HISTORY_LINES):
         raise ValueError(
             f"terminal_history_lines must be between {MIN_TERMINAL_HISTORY_LINES} "

@@ -22,6 +22,7 @@ import { renderSpeech } from './speech-settings.js';
 import { renderLidKeepAwake } from './lid-keep-awake.js';
 import { renderNetworkAccess, wireNetworkAccess } from './network-access.js';
 import { renderPerformance } from './performance.js';
+import { renderMirrorBrowser } from './mirror-browser.js';
 
 export async function fetchConfig(shouldApply) {
   const body = await jsonApi('/api/config');
@@ -78,6 +79,7 @@ export async function fetchConfig(shouldApply) {
   if (els.openSessionsInChatToggle) {
     setSwitch(els.openSessionsInChatToggle, body.open_sessions_in_chat !== false);
   }
+  renderMirrorBrowser(body);
   renderNetworkAccess(body);
   renderPerformance(body);
   renderClaudeOptions();

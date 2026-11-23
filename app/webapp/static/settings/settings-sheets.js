@@ -34,6 +34,7 @@ import { createRowMenu } from '../_vendored/row-menu/row-menu.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { speechValue, wireSpeech } from './speech-settings.js';
 import { performanceRowValue } from './performance.js';
+import { wireMirrorBrowser } from './mirror-browser.js';
 
 // ------------------------------------------------------------ navigation
 // The open sheets, the shown one last.
@@ -530,6 +531,7 @@ export function wireSettingsSheets() {
   wireFields();
   wireSpeech();
   wireChief();
+  wireMirrorBrowser();
   document.addEventListener('launcher:tab', function (e) {
     if (e.detail && e.detail.tab === 'settings') renderSettingsValues();
   });
