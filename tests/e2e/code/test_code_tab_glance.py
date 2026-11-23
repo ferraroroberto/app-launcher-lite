@@ -9,8 +9,8 @@ never turned into "needs you". The page header follows the header rule:
 only the exceptions, each in its tone, else the plain session count, and
 never the running-apps or git counts. The Usage card above the list draws
 the Copilot month from ``/api/copilot-usage`` (bar, pace tick, percent,
-reset date and pace words in their tone), and an unreadable usage log reads
-"unknown" with its reason, never 0%.
+reset date and pace words in their tone), and an unreadable plan figure
+reads "unknown" with its reason, never 0%, while this machine's line stays.
 
 Hermetic: the session list and the usage read are route-mocked before
 ``goto()`` (#510), with fictional sessions and numbers.
@@ -41,8 +41,8 @@ _USAGE = {"allowance": 300, "pace_pct": 40.0, "cycle_start": "2026-11-01T00:00:0
           "reset_at": "2026-12-01T00:00:00+00:00", "source": "a fictional log", "scope": "this machine"}
 _USAGE_AHEAD = {**_USAGE, "state": "ok", "used_credits": 180.0, "today_credits": 4.0,
                 "used_pct": 60.0, "reason": ""}
-_USAGE_UNKNOWN = {**_USAGE, "state": "unknown", "used_credits": None, "today_credits": None,
-                  "used_pct": None, "reason": "no Copilot usage log on this machine"}
+_USAGE_UNKNOWN = {**_USAGE, "state": "unknown", "used_credits": None, "today_credits": 2.0,
+                  "used_pct": None, "reason": "the Copilot CLI has not cached your plan on this machine"}
 
 
 def _mock(page: Page, sessions: list[dict], usage: dict = _USAGE_AHEAD) -> None:
@@ -108,7 +108,8 @@ def test_rows_carry_the_boards_chips_and_the_header_falls_back_to_the_plain_coun
     expect(meter).to_have_attribute("data-tone", "none")
     expect(meter.locator(".um-fill")).to_have_count(0)
     expect(authed_page.locator("#codingUsageFooter")).to_have_text(
-        "Unknown: no Copilot usage log on this machine.")
+        "Plan usage unknown: the Copilot CLI has not cached your plan on this machine."
+        " 2 credits today on this machine.")
     expect(head).to_have_text("3 sessions")
     expect(head.locator(".head-exception")).to_have_count(0)
     expect(head).not_to_contain_text("running")

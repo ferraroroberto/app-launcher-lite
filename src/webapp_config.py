@@ -193,7 +193,8 @@ class WebappConfig:
     copilot_remote_session: bool = True
     copilot_context: str = DEFAULT_COPILOT_CONTEXT
     copilot_effort: str = DEFAULT_COPILOT_EFFORT
-    # The Usage card's monthly allowance in AI credits (`src.copilot_usage`).
+    # The Usage card's fallback allowance in AI credits, named as such when the
+    # plan's own allowance cannot be read (`src.copilot_usage`).
     copilot_monthly_credits: int = DEFAULT_COPILOT_MONTHLY_CREDITS
     # --- Fleet chief ----------------------------------------
     # Settings for the standing conversational orchestrator (Board chat

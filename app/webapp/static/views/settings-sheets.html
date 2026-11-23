@@ -56,7 +56,7 @@
               <span>Monthly allowance (AI credits)</span>
               <input id="copilotMonthlyCredits" type="number" class="input-native" aria-describedby="copilotMonthlyCreditsHelp" step="1" inputmode="numeric">
             </label>
-            <p id="copilotMonthlyCreditsHelp" class="field-help">What the Code tab's Usage card measures against; 300 is the published Pro and Business allowance. The card counts the AI credits this PC's Copilot CLI billed since the 1st at 00:00 UTC, read from its usage log in <code>~/.copilot</code>. VS Code chat and other machines spend from the same allowance but are not counted.</p>
+            <p id="copilotMonthlyCreditsHelp" class="field-help">A fallback only: the Code tab's Usage card takes the used credits and the allowance from your Copilot plan, as the Copilot CLI last fetched it, every machine and VS Code included. When that plan figure cannot be read the card shows unknown rather than a percent, and names this value as the allowance; 300 is the published Pro and Business figure. The card's footnote counts this PC's credits today from the CLI's usage log in <code>~/.copilot</code>.</p>
           </div>
           <div class="opt-group">
             <h3 class="opt-group-title">Launch presets</h3>

@@ -1,12 +1,14 @@
 """``GET /api/copilot-usage``: the Code tab's Usage card, never on the request path.
 
-The read itself (``src.copilot_usage.read``) is SQLite on a file another
-process writes, so it can stall on a lock or a slow disk. A request therefore
+The reads (``src.copilot_usage.read`` and ``read_plan``) touch files another
+process writes, the usage log through SQLite, so they can stall on a lock or a
+slow disk. A request therefore
 never waits for it: it gets the last reading at once (``state: pending``
 before the first one lands) and, when that reading is older than
 :data:`REFRESH_S`, starts one refresh in a worker thread. Refreshes are
 single-flight, so a stalled read is never stacked, and one whose log file and
-UTC day are unchanged is skipped without opening the database. Nothing reads
+UTC day are unchanged is skipped without opening the database (the plan cache,
+one small JSON file, is read on every refresh). Nothing reads
 the log while nobody asks, and page load never asks: the card's module loads
 after the session list has drawn.
 """
@@ -57,23 +59,30 @@ class UsageSnapshot:
         db_path: Callable[[], Path] = copilot_usage.default_db_path,
         reader: Callable[[Path, datetime], copilot_usage.Reading] = copilot_usage.read,
         clock: Callable[[], float] = time.monotonic,
+        plan_path: Callable[[], Path] = copilot_usage.default_plan_cache_path,
+        plan_reader: Callable[[Path, datetime], copilot_usage.PlanReading] = copilot_usage.read_plan,
     ) -> None:
         self._db_path = db_path
         self._reader = reader
         self._clock = clock
+        self._plan_path = plan_path
+        self._plan_reader = plan_reader
         self._reading: Optional[copilot_usage.Reading] = None
+        self._plan: Optional[copilot_usage.PlanReading] = None
         self._read_at: Optional[float] = None
         self._signature: Optional[Tuple[str, _Signature]] = None
         self._task: Optional["asyncio.Future[None]"] = None
 
-    def current(self) -> Optional[copilot_usage.Reading]:
-        """The last reading at once; starts a refresh when it is due."""
+    def current(
+        self,
+    ) -> Tuple[Optional[copilot_usage.Reading], Optional[copilot_usage.PlanReading]]:
+        """The last machine and plan readings at once; starts a refresh when due."""
         due = self._read_at is None or self._clock() - self._read_at >= REFRESH_S
         if due and (self._task is None or self._task.done()):
             self._task = asyncio.ensure_future(asyncio.to_thread(self._refresh))
             # A failed refresh is logged in _refresh; nobody awaits the task.
             self._task.add_done_callback(lambda done: done.cancelled() or done.exception())
-        return self._reading
+        return self._reading, self._plan
 
     def _refresh(self) -> None:
         started = self._clock()
@@ -91,6 +100,11 @@ class UsageSnapshot:
             logger.exception("❌ Copilot usage refresh failed")
             self._reading = copilot_usage.Reading("unknown", reason=f"the usage read failed: {exc}")
             self._signature = None
+        try:
+            self._plan = self._plan_reader(self._plan_path(), now)
+        except Exception as exc:  # noqa: BLE001 — a reader bug must read as unknown, not crash the card
+            logger.exception("❌ Copilot plan refresh failed")
+            self._plan = copilot_usage.PlanReading("unknown", reason=f"the plan read failed: {exc}")
         finally:
             self._read_at = started
 
@@ -105,5 +119,5 @@ def usage_snapshot(app: Any) -> UsageSnapshot:
 @router.get("/api/copilot-usage")
 async def get_copilot_usage(request: Request) -> Dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
-    reading = usage_snapshot(request.app).current()
-    return copilot_usage.payload(reading, cfg.copilot_monthly_credits, datetime.now(timezone.utc))
+    reading, plan = usage_snapshot(request.app).current()
+    return copilot_usage.payload(reading, plan, cfg.copilot_monthly_credits, datetime.now(timezone.utc))

@@ -260,12 +260,12 @@ surfaces:
       - the first card on the Code tab
     holds:
       - the pace words beside the title, under pace or ahead of pace in their tone
-      - one Copilot · Month row with a bar filled to the share of the monthly allowance used, a tick at the share of the month gone, the percent and the reset date
-      - a footnote with today's credits on this machine, or the reason the usage log could not be read
+      - one Copilot · Month row with a bar filled to the share of the Copilot plan's monthly allowance used, as the Copilot CLI's own status line shows it, a tick at the share of the month gone, the percent and the reset date
+      - a footnote with today's credits on this machine, after the reason when the plan figure could not be read
     does:
       - the bar is accent on or under pace, attention ahead of it and danger at 90% or more
-      - an unreadable usage log reads unknown with its reason, never 0%
-      - the row's tooltip names the source, the Copilot CLI usage log on this machine, and its scope
+      - an unreadable plan figure reads unknown with its reason, never 0% and never this machine's share in its place
+      - the row's tooltip names the source, the Copilot plan as the CLI last fetched it, its scope, and this machine's credits this month
       - reads every 60 s while the Code tab is on screen, never during page load
     why: one glance says whether the month's Copilot allowance will last
 
@@ -1514,7 +1514,7 @@ surfaces:
       - the sign-in instruction
       - Models offered, one id per line
       - a line with an Add button when the saved list lacks a default model
-      - Usage card, the monthly allowance in AI credits the Code tab's Usage card measures against, with a line naming its source and scope
+      - Usage card, the fallback monthly allowance in AI credits the Code tab's Usage card names when the plan's own allowance cannot be read, with a line naming its source and scope
       - Launch presets, the saved list with a kebab on each row and one form (name, model from the list above, effort the model offers, context tier) that adds a preset or, from Edit, changes one
       - Done
     does:
