@@ -47,13 +47,14 @@ pytestmark = pytest.mark.smoke
 
 _GROUPS = ["Appearance", "Agents", "Sessions", "Board", "Performance", "Connections", "This PC"]
 _SHEETS = [
-    "copilotSheet", "chiefSheet", "gitlabSheet", "performanceSheet", "speechSheet", "tokensSheet", "foldersSheet",
+    "copilotSheet", "chiefSheet", "gitlabSheet", "performanceSheet", "servingSheet", "speechSheet", "tokensSheet",
+    "foldersSheet",
     "passkeysSheet", "terminalSheet", "diagnosticsSheet",
 ]
 # The design inventory's name for each sheet (surface() wants lowercase).
 _SURFACE_NAMES = {
     "copilotSheet": "copilot", "chiefSheet": "chief", "gitlabSheet": "gitlab", "performanceSheet": "performance",
-    "speechSheet": "speech", "tokensSheet": "tokens", "foldersSheet": "folders",
+    "servingSheet": "serving", "speechSheet": "speech", "tokensSheet": "tokens", "foldersSheet": "folders",
     "passkeysSheet": "passkeys", "terminalSheet": "terminal", "diagnosticsSheet": "diagnostics",
 }
 # A sheet whose one primary action is its own job rather than Done.
@@ -90,6 +91,9 @@ def _assert_groups_render_with_values_matching_the_saved_config(authed_page: Pag
     expect(_value(authed_page, "copilot")).to_contain_text(cfg["copilot"]["model"] or "Default")
     expect(_value(authed_page, "gitlab")).to_have_text(
         " · ".join(p for p in (cfg["gitlab_group"], cfg["gitlab_host"]) if p) or "Not set"
+    )
+    expect(_value(authed_page, "serving")).to_have_text(
+        {"auto": "Automatic", "https": "HTTPS", "http": "HTTP", "both": "Both"}[cfg["serving"]["mode"]]
     )
     expect(_value(authed_page, "terminal")).to_have_text(
         f"{cfg['terminal_history_lines']} lines · {cfg['large_upload_max_mb']} MB"
