@@ -49,6 +49,8 @@ webapp/terminal-themes.json
 webapp/sessions/
 # Board issue-start dispatch briefs (issue #1114) — launcher-written, TTL-pruned
 webapp/briefs/
+# Dictation takes kept for recovery (Settings > Speech to text): private audio, TTL-pruned
+webapp/recordings/
 # Files agents sent to their session's Chat (issue #1530) — launcher-written, TTL-pruned
 webapp/outbox/
 webapp/jobs/

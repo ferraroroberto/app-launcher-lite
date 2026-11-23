@@ -35,6 +35,15 @@ _MOUNT = """async () => {
 }"""
 
 
+# True once a kept take with audio in it reads transcribed (shared/voice-keep.js).
+_KEPT_TRANSCRIBED = """async () => {
+  const hit = performance.getEntriesByType('resource').find(e => /\\/api\\.js/.test(e.name));
+  const api = await import(hit ? hit.name : '/static/api.js');
+  const body = await api.jsonApi('/api/transcribe/recordings');
+  return body.recordings.some(r => r.status === 'transcribed' && r.bytes > 0);
+}"""
+
+
 def _take(page: Page) -> bytes:
     """Record one take and return the body the page uploaded."""
     page.evaluate("() => window.__dictation.toggle()")
@@ -61,6 +70,8 @@ def test_dictation_uploads_wav_a_strict_backend_transcribes(
         assert b'filename="recording.wav"' in sent, "the browser did not convert the take to WAV"
         expect(page.locator(FIELD)).to_have_value(fake_speech_backend.TRANSCRIPT)
         assert fake_speech_backend.is_strict_wav(uploads[-1]), "the backend did not get the portable WAV"
+        # The same take was kept on disk beside the upload and marked transcribed.
+        page.wait_for_function(_KEPT_TRANSCRIBED)
 
         page.evaluate("""() => {
           window.OfflineAudioContext = undefined;

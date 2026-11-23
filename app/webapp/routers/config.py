@@ -40,6 +40,7 @@ from src.webapp_config import (
     MAX_CHIEF_WORKER_CAP,
     MAX_COPILOT_MONTHLY_CREDITS,
     MAX_LARGE_UPLOAD_MAX_MB,
+    MAX_SPEECH_KEEP_RECORDINGS_HOURS,
     MAX_TERMINAL_HISTORY_LINES,
     MIN_CHIEF_AUTO_COMPACT_THRESHOLD,
     MIN_CHIEF_WORKER_CAP,
@@ -99,6 +100,8 @@ async def get_config(request: Request) -> Dict[str, Any]:
             "base_url": cfg.speech_base_url,
             "model": cfg.speech_model,
             "api_key_set": bool(cfg.speech_api_key),
+            "keep_recordings_hours": cfg.speech_keep_recordings_hours,
+            "keep_recordings_hours_max": MAX_SPEECH_KEEP_RECORDINGS_HOURS,
         },
         # Settings > Performance: each speed limit with its range, the two
         # presets and which one the stored values equal.
@@ -248,6 +251,7 @@ _PATCH_KEYS = frozenset({
     "speech_base_url",
     "speech_model",
     "speech_api_key",
+    "speech_keep_recordings_hours",
     "terminal_history_lines",
     "large_upload_max_mb",
     "chief_auto_compact_threshold",
@@ -338,6 +342,7 @@ async def patch_config(request: Request) -> Any:
             patch[key] = str(patch[key] or "").strip()
     _checked_whole_number(patch, "chief_auto_compact_threshold", "an integer percent")
     _checked_whole_number(patch, "large_upload_max_mb", "a whole number of MB")
+    _checked_whole_number(patch, "speech_keep_recordings_hours", "a whole number of hours")
     _checked_whole_number(patch, "copilot_monthly_credits", "a whole number of AI credits")
     for key in performance.KEYS:
         problem = performance.type_problem(key, patch[key]) if key in patch else None

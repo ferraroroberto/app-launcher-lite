@@ -162,6 +162,17 @@
             <button data-track="speech.test" type="button" id="speechTest" class="button-tint">Test connection</button>
           </div>
           <p id="speechTestResult" class="field-help" role="status" aria-live="polite" hidden></p>
+          <label class="stacked">
+            <span>Keep recordings (hours)</span>
+            <input id="speechKeepHours" type="number" class="input-native" inputmode="numeric" min="0" max="720" step="1" aria-describedby="speechKeepHoursHelp">
+          </label>
+          <p id="speechKeepHoursHelp" class="field-help">Each take is saved on this PC while you record, so a closed page or a failed transcription loses nothing. 0 keeps none.</p>
+          <div class="row">
+            <span>Recent recordings</span>
+            <button data-track="speech.recordings-refresh" type="button" id="speechRecordingsRefresh" class="button-surface">Refresh</button>
+          </div>
+          <ul id="speechRecordings" class="speech-recordings" aria-label="Recent recordings"></ul>
+          <p id="speechRecordingsState" class="field-help" role="status" aria-live="polite">No recordings kept.</p>
         </div>
         <div class="detail-actions">
           <button data-track="speech.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
