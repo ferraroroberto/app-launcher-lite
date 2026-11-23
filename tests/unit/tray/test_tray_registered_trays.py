@@ -238,7 +238,7 @@ class TestBootBreadcrumbLog:
         rt_mod.launch_all()
 
         log_text = (tmp_path / "webapp" / "registered_trays.log").read_text(encoding="utf-8")
-        assert "A: failed to launch: boom" in log_text
+        assert "A: spawn failed: OSError: boom" in log_text
 
     def test_registry_load_failure_still_logs(self, monkeypatch, tmp_path: Path):
 
@@ -377,7 +377,7 @@ class TestTrayStartLaunchesTraysRegardless:
 
         tray_mod.TrayApp._start(stub)
 
-        launch_all.assert_called_once_with()
+        launch_all.assert_called_once_with(stop=stub.watchdog_stop)
         assert isinstance(stub.starter_exc, RuntimeError)
         log = (tmp_path / "webapp" / "registered_trays.log").read_text(encoding="utf-8")
         assert "webapp not ready after 15.0s" in log
@@ -388,7 +388,7 @@ class TestTrayStartLaunchesTraysRegardless:
         tray_mod.TrayApp._start(stub)
 
         stub._start_webapp.assert_called_once_with(restart=False)
-        launch_all.assert_called_once_with()
+        launch_all.assert_called_once_with(stop=stub.watchdog_stop)
         assert stub.starter_exc is None
         assert not (tmp_path / "webapp" / "registered_trays.log").exists()
 
@@ -398,7 +398,161 @@ class TestTrayStartLaunchesTraysRegardless:
 
         tray_mod.TrayApp._start(stub)  # must not raise
 
-        launch_all.assert_called_once_with()
+        launch_all.assert_called_once_with(stop=stub.watchdog_stop)
+
+
+class _FakeStop:
+    """A tray stop event whose ``wait`` never blocks and records each delay."""
+
+    def __init__(self, stop_after: int | None = None) -> None:
+        self.waits: list = []
+        self._stop_after = stop_after
+
+    def wait(self, timeout: float) -> bool:
+        self.waits.append(timeout)
+        return self._stop_after is not None and len(self.waits) > self._stop_after
+
+
+class TestReconcileMissedAutostarts:
+    """After the first pass, a tray that was not confirmed ready gets a
+    bounded number of retries, each preceded by a readiness and identity
+    check so a slow tray is never launched twice."""
+
+    @pytest.fixture
+    def world(self, monkeypatch, tmp_path: Path):
+        (bat,) = _stub_tray_registry(monkeypatch, tmp_path, "a")
+        _write_fleet_toml(bat.parent, "port = 8447")
+        state = {"up": False, "spawns": 0, "running_pid": None, "drop_first": False}
+
+        def _spawn(bat_path):
+            state["spawns"] += 1
+            if not (state["drop_first"] and state["spawns"] == 1):
+                state["up"] = state.get("up_on_spawn", False)
+            return 4242
+
+        monkeypatch.setattr(rt_mod, "_spawn_tray_bat_detached", _spawn)
+        monkeypatch.setattr(rt_mod, "port_listening", lambda port: state["up"])
+        monkeypatch.setattr(rt_mod, "_wait_for_tray_ready", lambda repo_dir: state["up"])
+        monkeypatch.setattr(rt_mod, "find_running_target", lambda b: state["running_pid"])
+        def log() -> str:
+            return (tmp_path / "webapp" / "registered_trays.log").read_text(encoding="utf-8")
+
+        return state, log
+
+    def test_timeout_then_ready_on_retry(self, world):
+        state, log = world
+        state["drop_first"], state["up_on_spawn"] = True, True
+        stop = _FakeStop()
+
+        rt_mod.launch_all(stop=stop)
+
+        assert state["spawns"] == 2
+        assert stop.waits == [rt_mod._RETRY_DELAYS_S[0]]
+        text = log()
+        assert "A: readiness timed out" in text
+        assert "A: retry 1/3: relaunching" in text
+        assert "A: ready on retry 1/3" in text
+
+    def test_repeated_timeouts_stop_after_the_budget(self, world):
+        state, log = world
+        stop = _FakeStop()
+
+        rt_mod.launch_all(stop=stop)
+
+        assert state["spawns"] == 1 + len(rt_mod._RETRY_DELAYS_S)
+        assert stop.waits == list(rt_mod._RETRY_DELAYS_S)
+        assert "A: failed after 3 retries" in log()
+
+    def test_spawn_oserror_is_told_apart_from_a_timeout(self, world, monkeypatch):
+        _state, log = world
+
+        def _boom(bat_path):
+            raise OSError("access denied")
+
+        monkeypatch.setattr(rt_mod, "_spawn_tray_bat_detached", _boom)
+        rt_mod.launch_all(stop=_FakeStop())
+
+        text = log()
+        assert "A: spawn failed: OSError: access denied" in text
+        assert "readiness timed out" not in text
+        assert "A: failed after 3 retries" in text
+
+    def test_an_entry_already_answering_is_never_launched(self, world):
+        state, log = world
+        state["up"] = True
+        stop = _FakeStop()
+
+        rt_mod.launch_all(stop=stop)
+
+        assert state["spawns"] == 0
+        assert stop.waits == []
+        assert "A: :8447 already answering — not launched" in log()
+
+    def test_a_retry_finding_the_tray_running_does_not_relaunch(self, world):
+        state, log = world
+        state["running_pid"] = 9001
+        rt_mod.launch_all(stop=_FakeStop())
+
+        assert state["spawns"] == 1
+        assert "A: retry 1/3: already running (pid 9001) — not relaunched" in log()
+
+    def test_a_retry_that_cannot_check_identity_never_launches(self, world, monkeypatch):
+        state, log = world
+
+        def _unknown(_bat):
+            raise RuntimeError("process table unreadable")
+
+        monkeypatch.setattr(rt_mod, "find_running_target", _unknown)
+        rt_mod.launch_all(stop=_FakeStop())
+
+        assert state["spawns"] == 1
+        assert "A: retry 1/3: could not check it is not running" in log()
+
+    def test_simulated_missed_launch_ends_answering_with_one_copy(self, world):
+        """The first spawn is dropped; the retry brings the port up and no
+        later retry launches a second copy."""
+        state, _log = world
+        state["drop_first"], state["up_on_spawn"] = True, True
+        rt_mod.launch_all(stop=_FakeStop())
+
+        assert state["up"] is True
+        assert state["spawns"] == 2
+
+    def test_tray_quit_abandons_the_retries(self, world):
+        state, log = world
+        rt_mod.launch_all(stop=_FakeStop(stop_after=0))
+
+        assert state["spawns"] == 1
+        assert "tray stopping — retries abandoned" in log()
+
+    def test_no_port_entry_is_never_retried(self, monkeypatch, tmp_path: Path):
+        _stub_tray_registry(monkeypatch, tmp_path, "a")
+        spawn = MagicMock(return_value=None)
+        monkeypatch.setattr(rt_mod, "_spawn_tray_bat_detached", spawn)
+        monkeypatch.setattr(rt_mod, "_wait_for_tray_ready", lambda repo_dir: False)
+        stop = _FakeStop()
+
+        rt_mod.launch_all(stop=stop)
+
+        spawn.assert_called_once()
+        assert stop.waits == []
+
+    def test_reconciles_when_the_tray_webapp_failed_to_start(self, world, monkeypatch):
+        """``TrayApp._start`` hands its stop event to the real launch_all, so
+        a failed webapp start still gets the retries."""
+        from app.tray import tray as tray_mod
+
+        state, log = world
+        state["drop_first"], state["up_on_spawn"] = True, True
+        monkeypatch.setattr(tray_mod, "_notify", lambda title, message: None)
+        stub = MagicMock()
+        stub.watchdog_stop = _FakeStop()
+        stub._start_webapp.side_effect = RuntimeError("webapp not ready after 15.0s")
+
+        tray_mod.TrayApp._start(stub)
+
+        assert state["spawns"] == 2
+        assert "A: ready on retry 1/3" in log()
 
 
 class TestMiniAppsAutostart:
