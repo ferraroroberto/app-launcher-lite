@@ -1371,6 +1371,7 @@ surfaces:
       - a kebab with Rename and Stop
     does:
       - the chief's exchange poll and a live mic stop when the drawer closes
+      - a row opened before the drawer's code has loaded shows its exchange being read, then the drawer
     links:
       - to: board.drawer-menu
         via: kebab

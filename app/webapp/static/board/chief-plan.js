@@ -8,7 +8,7 @@ import { els, state } from '../state.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { chip } from '../glance.js';
 import { actionRow } from '../action-rows.js';
-import { openChiefAnswers, openOwnerAnswers, syncChiefAnswers } from '../lazy-views.js';
+import { openChiefAnswers, openOwnerAnswers, openPlanNoteSheet, syncChiefAnswers } from '../lazy-views.js';
 import { agoText, newestDateFirst, plural, shortDate } from '../shared/format.js';
 import { answeredKeys, itemKey } from './chief-keys.js';
 import { boardRepoFilter, isChiefCard, matchesRepoFilter } from './board-dispatch.js';
@@ -16,7 +16,6 @@ import { renderBoard, setLaneException } from '../board.js';
 import { DESKTOP_BOARD } from './board-columns.js';
 import { clearMergedButton, mergedCount } from './plan-prune.js';
 import { CLOSED, NOT_LOADED, bucketIndex, bucketName, groupPlanRows } from './plan-buckets.js';
-import { openPlanNoteSheet } from './plan-note-sheet.js';
 
 // The fleet chief records its lanes, its queue and what waits on Roberto in a
 // plan file (format v1, fleet-config's `chief_ops.py plan`); the server reads

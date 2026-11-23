@@ -16,6 +16,7 @@ from tests.e2e.board._support import (
     _open_board,
 )
 from tests.e2e.fixtures.ui import open_row_menu
+from tests.e2e.fixtures.waits import wait_until
 
 pytestmark = pytest.mark.smoke
 
@@ -24,7 +25,10 @@ def test_board_copilot_card_drawer_shows_agent_native_exchange(
     authed_page: Page, base_url: str
 ) -> None:
     """#457: a Copilot card opens its own structured exchange, rather than
-    degrading to an empty message."""
+    degrading to an empty message. The drawer's code is held on the way in,
+    so the card tap beats it: the card opens on a drawer reading its
+    exchange, never a tap that does nothing, and the drawer replaces it once
+    the code lands."""
     payload = _board_payload()
     payload["columns"]["claude_turn"].append({
         "session_id": "s-copilot", "kind": "pty", "agent": "copilot",
@@ -39,12 +43,22 @@ def test_board_copilot_card_drawer_shows_agent_native_exchange(
         "user": {"text": "fix the drawer", "timestamp": None},
         "assistant": {"text": "Copilot exchange resolved.", "timestamp": None},
     })
+    held: list = []
+    code = re.compile(r".*/static/board/drawer\.js(\?.*)?$")
+    authed_page.route(code, lambda route: held.append(route))
     _open_board(authed_page, base_url)
     card = authed_page.locator(
         '.board-list[data-col="claude_turn"] li.board-item',
         has_text="app-launcher",
     ).locator("button.board-card")
     card.click()
+    expect(card).to_have_attribute("aria-expanded", "true")
+    expect(authed_page.locator(".board-drawer-loading")).to_have_text("Reading last exchange…")
+    wait_until(authed_page, lambda: bool(held), "the drawer code request")
+    for route in held:
+        route.continue_()
+    authed_page.unroute(code)
+    expect(authed_page.locator(".board-drawer-loading")).to_have_count(0)
     exchange = authed_page.locator(".board-exchange")
     expect(exchange).to_have_attribute("data-state", "ready")
     expect(exchange).to_contain_text("fix the drawer")

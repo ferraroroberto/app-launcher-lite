@@ -3,7 +3,9 @@
  *
  * Split out of apps.js. Both dialogs are self-contained —
  * open, submit, re-fetch the registry — and share nothing with the list
- * rendering beyond fetchApps.
+ * rendering beyond fetchApps. Only a tap opens either, so this module loads
+ * on that tap or once the phone goes idle (lazy-views.js), never with the
+ * page; apps.js wires the taps that open them.
  */
 
 import { els, state } from '../state.js';
@@ -44,7 +46,7 @@ export function wireRenameDialog() {
 }
 
 // ----------------------------------------------------------- scan dialog
-async function runScan() {
+export async function runScan() {
   try {
     const body = await jsonApi('/api/apps/scan', { method: 'POST' });
     state.pendingScan = body.new || [];
@@ -99,13 +101,6 @@ function renderScanResults() {
 }
 
 export function wireScanDialog() {
-  // The Apps card's last row (moved here from Settings › Folders),
-  // and the empty registries straight from their empty state.
-  els.appsScanRow.addEventListener('click', runScan);
-  ['appsEmptyAction', 'registeredTraysEmptyAction', 'miniAppsEmptyAction'].forEach(function (id) {
-    const btn = document.getElementById(id);
-    if (btn) btn.addEventListener('click', runScan);
-  });
   els.scanCancel.addEventListener('click', function () {
     els.scanDialog.close();
   });

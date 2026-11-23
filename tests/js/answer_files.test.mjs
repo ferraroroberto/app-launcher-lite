@@ -9,7 +9,7 @@ import './_browser_stubs.mjs';
 
 const { composeAnswers } = await import('../../app/webapp/static/board/board-answers.js');
 const { ownerAnswerOf, ownerMessageLine, emptyOwnerDraft, BEFORE_START, VALIDATE_AFTER } =
-  await import('../../app/webapp/static/board/owner-checks.js');
+  await import('../../app/webapp/static/board/owner-answer.js');
 const { MAX_ITEM_FILES, MAX_SHEET_FILES, attachedLines, roomFor } =
   await import('../../app/webapp/static/board/answer-files.js');
 

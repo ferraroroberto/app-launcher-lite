@@ -111,6 +111,35 @@ const answerSheet = group(function () {
   });
 });
 
+// A Board card's drill-down drawer loads with the first card opened, or once
+// the phone goes idle, never with the Board: its lanes draw without it.
+const boardDrawer = group(function () {
+  return import('./board/drawer.js');
+});
+
+// The note sheet a Chief's plan row opens.
+const planNoteSheet = group(function () {
+  return import('./board/plan-note-sheet.js');
+});
+
+// The Board's "Since you last looked" card: it draws after its own read, so
+// its code loads with the Board's first read, not before the lanes draw.
+const journalCard = group(function () {
+  return import('./board/chief-journal.js').then(function (m) {
+    m.wireJournal();
+    return m;
+  });
+});
+
+// The Apps tab's rename and scan dialogs: only a tap opens either.
+const appsDialogs = group(function () {
+  return import('./apps/apps-dialogs.js').then(function (m) {
+    m.wireRenameDialog();
+    m.wireScanDialog();
+    return m;
+  });
+});
+
 // The shared composer, its mic and the session upload path, for the Board
 // drawer's reply box.
 const composerKit = group(function () {
@@ -145,9 +174,15 @@ const settingsPane = group(function () {
     import('./_vendored/fullscreen/fullscreen.js'),
     import('./_vendored/text-size/text-size.js'),
     import('./settings/claude-options.js'),
+    import('./settings/speech-settings.js'),
+    import('./settings/network-access.js'),
+    import('./settings/mirror-browser.js'),
+    import('./settings/launch-presets-settings.js'),
   ]).then(function (m) {
-    const s = { sheets: m[0], performance: m[1], lid: m[2] };
+    const s = { sheets: m[0], performance: m[1], lid: m[2], speech: m[10], network: m[11], mirror: m[12], presets: m[13] };
     const fetchConfig = m[9].fetchConfig;
+    s.network.wireNetworkAccess(fetchConfig);
+    s.presets.wireLaunchPresets(m[9].savePresets);
     s.lid.wireLidKeepAwake(function () { return fetchConfig(); });
     // Settings > Full screen on Edge: the row stays hidden in any other
     // browser. Same localStorage prefix as the theme and text size.
@@ -164,6 +199,10 @@ const settingsPane = group(function () {
     if (state.config) {
       s.lid.renderLidKeepAwake(state.config);
       s.performance.renderPerformance(state.config);
+      s.speech.renderSpeech(state.config);
+      s.mirror.renderMirrorBrowser(state.config);
+      s.network.renderNetworkAccess(state.config);
+      s.presets.renderLaunchPresetsEditor();
     }
     s.sheets.renderSettingsValues();
     if (state.tab === 'settings') {
@@ -279,6 +318,34 @@ export function adoptBoard(mod) {
   boardTab.adopt(mod);
 }
 
+// The drawer module once loaded, else null: until then no drawer is open.
+export function boardDrawerLoaded() {
+  return boardDrawer.loaded();
+}
+
+// Resolves true once the drawer's code has loaded, false when it failed (the
+// toast has said so).
+export function loadBoardDrawer() {
+  return use(boardDrawer, function () { return true; }).then(function (ok) { return ok === true; });
+}
+
+export function openRename(a) {
+  return use(appsDialogs, function (m) { return m.openRename(a); });
+}
+
+export function scanApps() {
+  return use(appsDialogs, function (m) { return m.runScan(); });
+}
+
+export function openPlanNoteSheet(o) {
+  return use(planNoteSheet, function (m) { return m.openPlanNoteSheet(o); });
+}
+
+// Quiet like the card itself: a load that fails waits for the next poll.
+export function pollJournal() {
+  return journalCard().then(function (m) { return m.pollJournal(); }, function () {});
+}
+
 export function openChiefAnswers(plan, run, shown, startAt) {
   return use(answerSheet, function (m) { return m.openChiefAnswers(plan, run, shown, startAt); });
 }
@@ -319,6 +386,26 @@ export function renderPerformance(cfg) {
 export function renderLidKeepAwake(body) {
   const s = settingsPane.loaded();
   if (s) s.lid.renderLidKeepAwake(body);
+}
+
+export function renderSpeech(cfg) {
+  const s = settingsPane.loaded();
+  if (s) s.speech.renderSpeech(cfg);
+}
+
+export function renderMirrorBrowser(body) {
+  const s = settingsPane.loaded();
+  if (s) s.mirror.renderMirrorBrowser(body);
+}
+
+export function renderNetworkAccess(body) {
+  const s = settingsPane.loaded();
+  if (s) s.network.renderNetworkAccess(body);
+}
+
+export function renderLaunchPresetsEditor() {
+  const s = settingsPane.loaded();
+  if (s) s.presets.renderLaunchPresetsEditor();
 }
 
 // tabs.js's openSettingsAt: an empty state's fix, or the Board's chief gear.
@@ -419,7 +506,8 @@ export function prefetchViews() {
   const first = state.tab === 'board' ? prefetch(boardTab) : Promise.resolve();
   first.then(function () { prefetch(sessionViews); });
   const run = function () {
-    [boardTab, composerKit, answerSheet, jobsTab, teamOsTab, settingsPane, screenView, progressSheet].forEach(prefetch);
+    [boardTab, boardDrawer, planNoteSheet, appsDialogs, composerKit, answerSheet, jobsTab, teamOsTab, settingsPane, screenView,
+      progressSheet].forEach(prefetch);
   };
   if (typeof window.requestIdleCallback === 'function') {
     window.requestIdleCallback(run, { timeout: PREFETCH_IDLE_TIMEOUT_MS });
