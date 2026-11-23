@@ -66,6 +66,7 @@ from fastapi.responses import Response
 
 from app.webapp import chief_doorbell
 from app.webapp.hot_poll import BuildSteps, hot_poll, session_poll
+from app.webapp.route_pools import BOARD_FILES, OUTBOUND, SESSION_HOST, run_on
 from app.webapp.routers import board_chief, board_owner
 from app.webapp.routers._helpers import (
     attach_provider_web_urls,
@@ -200,12 +201,12 @@ async def get_board_done(request: Request, days_back: int = 1) -> Dict[str, Any]
         raise HTTPException(status_code=409, detail="set gitlab_group in Settings")
     day = date.today() - timedelta(days=days_back)
     try:
-        items = await asyncio.to_thread(
-            forge.search_done_on, cfg.gitlab_group, day, host=cfg.gitlab_host)
+        items = await run_on(
+            OUTBOUND, forge.search_done_on, cfg.gitlab_group, day, host=cfg.gitlab_host)
     except forge.GlabError as exc:
         logger.warning(f"⚠️ glab done read for {day.isoformat()} failed: {exc}")
         raise HTTPException(status_code=502, detail=f"glab could not read that day: {exc}")
-    items = await asyncio.to_thread(proof_reports.annotate, items, cfg.projects_dir)
+    items = await run_on(BOARD_FILES, proof_reports.annotate, items, cfg.projects_dir)
     return {"days_back": days_back, "day": day.isoformat(), "items": items}
 
 
@@ -220,11 +221,11 @@ async def get_board_proof(request: Request, repo: str, pr: int) -> Response:
     store is read-only here. A missing report is a 404, whatever the reason.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    path = await asyncio.to_thread(proof_reports.report_path, repo, pr, cfg.projects_dir)
+    path = await run_on(BOARD_FILES, proof_reports.report_path, repo, pr, cfg.projects_dir)
     if path is None:
         raise HTTPException(status_code=404, detail="no proof report for that PR")
     try:
-        body = await asyncio.to_thread(path.read_bytes)
+        body = await run_on(BOARD_FILES, path.read_bytes)
     except OSError as exc:
         logger.warning("⚠️ proof report %s#%s unreadable: %s", repo, pr, exc)
         raise HTTPException(status_code=404, detail="no proof report for that PR")
@@ -388,7 +389,7 @@ async def get_chief_plan(request: Request) -> Dict[str, Any]:
     every device marks them alike.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    return await asyncio.to_thread(_read_plan_with_answers, cfg)
+    return await run_on(BOARD_FILES, _read_plan_with_answers, cfg)
 
 
 def _read_plan_with_answers(cfg: WebappConfig) -> Dict[str, Any]:
@@ -405,7 +406,7 @@ async def post_chief_plan_prune(request: Request) -> Dict[str, Any]:
     """
     cfg: WebappConfig = request.app.state.webapp_config
     try:
-        pruned = await asyncio.to_thread(
+        pruned = await run_on(OUTBOUND,
             plan_prune.prune_merged, cfg.fleet_config_dir, cfg.chief_plan_file
         )
     except plan_prune.PlanPruneUnavailable as exc:
@@ -434,13 +435,13 @@ async def post_chief_answered(request: Request) -> Dict[str, Any]:
             status_code=400, detail="updated_at must be a string and ids a list of strings"
         )
     cfg: WebappConfig = request.app.state.webapp_config
-    plan = await asyncio.to_thread(_read_plan_with_answers, cfg)
+    plan = await run_on(BOARD_FILES, _read_plan_with_answers, cfg)
     if plan["state"] != "ok":
         return {"recorded": False, "updated_at": "", "answered": []}
     if plan["updated_at"] != updated_at:
         return {"recorded": False, "updated_at": plan["updated_at"], "answered": plan["answered"]}
     try:
-        answered = await asyncio.to_thread(chief_answers.record_answered, updated_at, ids)
+        answered = await run_on(BOARD_FILES, chief_answers.record_answered, updated_at, ids)
     except OSError as exc:
         logger.warning("⚠️ chief answered marks not written: %s", exc)
         raise HTTPException(status_code=500, detail="answered marks not written")
@@ -458,7 +459,7 @@ async def refresh_github(request: Request) -> Dict[str, Any]:
     """
     cfg: WebappConfig = request.app.state.webapp_config
     view_refresh.start_side_sweeps(cfg)
-    snap = await asyncio.to_thread(forge.refresh, cfg.gitlab_group, cfg.gitlab_host)
+    snap = await run_on(OUTBOUND, forge.refresh, cfg.gitlab_group, cfg.gitlab_host)
     return _github_section(snap)
 
 
@@ -487,8 +488,8 @@ async def file_issue(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"body is over {_FILE_BODY_MAX} characters")
     entry = _resolve_repo_entry(cfg, str(body.get("repo") or "").strip())
     try:
-        url = await asyncio.to_thread(
-            forge.create_issue, cfg.gitlab_group, entry.name, title, text, cfg.gitlab_host
+        url = await run_on(
+            OUTBOUND, forge.create_issue, cfg.gitlab_group, entry.name, title, text, cfg.gitlab_host
         )
     except forge.GlabError as exc:
         logger.warning(f"⚠️ filing an issue on {entry.name} failed: {exc}")
@@ -642,7 +643,7 @@ async def start_issue(request: Request) -> Dict[str, Any]:
     prompt = f"/issue-{mode} {number}"
     brief_path = None
     if brief is not None:
-        brief_path = await asyncio.to_thread(dispatch_brief.write_brief, brief)
+        brief_path = await run_on(BOARD_FILES, dispatch_brief.write_brief, brief)
         prompt = f"{prompt} --brief {brief_path.as_posix()}"
     native_name_flags = agents.native_session_name_flags_for(agent, title)
     flags = " ".join(
@@ -659,7 +660,7 @@ async def start_issue(request: Request) -> Dict[str, Any]:
     except Exception:
         # No lane will ever read it — don't leave it for the TTL sweep.
         if brief_path is not None:
-            await asyncio.to_thread(dispatch_brief.discard_brief, brief_path)
+            await run_on(BOARD_FILES, dispatch_brief.discard_brief, brief_path)
         raise
     chief_dispatch = await board_chief._mark_chief_managed(
         cfg, request, sid, entry.name, number)
@@ -740,7 +741,7 @@ async def _launchable_entry(cfg: WebappConfig, repo: str, number: int) -> Any:
 
     A lane that cannot run its /issue-* skill only stalls, so it is never spawned."""
     entry = _resolve_repo_entry(cfg, repo)
-    refusal = skills_preflight.refusal(await asyncio.to_thread(
+    refusal = skills_preflight.refusal(await run_on(BOARD_FILES,
         skills_preflight.check_skills, cfg.skills_dir, cfg.fleet_config_dir))
     if refusal:
         logger.warning("⚠️ issue start refused for %s#%s: %s", repo, number, refusal)
@@ -772,7 +773,7 @@ def _issue_number(body: Dict[str, Any]) -> int:
 async def _auto_name_session(cfg: WebappConfig, sid: str, name: str) -> None:
     """Rename a just-started session; a failure is logged, never raised."""
     try:
-        await asyncio.to_thread(
+        await run_on(SESSION_HOST,
             session_client.rename, cfg.session_host_port, sid, name
         )
     except session_client.SessionHostError as exc:

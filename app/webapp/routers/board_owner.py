@@ -19,13 +19,13 @@ never hides the ones that landed.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections import Counter
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.webapp.route_pools import OUTBOUND, run_on
 from app.webapp.routers._helpers import maybe_json
 from src.board import owner_checks
 from src.clients import gitlab as forge
@@ -73,7 +73,7 @@ async def post_owner_answers(request: Request) -> Dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
     results: List[Dict[str, Any]] = []
     for ans in answers:
-        results.append(await asyncio.to_thread(_apply, cfg, ans))
+        results.append(await run_on(OUTBOUND, _apply, cfg, ans))
     failed = [r["ref"] for r in results if not r["ok"]]
     kinds = Counter(a["answer"] for a in answers)
     logger.info(
