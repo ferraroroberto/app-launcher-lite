@@ -129,15 +129,15 @@ def create_self_signed(cert_dir: Path, names: Iterable[str]) -> CertificateStatu
         .add_extension(x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
         .sign(key, hashes.SHA256())
     )
-    cert_dir.mkdir(parents=True, exist_ok=True)
+    cert_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: webapp/certificates/ (gitignored) is where cert_paths() and the Tailscale provisioner keep the pair
     key_bytes = key.private_bytes(
         serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
     )
-    with open(key_path, "xb") as fh:
+    with open(key_path, "xb") as fh:  # runtime-write-exempt: webapp/certificates/ (gitignored) is where cert_paths() and the Tailscale provisioner keep the pair
         fh.write(key_bytes)
     _restrict_to_user(key_path)
     try:
-        with open(cert_path, "xb") as fh:
+        with open(cert_path, "xb") as fh:  # runtime-write-exempt: webapp/certificates/ (gitignored) is where cert_paths() and the Tailscale provisioner keep the pair
             fh.write(cert.public_bytes(serialization.Encoding.PEM))
     except FileExistsError:
         # The key is ours from a moment ago; without its certificate it is useless.
