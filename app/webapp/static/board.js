@@ -54,7 +54,7 @@ import { setTab } from './tabs.js';
 import { sessionTitle } from './sessions.js';
 import { applyLaunchSizePayload } from './shared/launch-size.js';
 import { SensitiveOutcome, runSensitiveAction } from './shared/sensitive-action.js';
-import { openTerminal } from './lazy-views.js';
+import { boardDrawerLoaded, loadBoardDrawer, openTerminal, pollJournal } from './lazy-views.js';
 import { emptyStateEl } from './_vendored/empty-state/empty-state.js';
 import { icon } from './_vendored/icons/icons.js';
 import { terminalJsonApi } from './webauthn.js';
@@ -73,9 +73,6 @@ import {
   wireDispatch,
 } from './board/board-dispatch.js';
 import { openQuestionCount } from './board/chief-keys.js';
-import {
-  buildDrawer, drawerId, drawerShape, endDrawerRender, openDrawerItem, syncDrawerLifecycle,
-} from './board/drawer.js';
 import { openOwnerAnswersAt, renderChiefPlan } from './board/chief-plan.js';
 import { ownerNeedsCount, renderOwnerChecks } from './board/owner-checks.js';
 import { doneEarlierLoaded, renderDoneEarlier } from './board/done-earlier.js';
@@ -84,7 +81,6 @@ import { folderTrustControls } from './board/folder-trust.js';
 import { isDismissible, isFailing } from './board/attention-state.js';
 import { renderCiCard } from './board/ci-card.js';
 import { ClaimState, claimState } from './board/claim-state.js';
-import { pollJournal, wireJournal } from './board/chief-journal.js';
 import { syncFoldAll, wireFoldAll } from './board/fold-all.js';
 import {
   bucketChipEls, bucketNodes, hasBuckets, notPlannedCount,
@@ -248,9 +244,45 @@ function renderSessionCard(card, openItem) {
     return openItem;
   }
   li.classList.add('expanded');
-  li.dataset.drawerShape = drawerShape(card);
-  li.appendChild(buildDrawer(card));
+  const drawer = boardDrawerLoaded();
+  if (!drawer) {
+    li.appendChild(loadingDrawer(card));
+    return li;
+  }
+  li.dataset.drawerShape = drawer.drawerShape(card);
+  li.appendChild(drawer.buildDrawer(card));
   return li;
+}
+
+// The open drawer's id, which its card header's aria-controls names.
+export function drawerId(card) {
+  return 'board-drawer-' + card.session_id;
+}
+
+// A card opened before the drawer's code has loaded shows the drawer's own
+// first state, its exchange being read, then the drawer once the code lands;
+// a failed load folds the card again (the toast says why).
+let drawerAsked = false;
+function loadingDrawer(card) {
+  const drawer = document.createElement('div');
+  drawer.className = 'board-drawer board-drawer-loading';
+  drawer.id = drawerId(card);
+  const exchange = document.createElement('div');
+  exchange.className = 'board-exchange';
+  exchange.dataset.state = 'loading';
+  exchange.setAttribute('role', 'status');
+  exchange.setAttribute('aria-live', 'polite');
+  exchange.textContent = 'Reading last exchange…';
+  drawer.appendChild(exchange);
+  if (!drawerAsked) {
+    drawerAsked = true;
+    loadBoardDrawer().then(function (ok) {
+      drawerAsked = false;
+      if (!ok) state.boardExpanded = null;
+      renderBoard();
+    });
+  }
+  return drawer;
 }
 
 // ---------------------------------------------------- one-tap issue start
@@ -757,10 +789,11 @@ export function renderBoard() {
   // The poll keeps running with a drawer open, so a render that still
   // shows the same drawer keeps its node — reply text, focus, a live mic and
   // the chief exchange poll all live on it.
-  const openItem = openDrawerItem(expandedCard);
+  const drawer = boardDrawerLoaded();
+  const openItem = drawer ? drawer.openDrawerItem(expandedCard) : null;
   const activeEl = openItem && openItem.contains(document.activeElement)
     ? document.activeElement : null;
-  syncDrawerLifecycle(openItem);
+  if (drawer) drawer.syncDrawerLifecycle(openItem);
   if (!body || !els.boardColumns) return;
   const ghLoaded = ghFetched(body);
   const liveRead = liveSessionsRead(body);
@@ -782,7 +815,7 @@ export function renderBoard() {
   // The open Backlog kebab's row is gone (issue closed, filtered out).
   issueMenu.endRender();
   // A kept drawer keeps its menu; one rebuilt re-attached it; none, ends it.
-  endDrawerRender(openItem);
+  if (drawer) drawer.endDrawerRender(openItem);
   renderBacklogFoot(body, ghLoaded);
   renderDoneEarlier(ghLoaded);
   renderChiefPlan(body, liveRead);
@@ -967,7 +1000,6 @@ export function wireBoard() {
   if (!els.tabBoard) return;
   els.tabBoard.addEventListener('click', openBoardTab);
   wireDispatch();
-  wireJournal();
   wireFoldAll(els.boardFoldAll, els.boardColumns);
   els.boardRefresh.addEventListener('click', function () {
     refreshGithub().catch(function (exc) {

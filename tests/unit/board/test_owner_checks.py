@@ -319,7 +319,7 @@ def test_the_sheet_sends_fewer_answers_per_request_than_the_route_accepts():
     from pathlib import Path
 
     from app.webapp.routers.board_owner import _MAX_ANSWERS
-    src = (Path(__file__).resolve().parents[3] / "app/webapp/static/board/owner-checks.js").read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parents[3] / "app/webapp/static/board/owner-answer.js").read_text(encoding="utf-8")
     per = int(re.search(r"OWNER_ANSWERS_PER_REQUEST = (\d+);", src).group(1))
     assert 0 < per <= _MAX_ANSWERS
 

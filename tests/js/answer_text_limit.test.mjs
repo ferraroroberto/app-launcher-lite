@@ -9,7 +9,7 @@ import './_browser_stubs.mjs';
 const { composeAnswers } = await import('../../app/webapp/static/board/board-answers.js');
 const { ANSWER_TEXT_MAX, answerCountText } = await import('../../app/webapp/static/board/answer-item.js');
 const { ownerAnswerOf, ownerMessageLine, emptyOwnerDraft, VALIDATE_AFTER } =
-  await import('../../app/webapp/static/board/owner-checks.js');
+  await import('../../app/webapp/static/board/owner-answer.js');
 
 // 5,000 characters of single-spaced words, as a dictation lands.
 const long = Array.from({ length: 1100 }, (_, i) => 'w' + String(i % 10).repeat(3)).join(' ').slice(0, 5000).replace(/ $/, 'x');

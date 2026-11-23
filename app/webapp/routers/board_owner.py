@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Bounds one request's GitLab writes; the sheet sends a long list in several
-# requests well under it (owner-checks.js OWNER_ANSWERS_PER_REQUEST).
+# requests well under it (owner-answer.js OWNER_ANSWERS_PER_REQUEST).
 _MAX_ANSWERS = 30
 
 

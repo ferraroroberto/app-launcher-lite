@@ -35,7 +35,7 @@
  * posts to GitLab only how many files it has, and the chief gets the paths in
  * the one message below.
  *
- * Owner checks (owner-checks.js) have their own sheet, the same dialog in
+ * Owner checks (owner-checks.js, owner-answer.js) have their own sheet, the same dialog in
  * `owner` mode, its items drawn from the same option and Other parts as a chief
  * question (answer-item.js) and Anything else under them: the chief's
  * questions unblock work in flight, an owner check waits on the owner's own
@@ -62,10 +62,11 @@ import {
 } from './answer-files.js';
 import { renderBoard } from '../board.js';
 import { itemKey, markSent } from './chief-keys.js';
+import { groupLabel, shownOwnerItems } from './owner-checks.js';
 import {
-  emptyOwnerDraft, groupLabel, ownerAnswerOf, ownerMessageLine, ownerNeedsChief, ownerSheetBlock,
-  ownerSheetKey, postOwnerAnswers, shownOwnerItems,
-} from './owner-checks.js';
+  emptyOwnerDraft, ownerAnswerOf, ownerMessageLine, ownerNeedsChief, ownerSheetBlock, ownerSheetKey,
+  postOwnerAnswers,
+} from './owner-answer.js';
 
 const DONE_LABEL = 'Done';
 // Question and answer are joined by an arrow in the message the chief

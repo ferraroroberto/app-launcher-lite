@@ -22,13 +22,12 @@ import { chatAvailable, modeReason, terminalAvailable } from '../session-modes.j
 import { icon } from '../_vendored/icons/icons.js';
 import { terminalJsonApi } from '../webauthn.js';
 import { CHIEF_KILL_CONFIRM } from '../shared/session-kinds.js';
-import { renderMarkdown } from '../markdown.js';
 import { confirmDialog } from '../confirm-dialog.js';
 import { createRowMenu } from '../_vendored/row-menu/row-menu.js';
 import { exchangeState } from './exchange-state.js';
 import { isChiefCard } from './board-dispatch.js';
 import { markLooked } from './journal-look.js';
-import { fetchBoard, noteBoardEdit, renderBoard, sessionLabel } from '../board.js';
+import { drawerId, fetchBoard, noteBoardEdit, renderBoard, sessionLabel } from '../board.js';
 
 // Chief-only exchange refresh: loadExchange is one-shot, fine for a
 // worker drawer you glance at — but a chat conversation needs the chief's
@@ -134,11 +133,6 @@ function drawerAction(cls, glyph, label, title, reason, onTap, opts) {
     onTap(btn);
   });
   return btn;
-}
-
-// The open drawer's id, which its card header's aria-controls names.
-export function drawerId(card) {
-  return 'board-drawer-' + card.session_id;
 }
 
 function drawerKebab() {
@@ -261,11 +255,15 @@ function stopConfirm(card) {
   };
 }
 
+// The Markdown renderer loads with the first drawer that shows an exchange,
+// alongside its read, so the Board's first draw never waits for it.
 async function loadExchange(card, el) {
   try {
-    const body = await terminalJsonApi(
-      '/api/board/sessions/' + encodeURIComponent(card.session_id) + '/exchange'
-    );
+    const [body, md] = await Promise.all([
+      terminalJsonApi('/api/board/sessions/' + encodeURIComponent(card.session_id) + '/exchange'),
+      import('../markdown.js'),
+    ]);
+    const renderMarkdown = md.renderMarkdown;
     el.replaceChildren();
     el.dataset.state = exchangeState(body);
     if (!body.available) {

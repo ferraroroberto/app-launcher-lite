@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import './_browser_stubs.mjs';
 
 const { ownerAnswerOf, ownerMessageLine, ownerMeaning, ownerNeedsChief, emptyOwnerDraft, BEFORE_START, VALIDATE_AFTER } =
-  await import('../../app/webapp/static/board/owner-checks.js');
+  await import('../../app/webapp/static/board/owner-answer.js');
 
 const before = { ref: 'demo#7', kind: BEFORE_START, title: 'Pair it' };
 const validate = { ref: 'demo#9', kind: VALIDATE_AFTER, title: 'New tab' };

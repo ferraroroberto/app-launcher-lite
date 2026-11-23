@@ -13,13 +13,12 @@
 
 import { els, state } from '../state.js';
 import { apiFailToast, jsonApi, toast } from '../api.js';
-import { renderLidKeepAwake, renderPerformance, renderSettingsValues, setTeamOsModelOptions } from '../lazy-views.js';
+import {
+  renderLaunchPresetsEditor, renderLidKeepAwake, renderMirrorBrowser, renderNetworkAccess, renderPerformance,
+  renderSettingsValues, renderSpeech, setTeamOsModelOptions,
+} from '../lazy-views.js';
 import { syncLaunchPresets } from '../shared/launch-presets.js';
-import { renderLaunchPresetsEditor, wireLaunchPresets } from './launch-presets-settings.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
-import { renderSpeech } from './speech-settings.js';
-import { renderNetworkAccess, wireNetworkAccess } from './network-access.js';
-import { renderMirrorBrowser } from './mirror-browser.js';
 
 export async function fetchConfig(shouldApply) {
   const body = await jsonApi('/api/config');
@@ -210,7 +209,7 @@ export async function patchConfig(patch) {
 // Saves the launch preset list. Resolves null once saved and the config is
 // re-read, or { message, field } for a refusal the editor shows beside the
 // field it names (the server's 400 carries `field`); any other failure toasts.
-async function savePresets(presets) {
+export async function savePresets(presets) {
   try {
     await postConfigPatch({ launch_presets: presets });
   } catch (exc) {
@@ -285,8 +284,6 @@ export function wireClaudeOptions() {
   wireConfigSwitch(els.copilotAutopilot, 'copilot_autopilot', { label: 'Autopilot' });
   wireConfigSwitch(els.copilotSkipPerms, 'copilot_skip_permissions', { label: 'Skip permission prompts' });
   wireConfigSwitch(els.copilotRemote, 'copilot_remote_session', { label: 'Remote session' });
-  wireNetworkAccess(fetchConfig);
   wireModelList();
   wireAddDefaultModels();
-  wireLaunchPresets(savePresets);
 }

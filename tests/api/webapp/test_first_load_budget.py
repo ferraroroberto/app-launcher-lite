@@ -7,9 +7,13 @@ budget with a little headroom over what they weigh now. The page and the
 stylesheet are sent without their comments; a change that sends them again
 fails here. The views a tap opens (chat, terminal, changes, links, Screen,
 Progress, the Jobs, Team OS and Board tabs, the Settings pane, the Markdown
-renderer and the shared composer) load
-on that tap (lazy-views.js); a static import that pulls one back into the
-first load fails here too.
+renderer, the Apps dialogs and the shared composer) load
+on that tap (lazy-views.js), and what only runs once boot has settled (the
+new-build prompt, the build readout and restart sheet, the copy button of
+rendered Markdown, the terminal scripts' loader) loads then; a static import
+that pulls one back into the first load fails here too. A boot that reopens
+on the Board preloads only what its lanes draw: the card drawer, the answer
+sheets, the plan note sheet and the journal card load after.
 """
 
 from __future__ import annotations
@@ -21,8 +25,8 @@ from typing import Dict, List
 MAX_RESPONSE_BYTES = 100 * 1024
 # The page and its one stylesheet block the first paint (55 KB together, gzipped).
 RENDER_BLOCKING_BYTES = 70 * 1024
-# Page, stylesheet and every module main.js reaches statically (151 KB now).
-FIRST_LOAD_BYTES = 160 * 1024
+# Page, stylesheet and every module main.js reaches statically (135 KB now).
+FIRST_LOAD_BYTES = 145 * 1024
 # Loaded on first open, never by the first load.
 LAZY_VIEWS = (
     "/static/terminal.js",
@@ -52,6 +56,28 @@ LAZY_VIEWS = (
     "/static/_vendored/text-size/text-size.js",
     "/static/markdown.js",
     "/static/shared/mermaid-render.js",
+    "/static/settings/speech-settings.js",
+    "/static/settings/network-access.js",
+    "/static/settings/mirror-browser.js",
+    "/static/settings/launch-presets-settings.js",
+    "/static/apps/apps-dialogs.js",
+    "/static/quote-copy.js",
+    "/static/_vendored/build-watch/build-watch.js",
+    "/static/_vendored/page-foot/page-foot.js",
+    "/static/shared/build-restart.js",
+    "/static/terminal/xterm-loader.js",
+    "/static/chat/transcript-text.js",
+)
+# Never preloaded by a Board-first boot: none of it draws the lanes.
+BOARD_LATER = (
+    "/static/board/drawer.js",
+    "/static/markdown.js",
+    "/static/board/board-answers.js",
+    "/static/board/owner-answer.js",
+    "/static/board/answer-files.js",
+    "/static/attach-batch.js",
+    "/static/board/plan-note-sheet.js",
+    "/static/board/chief-journal.js",
 )
 
 _STATIC_IMPORT_RE = re.compile(r"""from\s*['"](\.\.?/[^'"?]+\.js)(\?v=[^'"]*)?['"]""")
@@ -143,4 +169,11 @@ def test_a_board_first_boot_preloads_the_instance_lazy_views_imports(webapp_clie
     stamps = _BOARD_IMPORT_RE.findall(client.get("/static/lazy-views.js").text)
     assert stamps, "lazy-views.js no longer imports the Board"
     assert board[0] == "/static/board.js" + stamps[0]
-    assert "/static/board/drawer.js" + stamps[0] in board
+    assert "/static/board/chief-plan.js" + stamps[0] in board
+
+
+def test_a_board_first_boot_preloads_only_what_the_lanes_draw(webapp_client):
+    client, _, _ = webapp_client
+    page = client.get("/").text
+    board = {url.split("?")[0] for url in _preloads(page, "boardPreload")}
+    assert not board.intersection(BOARD_LATER), sorted(board.intersection(BOARD_LATER))

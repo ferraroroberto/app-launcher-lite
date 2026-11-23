@@ -9,9 +9,6 @@ import { els, state, BOARD_POLL_MS, GIT_STATUS_POLL_MS, JOBS_POLL_MS, LISTENERS_
 import { AuthRequiredError, apiFailToast, consumeUrlParam, jsonApi, setSignInHandler, toast, writeToken } from './api.js';
 import { wireTabs } from './tabs.js';
 import { wireUsageLog } from './usage.js';
-import { initBuildWatch } from './_vendored/build-watch/build-watch.js';
-import { buildReadoutText } from './_vendored/page-foot/page-foot.js';
-import { wireBuildRestart } from './shared/build-restart.js';
 import { fetchConfig, wireClaudeOptions } from './settings/claude-options.js';
 import { fetchSessions, wireSessions } from './sessions.js';
 import { fetchSystemLoad, wireSystemLoad } from './system-load.js';
@@ -19,10 +16,7 @@ import { fetchAgents, fetchApps, fetchRunningApps, wireApps } from './apps.js';
 import { refreshGitStatus } from './apps/apps-coding.js';
 import { fetchListeners } from './apps/apps-listeners.js';
 import { wireHtmlViewer, wireImageLightbox } from './lightbox.js';
-import { wireQuoteCopy } from './quote-copy.js';
 import { adoptBoard, fetchBoard, fetchJobs, fetchSkills, markMirrorWindowEarly, openBoardCard, openScreenWindow, openTerminal, prefetchViews, renderBoard, startSessionViews, wireViewOpeners } from './lazy-views.js';
-import { loadXtermScripts } from './terminal/xterm-loader.js';
-import { warmTimeFormat } from './chat/transcript-text.js';
 import { fetchWebauthnStatus, wireWebauthn, writeTerminalToken } from './webauthn.js';
 import { renderSettingsHead } from './home-head.js';
 import { isWideLayout } from './layout.js';
@@ -121,9 +115,11 @@ async function fetchVersion() {
   // a readout; after the last attempt it stays blank.
   for (let attempt = 0; ; attempt++) {
     try {
-      const body = await jsonApi('/api/version');
+      const [body, foot] = await Promise.all([
+        jsonApi('/api/version'), import('./_vendored/page-foot/page-foot.js'),
+      ]);
       const sha = body.git_sha || 'unknown';
-      els.buildReadout.textContent = buildReadoutText(sha, body.built_at || '');
+      els.buildReadout.textContent = foot.buildReadoutText(sha, body.built_at || '');
       // The Settings header carries the sha too, without the time.
       state.buildSha = sha;
       renderSettingsHead();
@@ -232,7 +228,9 @@ async function boot() {
   const running = safe(fetchRunningApps);
   const load = safe(fetchSystemLoad);
   // The readout's restart sheet reads /api/restart once; no targets, no button.
-  const others = [safe(fetchVersion), safe(function () { return wireBuildRestart(els.buildReadout); })];
+  const others = [safe(fetchVersion), safe(function () {
+    return import('./shared/build-restart.js').then(function (m) { return m.wireBuildRestart(els.buildReadout); });
+  })];
   // The Board card link fetches the Board itself, so it needs none of these.
   if (boardSid) openBoardCard(boardSid).catch(function () {});
   // A reload restores the last tab without a tap, and the Board and Jobs
@@ -241,8 +239,17 @@ async function boot() {
   else others.push(safe(fetchBoard), safe(fetchJobs));
 
   armPolls({ lists, listeners, running, webauthn, load, git });
-  // The views a tap opens load once the list has drawn (lazy-views.js).
+  // The views a tap opens load once the list has drawn (lazy-views.js), and
+  // with them what no first screen draws: the copy button of rendered
+  // Markdown, which only a lazily loaded view renders, and the new-build
+  // prompt, which checks every few minutes.
   lists.then(prefetchViews);
+  lists.then(function () {
+    return Promise.all([import('./quote-copy.js'), import('./_vendored/build-watch/build-watch.js')]);
+  }).then(function (m) {
+    m[0].wireQuoteCopy();
+    m[1].initBuildWatch();
+  }).catch(function (exc) { console.warn('boot: a deferred module did not load', exc); });
   // The Usage card's code too: it is no part of the first load, and its read
   // is answered from server memory, so it can never hold up the list.
   lists.then(function () { return import('./copilot-usage.js'); })
@@ -271,8 +278,10 @@ function warmSessionOpen() {
   const unreachable = !!(state.status && state.status.terminal &&
     state.status.terminal.reachable === false);
   const run = function () {
-    warmTimeFormat();
-    if (!unreachable) loadXtermScripts().catch(function () {});
+    import('./chat/transcript-text.js').then(function (m) { m.warmTimeFormat(); }).catch(function () {});
+    if (!unreachable) {
+      import('./terminal/xterm-loader.js').then(function (m) { return m.loadXtermScripts(); }).catch(function () {});
+    }
   };
   if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 5000 });
   else window.setTimeout(run, 1000);
@@ -388,10 +397,8 @@ if (boardFirst) adoptBoard(boardFirst);
 wireImageLightbox();
 wireHtmlViewer();
 wireViewOpeners();
-wireQuoteCopy();
 wireWebauthn();
 wireSettings();
 wireTheme();
 
-initBuildWatch();
 boot();

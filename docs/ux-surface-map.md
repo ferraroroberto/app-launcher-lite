@@ -1311,7 +1311,9 @@ flowchart LR
   - the shared composer
   - Chat and Terminal
   - a kebab with Rename and Stop
-- **Does:** the chief's exchange poll and a live mic stop when the drawer closes
+- **Does:**
+  - the chief's exchange poll and a live mic stop when the drawer closes
+  - a row opened before the drawer's code has loaded shows its exchange being read, then the drawer
 - **Leads to:**
   - [Drawer menu](#boarddrawer-menu-drawer-menu) (kebab)
   - [Session overlay](#terminaloverlay-session-overlay) (Terminal)
