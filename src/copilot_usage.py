@@ -7,10 +7,21 @@ user response, which the CLI fetches with its own sign-in and caches in
 ``quota_snapshots.premium_interactions`` entry holds the plan-wide
 ``entitlement`` and ``quota_remaining`` (used is the difference), every
 machine and VS Code included, and the response names the next reset in
-``quota_reset_date_utc``. Reading that file needs no credential of ours. A
-cache that is missing, unparseable, unlimited or older than the last reset
-reads as ``unknown`` with the reason, so the card shows no percent rather
-than passing this machine's share off as the plan's.
+``quota_reset_date_utc``. The CLI's status line renders that same
+``premium_interactions`` quota for premium-request plans and AI-credit plans
+alike; the quota's ``token_based_billing`` says which unit it counts. Reading
+that file needs no credential of ours. A cache that is missing, unparseable,
+unlimited, silent on its billing unit or older than the last reset reads as
+``unknown`` with the reason, so the card shows no percent rather than passing
+this machine's share off as the plan's.
+
+**Which entry.** The cache keeps one entry per signed-in account, under a
+hashed key, and the status line shows the account the CLI is signed in with.
+Telling that account apart would mean reading an account identifier, which
+this module never does. So an entry whose cycle has already reset is set
+aside (it cannot be this cycle's plan), one remaining entry is the plan, and
+several remaining entries read as ``unknown``, because the newest fetch can
+belong to another account.
 
 **This machine** (the card's footnote): the Copilot CLI records every model
 call it bills in the ``assistant_usage_events`` table of
@@ -34,7 +45,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +93,8 @@ class PlanReading:
     reset_at: Optional[datetime] = None
     as_of: str = ""
     reason: str = ""
+    # True for an AI-credit plan, False for a premium-request plan (its figures count requests).
+    billed_in_credits: Optional[bool] = None
 
 
 def billing_month(now: datetime) -> Tuple[datetime, datetime]:
@@ -169,20 +182,49 @@ def read(db_path: Path, now: datetime) -> Reading:
     )
 
 
-def _plan_quota(doc: Any) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any], str]:
-    """The newest cache entry's response and its plan quota, or a reason there is none."""
+def _cached_plans(entries: Dict[str, Any]) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
+    """Every cache entry that carries a plan quota, as (response, quota) pairs."""
+    plans = []
+    for entry in entries.values():
+        response = entry.get("response") if isinstance(entry, dict) else None
+        snapshots = response.get("quota_snapshots") if isinstance(response, dict) else None
+        quota = snapshots.get(PLAN_QUOTA) if isinstance(snapshots, dict) else None
+        if isinstance(quota, dict):
+            plans.append(({**response, "_retrieved_at": entry.get("retrievedAt")}, quota))
+    return plans
+
+
+def _plan_quota(doc: Any, now: datetime) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any], str]:
+    """The one cached plan still in its cycle, its response and quota, or a reason there is none."""
     entries = doc.get("copilotUserCache") if isinstance(doc, dict) else None
-    candidates = [e for e in (entries or {}).values() if isinstance(e, dict)] if isinstance(entries, dict) else []
-    if not candidates:
+    if not (isinstance(entries, dict) and entries):
         return None, {}, "the Copilot plan cache holds no plan"
-    # One entry per sign-in; the newest fetch is the one the CLI's status line shows.
-    entry = max(candidates, key=lambda e: str(e.get("retrievedAt", "")))
-    response = entry.get("response")
-    snapshots = response.get("quota_snapshots") if isinstance(response, dict) else None
-    quota = snapshots.get(PLAN_QUOTA) if isinstance(snapshots, dict) else None
-    if not isinstance(quota, dict):
+    plans = _cached_plans(entries)
+    if not plans:
         return None, {}, f"the Copilot plan cache has no {PLAN_QUOTA} quota"
-    return quota, {**response, "_retrieved_at": entry.get("retrievedAt")}, ""
+    utc_now = now.astimezone(timezone.utc)
+    current = []
+    for response, quota in plans:
+        reset = _parse_utc(response.get("quota_reset_date_utc"))
+        if reset is None or reset > utc_now:
+            current.append((response, quota))
+    if not current:
+        return None, {}, "the cached plan figure predates the last reset; run Copilot CLI to refresh it"
+    if len(current) > 1:
+        return None, {}, (
+            f"the Copilot CLI has {len(current)} Copilot accounts cached and the card "
+            "can't tell which one it is signed in with"
+        )
+    response, quota = current[0]
+    return quota, response, ""
+
+
+def _billed_in_credits(quota: Dict[str, Any], response: Dict[str, Any]) -> Optional[bool]:
+    """The quota's own billing flag, else the account's; None when neither says."""
+    for flag in (quota.get("token_based_billing"), response.get("token_based_billing")):
+        if isinstance(flag, bool):
+            return flag
+    return None
 
 
 def read_plan(cache_path: Path, now: datetime) -> PlanReading:
@@ -196,7 +238,7 @@ def read_plan(cache_path: Path, now: datetime) -> PlanReading:
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         logger.warning("⚠️ Copilot plan cache %s unreadable: %s", cache_path, exc)
         return PlanReading("unknown", reason=f"the Copilot plan cache could not be read: {exc}")
-    quota, response, reason = _plan_quota(doc)
+    quota, response, reason = _plan_quota(doc, now)
     if quota is None:
         return PlanReading("unknown", reason=reason)
     if quota.get("unlimited") is True:
@@ -204,18 +246,19 @@ def read_plan(cache_path: Path, now: datetime) -> PlanReading:
     entitlement, remaining = quota.get("entitlement"), quota.get("quota_remaining")
     if not (_is_number(entitlement) and _is_number(remaining)) or entitlement <= 0:
         return PlanReading("unknown", reason="the Copilot plan cache has no usable allowance")
-    reset = _parse_utc(response.get("quota_reset_date_utc"))
-    if reset is not None and reset <= now.astimezone(timezone.utc):
+    billed_in_credits = _billed_in_credits(quota, response)
+    if billed_in_credits is None:
         return PlanReading(
             "unknown",
-            reason="the cached plan figure predates the last reset; run Copilot CLI to refresh it",
+            reason="the Copilot plan cache does not say whether the plan is billed in credits or requests",
         )
     return PlanReading(
         "ok",
         used_credits=round(max(0.0, float(entitlement) - float(remaining)), 2),
         allowance=float(entitlement),
-        reset_at=reset,
+        reset_at=_parse_utc(response.get("quota_reset_date_utc")),
         as_of=str(quota.get("timestamp_utc") or response.get("_retrieved_at") or ""),
+        billed_in_credits=billed_in_credits,
     )
 
 
@@ -232,12 +275,26 @@ def payload(
     while its first read runs (``pending``).
     """
     plan_ok = plan is not None and plan.state == "ok" and plan.used_credits is not None and bool(plan.allowance)
+    plan_reason = "" if plan is None else plan.reason
+    # The plan counts every machine, so on a credit plan it is never below this
+    # machine's own month; when it is, it is stale or another account's. A
+    # premium-request plan counts requests, a different unit, so it is not compared.
+    if (
+        plan_ok and plan.billed_in_credits is True
+        and reading is not None and reading.state == "ok" and reading.used_credits is not None
+        and reading.used_credits > plan.used_credits
+    ):
+        plan_ok = False
+        plan_reason = (
+            "the plan figure is older or from another account: this machine alone "
+            "used more credits this month"
+        )
     if plan_ok and plan.reset_at is not None:
         start, reset = month_before(plan.reset_at), plan.reset_at
     else:
         start, reset = billing_month(now)
     body: Dict[str, Any] = {
-        "state": "pending" if plan is None else plan.state,
+        "state": "pending" if plan is None else ("ok" if plan_ok else "unknown"),
         "used_credits": None,
         "used_pct": None,
         "allowance": allowance,
@@ -248,7 +305,7 @@ def payload(
         "source": PLAN_SOURCE,
         "scope": PLAN_SCOPE,
         "as_of": "",
-        "reason": "" if plan is None else plan.reason,
+        "reason": plan_reason,
         "today_state": "pending" if reading is None else reading.state,
         "today_credits": None,
         "machine_month_credits": None,
