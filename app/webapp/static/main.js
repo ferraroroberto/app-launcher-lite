@@ -236,7 +236,7 @@ async function boot() {
   else others.push(safe(fetchBoard), safe(fetchJobs));
 
   armPolls({ lists, listeners, running, webauthn, load, git });
-  lists.then(loadAfterList);
+  lists.then(function () { loadAfterList(status); });
 
   if (deepLinkSid) {
     await Promise.all([lists, status, webauthn]);
@@ -248,16 +248,16 @@ async function boot() {
   // safe() never rejects, so neither does this: boot() resolves once every
   // boot fetch has settled.
   await Promise.all([lists, skills, status, webauthn, git, listeners, running, load].concat(others));
-  warmSessionOpen();
 }
 
-// What loads once the list has drawn: the views a tap opens (lazy-views.js),
+// What loads once the list has drawn: the views a tap opens and the terminal's
+// scripts (lazy-views.js; `status` says whether the terminal is reachable),
 // and what no first screen draws: the copy button of rendered Markdown, which
 // only a lazily loaded view renders, the new-build prompt, which checks every
 // few minutes, and the Usage card, whose read is answered from server memory
 // so it can never hold up the list.
-function loadAfterList() {
-  prefetchViews();
+function loadAfterList(status) {
+  prefetchViews(status);
   Promise.all([import('./quote-copy.js'), import('./_vendored/build-watch/build-watch.js')])
     .then(function (m) {
       m[0].wireQuoteCopy();
@@ -267,24 +267,6 @@ function loadAfterList() {
   import('./copilot-usage.js')
     .then(function (mod) { mod.wireCopilotUsage(); })
     .catch(function (exc) { console.warn('usage card did not load', exc); });
-}
-
-// Once boot has settled, pay in idle time for what opening a session would
-// otherwise pay for on the tap: the chat's time formatter and the terminal
-// scripts (~95 KB gzipped, ~200 ms on a phone link, plus their parse). A terminal
-// this origin cannot reach never opens, so it gets no stack. A failed load is
-// left for the terminal open to retry.
-function warmSessionOpen() {
-  const unreachable = !!(state.status && state.status.terminal &&
-    state.status.terminal.reachable === false);
-  const run = function () {
-    import('./chat/transcript-text.js').then(function (m) { m.warmTimeFormat(); }).catch(function () {});
-    if (!unreachable) {
-      import('./terminal/xterm-loader.js').then(function (m) { return m.loadXtermScripts(); }).catch(function () {});
-    }
-  };
-  if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 5000 });
-  else window.setTimeout(run, 1000);
 }
 
 // Cache the URL's tokens and read its session links: ?terminal=<sid> (the

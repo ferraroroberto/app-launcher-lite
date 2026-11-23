@@ -19,6 +19,7 @@ import { state } from './state.js';
 import { opensInPcWindow, toast } from './api.js';
 import { fetchSessions } from './sessions.js';
 import { readApps } from './apps/apps-reads.js';
+import { resolveSessionMode, terminalAvailable } from './session-modes.js';
 
 // A group loads once; a failed load (a dropped connection) is retried by
 // the next call instead of staying failed.
@@ -269,10 +270,12 @@ function use(get, fn) {
 }
 
 export function openTerminal(session) {
+  startTerminalFor(session, 'terminal');
   return use(sessionViews, function (v) { return v.terminal.openTerminal(session); });
 }
 
 export function openSessionOverlay(session, wantMode) {
+  startTerminalFor(session, wantMode);
   return use(sessionViews, function (v) { return v.overlay.openSessionOverlay(session, wantMode); });
 }
 
@@ -574,12 +577,13 @@ export function startSessionViews() {
 }
 
 // Once the list has drawn, load every view, so the first tap on one opens
-// as fast as it did when they loaded with the page. A session row is the tap
-// that comes first, so its views start at once; the rest wait for the phone
-// to go idle. Safari has no requestIdleCallback; a short timer stands in.
-// On the Board the open tab's own code comes first: the list can draw before
-// it lands, and the session views would share the link with it. The Code and
-// Apps tabs' code, which a Board-first boot left out, leads the idle loads.
+// as fast as it did when they loaded with the page. The loads queue by how
+// soon a tap needs them, because on a phone link whatever loads alongside a
+// view delays it: the open tab's own code (on the Board, the list can draw
+// before it lands), then the session views and the Code and Apps tabs' code
+// (which a Board-first boot left out), then the terminal's scripts, then the
+// rest once the phone goes idle. Safari has no requestIdleCallback; a short
+// timer stands in.
 const PREFETCH_IDLE_TIMEOUT_MS = 3000;
 const PREFETCH_FALLBACK_MS = 300;
 
@@ -587,16 +591,44 @@ function prefetch(get) {
   return get().catch(function () { /* the first open retries and reports it */ });
 }
 
-export function prefetchViews() {
+function terminalUnreachable() {
+  return !!(state.status && state.status.terminal && state.status.terminal.reachable === false);
+}
+
+// The xterm stack (~95 KB gzipped) is the largest part of a first Terminal
+// open. Its stylesheet is only fetched here, because applying it restyles the
+// page; the open applies it. A terminal this origin cannot reach never opens,
+// so it gets no stack. A failed load is left for the open to retry.
+function warmSessionOpen() {
+  const loads = [import('./chat/transcript-text.js').then(function (m) { m.warmTimeFormat(); })];
+  if (!terminalUnreachable()) {
+    loads.push(import('./terminal/xterm-loader.js').then(function (m) { return m.loadXtermScripts(); }));
+  }
+  return Promise.all(loads).catch(function () {});
+}
+
+// A tap that opens a terminal before the session views have loaded fetches
+// the xterm stack alongside them, not after them.
+function startTerminalFor(session, wantMode) {
+  if (sessionViews.loaded() || !session || terminalUnreachable() || !terminalAvailable(session)) return;
+  if (resolveSessionMode(session, wantMode) !== 'terminal') return;
+  import('./terminal/xterm-loader.js').then(function (m) { return m.loadXterm(); }).catch(function () {});
+}
+
+// `statusReady` settles once the boot's status read has, which says whether
+// this origin can reach the terminal at all.
+export function prefetchViews(statusReady) {
   const first = state.tab === 'board' ? prefetch(boardTab) : Promise.resolve();
-  first.then(function () { prefetch(sessionViews); });
+  const views = first.then(function () { return Promise.all([prefetch(sessionViews), prefetch(appsView)]); });
   const run = function () {
-    [appsView, boardTab, boardDrawer, planNoteSheet, appsDialogs, composerKit, answerSheet, jobsTab, teamOsTab, settingsPane, screenView,
+    [boardTab, boardDrawer, planNoteSheet, appsDialogs, composerKit, answerSheet, jobsTab, teamOsTab, settingsPane, screenView,
       progressSheet].forEach(prefetch);
   };
-  if (typeof window.requestIdleCallback === 'function') {
-    window.requestIdleCallback(run, { timeout: PREFETCH_IDLE_TIMEOUT_MS });
-  } else {
-    setTimeout(run, PREFETCH_FALLBACK_MS);
-  }
+  Promise.all([views, statusReady]).then(warmSessionOpen).then(function () {
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(run, { timeout: PREFETCH_IDLE_TIMEOUT_MS });
+    } else {
+      setTimeout(run, PREFETCH_FALLBACK_MS);
+    }
+  });
 }
