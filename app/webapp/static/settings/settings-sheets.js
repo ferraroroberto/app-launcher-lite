@@ -306,6 +306,7 @@ const NUMBER_FIELDS = [
   ['terminalHistoryLines', 'terminal_history_lines', 'Terminal history'],
   ['largeUploadMaxMb', 'large_upload_max_mb', 'Large file limit'],
   ['copilotMonthlyCredits', 'copilot_monthly_credits', 'Monthly allowance'],
+  ['speechKeepHours', 'speech_keep_recordings_hours', 'Keep recordings'],
 ];
 
 // `change` fires once an edited field loses focus (or on Enter), never per

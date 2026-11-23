@@ -25,6 +25,7 @@ def test_settings_round_trip_and_key_is_write_only(webapp_client):
     client, app, overrides = webapp_client
     assert client.get("/api/config").json()["speech"] == {
         "enabled": False, "base_url": "", "model": "", "api_key_set": False,
+        "keep_recordings_hours": 24, "keep_recordings_hours_max": 720,
     }
     resp = client.post("/api/config", json={
         "speech_enabled": True, "speech_base_url": " http://127.0.0.1:8000/v1 ",
@@ -35,6 +36,7 @@ def test_settings_round_trip_and_key_is_write_only(webapp_client):
     assert body["speech"] == {
         "enabled": True, "base_url": "http://127.0.0.1:8000/v1",
         "model": "whisper-1", "api_key_set": True,
+        "keep_recordings_hours": 24, "keep_recordings_hours_max": 720,
     }
     assert "sekret" not in client.get("/api/config").text
     assert load_webapp_config(overrides["tmp_webapp_cfg_path"]).speech_api_key == "sekret"

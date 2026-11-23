@@ -55,7 +55,7 @@ from app.webapp.routers import (
 )
 from app.webapp.routers._helpers import STATIC_DIR
 from app.webapp.static_trim import trim_js
-from src import app_runtime, instance_role, private_network, request_timing, system_load
+from src import app_runtime, instance_role, private_network, recordings, request_timing, system_load
 from src.app_config import load_app_config
 from src.auth.webauthn_gate import WebAuthnGate
 from src.board import state_reconcile
@@ -378,6 +378,17 @@ async def _session_retention_tick(app: FastAPI) -> None:
 
 
 @asynccontextmanager
+def _prune_recordings(app: FastAPI) -> None:
+    """Drop dictation takes past Settings' keep window; a failure never blocks boot."""
+    cfg = getattr(app.state, "webapp_config", None)
+    if cfg is None:
+        return
+    try:
+        recordings.prune(cfg.speech_keep_recordings_hours)
+    except Exception as exc:  # noqa: BLE001 — never take the lifespan down
+        _log.warning("⚠️ could not prune dictation recordings: %s", exc)
+
+
 async def _lifespan(app: FastAPI):
     # The loop's own default executor, swapped for one that reports queue and
     # worker time to the request that submitted the work (src/request_timing.py).
@@ -386,6 +397,7 @@ async def _lifespan(app: FastAPI):
     # Launched apps outlive a launcher restart; take the previous launcher's
     # records back now so the line naming any that died lands at boot.
     await asyncio.to_thread(app_runtime.adopt_previous)
+    _prune_recordings(app)
     # The jobs runtime snapshot behind /api/jobs and /api/board. It
     # only walks while those polls are asking, so every instance runs it:
     # the reads it serves happen on every instance too.

@@ -213,7 +213,8 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         lambda p: p == "/api/transcribe" or p.startswith("/api/transcribe/"),
         "passkey",
         "Voice dictation (#165/#168): the recording is as sensitive as terminal "
-        "input — covers the single-shot proxy and the streamed/SSE session proxy.",
+        "input — covers the single-shot proxy, the streamed/SSE session proxy and "
+        "the takes kept on disk (/api/transcribe/recordings).",
     ),
     (
         lambda p: p == "/api/ocr",

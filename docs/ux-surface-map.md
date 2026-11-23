@@ -1519,12 +1519,18 @@ flowchart LR
   - a Dictation switch, the Base URL, an optional Model and an optional API key that is never shown again
   - Remove key, once a key is set
   - Test connection, with its result line
+  - Keep recordings (hours), 0 keeping none
+  - Recent recordings, newest first, with Refresh; each take shows its time, length and status, with Play and Transcribe, and a transcript with Copy once transcribed
   - Done
 - **Does:**
   - every field saves as it changes
   - Test connection sends a short test recording with the saved settings and reports Transcribes, Refuses audio, Reachable (transcription not confirmed), Refused or Unknown, with a reason
   - with Dictation off no record button shows in any message box
-- **States:** the Settings row reads Off, On or No URL
+  - the recordings list loads each time the sheet opens; Play fetches the kept audio, Transcribe sends it to the saved endpoint again
+- **States:**
+  - the Settings row reads Off, On or No URL
+  - a take reads Recording, Transcribed, Failed (with the reason), Not transcribed or Incomplete (its page closed mid-take)
+  - with nothing kept the list reads No recordings kept; a list that could not be read says so
 
 ### `settings.preset-menu` Launch preset menu
 

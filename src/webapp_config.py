@@ -49,6 +49,7 @@ from src.webapp_settings.values import (  # noqa: F401 — re-exported for webap
     MAX_LARGE_UPLOAD_MAX_MB,
     MAX_TERMINAL_HISTORY_LINES, MIN_CHIEF_AUTO_COMPACT_THRESHOLD, MIN_CHIEF_WORKER_CAP,
     MIN_COPILOT_MONTHLY_CREDITS, MIN_LARGE_UPLOAD_MAX_MB, MIN_TERMINAL_HISTORY_LINES, SESSION_HOST_PORT_ENV,
+    DEFAULT_SPEECH_KEEP_RECORDINGS_HOURS, MAX_SPEECH_KEEP_RECORDINGS_HOURS, MIN_SPEECH_KEEP_RECORDINGS_HOURS,
     VALID_CHIEF_WORKER_CAP_SCOPES, VALID_COPILOT_CONTEXTS, VALID_COPILOT_EFFORTS,
     WEBAPP_CONFIG_PATH_ENV, check_mirror_browser,
 )
@@ -177,6 +178,9 @@ class WebappConfig:
     speech_base_url: str = ""
     speech_model: str = ""
     speech_api_key: str = ""
+    # Hours each dictation take stays on disk (``src/recordings.py``) so a
+    # crashed page or a failed transcription loses nothing; 0 keeps none.
+    speech_keep_recordings_hours: int = DEFAULT_SPEECH_KEEP_RECORDINGS_HOURS
     # GitHub Copilot CLI launch settings (`src.launching.flags.build_copilot_flags`).
     # `copilot_models` is the per-install list of model ids the pickers offer
     # (explicit ids are gated by the account's plan); `copilot_model` is the
@@ -743,6 +747,12 @@ def _validate(cfg: WebappConfig) -> None:
         raise ValueError(
             f"copilot_monthly_credits must be between {MIN_COPILOT_MONTHLY_CREDITS} "
             f"and {MAX_COPILOT_MONTHLY_CREDITS}; got {cfg.copilot_monthly_credits}"
+        )
+    if not (MIN_SPEECH_KEEP_RECORDINGS_HOURS <= cfg.speech_keep_recordings_hours
+            <= MAX_SPEECH_KEEP_RECORDINGS_HOURS):
+        raise ValueError(
+            f"speech_keep_recordings_hours must be between {MIN_SPEECH_KEEP_RECORDINGS_HOURS} "
+            f"and {MAX_SPEECH_KEEP_RECORDINGS_HOURS}; got {cfg.speech_keep_recordings_hours}"
         )
     if cfg.speech_base_url:
         parsed = urlparse(cfg.speech_base_url)

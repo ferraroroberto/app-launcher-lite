@@ -185,6 +185,10 @@ export const els = {
   speechApiKeyClear: document.getElementById('speechApiKeyClear'),
   speechTest: document.getElementById('speechTest'),
   speechTestResult: document.getElementById('speechTestResult'),
+  speechKeepHours: document.getElementById('speechKeepHours'),
+  speechRecordings: document.getElementById('speechRecordings'),
+  speechRecordingsState: document.getElementById('speechRecordingsState'),
+  speechRecordingsRefresh: document.getElementById('speechRecordingsRefresh'),
   tabBoard: document.getElementById('tabBoard'),
 
   boardColumns: document.getElementById('boardColumns'),

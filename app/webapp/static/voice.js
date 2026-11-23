@@ -16,6 +16,9 @@
  * the button is at rest again at once with "Dictation cancelled", and whatever
  * text is already in the textarea stays. The endpoint has no abort route, so
  * the upload is simply dropped.
+ *
+ * Beside the upload, a copy of each take goes to disk while it is recorded
+ * (voice-keep.js), so a crash or a failed transcription loses no audio.
  */
 
 import { AuthRequiredError, apiFailToast, apiRaw, apiRawJson, readToken, toast } from './api.js';
@@ -28,6 +31,7 @@ import { usage } from './usage.js';
 import { attachMicNotice } from './_vendored/mic-notice/mic-notice.js';
 import { REMOTE_MIC_HINT, inRemoteDesktopSession } from './voice-remote.js';
 import { watchForPause } from './voice-autostop.js';
+import { keepTake } from './voice-keep.js';
 
 const _CHUNK_MS = 1000;
 // A chunk upload that fails (network error or non-2xx) is retried this many
@@ -103,6 +107,8 @@ function newDictationState(opts) {
     api: null,
     recorder: null,
     recordChunks: [],
+    // The take's copy on disk (voice-keep.js), from start until its stop.
+    keep: null,
     // The live getUserMedia stream, held from the moment it's granted until
     // the recorder's own 'stop' handler releases its tracks. Lets dispose()
     // release the mic even in the narrow window after permission is
@@ -508,6 +514,9 @@ function watchTakePause(d, stream) {
 }
 
 function handleRecorderStop(d, stream, mime) {
+  const keep = d.keep;
+  d.keep = null;
+  if (keep) keep.stop();
   clearInputNotice(d);
   stream.getTracks().forEach(function (tr) { tr.stop(); });
   setRecordingUI(d, false);
@@ -522,6 +531,7 @@ function handleRecorderStop(d, stream, mime) {
     closeVoiceEvents(d);
     d.voiceSession = null;
     d.streaming = false;
+    if (keep) keep.end('stopped');
     return;
   }
   if (d.streaming) {
@@ -531,7 +541,8 @@ function handleRecorderStop(d, stream, mime) {
     const blob = new Blob(d.recordChunks, { type: type });
     d.recordChunks = [];
     d.recorder = null;
-    if (blob.size) sendBufferedRecording(d, blob);
+    if (blob.size) sendBufferedRecording(d, blob, keep);
+    else if (keep) keep.end('stopped');
   }
 }
 
@@ -598,6 +609,7 @@ async function startRecording(d) {
   // Timeslice only matters when streaming — it forces periodic
   // dataavailable so chunks flow during the take.
   d.recorder.start(d.streaming ? _CHUNK_MS : undefined);
+  if (!d.streaming) d.keep = keepTake(stream, d.recorder.mimeType || mime);
   setRecordingUI(d, true);
   watchTakePause(d, stream);
   watchTakeLevel(d, stream);
@@ -730,10 +742,13 @@ async function uploadForm(blob) {
   return fd;
 }
 
-// Single-shot: the whole take in one POST to /api/transcribe.
-async function sendBufferedRecording(d, blob) {
+// Single-shot: the whole take in one POST to /api/transcribe. `keep`, the
+// take's copy on disk, learns the outcome only after the transcript landed.
+async function sendBufferedRecording(d, blob, keep) {
   const signal = d.takeCtrl.signal;
   const op = beginFinishing(d);
+  let outcome = 'stopped';
+  let failure = '';
   // A dispose() or a cancel that lands mid-request must not
   // write a late transcript into whatever textarea getTextarea() now
   // resolves to.
@@ -745,6 +760,7 @@ async function sendBufferedRecording(d, blob) {
       method: 'POST', terminalToken: readTerminalToken(), body: fd, signal: signal,
     });
     if (gone()) return;
+    outcome = 'transcribed';
     const text = body && body.transcript;
     if (body && body.silent) {
       toast('Nothing heard — silent recording', undefined, { icon: 'mic' });
@@ -765,9 +781,14 @@ async function sendBufferedRecording(d, blob) {
     ta.focus();
     toast('Transcribed — review, then tap Send.', 'good', { icon: 'mic' });
   } catch (exc) {
-    if (!gone()) apiFailToast('Transcription failed', exc);
+    if (!gone()) {
+      outcome = 'failed';
+      failure = (exc && exc.message) || String(exc);
+      apiFailToast('Transcription failed', exc);
+    }
   } finally {
     endFinishing(d, op);
+    if (keep) keep.end(outcome, failure);
   }
 }
 

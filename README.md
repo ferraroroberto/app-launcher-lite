@@ -96,6 +96,8 @@ Directories (projects dir and ignore globs, apps scan root, team-os dir), GitLab
 
 Settings > Speech to text turns on the record button in the Board chat and the session composer: tap it, speak, tap again, and the transcript lands in the box for review before you send it. Audio goes to `<base URL>/audio/transcriptions` in the OpenAI shape, so the endpoint is whatever you set: the local LLM hub (`http://127.0.0.1:8000/v1`), another machine's server, or any OpenAI-compatible host, with an optional model name and API key. **Test connection** reports `reachable`, `refused` or `unknown` for the saved endpoint; it proves a server answers, and only a real recording proves transcription. With the switch off no record button shows. The browser needs microphone access, which on a phone means the secure (Tailscale HTTPS) address. The recorder offers mp4 before webm because the hub's parakeet and whisper backends cannot decode a browser's webm take; for the hub, set the model to `parakeet-tdt-0.6b-v3` (see its `GET /v1/models`).
 
+Each take is also saved on this PC while you record and kept for the retention window (`speech_keep_recordings_hours`, 24 hours by default, 0 for none), so a closed page or a failed transcription loses no audio: Settings > Speech to text > **Recent recordings** plays a kept take, transcribes it again and copies the text.
+
 ## Configuration
 
 There is no `.env`. Committed samples live next to each gitignored real file in `config/`: `config.sample.json`, `webapp_config.sample.json`, `apps.sample.json`, `jobs.sample.json`. The full key reference is [docs/config.md](docs/config.md); the keys you set on a fresh machine:
@@ -113,6 +115,7 @@ There is no `.env`. Committed samples live next to each gitignored real file in 
 | `webapp_config.json` | `speech_base_url` | `""` | Base URL of any OpenAI-shaped speech server, e.g. `http://127.0.0.1:8000/v1`; audio goes to `<base>/audio/transcriptions` as 16 kHz mono 16-bit WAV, which every such server reads. The page converts each take; an upload that arrives in another shape is converted with ffmpeg when it is on PATH, else refused as an unsupported format. Settings' Test connection sends a short test recording and reports Transcribes only when it comes back transcribed. |
 | `webapp_config.json` | `speech_model` | `""` | Model name sent with each upload; omitted when empty. |
 | `webapp_config.json` | `speech_api_key` | `""` | Bearer key sent when set. A secret: kept in the gitignored file and never returned by the API. |
+| `webapp_config.json` | `speech_keep_recordings_hours` | `24` | Hours each dictation take stays on disk under the gitignored `webapp/recordings/`, from 0 (keep none) to 720. Older takes are pruned at start-up and when a new take begins. |
 | `webapp_config.json` | `gitlab_host` | `""` | Self-hosted GitLab (rides glab's `GITLAB_HOST`). Empty means glab's default context. |
 | `webapp_config.json` | `sessions_state_file` | `~/.copilot/hooks/state/sessions-state.json` | Session-status file written by the session-state hook (`copilot/hooks/`). |
 | `webapp_config.json` | `copilot_models` | `["gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "mai-code-2-flash"]` | Model ids the pickers offer. Edited here, read-only in the UI. |

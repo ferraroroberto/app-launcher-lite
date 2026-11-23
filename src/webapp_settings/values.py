@@ -86,6 +86,13 @@ DEFAULT_LARGE_UPLOAD_MAX_MB = 2048
 MIN_LARGE_UPLOAD_MAX_MB = 1
 MAX_LARGE_UPLOAD_MAX_MB = 10240
 
+# Settings > Speech to text: how long each dictation take is kept on disk.
+# A day covers coming back to a failed take after a night; the ceiling (a
+# month) keeps a typo from hoarding private audio indefinitely.
+DEFAULT_SPEECH_KEEP_RECORDINGS_HOURS = 24
+MIN_SPEECH_KEEP_RECORDINGS_HOURS = 0
+MAX_SPEECH_KEEP_RECORDINGS_HOURS = 720
+
 # The Usage card's monthly Copilot allowance, in AI credits. The account's
 # plan cannot be read from this machine, so the size is a setting; 300 is the
 # published Pro and Business monthly allowance. The ceiling only keeps a typo
