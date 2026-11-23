@@ -30,6 +30,7 @@ from app.webapp.observability import (
     ensure_slow_log_handler,
     ensure_warning_log_handler,
 )
+from app.webapp.restart_targets import build_restart_router
 from app.webapp.routers import (
     apps,
     auth,
@@ -541,6 +542,8 @@ def create_app() -> FastAPI:
     app.include_router(team_os.router)
     app.include_router(speech.router)
     app.include_router(webauthn.router)
+    # The build readout's restart sheet: the app, and the session-host.
+    app.include_router(build_restart_router(app))
     # Local-only view/tap log. Behind the bearer-token middleware like
     # every /api route; static/usage.js hands the vendored client the bearer
     # header through its `headers` option.

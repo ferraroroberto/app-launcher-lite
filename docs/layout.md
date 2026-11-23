@@ -12,6 +12,7 @@ app-launcher-lite/
 │   ├── tray/                  # pystray icon: owns the webapp + cloudflared + session-host; watchdog, self-heal, Tailscale helper
 │   └── webapp/
 │       ├── server.py          # FastAPI app: route registration, auth gating, WS proxy
+│       ├── restart_targets.py # the build readout's restart sheet: its two targets (app, session-host + live session count) and the passkey guard
 │       ├── manager.py         # adopt-or-spawn webapp lifecycle
 │       ├── serve.py           # the one launch entry: hypercorn (HTTP/2 over TLS) on the selector loop, uvicorn as the fallback
 │       ├── shell_html.py      # splices static/views/*.html into index.html where its include markers sit
@@ -35,6 +36,7 @@ app-launcher-lite/
 │   ├── app_config.py           # log level, webapp embed section, the webapp port
 │   ├── webapp_config.py        # host / scan paths / agent settings / secrets / terminal knobs
 │   ├── webapp_settings/        # the defaults and value sets every webapp_config field validates against; performance.py is the speed-limit table and presets
+│   ├── self_restart.py         # vendored: /api/restart routes, the detached restart runner and its run record
 │   ├── agents.py               # coding-agent registry (Copilot CLI only) + PATH detection
 │   ├── registry.py             # apps registry (load / save / scan)
 │   ├── scanner.py              # bat classifier + project-dir + team-os skill discovery

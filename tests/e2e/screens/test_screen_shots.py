@@ -120,6 +120,8 @@ _MOCKS = {
                             "allowance": 300, "pace_pct": 70.0, "cycle_start": "2026-01-01T00:00:00+00:00",
                             "reset_at": "2026-02-01T00:00:00+00:00", "source": "a fictional log",
                             "scope": "this machine", "reason": ""},
+    # The build readout's restart sheet: answered, the readout gains its underline.
+    r"/api/restart": {"targets": [{"id": "app", "label": "Restart app", "warning": ""}], "last": None},
 }
 
 #: tab button -> the first row that proves the tab rendered its fixture.
@@ -141,6 +143,19 @@ def _mock_data(page: Page) -> None:
         page.route(re.compile(rf".*{pattern}(\?.*)?$"), _json_route(body))
 
 
+def _goto(page: Page, base_url: str) -> None:
+    """Boot the page and wait for the build readout's restart wiring, which
+    lands after first paint and would otherwise race the capture.
+
+    The readout's dotted underline rasterises its dots a little differently
+    from run to run (the glyphs above it do not move), so the capture draws
+    it solid: still visibly tappable, and the same pixels every run.
+    """
+    page.goto(f"{base_url}/", wait_until="domcontentloaded")
+    expect(page.locator("#buildReadout")).to_have_attribute("role", "button")
+    page.add_style_tag(content=".page-foot-restart { text-decoration-style: solid; }")
+
+
 @pytest.mark.parametrize("name", _TABS)
 def test_tab_shots(browser: Browser, base_url: str, name: str) -> None:
     tab, ready = _TABS[name]
@@ -148,7 +163,7 @@ def test_tab_shots(browser: Browser, base_url: str, name: str) -> None:
         with variant_page(browser, variant) as page:
             page.add_init_script(f"localStorage.setItem('app-launcher.theme', '{variant.theme}');")
             _mock_data(page)
-            page.goto(f"{base_url}/", wait_until="domcontentloaded")
+            _goto(page, base_url)
             page.locator(tab).click()
             expect(page.locator(ready).first).to_be_visible()
             shot(page, SHOTS_DIR / f"{name}-{variant.slug}.png")
@@ -192,7 +207,7 @@ def test_html_viewer_shots(browser: Browser, base_url: str) -> None:
             page.route(re.compile(base + r"/outbox/[0-9a-f]+$"), lambda route: route.fulfill(
                 status=200, content_type="text/html; charset=utf-8", body=_REPORT_HTML))
             stub_session_mirror(page)
-            page.goto(f"{base_url}/", wait_until="domcontentloaded")
+            _goto(page, base_url)
             open_session_row(page, page.locator('#sessionsList li[data-session-id="s-alpha"]'), mode="chat")
             card = page.locator("#transcriptList .tr-file-card[data-kind='html']")
             expect(card.locator("iframe").content_frame.locator("h1")).to_have_text("Garden plan")
@@ -224,7 +239,7 @@ def test_settings_shots(browser: Browser, base_url: str) -> None:
             page.route(re.compile(r".*/api/config$"), _json_route(_CONFIG))
             page.route(re.compile(r".*/api/desktop-session$"), _json_route(
                 {"state": "local", "this_pc": True}))
-            page.goto(f"{base_url}/", wait_until="domcontentloaded")
+            _goto(page, base_url)
             page.locator("#tabClaude").click()
             open_settings(page)
             row = page.locator('#paneSettings [data-sheet="gitlabSheet"]')

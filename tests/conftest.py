@@ -179,6 +179,20 @@ def project_root() -> Path:
 
 
 @pytest.fixture(autouse=True)
+def _no_real_restart(monkeypatch):
+    """Never start a real restart from a test: the tray recipe, or the
+    session-host's, which ends every live terminal session. Patched on the
+    vendored module, which the app's restart router looks up per call; a test
+    that reaches the spawn replaces this with its own recorder."""
+    from src import self_restart
+
+    def _refuse(spec_path, root):
+        raise AssertionError(f"a test tried to start a real restart: {spec_path}")
+
+    monkeypatch.setattr(self_restart, "spawn_detached", _refuse)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_mirror_window(request, monkeypatch):
     """Never spawn a real PC mirror window from a non-e2e test (issue #279).
 
