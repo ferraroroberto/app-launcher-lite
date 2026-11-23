@@ -114,26 +114,29 @@ def test_pace_follows_the_month_length() -> None:
     assert copilot_usage.pace_pct(feb_start, feb_start, feb_reset) == 0.0
 
 
-def _plan_cache(path: Path, *, entitlement=1000, remaining=750.5, unlimited=False,
-                reset="2026-12-01T00:00:00.000Z", retrieved="2026-11-22T09:00:00.000Z",
-                extra_entries: dict | None = None) -> Path:
-    """A fake CLI user cache: ``//`` header lines, then entries keyed by sign-in."""
-    entry = {
+def _entry(*, entitlement=1000, remaining=750.5, unlimited=False, billing=True,
+           reset="2026-12-01T00:00:00.000Z", retrieved="2026-11-22T09:00:00.000Z") -> dict:
+    """One synthetic sign-in's cached user response."""
+    quota = {"entitlement": entitlement, "quota_remaining": remaining,
+             "unlimited": unlimited, "timestamp_utc": "2026-11-22T09:00:00.0000000Z"}
+    if billing is not None:
+        quota["token_based_billing"] = billing
+    return {
         "schemaVersion": 1,
         "retrievedAt": retrieved,
         "response": {
-            "login": "someone",
             "quota_reset_date_utc": reset,
             "quota_snapshots": {
                 "chat": {"entitlement": 0, "quota_remaining": 0, "unlimited": True},
-                "premium_interactions": {
-                    "entitlement": entitlement, "quota_remaining": remaining,
-                    "unlimited": unlimited, "timestamp_utc": "2026-11-22T09:00:00.0000000Z",
-                },
+                "premium_interactions": quota,
             },
         },
     }
-    doc = {"copilotUserCache": {"v1:a": entry, **(extra_entries or {})}}
+
+
+def _plan_cache(path: Path, *, extra_entries: dict | None = None, **entry_kwargs) -> Path:
+    """A fake CLI user cache: ``//`` header lines, then entries keyed by sign-in."""
+    doc = {"copilotUserCache": {"v1:a": _entry(**entry_kwargs), **(extra_entries or {})}}
     path.write_text("// Disposable cache, safe to delete.\n// Settings live elsewhere.\n" + json.dumps(doc),
                     encoding="utf-8")
     return path
@@ -146,11 +149,27 @@ def test_plan_reads_used_as_entitlement_minus_remaining(tmp_path: Path) -> None:
     assert plan.as_of.startswith("2026-11-22T09:00")
 
 
-def test_plan_takes_the_newest_sign_in(tmp_path: Path) -> None:
-    older = {"retrievedAt": "2026-11-01T00:00:00.000Z", "response": {"quota_snapshots": {
-        "premium_interactions": {"entitlement": 50, "quota_remaining": 0}}}}
-    plan = copilot_usage.read_plan(_plan_cache(tmp_path / "c.json", extra_entries={"v1:b": older}), NOW)
-    assert plan.allowance == 1000.0
+def test_plan_picks_the_one_sign_in_still_in_its_cycle_not_the_newest(tmp_path: Path) -> None:
+    # The other account's entry was fetched later but its cycle has ended, so
+    # it cannot be the plan the CLI's status line shows now.
+    lapsed = _entry(entitlement=50, remaining=0, reset="2026-11-15T00:00:00.000Z",
+                    retrieved="2026-11-22T09:59:00.000Z")
+    plan = copilot_usage.read_plan(_plan_cache(tmp_path / "c.json", extra_entries={"v1:b": lapsed}), NOW)
+    assert (plan.state, plan.used_credits, plan.allowance) == ("ok", 249.5, 1000.0)
+
+
+def test_two_current_sign_ins_are_unknown_not_the_newest(tmp_path: Path) -> None:
+    other = _entry(entitlement=50, remaining=0, retrieved="2026-11-22T09:59:00.000Z")
+    plan = copilot_usage.read_plan(_plan_cache(tmp_path / "c.json", extra_entries={"v1:b": other}), NOW)
+    assert plan.state == "unknown" and plan.used_credits is None
+    assert "2 Copilot accounts" in plan.reason and "can't tell which" in plan.reason
+
+
+def test_plan_names_its_billing_unit(tmp_path: Path) -> None:
+    credits = copilot_usage.read_plan(_plan_cache(tmp_path / "a.json"), NOW)
+    requests = copilot_usage.read_plan(_plan_cache(tmp_path / "b.json", billing=False), NOW)
+    assert (credits.state, credits.billed_in_credits) == ("ok", True)
+    assert (requests.state, requests.billed_in_credits, requests.allowance) == ("ok", False, 1000.0)
 
 
 @pytest.mark.parametrize("kwargs, reason", [
@@ -158,6 +177,7 @@ def test_plan_takes_the_newest_sign_in(tmp_path: Path) -> None:
     ({"entitlement": 0}, "no usable allowance"),
     ({"remaining": None}, "no usable allowance"),
     ({"reset": "2026-11-01T00:00:00.000Z"}, "predates the last reset"),
+    ({"billing": None}, "does not say whether the plan is billed"),
 ])
 def test_plan_that_cannot_give_a_percent_is_unknown(tmp_path: Path, kwargs: dict, reason: str) -> None:
     plan = copilot_usage.read_plan(_plan_cache(tmp_path / "c.json", **kwargs), NOW)
@@ -220,3 +240,31 @@ def test_payload_never_claims_zero_when_this_machine_is_unknown() -> None:
     body = copilot_usage.payload(copilot_usage.Reading("unknown", reason="locked"), None, 300, NOW)
     assert (body["state"], body["today_state"], body["today_credits"], body["today_reason"]) == (
         "pending", "unknown", None, "locked")
+
+
+def _credits_plan(used: float) -> copilot_usage.PlanReading:
+    return copilot_usage.PlanReading("ok", used_credits=used, allowance=1000.0,
+                                     reset_at=datetime(2026, 12, 1, tzinfo=timezone.utc),
+                                     billed_in_credits=True)
+
+
+def test_payload_plan_below_this_machine_alone_is_unknown() -> None:
+    machine = copilot_usage.Reading("ok", used_credits=300.0, today_credits=3.0)
+    body = copilot_usage.payload(machine, _credits_plan(250.0), 300, NOW)
+    assert (body["state"], body["used_pct"], body["used_credits"]) == ("unknown", None, None)
+    assert "older or from another account" in body["reason"]
+    assert (body["allowance"], body["allowance_source"]) == (300, "config")
+    assert body["machine_month_credits"] == 300.0
+
+
+def test_payload_plan_at_or_above_this_machine_is_shown() -> None:
+    machine = copilot_usage.Reading("ok", used_credits=250.0, today_credits=3.0)
+    body = copilot_usage.payload(machine, _credits_plan(250.0), 300, NOW)
+    assert (body["state"], body["used_pct"]) == ("ok", 25.0)
+
+
+def test_payload_request_plan_is_not_compared_with_this_machines_credits() -> None:
+    # A premium-request plan counts requests, not credits: the units differ.
+    plan = copilot_usage.PlanReading("ok", used_credits=10.0, allowance=300.0, billed_in_credits=False)
+    machine = copilot_usage.Reading("ok", used_credits=40.0, today_credits=1.0)
+    assert copilot_usage.payload(machine, plan, 300, NOW)["used_pct"] == 3.3
