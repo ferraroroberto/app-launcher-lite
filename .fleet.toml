@@ -1048,7 +1048,7 @@ derive = "usageState"
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "9e1ce16f6ce6e0c3da07cd6e63387c0d203bf573"
+synced_sha = "518753600488b5ec7f712c9196c6b1d0f65325e1"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
@@ -1173,3 +1173,19 @@ reason = "already present"
 [[upstream.skipped]]
 sha = "ffd185a33a946d22c7dc05c56df53b54a3d583ce"
 reason = "already present"
+
+[[upstream.skipped]]
+sha = "bca055171cad694b09106a20157662733dae4ae5"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "a0fc9f9138da2d9ee32e823312f5f28942bf0983"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "61881a016957f43a165c5c3a67348acd52ef8b8c"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "2bba9c28cb067d2e17a9f219554eef686cd23324"
+reason = "local request timing keeps resizable pools for Settings Performance, which the shared middleware lacks"
