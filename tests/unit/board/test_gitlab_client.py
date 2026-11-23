@@ -147,13 +147,6 @@ def test_host_rides_gitlab_host(monkeypatch):
     assert all(kw["env"]["GITLAB_HOST"] == "gitlab.example.test" for _, kw in fake.calls)
 
 
-def test_recently_filled_reads_the_cache_stamp(monkeypatch):
-    assert forge.recently_filled() is False
-    _install(monkeypatch, {})
-    forge.refresh("grp")
-    assert forge.recently_filled() is True
-
-
 def test_glab_cmd_env_must_be_a_json_argv(monkeypatch):
     monkeypatch.setenv(forge.GLAB_CMD_ENV, "not json")
     with pytest.raises(forge.GlabError):

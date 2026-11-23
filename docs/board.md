@@ -36,8 +36,8 @@ All Board routes live in `app/webapp/routers/board.py`, except the `/api/board/c
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
-| `GET /api/board` | bearer-token | The columns, the **5 s poll target**. Cheap only: the live session list, two small state-file reads and one jobs-runs walk run concurrently, plus a pure in-memory read of the GitLab cache. **No `glab` subprocess ever runs on this path.** |
-| `POST /api/board/github/refresh` | bearer-token | Runs the GitLab reads and replaces the cache. The **only** place `glab` is invoked. The path keeps the full app's name so the Board's client code is shared; it refreshes GitLab. |
+| `GET /api/board` | bearer-token | The columns, the **5 s poll target**. Cheap only: the live session list, two small state-file reads and one jobs-runs walk run concurrently, plus a pure in-memory read of the GitLab cache. **No `glab` subprocess ever runs on this path**: a poll carrying `X-Board-View: 1` may start the background refresh (see below) but never waits on it. |
+| `POST /api/board/github/refresh` | bearer-token | Runs the GitLab reads and replaces the cache: the ↻ tap, which always runs. The only other caller is the server's own once-per-TTL refresh while a Board is viewed (see below). The path keeps the full app's name so the Board's client code is shared; it refreshes GitLab. |
 | `GET /api/board/done` | bearer-token | One earlier local day of closed issues, for Show earlier. |
 | `GET /api/board/proof/{repo}/{pr}` | Tailscale + passkey | A merged UI MR's visual-proof report. |
 | `POST /api/board/issues/file` | Tailscale + passkey | File a new GitLab issue in a project of the group. |
@@ -56,7 +56,7 @@ The `GET /api/board` response carries the columns, source health (`github: {avai
 
 ## Red pipelines
 
-A project's default-branch pipeline state is read by the same forge refresh as the issues and merge requests (the ↻ button, or one stale tab activation), never on the 5 s poll: one project-list call plus one `pipelines` call per project, `ref` the default branch the project row names, in a pool of four. A project is `red` when its latest *finished* pipeline failed, `green` when that one succeeded; a pipeline still running, cancelled or skipped is looked past. A project with no pipeline, or none finished, makes no row, and neither does a green one.
+A project's default-branch pipeline state is read by the same forge refresh as the issues and merge requests (the ↻ button, or the server's own refresh while a Board is viewed), never as part of the 5 s poll's read: one project-list call plus one `pipelines` call per project, `ref` the default branch the project row names, in a pool of four. A project is `red` when its latest *finished* pipeline failed, `green` when that one succeeded; a pipeline still running, cancelled or skipped is looked past. A project with no pipeline, or none finished, makes no row, and neither does a green one.
 
 A red project is one **Other** row with a `CI failed` chip (danger), its default branch and how long the red streak has run, opening the failed pipeline on GitLab. A project whose pipelines could not be read, or whose default branch the project row does not name, is a `CI unknown` row (attention), never green; a failed project-list read turns every project last known into `unknown` rather than carrying an old red or green forward. A later green pipeline drops the row at the next refresh. The row has no dismiss: the job dismissal store is keyed by job run, and a red branch is a live problem. A red row counts toward the header's "N failing". The probe and what stays unverified: [gitlab.md](gitlab.md#what-the-board-reads).
 
@@ -205,7 +205,12 @@ GitLab data is fetched **server-side via `glab`** into a lock-guarded module-lev
 
 An empty `gitlab_group` keeps the panel dormant with a Settings hint; `glab` missing from `PATH` or not signed in surfaces as the same `error` badge.
 
-The cache is refreshed **only** by the manual **Refresh** button, by **tab activation** when the cache is stale (never fetched, or older than two minutes), and by the Board's **own timer**: from a visible, foreground page on the Board tab, a poll refreshes a cache that was never filled or is older than five minutes (gate in `board/github-refresh.js`). A hidden page never refreshes, at most one attempt runs per age so a failing `glab` cannot loop, and the failure stays quiet (the Backlog footer keeps showing the cache's age). A poll of a fresh cache never runs `glab`. This mirrors the Coding tab's git-status on-demand contract.
+The cache is refreshed by exactly two things:
+
+- the manual **Refresh** button (`POST /api/board/github/refresh`, always runs), or
+- the **server**, while a Board is being viewed: the Board's 5 s poll from a visible, foreground page sends `X-Board-View: 1` on `GET /api/board`, and on such a poll `src/board/view_refresh.py` starts one background refresh (the `glab` reads, pipelines included, and the owner checks) when the cache was never filled or its `fetched_at` is older than 5 minutes (`REFRESH_TTL_SECONDS`). The decision is server-wide and single-flight, so five open tabs cost the same one refresh per 5 minutes as one, and a hidden or backgrounded page, which sends no header, starts nothing. At most one attempt per TTL, so a failing `glab` cannot loop: the cache keeps its older stamp, the status line shows the error, and the next try waits out the TTL. Opening the tab polls at once, so a stale cache starts refreshing then; a Board-first boot's early read carries the header too.
+
+A poll of a fresh cache never runs `glab` (it only reads the snapshot). The pipeline read names each project's default branch from the project list it already fetched, so a refresh spawns no `git` and makes no separate default-branch call. This mirrors the Coding tab's git-status on-demand contract.
 
 ## Security boundary
 

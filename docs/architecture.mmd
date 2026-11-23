@@ -94,6 +94,7 @@ publishes a managed lane's missed turn end or exit"]
     SESSCLIENT["clients/session.py\nHTTP client to the session-host over loopback"]
     FORGE["clients/gitlab.py\nglab api reads (issues, MRs, done today)\nand writes (file issue, note); cached snapshot,\nnever on a poll"]
     BOARD["board/\nassembly: sessions + jobs + GitLab snapshot,\nowner checks, proof reports, claims"]
+    VIEWREFRESH["board/view_refresh.py\none single-flight GitLab refresh\nper TTL while a Board is viewed"]
     CHIEF["chief/\nplan, journal, answers, dispatch brief, identity"]
     JOBS["jobs/ + jobs_kinds/\nTask Scheduler \\AppLauncherLite\\, runs, coverage"]
     SCANNER["scanner.py + registry.py\nproject dirs, *.bat classify, team-os skills,\nrepo web/issues URL for any host"]
@@ -109,6 +110,8 @@ publishes a managed lane's missed turn end or exit"]
   R_TEAMOS --> SESSCLIENT
   R_BOARD --> BOARD
   R_BOARD --> FORGE
+  R_BOARD -->|"viewed poll starts the refresh"| VIEWREFRESH
+  VIEWREFRESH --> FORGE
   R_PROGRESS --> FORGE
   R_BOARD --> CHIEF
   R_JOBS --> JOBS

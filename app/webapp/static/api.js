@@ -120,6 +120,13 @@ function takeBootPrefetch(path, opts) {
   return hit.res.catch(function () { return null; });
 }
 
+// Whether a plain GET of `path` would still take the boot prefetch, so a
+// caller that adds headers of its own can leave them off that one read.
+export function bootPrefetchPending(path) {
+  const store = window.__bootPrefetch;
+  return !!(store && store[path]);
+}
+
 export async function api(path, opts) {
   opts = opts || {};
   const early = takeBootPrefetch(path, opts);

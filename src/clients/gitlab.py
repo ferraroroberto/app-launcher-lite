@@ -518,18 +518,6 @@ _cache: Dict[str, Any] = {
     "prs": [], "done": [], "ci": _empty_ci(), "error": None,
 }
 
-# Matches the owner-check sweep's own cooldown.
-AUTO_REFRESH_COOLDOWN_SECONDS = 60
-
-
-def recently_filled(seconds: float = AUTO_REFRESH_COOLDOWN_SECONDS) -> bool:
-    """Whether a refresh landed inside ``seconds``; never-filled or unreadable is no."""
-    stamp = _parse(snapshot().get("fetched_at"))
-    if stamp is None:
-        return False
-    return (datetime.now(timezone.utc) - stamp).total_seconds() < seconds
-
-
 def snapshot() -> Dict[str, Any]:
     """The cached GitLab view: a pure memory read, safe on every poll."""
     with _lock:

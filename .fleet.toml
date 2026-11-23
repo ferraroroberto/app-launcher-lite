@@ -460,7 +460,7 @@ time_budget_s         = 1200
 # and changes the live session count between load and tap; no existing node
 # opens that sheet, and the refresh, the no-post first tap, the confirmed post
 # and the failed-run report all ride that one node.
-test_budget = 303
+test_budget = 302
 
 # --- static assets under the webapp's static dir -> Chromium smoke ----------
 [[e2e.rule]]
@@ -1048,7 +1048,7 @@ derive = "usageState"
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "d0f4c219e118d03957b735b36cd493faba6b1b5f"
+synced_sha = "9e1ce16f6ce6e0c3da07cd6e63387c0d203bf573"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
@@ -1141,3 +1141,35 @@ reason = "held: its tests raise the test-to-code ratio over its ceiling and noth
 [[upstream.skipped]]
 sha = "7da23ea3723e544c5eff90c7ad73f9d2438131df"
 reason = "already present: a plain script's exit code is already not blamed on the scheduled-run adapter"
+
+[[upstream.skipped]]
+sha = "fc689136ee78715f0d134288bdf51369b2c63b0e"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "6a29e45be81e42ef482ac277bb3232e0df46fb6b"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "984321193b29360d3681d5c5b34ab6ff029a7c52"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "7dce00e2875bab7c9a2a14c7fee0ba422df185a2"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "a12ed4b09c737aeb32c9bcf8f9ffc655cfe34288"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "2f5771adb8508a3cd3b8f6eae575efb7752065b7"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "5a8017bb4d7b80e454f6617101f7b6bcc8b222c7"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "ffd185a33a946d22c7dc05c56df53b54a3d583ce"
+reason = "already present"
