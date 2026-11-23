@@ -39,16 +39,18 @@ iPhone PWA never serves a stale asset against fresh HTML, or vice versa.
   gzipped bytes and a quarter of the page's. `tests/api/webapp/test_first_load_budget.py`
   holds every first-load response under 100 KB on the wire, the page plus its
   stylesheet under 70 KB, and the whole first load (page, stylesheet and every
-  module `main.js` reaches statically) under 175 KB.
+  module `main.js` reaches statically) under 160 KB.
 - The views a tap opens load on that tap, not with the page
   (`app/webapp/static/lazy-views.js`): Chat, the terminal, the changes overlay,
-  Links, Screen, Progress, the Jobs and Board tabs and the shared composer
-  were about two thirds of the first load's JavaScript, and none of them draws
-  the shell or the session list. Every caller goes through `lazy-views.js`,
+  Links, Screen, Progress, the Jobs, Team OS and Board tabs, the Settings
+  pane, the Markdown renderer (`lightbox.js` imports it with the first
+  Markdown file it draws) and the shared composer were about two thirds
+  of the first load's JavaScript, and none of them draws the shell or the
+  session list. Every caller goes through `lazy-views.js`,
   which loads and wires each group once. Once the session list has drawn, the
   session views load straight away and the rest when the phone goes idle, so a
-  later first open finds them parsed. A tap on the Jobs or Board pane that
-  beats its code is held and replayed, and a deep link (`?terminal=`,
+  later first open finds them parsed. A tap on the Jobs, Team OS, Board or
+  Settings pane that beats its code is held and replayed, and a deep link (`?terminal=`,
   `?session=`, `?screen=1`) starts its view's load at boot. The predicates the
   session list draws from (which modes a session offers, the one it opens in)
   live in `session-modes.js`, and the chief row's Start, Resume and Restart in

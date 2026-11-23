@@ -27,7 +27,7 @@ import { choice, fetchConfig, fillSelect, patchConfig, wireConfigSwitch } from '
 import { terminalJsonApi } from '../webauthn.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
 import { fetchApps } from '../apps.js';
-import { fetchSkills } from '../team-os.js';
+import { fetchSkills } from '../lazy-views.js';
 import { plural } from '../shared/format.js';
 import { ACTION_ROW_MENU } from '../action-rows.js';
 import { createRowMenu } from '../_vendored/row-menu/row-menu.js';

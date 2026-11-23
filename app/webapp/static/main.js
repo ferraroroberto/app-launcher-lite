@@ -10,7 +10,6 @@ import { AuthRequiredError, apiFailToast, consumeUrlParam, jsonApi, setSignInHan
 import { wireTabs } from './tabs.js';
 import { wireUsageLog } from './usage.js';
 import { initBuildWatch } from './_vendored/build-watch/build-watch.js';
-import { bindTextSize } from './_vendored/text-size/text-size.js';
 import { buildReadoutText } from './_vendored/page-foot/page-foot.js';
 import { wireBuildRestart } from './shared/build-restart.js';
 import { fetchConfig, wireClaudeOptions } from './settings/claude-options.js';
@@ -19,18 +18,9 @@ import { fetchSystemLoad, wireSystemLoad } from './system-load.js';
 import { fetchAgents, fetchApps, fetchRunningApps, wireApps } from './apps.js';
 import { refreshGitStatus } from './apps/apps-coding.js';
 import { fetchListeners } from './apps/apps-listeners.js';
-import { fetchSkills, wireTeamOs } from './team-os.js';
 import { wireHtmlViewer, wireImageLightbox } from './lightbox.js';
-import { wireTokens } from './settings/tokens.js';
-import { wireDocuments } from './settings/documents.js';
-import { wireSettingsSheets } from './settings/settings-sheets.js';
-import { wireLidKeepAwake } from './settings/lid-keep-awake.js';
-import { bindFullscreen } from './_vendored/fullscreen/fullscreen.js';
-import { renderInstallReadiness } from './settings/install-readiness.js';
-import { wireDiagnostics } from './settings/diagnostics.js';
-import { wirePerformance } from './settings/performance.js';
 import { wireQuoteCopy } from './quote-copy.js';
-import { adoptBoard, fetchBoard, fetchJobs, markMirrorWindowEarly, openBoardCard, openScreenWindow, openTerminal, prefetchViews, renderBoard, startSessionViews, wireViewOpeners } from './lazy-views.js';
+import { adoptBoard, fetchBoard, fetchJobs, fetchSkills, markMirrorWindowEarly, openBoardCard, openScreenWindow, openTerminal, prefetchViews, renderBoard, startSessionViews, wireViewOpeners } from './lazy-views.js';
 import { loadXtermScripts } from './terminal/xterm-loader.js';
 import { warmTimeFormat } from './chat/transcript-text.js';
 import { fetchWebauthnStatus, wireWebauthn, writeTerminalToken } from './webauthn.js';
@@ -74,15 +64,7 @@ function wireSettings() {
   if (els.bootAutostartToggle) {
     els.bootAutostartToggle.addEventListener('click', toggleBootAutostart);
   }
-  wireLidKeepAwake(function () { return fetchConfig(); });
-  // Settings > Full screen on Edge: the row stays hidden in any other browser.
-  // Same localStorage prefix as the theme and text size.
-  bindFullscreen(document.getElementById('fullscreenRow'), 'app-launcher');
-  renderInstallReadiness();
-  wireDiagnostics();
-  wirePerformance();
-  // Every other Settings field saves as it changes: settings-sheets.js.
-  wireSettingsSheets();
+  // Every other Settings row loads with the pane's code (lazy-views.js).
 }
 
 // --------------------------------------------------------- theme toggle
@@ -234,7 +216,8 @@ async function boot() {
     // redraw it by coming last in the serial chain; now nothing else would.
     if (state.tab === 'board') renderBoard();
   });
-  // The Team OS skills fill their tab's list and header count.
+  // The Team OS skills fill their tab's list and header count; on any other
+  // tab this asks nothing, and the tab's first visit reads them.
   const skills = safe(fetchSkills);
   // The terminal deep link reads both: reachability and the passkey gate.
   const status = safe(fetchStatus);
@@ -400,7 +383,6 @@ wireClaudeOptions();
 wireSessions();
 wireSystemLoad();
 wireApps();
-wireTeamOs();
 openDesktopColumns();
 if (boardFirst) adoptBoard(boardFirst);
 wireImageLightbox();
@@ -409,14 +391,7 @@ wireViewOpeners();
 wireQuoteCopy();
 wireWebauthn();
 wireSettings();
-wireTokens();
-wireDocuments();
 wireTheme();
-// Settings → Text size: same localStorage prefix as the theme,
-// which the pre-paint boot script reads.
-if (document.getElementById('textSizeControl')) {
-  bindTextSize(document.getElementById('textSizeControl'), 'app-launcher');
-}
 
 initBuildWatch();
 boot();

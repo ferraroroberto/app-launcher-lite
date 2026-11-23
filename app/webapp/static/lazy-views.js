@@ -1,8 +1,9 @@
 /* The views a tap opens load on that first tap, not with the page.
  *
- * The chat, terminal, changes, links, Screen and Progress code, the Jobs
- * and Board tabs and the shared composer are most of the app's JavaScript,
- * and none of it draws the shell or the session list. A phone with an empty
+ * The chat, terminal, changes, links, Screen and Progress code, the Jobs,
+ * Team OS and Board tabs, the Settings pane and the shared composer are most
+ * of the app's JavaScript, and none of it draws the shell or the session
+ * list. A phone with an empty
  * cache (a first visit, or any visit after a deploy, since one hash stamps
  * every module URL) downloaded all of it before either could draw. Each
  * group below loads and wires its listeners once: on the first call that
@@ -126,6 +127,65 @@ const composerKit = group(function () {
   });
 });
 
+// The Settings pane's code: its sheets, fields and rows. The page loads on
+// the Code or Board tab, and Settings opens from a header's gear, so none of
+// it draws the first screen. Loaded, it draws the config the boot already
+// read, and a load that lands during a Settings visit reads what a visit
+// reads (the token count, the documents list), whose own tab listeners
+// were not yet attached when the visit began.
+const settingsPane = group(function () {
+  return Promise.all([
+    import('./settings/settings-sheets.js'),
+    import('./settings/performance.js'),
+    import('./settings/lid-keep-awake.js'),
+    import('./settings/install-readiness.js'),
+    import('./settings/diagnostics.js'),
+    import('./settings/tokens.js'),
+    import('./settings/documents.js'),
+    import('./_vendored/fullscreen/fullscreen.js'),
+    import('./_vendored/text-size/text-size.js'),
+    import('./settings/claude-options.js'),
+  ]).then(function (m) {
+    const s = { sheets: m[0], performance: m[1], lid: m[2] };
+    const fetchConfig = m[9].fetchConfig;
+    s.lid.wireLidKeepAwake(function () { return fetchConfig(); });
+    // Settings > Full screen on Edge: the row stays hidden in any other
+    // browser. Same localStorage prefix as the theme and text size.
+    m[7].bindFullscreen(document.getElementById('fullscreenRow'), 'app-launcher');
+    m[3].renderInstallReadiness();
+    m[4].wireDiagnostics();
+    s.performance.wirePerformance();
+    s.sheets.wireSettingsSheets();
+    m[5].wireTokens();
+    m[6].wireDocuments();
+    // Settings > Text size: the pre-paint boot script reads the same key.
+    const textSize = document.getElementById('textSizeControl');
+    if (textSize) m[8].bindTextSize(textSize, 'app-launcher');
+    if (state.config) {
+      s.lid.renderLidKeepAwake(state.config);
+      s.performance.renderPerformance(state.config);
+    }
+    s.sheets.renderSettingsValues();
+    if (state.tab === 'settings') {
+      m[5].ensureLoaded();
+      m[6].fetchList(true);
+    }
+    return s;
+  });
+});
+
+// The Team OS tab loads on its first visit, or once the phone goes idle; a
+// boot that reopens on it loads it from the boot's skills read. A filter
+// typed before it landed is replayed, as Jobs' search is.
+const teamOsTab = group(function () {
+  return import('./team-os.js').then(function (m) {
+    m.wireTeamOs();
+    const filter = document.getElementById('teamOsFilterInput');
+    if (filter && filter.value) filter.dispatchEvent(new Event('input'));
+    return m;
+  });
+});
+
 const progressSheet = group(function () {
   return import('./progress/progress-sheet.js').then(function (m) {
     m.wireProgressSheet();
@@ -244,6 +304,43 @@ export function openScreenWindow() {
   return use(screenView, function (m) { return m.openScreenWindow(); });
 }
 
+// Every config read redraws Settings; before its code has loaded there is
+// nothing to redraw, and the load draws the config itself.
+export function renderSettingsValues() {
+  const s = settingsPane.loaded();
+  if (s) s.sheets.renderSettingsValues();
+}
+
+export function renderPerformance(cfg) {
+  const s = settingsPane.loaded();
+  if (s) s.performance.renderPerformance(cfg);
+}
+
+export function renderLidKeepAwake(body) {
+  const s = settingsPane.loaded();
+  if (s) s.lid.renderLidKeepAwake(body);
+}
+
+// tabs.js's openSettingsAt: an empty state's fix, or the Board's chief gear.
+export function revealSettingsField(el) {
+  return use(settingsPane, function (s) { return s.sheets.revealSettingsField(el); });
+}
+
+// Self-gated to the Team OS tab like fetchJobs: the boot and a Settings
+// folder change call it on every tab, and only a visit loads the tab.
+export function fetchSkills() {
+  const team = teamOsTab.loaded();
+  if (team) return team.fetchSkills();
+  if (state.tab !== 'teamos') return Promise.resolve();
+  return use(teamOsTab, function (m) { return m.fetchSkills(); });
+}
+
+// The tab builds its model list when it loads; until then there is none.
+export function setTeamOsModelOptions() {
+  const team = teamOsTab.loaded();
+  if (team) team.setTeamOsModelOptions();
+}
+
 // A tab's pane draws before its code lands, so a tap that beats the code is
 // held and replayed once it has, never dropped. Held in the capture phase,
 // it reaches the usage log once: as the replay. The page head's buttons
@@ -271,9 +368,19 @@ export function wireViewOpeners() {
     if (tab === 'board' && !boardTab.loaded()) {
       use(boardTab, function (m) { m.openBoardTab(); });
     }
+    // Once loaded, team-os.js's own tab-click listener reads on each visit.
+    if (tab === 'teamos' && !teamOsTab.loaded()) {
+      use(teamOsTab, function (m) {
+        m.fetchSkills().catch(function () {});
+        m.fetchRecapStatus().catch(function () {});
+      });
+    }
+    if (tab === 'settings' && !settingsPane.loaded()) prefetch(settingsPane);
   });
   holdPaneTaps('paneJobs', jobsTab);
   holdPaneTaps('paneBoard', boardTab);
+  holdPaneTaps('paneTeamOS', teamOsTab);
+  holdPaneTaps('paneSettings', settingsPane);
   const history = document.getElementById('historyOpen');
   if (history && document.getElementById('progressSheet')) {
     history.addEventListener('click', function () {
@@ -312,7 +419,7 @@ export function prefetchViews() {
   const first = state.tab === 'board' ? prefetch(boardTab) : Promise.resolve();
   first.then(function () { prefetch(sessionViews); });
   const run = function () {
-    [boardTab, composerKit, answerSheet, jobsTab, screenView, progressSheet].forEach(prefetch);
+    [boardTab, composerKit, answerSheet, jobsTab, teamOsTab, settingsPane, screenView, progressSheet].forEach(prefetch);
   };
   if (typeof window.requestIdleCallback === 'function') {
     window.requestIdleCallback(run, { timeout: PREFETCH_IDLE_TIMEOUT_MS });

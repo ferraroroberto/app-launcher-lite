@@ -54,7 +54,7 @@ function renderList() {
   els.documentsSection.hidden = !documents.length;
 }
 
-async function fetchList(quiet) {
+export async function fetchList(quiet) {
   try {
     const body = await jsonApi('/api/documents');
     documents = (body && body.documents) || [];
