@@ -1233,7 +1233,7 @@ derive = "usageState"
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "ba990c45259017fa4bdd350a798b5bbd6fae59e9"
+synced_sha = "ea6696b2f9551766bd1afd7357ecba499b5af3ff"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
@@ -1398,3 +1398,11 @@ reason = "already present"
 [[upstream.skipped]]
 sha = "13a44b341336aeecb217569f72860b23410598a9"
 reason = "Life OS is not carried in this repo"
+
+[[upstream.skipped]]
+sha = "145c5d8f66e888d5ff6ca22f9a67fd463c9e7534"
+reason = "already present"
+
+[[upstream.skipped]]
+sha = "ea6696b2f9551766bd1afd7357ecba499b5af3ff"
+reason = "already present"
