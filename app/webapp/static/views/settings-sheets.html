@@ -205,6 +205,7 @@
             <input data-track="serving.http-port" id="servingHttpPort" type="number" class="input-native" inputmode="numeric" min="1" max="65535" step="1" aria-describedby="servingHttpPortHelp">
           </label>
           <p id="servingHttpPortHelp" class="field-help">Plain HTTP answers here while HTTPS keeps the app's own port.</p>
+          <p id="servingBind" class="field-help" role="status" aria-live="polite" hidden></p>
           <div class="row">
             <span>Certificate</span>
             <button data-track="serving.create-cert" type="button" id="servingCreateCert" class="button-tint" hidden>Create certificate</button>

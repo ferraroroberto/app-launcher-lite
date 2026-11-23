@@ -161,7 +161,7 @@ def test_webapp_cmd_runs_serve(monkeypatch):
     monkeypatch.setattr(
         "src.webapp_config.load_webapp_config",
         lambda: type("Cfg", (), {
-            "host": "127.0.0.1", "port": 18445, "serve_over": "auto", "serve_http_port": 8467,
+            "host": "127.0.0.1", "port": 18445, "serve_over": "auto", "serve_http_port": 8475,
         })(),
     )
 

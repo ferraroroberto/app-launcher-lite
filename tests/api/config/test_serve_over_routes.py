@@ -15,6 +15,15 @@ def test_serve_over_saves_and_reads_back(webapp_client):
     assert client.post("/api/config", json={"serve_http_port": "80"}).status_code == 400
 
 
+def test_serving_reports_a_failed_second_port(webapp_client, monkeypatch):
+    from app.webapp import serve_modes
+    client, _app, _ = webapp_client
+    monkeypatch.setenv(serve_modes.HTTP_BIND_ENV, "failed:8475")
+    assert client.get("/api/config").json()["serving"]["http_bind"] == {"bound": False, "port": 8475}
+    monkeypatch.delenv(serve_modes.HTTP_BIND_ENV)
+    assert client.get("/api/config").json()["serving"]["http_bind"] == {"bound": None, "port": None}
+
+
 def test_the_certificate_is_created_once_and_never_replaced(webapp_client, tmp_path, monkeypatch):
     client, _app, _ = webapp_client
     cert_dir = tmp_path / "certificates"

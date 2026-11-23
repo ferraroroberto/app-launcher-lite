@@ -58,6 +58,14 @@ def test_the_default_setting_serves_as_before():
     assert serve_plan("auto", 8467, CERTS) == serve_plan("https", 8467, CERTS)
 
 
+def test_the_default_http_port_is_not_one_a_fleet_app_declares():
+    # Read from each sibling repo's .fleet.toml `port`, gathered by hand when
+    # the default was chosen; 8467 was overmark's.
+    declared = {8020, 8000, 8377, 8443, 8444, 8445, 8446, 8447, 8448, 8449, 8450, 8451, 8452, 8453,
+                8455, 8456, 8465, 8466, 8467, 8501, 8502, 8503}
+    assert WebappConfig().serve_http_port not in declared
+
+
 def test_both_refuses_an_http_port_the_app_already_uses():
     with pytest.raises(ValueError, match="serve_http_port"):
         _validate(WebappConfig(serve_over="both", serve_http_port=WebappConfig().port))
@@ -126,3 +134,38 @@ async def health_app(scope, receive, send):
         return
     await send({"type": "http.response.start", "status": 200, "headers": []})
     await send({"type": "http.response.body", "body": b"ok"})
+
+
+def test_a_taken_http_port_keeps_https_up_and_warns_once(tmp_path):
+    cert_dir = tmp_path / "certificates"
+    tls_certificate.create_self_signed(cert_dir, ["127.0.0.1"])
+    port = _free_port()
+    with socket.socket() as holder:
+        holder.bind(("127.0.0.1", 0))
+        holder.listen()
+        http_port = holder.getsockname()[1]
+        out = tmp_path / "serve.log"
+        with out.open("wb") as log:
+            proc = subprocess.Popen(
+                [sys.executable, "-m", SERVE_MODES_MODULE, "--http-port", str(http_port),
+                 "--host", "127.0.0.1", "--port", str(port),
+                 "--app", "tests.unit.webapp_config.test_serve_over:health_app",
+                 "--ssl-certfile", str(cert_dir / "cert.pem"), "--ssl-keyfile", str(cert_dir / "key.pem")],
+                cwd=str(Path(__file__).resolve().parents[3]), creationflags=NO_WINDOW,
+                stdout=log, stderr=subprocess.STDOUT,
+            )
+            try:
+                assert _healthz(f"https://127.0.0.1:{port}/healthz", time.monotonic() + 20) == 200
+                assert proc.poll() is None
+            finally:
+                proc.terminate()
+                proc.wait(timeout=10)
+    assert out.read_text(encoding="utf-8", errors="replace").count(f"plain HTTP port {http_port} is in use") == 1
+
+
+def test_the_bind_outcome_reaches_the_settings_payload(monkeypatch):
+    from app.webapp import serve_modes
+    monkeypatch.delenv(serve_modes.HTTP_BIND_ENV, raising=False)
+    assert serve_modes.http_bind_state() == (None, None)
+    monkeypatch.setenv(serve_modes.HTTP_BIND_ENV, "failed:8475")
+    assert serve_modes.http_bind_state() == ("failed", 8475)

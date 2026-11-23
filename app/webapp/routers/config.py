@@ -20,6 +20,7 @@ from app.webapp.routers._helpers import (
     cert_present,
     maybe_json,
 )
+from app.webapp.serve_modes import HTTP_BOUND, http_bind_state
 from src import boot_autostart, password, private_network
 from src.agents import AGENTS, DEFAULT_AGENT
 from src.app_config import AppConfig
@@ -71,10 +72,14 @@ def _serving_payload(cfg: WebappConfig) -> Dict[str, Any]:
     the next restart.
     """
     cert = tls_certificate.certificate_status(CERT_DIR)
+    bind_state, bind_port = http_bind_state()
     return {
         "mode": cfg.serve_over,
         "modes": list(VALID_SERVE_OVER),
         "http_port": cfg.serve_http_port,
+        # Whether this process's start bound the second port: true, false
+        # (another process holds it) or null (not a Both start).
+        "http_bind": {"bound": None if bind_state is None else bind_state == HTTP_BOUND, "port": bind_port},
         "cert": {"present": cert.present, "self_signed": cert.self_signed, "expires": cert.expires},
     }
 
