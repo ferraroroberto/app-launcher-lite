@@ -547,6 +547,13 @@ function handleRecorderStop(d, stream, mime) {
 }
 
 async function startRecording(d) {
+  // Browsers hide the microphone from a page on plain HTTP, so say that
+  // instead of blaming the browser.
+  if (!window.isSecureContext) {
+    console.info('[dictation] tap ignored: the page is not on HTTPS');
+    toast('Recording needs HTTPS: Settings › Connections › Serve over', 'error');
+    return;
+  }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia ||
       !window.MediaRecorder) {
     console.info('[dictation] tap ignored: this browser cannot record');

@@ -31,6 +31,7 @@ import { plural } from '../shared/format.js';
 import { ACTION_ROW_MENU } from '../action-rows.js';
 import { createRowMenu } from '../_vendored/row-menu/row-menu.js';
 import { icon } from '../_vendored/icons/icons.js';
+import { servingValue, wireServing } from './serving.js';
 import { speechValue, wireSpeech } from './speech-settings.js';
 import { performanceRowValue } from './performance.js';
 import { wireMirrorBrowser } from './mirror-browser.js';
@@ -140,6 +141,7 @@ export function renderSettingsValues() {
   if (!cfg) return;
   setValue('copilot', copilotValue(cfg.copilot));
   setValue('speech', speechValue(cfg.speech));
+  setValue('serving', servingValue(cfg.serving));
   setValue('performance', performanceRowValue(cfg));
   setValue('gitlab', cfg.gitlab_group
     ? joined([cfg.gitlab_group, cfg.gitlab_host || ''])
@@ -530,6 +532,7 @@ export function wireSettingsSheets() {
   });
   wireFields();
   wireSpeech();
+  wireServing();
   wireChief();
   wireMirrorBrowser();
   document.addEventListener('launcher:tab', function (e) {

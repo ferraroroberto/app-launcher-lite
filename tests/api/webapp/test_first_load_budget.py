@@ -62,6 +62,7 @@ LAZY_VIEWS = (
     "/static/settings/network-access.js",
     "/static/settings/mirror-browser.js",
     "/static/settings/launch-presets-settings.js",
+    "/static/settings/serving.js",
     "/static/apps/apps-dialogs.js",
     "/static/quote-copy.js",
     "/static/_vendored/build-watch/build-watch.js",

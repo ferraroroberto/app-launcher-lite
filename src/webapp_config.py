@@ -50,6 +50,7 @@ from src.webapp_settings.values import (  # noqa: F401 — re-exported for webap
     MAX_TERMINAL_HISTORY_LINES, MIN_CHIEF_AUTO_COMPACT_THRESHOLD, MIN_CHIEF_WORKER_CAP,
     MIN_COPILOT_MONTHLY_CREDITS, MIN_LARGE_UPLOAD_MAX_MB, MIN_TERMINAL_HISTORY_LINES, SESSION_HOST_PORT_ENV,
     DEFAULT_SPEECH_KEEP_RECORDINGS_HOURS, MAX_SPEECH_KEEP_RECORDINGS_HOURS, MIN_SPEECH_KEEP_RECORDINGS_HOURS,
+    DEFAULT_SERVE_HTTP_PORT, DEFAULT_SERVE_OVER, VALID_SERVE_OVER,
     VALID_CHIEF_WORKER_CAP_SCOPES, VALID_COPILOT_CONTEXTS, VALID_COPILOT_EFFORTS,
     WEBAPP_CONFIG_PATH_ENV, check_mirror_browser,
 )
@@ -181,6 +182,10 @@ class WebappConfig:
     # Hours each dictation take stays on disk (``src/recordings.py``) so a
     # crashed page or a failed transcription loses nothing; 0 keeps none.
     speech_keep_recordings_hours: int = DEFAULT_SPEECH_KEEP_RECORDINGS_HOURS
+    # How the webapp is served, read at each start (app/webapp/serve_modes.py):
+    # a phone's browser only opens the microphone on an HTTPS page.
+    serve_over: str = DEFAULT_SERVE_OVER
+    serve_http_port: int = DEFAULT_SERVE_HTTP_PORT
     # GitHub Copilot CLI launch settings (`src.launching.flags.build_copilot_flags`).
     # `copilot_models` is the per-install list of model ids the pickers offer
     # (explicit ids are gated by the account's plan); `copilot_model` is the
@@ -722,6 +727,7 @@ _ENUM_VALIDATIONS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("chief_context", VALID_COPILOT_CONTEXTS),
     ("chief_effort", VALID_COPILOT_EFFORTS),
     ("chief_worker_cap_scope", VALID_CHIEF_WORKER_CAP_SCOPES),
+    ("serve_over", VALID_SERVE_OVER),
 )
 
 
@@ -733,6 +739,11 @@ def _validate(cfg: WebappConfig) -> None:
     if cfg.session_host_port == cfg.port:
         raise ValueError("session_host_port must differ from the webapp port")
     check_mirror_browser(cfg.mirror_browser)
+    if not (1 <= cfg.serve_http_port <= 65535):
+        raise ValueError(f"serve_http_port out of range: {cfg.serve_http_port}")
+    # Only "both" binds it, so a clash matters only there.
+    if cfg.serve_over == "both" and cfg.serve_http_port in (cfg.port, cfg.session_host_port):
+        raise ValueError("serve_http_port must differ from the webapp and session-host ports")
     if not (MIN_TERMINAL_HISTORY_LINES <= cfg.terminal_history_lines <= MAX_TERMINAL_HISTORY_LINES):
         raise ValueError(
             f"terminal_history_lines must be between {MIN_TERMINAL_HISTORY_LINES} "

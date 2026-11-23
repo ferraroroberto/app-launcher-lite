@@ -22,6 +22,8 @@ from app.webapp.routers._helpers import (
 )
 from src import boot_autostart, password, private_network
 from src.agents import AGENTS, DEFAULT_AGENT
+from src.app_config import AppConfig
+from src.auth import tls_certificate
 from src.chief import skills_preflight
 from src.chief.launch_settings import chief_model_problem
 from src.desktop import lid_keep_awake
@@ -49,6 +51,7 @@ from src.webapp_config import (
     MIN_TERMINAL_HISTORY_LINES,
     VALID_COPILOT_CONTEXTS,
     VALID_COPILOT_EFFORTS,
+    VALID_SERVE_OVER,
     WebappConfig,
     update_webapp_config,
 )
@@ -57,6 +60,23 @@ from src.webapp_settings import performance
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+CERT_DIR = PROJECT_ROOT / "webapp" / "certificates"
+
+
+def _serving_payload(cfg: WebappConfig) -> Dict[str, Any]:
+    """Settings > Connections > Serve over: the saved choice and the pair on disk.
+
+    The page's own scheme is the browser's to read; what is saved applies at
+    the next restart.
+    """
+    cert = tls_certificate.certificate_status(CERT_DIR)
+    return {
+        "mode": cfg.serve_over,
+        "modes": list(VALID_SERVE_OVER),
+        "http_port": cfg.serve_http_port,
+        "cert": {"present": cert.present, "self_signed": cert.self_signed, "expires": cert.expires},
+    }
 
 
 @router.get("/api/config")
@@ -103,6 +123,7 @@ async def get_config(request: Request) -> Dict[str, Any]:
             "keep_recordings_hours": cfg.speech_keep_recordings_hours,
             "keep_recordings_hours_max": MAX_SPEECH_KEEP_RECORDINGS_HOURS,
         },
+        "serving": _serving_payload(cfg),
         # Settings > Performance: each speed limit with its range, the two
         # presets and which one the stored values equal.
         "performance": performance.payload(cfg),
@@ -252,6 +273,8 @@ _PATCH_KEYS = frozenset({
     "speech_model",
     "speech_api_key",
     "speech_keep_recordings_hours",
+    "serve_over",
+    "serve_http_port",
     "terminal_history_lines",
     "large_upload_max_mb",
     "chief_auto_compact_threshold",
@@ -336,7 +359,7 @@ async def patch_config(request: Request) -> Any:
         patch["copilot_models"] = _checked_model_list(patch["copilot_models"])
     for key in (
         "skills_dir", "gitlab_group", "gitlab_host", "copilot_model", "copilot_context", "copilot_effort",
-        "speech_base_url", "speech_model", "speech_api_key",
+        "speech_base_url", "speech_model", "speech_api_key", "serve_over",
     ):
         if key in patch:
             patch[key] = str(patch[key] or "").strip()
@@ -344,6 +367,7 @@ async def patch_config(request: Request) -> Any:
     _checked_whole_number(patch, "large_upload_max_mb", "a whole number of MB")
     _checked_whole_number(patch, "speech_keep_recordings_hours", "a whole number of hours")
     _checked_whole_number(patch, "copilot_monthly_credits", "a whole number of AI credits")
+    _checked_whole_number(patch, "serve_http_port", "a whole port number")
     for key in performance.KEYS:
         problem = performance.type_problem(key, patch[key]) if key in patch else None
         if problem:
@@ -374,6 +398,28 @@ async def patch_config(request: Request) -> Any:
     if any(key in patch for key in performance.KEYS):
         perf_apply.apply(new_cfg)
     return {"ok": True, "copilot": copilot_payload(new_cfg)}
+
+
+@router.post("/api/settings/certificate")
+async def create_certificate(request: Request) -> Dict[str, Any]:
+    """Create a self-signed pair in webapp/certificates/ for this PC's names.
+
+    409 when a certificate or key is already there: an existing pair, a
+    Tailscale-issued one included, is never replaced. The webapp serves it
+    from its next start.
+    """
+    app_config: AppConfig = request.app.state.app_config
+    names = tls_certificate.machine_names(
+        [private_network.current() or "", app_config.tailnet_host or ""]
+    )
+    try:
+        await run_on(OUTBOUND, tls_certificate.create_self_signed, CERT_DIR, names)
+    except tls_certificate.CertificateExists as exc:
+        raise HTTPException(status_code=409, detail="a certificate already exists; nothing was changed") from exc
+    except OSError as exc:
+        logger.error(f"❌ certificate not created: {exc}")
+        raise HTTPException(status_code=500, detail=f"certificate not created: {exc.strerror or exc}") from exc
+    return {"ok": True, "serving": _serving_payload(request.app.state.webapp_config)}
 
 
 @router.post("/api/settings/boot-autostart")

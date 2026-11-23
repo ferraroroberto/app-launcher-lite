@@ -189,6 +189,12 @@ export const els = {
   speechRecordings: document.getElementById('speechRecordings'),
   speechRecordingsState: document.getElementById('speechRecordingsState'),
   speechRecordingsRefresh: document.getElementById('speechRecordingsRefresh'),
+  servingHttpPort: document.getElementById('servingHttpPort'),
+  servingHttpPortRow: document.getElementById('servingHttpPortRow'),
+  servingHttpPortHelp: document.getElementById('servingHttpPortHelp'),
+  servingNow: document.getElementById('servingNow'),
+  servingCert: document.getElementById('servingCert'),
+  servingCreateCert: document.getElementById('servingCreateCert'),
   tabBoard: document.getElementById('tabBoard'),
 
   boardColumns: document.getElementById('boardColumns'),

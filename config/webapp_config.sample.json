@@ -47,6 +47,9 @@
   "speech_api_key": "",
   "_comment_speech_keep_recordings_hours": "Hours each dictation take is kept on disk under webapp/recordings/ (gitignored), so a crashed page or a failed transcription can be replayed and transcribed again from Settings > Speech to text. 0 keeps none.",
   "speech_keep_recordings_hours": 24,
+  "_comment_serve_over": "How the phone reaches the webapp, applied at the next restart (Settings > Connections > Serve over). auto is HTTPS when webapp/certificates/ holds cert.pem + key.pem, otherwise HTTP. https serves HTTPS (HTTP until a certificate exists), http never uses TLS, both adds plain HTTP on serve_http_port beside HTTPS on the webapp port. A phone's browser only opens the microphone on an HTTPS page.",
+  "serve_over": "auto",
+  "serve_http_port": 8467,
   "_comment_copilot_flags": "GitHub Copilot CLI (copilot) launch settings, also set from Settings. copilot_models is the list of model ids the pickers offer: which ids an account may use depends on its plan, so edit it per install (Copilot falls back to its own pick and prints one line when an id is not available). copilot_model is the saved --model (empty or 'default' lets Copilot pick). copilot_autopilot adds --autopilot, copilot_context --context (empty omits it), copilot_effort --effort (sent only with an explicit model), copilot_skip_permissions --allow-all. copilot_remote_session (default true) turns on remote access for every Copilot session Lite launches, through the CLI user settings, not a flag. chief_model is the chief's Copilot model; chief_context and chief_effort are its --context and --effort (empty follows copilot_context and copilot_effort).",
   "copilot_skip_permissions": false,
   "copilot_models": [

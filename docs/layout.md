@@ -56,7 +56,7 @@ app-launcher-lite/
 │   ├── git_utils.py            # shared `git` subprocess runner; every git spawn goes through it
 │   ├── git_upstream/           # ahead/behind against origin and the guarded fast-forward
 │   ├── documents/              # Settings > Documents: allowlist validation, path jail, read
-│   ├── auth/                   # job-scoped API tokens, the passkey (WebAuthn) gate
+│   ├── auth/                   # job-scoped API tokens, the passkey (WebAuthn) gate, the self-signed TLS certificate
 │   ├── middleware/             # the webapp's auth gate: trust (loopback / tailnet), credentials, route guard table, bearer
 │   ├── clients/                # loopback HTTP clients (shared base, session-host) and the GitLab client (gitlab.py, via glab)
 │   ├── launching/              # agent launch: Copilot flags (flags.py), spawn helpers (launcher.py), the tray-restart check, the PowerShell script launcher (ps_script.py), the installer behind setup.bat (installer.py)
