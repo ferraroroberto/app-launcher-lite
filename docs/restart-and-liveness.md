@@ -27,7 +27,12 @@ process is restarted.
    repo's `launcher.py session-host` (a host re-execed from the base interpreter
    carries no `.venv` path), and it exits 1 when an owned holder is still alive
    after the stop, so a restart that did not replace the old process fails
-   instead of reporting success.
+   instead of reporting success. A tray, webapp or session-host started from one
+   of this repo's own `-wt-<N>` worktrees counts as this repo's too: the helper
+   resolves those worktrees from `git worktree list` (a lookalike directory git
+   does not list is never claimed), stops their trays with the primary's, and
+   names the checkout of each process it reclaims. When git cannot list the
+   worktrees it says so and claims none.
 4. Run the restart from **PowerShell**, wrapped by the replacement check:
 
    ```
