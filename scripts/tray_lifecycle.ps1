@@ -7,8 +7,9 @@
       ports in comments updated to this fork's 8465/8466. Local code change:
       reclaim also owns a session-host started from this repo root without
       .venv in its command line, fails when an owned holder survives, matches
-      this repo's paths under either drive spelling of a junctioned root, and
-      says so when a restart found nothing to stop.
+      this repo's paths under either drive spelling of a junctioned root,
+      says so when a restart found nothing to stop, and claims processes
+      started from this repo's own `-wt-<N>` git worktrees.
       Vendored for the lite fork so the tray has zero external dependencies;
       this repo-local copy replaces the machine-shared
       %USERPROFILE%\.claude\tray\tray_lifecycle.ps1. Keep ASCII-only.
@@ -130,8 +131,8 @@ function Test-CommandLineMatches {
 }
 
 function Test-UnderVenv {
-    param([string] $CommandLine)
-    return Test-CommandLineMatches $CommandLine (Get-PathPattern ($VenvDir -replace '[\\/]+$', '') '([\\/]|["''\s]|$)')
+    param([string] $CommandLine, [string] $Dir = $VenvDir)
+    return Test-CommandLineMatches $CommandLine (Get-PathPattern ($Dir -replace '[\\/]+$', '') '([\\/]|["''\s]|$)')
 }
 
 # A session-host re-execs from the base interpreter, so its CommandLine can carry the repo's
@@ -143,25 +144,88 @@ function Get-RepoRoot {
 }
 
 function Test-IsRepoSessionHost {
-    param([string] $CommandLine)
-    return Test-CommandLineMatches $CommandLine (Get-PathPattern (Get-RepoRoot) '[\\/]+launcher\.py["'']?\s+session-host(\s|$)')
+    param([string] $CommandLine, [string] $Root = (Get-RepoRoot))
+    return Test-CommandLineMatches $CommandLine (Get-PathPattern $Root '[\\/]+launcher\.py["'']?\s+session-host(\s|$)')
+}
+
+# This repo's own sibling worktrees (`<repo>-wt-<N>`), read from `git worktree list` so a directory
+# that merely looks like one is never claimed: a tray, webapp or session-host started from a
+# worktree runs under that worktree's .venv and never matches the primary's. The name pattern only
+# narrows git's answer to the repo's sibling convention. Run from a worktree itself, the leaf
+# is `<repo>-wt-<N>`, so no `-wt-<M>` sibling matches and the primary is never claimed. A listing
+# git cannot give is said out loud and claims nothing, never a guess.
+function Get-RepoWorktreeRoots {
+    $root = (Get-RepoRoot) -replace '[\\/]+$', ''
+    $leaf = Split-Path -Leaf $root
+    $listing = @()
+    $listed = $false
+    $savedLocks = $env:GIT_OPTIONAL_LOCKS
+    $env:GIT_OPTIONAL_LOCKS = '0'
+    try {
+        $listing = @(& git -C $root worktree list --porcelain 2>$null)
+        $listed = ($LASTEXITCODE -eq 0)
+    } catch {
+        $listed = $false
+    } finally {
+        $env:GIT_OPTIONAL_LOCKS = $savedLocks
+    }
+    if (-not $listed) {
+        Write-Host ("NOTE: could not list the git worktrees of {0}; processes started from its -wt-N worktrees are not claimed." -f $root)
+        return @()
+    }
+    $found = @()
+    foreach ($line in $listing) {
+        if ($line -notmatch '^worktree (.+)$') { continue }
+        $path = $Matches[1].Trim() -replace '[\\/]+$', ''
+        if ((Split-Path -Leaf $path) -match ('^' + [regex]::Escape($leaf) + '-wt-\d+$')) { $found += $path }
+    }
+    return $found
+}
+
+function Get-WorktreeRoots {
+    if ($null -eq $script:WorktreeRoots) { $script:WorktreeRoots = @(Get-RepoWorktreeRoots) }
+    return $script:WorktreeRoots
+}
+
+# Which checkout of this repo a command line belongs to: the primary (Kind 'primary') or one of its
+# worktrees (Kind 'worktree'); $null when it is neither. -VenvOnly drops the session-host form, which
+# tray detection never wants.
+function Get-OwningCheckout {
+    param([string] $CommandLine, [switch] $VenvOnly)
+    if ((Test-UnderVenv $CommandLine) -or (-not $VenvOnly -and (Test-IsRepoSessionHost $CommandLine))) {
+        return [pscustomobject]@{ Kind = 'primary'; Root = (Get-RepoRoot) }
+    }
+    foreach ($wt in (Get-WorktreeRoots)) {
+        if ((Test-UnderVenv $CommandLine (Join-Path $wt '.venv')) -or
+            (-not $VenvOnly -and (Test-IsRepoSessionHost $CommandLine $wt))) {
+            return [pscustomobject]@{ Kind = 'worktree'; Root = $wt }
+        }
+    }
+    return $null
 }
 
 function Test-OwnsProcess {
     param([string] $CommandLine)
-    return (Test-UnderVenv $CommandLine) -or (Test-IsRepoSessionHost $CommandLine)
+    return $null -ne (Get-OwningCheckout $CommandLine)
+}
+
+# Each tray of this repo, from the primary or from one of its worktrees, with the checkout it runs from.
+function Get-TrayProcesses {
+    if (-not $TrayMatch) { throw "detect/launch requires -TrayMatch" }
+    $trays = @()
+    foreach ($cim in @(Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe' OR Name = 'python.exe'")) {
+        # The repo launcher that started this script has the venv path and the tray's launch
+        # args on its own command line; it is not a tray, and stopping it would end this run.
+        if (-not $cim.CommandLine -or $cim.CommandLine -notmatch $TrayMatch -or
+            $cim.CommandLine -like '*src.launching.ps_script*') { continue }
+        $checkout = Get-OwningCheckout $cim.CommandLine -VenvOnly
+        if ($checkout) { $trays += [pscustomobject]@{ ProcessId = $cim.ProcessId; Kind = $checkout.Kind; Root = $checkout.Root } }
+    }
+    return $trays
 }
 
 function Get-TrayProcessIds {
-    if (-not $TrayMatch) { throw "detect/launch requires -TrayMatch" }
-    return @(
-        Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe' OR Name = 'python.exe'" |
-            # The repo launcher that started this script has the venv path and the tray's launch
-            # args on its own command line; it is not a tray, and stopping it would end this run.
-            Where-Object { (Test-UnderVenv $_.CommandLine) -and $_.CommandLine -match $TrayMatch -and
-                $_.CommandLine -notlike '*src.launching.ps_script*' } |
-            Select-Object -ExpandProperty ProcessId
-    )
+    return @(Get-TrayProcesses | ForEach-Object { $_.ProcessId })
 }
 
 function Get-OwnedPorts {
@@ -194,9 +258,10 @@ function Invoke-ReclaimPorts {
         foreach ($ownerProcessId in $holders) {
             $cim = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $ownerProcessId) -ErrorAction SilentlyContinue
             if (-not $cim) { continue }
-            if (Test-OwnsProcess $cim.CommandLine) {
+            $checkout = Get-OwningCheckout $cim.CommandLine
+            if ($checkout) {
                 $script:ReclaimedCount++
-                Write-Host ("Reclaiming :{0} from PID {1}" -f $port, $ownerProcessId)
+                Write-Host ("Reclaiming :{0} from PID {1} ({2} checkout {3})" -f $port, $ownerProcessId, $checkout.Kind, $checkout.Root)
                 Stop-Process -Id $ownerProcessId -Force -ErrorAction SilentlyContinue
                 if (-not (Wait-ProcessGone -ProcessId $ownerProcessId)) {
                     Write-Host ("FAILED: old holder PID {0} is still running on :{1} after the stop; the restart did not replace it." -f $ownerProcessId, $port)
@@ -364,7 +429,8 @@ switch ($Action) {
     }
     'launch' {
         if (-not $AppName) { throw "launch requires -AppName" }
-        $trayPids = @(Get-TrayProcessIds)
+        $trays = @(Get-TrayProcesses)
+        $trayPids = @($trays | ForEach-Object { $_.ProcessId })
         if ($trayPids.Count -gt 0 -and -not $Restart) {
             Write-Host ("{0} tray is already running (PID: {1})." -f $AppName, ($trayPids -join " "))
             Write-Host 'Run "tray.bat --restart" to stop it and start fresh.'
@@ -374,6 +440,9 @@ switch ($Action) {
         if ($Restart) {
             if ($trayPids.Count -gt 0) {
                 Write-Host ("Stopping previous {0} tray (PID: {1})..." -f $AppName, ($trayPids -join " "))
+                foreach ($tray in $trays) {
+                    Write-Host ("  PID {0}: {1} checkout {2}" -f $tray.ProcessId, $tray.Kind, $tray.Root)
+                }
                 Stop-TrayProcesses -ProcessIds $trayPids
             }
             $script:ReclaimedCount = 0

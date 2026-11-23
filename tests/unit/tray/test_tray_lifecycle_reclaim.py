@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple
 
 import pytest
 
+from src.git_utils import run_git
 from src.subprocess_flags import NO_WINDOW
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows PowerShell + CIM")
@@ -40,7 +41,14 @@ $VenvDir = $env:TL_VENV
 $ScriptDir = $env:TL_SCRIPTDIR
 $Ports = $env:TL_PORTS
 if ($env:TL_NO_STOP) { function Stop-Process { } }
-if ($env:TL_CASES) {
+# A fake `git worktree list`: the checkouts git would report for this repo.
+if ($env:TL_WORKTREES) { function Get-RepoWorktreeRoots { return @(ConvertFrom-Json $env:TL_WORKTREES) } }
+if ($env:TL_MODE -eq 'list') {
+    Write-Output ('ROOTS=' + ((@(Get-RepoWorktreeRoots)) -join '|'))
+} elseif ($env:TL_MODE -eq 'detect') {
+    $TrayMatch = $env:TL_TRAYMATCH
+    Write-Output ('PIDS=' + ((@(Get-TrayProcessIds)) -join ','))
+} elseif ($env:TL_CASES) {
     $out = @()
     foreach ($c in (ConvertFrom-Json $env:TL_CASES)) { $out += (Test-OwnsProcess $c) }
     Write-Output ($out -join ',')
@@ -65,10 +73,12 @@ def _run_ps(tmp_path: Path, env_extra: dict) -> str:
     return done.stdout
 
 
-def _owns(tmp_path: Path, repo: str, lines: List[str]) -> List[bool]:
+def _owns(tmp_path: Path, repo: str, lines: List[str], worktrees: Optional[List[str]] = None) -> List[bool]:
+    """Ownership of each command line, given the worktrees a fake ``git worktree list`` reports."""
     out = _run_ps(tmp_path, {
         "TL_VENV": repo + "\\.venv",
         "TL_SCRIPTDIR": "",
+        "TL_WORKTREES": json.dumps(worktrees or []),
         "TL_CASES": json.dumps(lines),
     })
     return [part.strip() == "True" for part in out.strip().split(",")]
@@ -93,7 +103,7 @@ class TestOwnership:
         repo = "C:" + "\\automation\\app-launcher-lite"
         owned = _owns(tmp_path, repo, [
             "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher\\launcher.py session-host --port 8466",
-            # a sibling checkout of this repo is a different tree
+            # a sibling checkout git does not list for this repo is a different tree
             "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher-lite-wt-371\\launcher.py session-host",
             # a longer parent path that merely ends in the root's segments
             "C:\\Python314\\pythonw.exe C:\\other\\automation\\app-launcher-lite\\launcher.py session-host",
@@ -128,6 +138,76 @@ class TestVenvSpelling:
             "C:\\Python314\\pythonw.exe launcher.py tray",
         ])
         assert owned == [False, False, False, False, False]
+
+
+class TestOwnWorktrees:
+    """A tray, webapp or session-host started from this repo's own worktree is claimed."""
+
+    REPO = "C:" + "\\automation\\app-launcher-lite"
+    # what `git worktree list --porcelain` prints: forward slashes
+    WORKTREES = ["C:/automation/app-launcher-lite-wt-478"]
+
+    def test_tray_webapp_and_session_host_of_a_worktree_are_claimed(self, tmp_path: Path) -> None:
+        owned = _owns(tmp_path, self.REPO, [
+            "C:\\automation\\app-launcher-lite-wt-478\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            '"C:\\automation\\app-launcher-lite-wt-478\\.venv\\Scripts\\python.exe" -m uvicorn app.webapp.server:app --port 8978',
+            # the session-host re-execs from the base interpreter: no .venv in its command line
+            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher-lite-wt-478\\launcher.py session-host --port 8466",
+            # the same worktree under its other drive spelling
+            "E:\\automation\\app-launcher-lite-wt-478\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+        ], self.WORKTREES)
+        assert owned == [True, True, True, True]
+
+    def test_other_processes_are_not_claimed(self, tmp_path: Path) -> None:
+        owned = _owns(tmp_path, self.REPO, [
+            # app-launcher's own tray, session-host and worktree
+            "C:\\automation\\app-launcher\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher\\launcher.py session-host --port 8446",
+            "C:\\automation\\app-launcher-wt-12\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            # a lookalike directory git does not list as this repo's worktree
+            "C:\\automation\\app-launcher-lite-wt-999\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher-lite-wt-999\\launcher.py session-host",
+            # unrelated python under another .venv, and the bare interpreter
+            "C:\\projects\\other\\.venv\\Scripts\\python.exe -m http.server",
+            "C:\\Python314\\python.exe -m http.server",
+            # a worktree process that is neither under its .venv nor its session-host
+            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher-lite-wt-478\\launcher.py tray",
+            # a longer name that merely starts with the worktree's
+            "C:\\automation\\app-launcher-lite-wt-4781\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+        ], self.WORKTREES)
+        assert owned == [False] * 9
+
+    def test_an_unreadable_worktree_listing_claims_no_worktree(self, tmp_path: Path) -> None:
+        # Real git against a directory that is not a repository: nothing is claimed and the note says why.
+        out = _run_ps(tmp_path, {
+            "TL_VENV": str(tmp_path / "missing" / "app-launcher-lite" / ".venv"),
+            "TL_SCRIPTDIR": str(tmp_path / "missing" / "app-launcher-lite"),
+            "TL_MODE": "list",
+        })
+        assert "ROOTS=" in out and "ROOTS=C" not in out
+        assert "could not list the git worktrees" in out
+
+
+class TestWorktreeListing:
+    """The listing comes from git, narrowed to this repo's ``<repo>-wt-<N>`` siblings."""
+
+    def test_only_registered_sibling_worktrees_are_listed(self, tmp_path: Path) -> None:
+        repo = tmp_path / "app-launcher-lite"
+        repo.mkdir()
+        assert run_git(repo, ["init", "-q", "-b", "main"]) is not None
+        ident = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+        assert run_git(repo, [*ident, "commit", "-q", "--no-verify", "--allow-empty", "-m", "x"]) is not None
+        sibling = tmp_path / "app-launcher-lite-wt-7"
+        elsewhere = tmp_path / "scratch-tree"
+        assert run_git(repo, ["worktree", "add", "-q", "-b", "b7", str(sibling)]) is not None
+        assert run_git(repo, ["worktree", "add", "-q", "-b", "bx", str(elsewhere)]) is not None
+        (tmp_path / "app-launcher-lite-wt-9").mkdir()  # looks like one, git does not know it
+
+        out = _run_ps(tmp_path, {
+            "TL_VENV": str(repo / ".venv"), "TL_SCRIPTDIR": str(repo), "TL_MODE": "list",
+        })
+        roots = [r for r in out.strip().split("ROOTS=", 1)[1].split("|") if r]
+        assert [Path(r).resolve() for r in roots] == [sibling.resolve()]
 
 
 def _spawn_listener(script_dir: Path, role: str = "session-host") -> Tuple["subprocess.Popen[str]", int, int]:
@@ -208,6 +288,60 @@ class TestReclaim:
         assert "SURVIVORS=1" in out
         assert f"FAILED: old holder PID {pid} is still running on :{port}" in out
         assert _alive(pid)
+
+
+class TestWorktreeProcessesAreReclaimed:
+    """Real listeners standing in for a tray and a session-host started from a worktree."""
+
+    @pytest.fixture
+    def listeners(self):
+        spawned: List["subprocess.Popen[str]"] = []
+        yield spawned
+        for proc in spawned:
+            proc.kill()
+
+    def test_reclaim_stops_a_worktree_session_host_and_names_its_checkout(self, tmp_path, listeners) -> None:
+        repo, worktree = tmp_path / "app-launcher-lite", tmp_path / "app-launcher-lite-wt-5"
+        proc, port, pid = _spawn_listener(worktree)
+        listeners.append(proc)
+        out = _run_ps(tmp_path, {
+            "TL_VENV": str(repo / ".venv"), "TL_SCRIPTDIR": str(repo), "TL_PORTS": str(port),
+            "TL_WORKTREES": json.dumps([str(worktree)]),
+        })
+        assert "SURVIVORS=0" in out
+        assert f"Reclaiming :{port} from PID {pid} (worktree checkout" in out
+        assert _wait_dead(pid)
+
+    def test_reclaim_leaves_an_unlisted_worktree_alone(self, tmp_path, listeners) -> None:
+        repo, worktree = tmp_path / "app-launcher-lite", tmp_path / "app-launcher-lite-wt-5"
+        proc, port, pid = _spawn_listener(worktree)
+        listeners.append(proc)
+        out = _run_ps(tmp_path, {
+            "TL_VENV": str(repo / ".venv"), "TL_SCRIPTDIR": str(repo), "TL_PORTS": str(port),
+            "TL_WORKTREES": json.dumps([]),
+        })
+        assert "SURVIVORS=0" in out and "not this repo's process" in out
+        assert _alive(pid)
+
+    def test_detect_finds_the_primary_and_worktree_trays_but_not_another_repos(self, tmp_path, listeners) -> None:
+        repo, worktree = tmp_path / "app-launcher-lite", tmp_path / "app-launcher-lite-wt-5"
+        other = tmp_path / "app-launcher"
+        pids = {}
+        # the tray's command line carries `<root>\.venv`: the listener script lives under it
+        for name, root in (("primary", repo), ("worktree", worktree), ("other", other)):
+            proc, _port, pid = _spawn_listener(root / ".venv", role="tray")
+            listeners.append(proc)
+            pids[name] = pid
+        out = _run_ps(tmp_path, {
+            "TL_VENV": str(repo / ".venv"), "TL_SCRIPTDIR": str(repo), "TL_MODE": "detect",
+            "TL_TRAYMATCH": r"launcher\.py\s+tray",
+            "TL_WORKTREES": json.dumps([str(worktree)]),
+        })
+        found = {int(p) for p in out.strip().split("PIDS=", 1)[1].split(",") if p}
+        # A venv launcher can sit in front of the interpreter with the same command line, so the
+        # set may hold more than one process per tray: assert on membership, not equality.
+        assert {pids["primary"], pids["worktree"]} <= found
+        assert pids["other"] not in found
 
 
 class TestRestartWithNothingToStop:
