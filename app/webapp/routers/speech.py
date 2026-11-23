@@ -15,10 +15,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.webapp.routers._helpers import audit_off_loop, client_ip
 from src import audit, recordings
@@ -142,10 +143,8 @@ def recording_audio(take_id: str) -> FileResponse:
     return FileResponse(path, media_type=mime, headers={"Cache-Control": "no-store"})
 
 
-@router.post("/api/transcribe/recordings/{take_id}/transcribe")
-def recording_transcribe(request: Request, take_id: str) -> Dict[str, Any]:
-    """Send a kept take to the speech endpoint again and record the outcome."""
-    cfg = _endpoint(request)
+def _transcribe_kept(cfg: WebappConfig, take_id: str) -> Tuple[Dict[str, Any], int]:
+    """Send a kept take to the speech endpoint and record the outcome on it."""
     try:
         path = recordings.audio_path(take_id)
         mime = recordings.mime_of(take_id)
@@ -164,6 +163,16 @@ def recording_transcribe(request: Request, take_id: str) -> Dict[str, Any]:
         recordings.set_status(take_id, recordings.STATUS_FAILED, str(exc))
         raise HTTPException(status_code=exc.status, detail=str(exc))
     recordings.set_status(take_id, recordings.STATUS_TRANSCRIBED)
-    audit.audit_event("transcribe", bytes=len(content), silent=bool(result.get("silent")),
-                      client=client_ip(request), kept=True)
+    return result, len(content)
+
+
+@router.post("/api/transcribe/recordings/{take_id}/transcribe")
+async def recording_transcribe(request: Request, take_id: str) -> Dict[str, Any]:
+    """Transcribe a kept take again, on the worker pool the sync routes share."""
+    cfg = _endpoint(request)
+    result, size = await run_in_threadpool(_transcribe_kept, cfg, take_id)
+    await audit_off_loop(
+        audit.audit_event, "transcribe", bytes=size, silent=bool(result.get("silent")),
+        client=client_ip(request), kept=True,
+    )
     return result

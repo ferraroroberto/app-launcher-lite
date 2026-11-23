@@ -384,7 +384,6 @@ async def _session_retention_tick(app: FastAPI) -> None:
         await asyncio.sleep(_RETENTION_INTERVAL_SECONDS)
 
 
-@asynccontextmanager
 def _prune_recordings(app: FastAPI) -> None:
     """Drop dictation takes past Settings' keep window; a failure never blocks boot."""
     cfg = getattr(app.state, "webapp_config", None)
@@ -396,6 +395,7 @@ def _prune_recordings(app: FastAPI) -> None:
         _log.warning("⚠️ could not prune dictation recordings: %s", exc)
 
 
+@asynccontextmanager
 async def _lifespan(app: FastAPI):
     # The loop's own default executor, swapped for one that reports queue and
     # worker time to the request that submitted the work (src/request_timing.py).
