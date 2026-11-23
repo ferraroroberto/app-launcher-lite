@@ -22,17 +22,17 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import gitlab_namespace
+import lite_repos
 from no_window import NO_WINDOW
 
 from . import rails
 
 DEFAULT_BASE_URL = gitlab_namespace.DEFAULT_BASE_URL
-# Sibling checkouts live next to this repo (`<parent>/<repo>`), as app-launcher-lite assumes.
-REPOS_ROOT = Path(__file__).resolve().parents[4]
+# `<projects_dir>/<repo>`: the folder app-launcher-lite's own `projects_dir` names.
+REPOS_ROOT = lite_repos.repos_root()
 
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
