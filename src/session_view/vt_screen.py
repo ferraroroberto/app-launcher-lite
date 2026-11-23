@@ -19,6 +19,7 @@ from websockets.asyncio.client import connect as ws_connect
 from websockets.exceptions import InvalidHandshake, WebSocketException
 
 from src.clients import session as session_client
+from src.request_timing import TimedExecutor
 from src.session_view.plan_picker import screen_lines
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,9 @@ _CLEAR_FRAME = "\x1b[H\x1b[2J\x1b[3J"
 # The frame is the host's second message, sent from memory: a wait past this
 # is a host that is not answering, not a slow render.
 _FRAME_TIMEOUT_S = 3.0
+# Rendering a frame is short CPU work; its own pool keeps a burst of screen
+# reads off the loop's shared default pool.
+_RENDER_POOL = TimedExecutor("vt-screen", max_workers=2)
 
 
 async def read_vt_screen(port: int, sid: str, rows: int, cols: int) -> Optional[List[str]]:
@@ -39,7 +43,9 @@ async def read_vt_screen(port: int, sid: str, rows: int, cols: int) -> Optional[
                 async for message in ws:
                     text = message if isinstance(message, str) else message.decode("utf-8", "replace")
                     if text and text != _CLEAR_FRAME:
-                        return await asyncio.to_thread(screen_lines, text, rows, cols)
+                        return await asyncio.get_running_loop().run_in_executor(
+                            _RENDER_POOL, screen_lines, text, rows, cols
+                        )
     except (TimeoutError, OSError, InvalidHandshake, WebSocketException) as exc:
         logger.info("ℹ️ vt screen %s unreadable: %s", sid[:8], exc or type(exc).__name__)
     return None

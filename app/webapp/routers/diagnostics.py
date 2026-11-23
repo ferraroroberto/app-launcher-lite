@@ -13,7 +13,6 @@ holds session lifecycle and chief traffic, terminal-grade content.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from typing import Any, Dict, Optional
@@ -22,6 +21,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from app.webapp.route_pools import APP_PROBES, MISC_FILES, run_on
 from src import diagnostics_bundle, request_timing
 from src import performance_health as performance_health_module
 from src.build_info import build_identity
@@ -86,7 +86,7 @@ async def performance_health(request: Request) -> Dict[str, Any]:
     under ``unknown``, never zero.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    return await asyncio.to_thread(performance_health_module.read, cfg)
+    return await run_on(APP_PROBES, performance_health_module.read, cfg)
 
 
 @router.post("/api/diagnostics")
@@ -98,7 +98,8 @@ async def save_diagnostics(body: SaveRequest, request: Request) -> Dict[str, Any
         )
     cfg: WebappConfig = request.app.state.webapp_config
     try:
-        saved = await asyncio.to_thread(
+        saved = await run_on(
+            MISC_FILES,
             diagnostics_bundle.save_bundle,
             diagnostics_bundle.sources_from_config(cfg),
             body.minutes,

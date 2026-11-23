@@ -1,25 +1,12 @@
 {
   "version": 1,
   "entries": [
-    {"key": "app/webapp/chief_doorbell.py", "counts": {"default-pool": 6}},
-    {"key": "app/webapp/routers/config.py", "counts": {"default-pool": 4}},
-    {"key": "app/webapp/routers/copilot_usage.py", "counts": {"default-pool": 1}},
-    {"key": "app/webapp/routers/desktop_screen.py", "counts": {"default-pool": 3}},
-    {"key": "app/webapp/routers/diagnostics.py", "counts": {"default-pool": 2}},
-    {"key": "app/webapp/routers/documents.py", "counts": {"default-pool": 2}},
-    {"key": "app/webapp/routers/progress.py", "counts": {"default-pool": 1}},
-    {"key": "app/webapp/routers/speech.py", "counts": {"default-pool": 2}},
     {"key": "app/webapp/routers/team_os.py", "counts": {"scan-per-request": 2}},
-    {"key": "app/webapp/server.py", "counts": {"default-pool": 7, "timing-middleware": 1}},
+    {"key": "app/webapp/server.py", "counts": {"timing-middleware": 1}},
     {"key": "app/webapp/session_host/server.py", "counts": {"default-pool": 15}},
     {"key": "app/webapp/static/board/drawer.js", "counts": {"fixed-rate-poll": 1}},
     {"key": "app/webapp/static/copilot-usage.js", "counts": {"fixed-rate-poll": 1}},
     {"key": "app/webapp/static/settings/performance.js", "counts": {"fixed-rate-poll": 1}},
-    {"key": "app/webapp/static/terminal.js", "counts": {"fixed-rate-poll": 2}},
-    {"key": "src/board/state_reconcile.py", "counts": {"default-pool": 1}},
-    {"key": "src/chief/reconcile.py", "counts": {"default-pool": 1}},
-    {"key": "src/desktop/capture.py", "counts": {"default-pool": 2}},
-    {"key": "src/session_view/vt_screen.py", "counts": {"default-pool": 1}},
-    {"key": "src/system_load.py", "counts": {"default-pool": 1}}
+    {"key": "app/webapp/static/terminal.js", "counts": {"fixed-rate-poll": 2}}
   ]
 }

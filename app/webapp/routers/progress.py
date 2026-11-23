@@ -9,11 +9,11 @@ answer says ``refreshing`` while it runs. The maths is
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from app.webapp.route_pools import MISC_FILES, run_on
 from src.progress import buckets, history
 from src.webapp_config import WebappConfig
 
@@ -35,8 +35,8 @@ async def get_progress(
         first, last = buckets.parse_range(from_, to)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return await asyncio.to_thread(
-        history.read,
+    return await run_on(
+        MISC_FILES, history.read,
         bucket=bucket, first=first, last=last, projects_dir=cfg.projects_dir,
         ignore=list(cfg.projects_ignore), host=cfg.gitlab_host, refresh=refresh,
     )

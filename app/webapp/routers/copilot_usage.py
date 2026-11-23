@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Request
 
+from app.webapp.route_pools import MISC_FILES, run_on
 from src import copilot_usage
 from src.webapp_config import WebappConfig
 
@@ -79,7 +80,7 @@ class UsageSnapshot:
         """The last machine and plan readings at once; starts a refresh when due."""
         due = self._read_at is None or self._clock() - self._read_at >= REFRESH_S
         if due and (self._task is None or self._task.done()):
-            self._task = asyncio.ensure_future(asyncio.to_thread(self._refresh))
+            self._task = asyncio.ensure_future(run_on(MISC_FILES, self._refresh))
             # A failed refresh is logged in _refresh; nobody awaits the task.
             self._task.add_done_callback(lambda done: done.cancelled() or done.exception())
         return self._reading, self._plan
