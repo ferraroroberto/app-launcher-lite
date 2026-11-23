@@ -158,11 +158,101 @@ def test_plan_picks_the_one_sign_in_still_in_its_cycle_not_the_newest(tmp_path: 
     assert (plan.state, plan.used_credits, plan.allowance) == ("ok", 249.5, 1000.0)
 
 
-def test_two_current_sign_ins_are_unknown_not_the_newest(tmp_path: Path) -> None:
+def test_two_current_sign_ins_without_settings_are_unknown_not_the_newest(tmp_path: Path) -> None:
     other = _entry(entitlement=50, remaining=0, retrieved="2026-11-22T09:59:00.000Z")
     plan = copilot_usage.read_plan(_plan_cache(tmp_path / "c.json", extra_entries={"v1:b": other}), NOW)
     assert plan.state == "unknown" and plan.used_credits is None
-    assert "2 Copilot accounts" in plan.reason and "can't tell which" in plan.reason
+    assert "2 cached plan entries" in plan.reason and "can't tell which" in plan.reason
+
+
+def _acct(login: str, **kwargs) -> dict:
+    """A synthetic entry that names its account, as the CLI's cached response does."""
+    entry = _entry(**kwargs)
+    entry["response"]["login"] = login
+    return entry
+
+
+def _signed_in(path: Path, login) -> Path:
+    """A fake CLI settings file with ``//`` header lines and the signed-in login."""
+    doc = {"lastLoggedInUser": {"host": "https://example.invalid", "login": login}} if login else {}
+    path.write_text("// User settings.\n" + json.dumps(doc), encoding="utf-8")
+    return path
+
+
+def _multi_cache(path: Path, entries: dict) -> Path:
+    path.write_text("// Disposable cache.\n" + json.dumps({"copilotUserCache": entries}), encoding="utf-8")
+    return path
+
+
+def test_signed_in_login_picks_its_entry_among_several(tmp_path: Path) -> None:
+    cache = _multi_cache(tmp_path / "c.json", {
+        "v1:a": _acct("sample-user", remaining=600, retrieved="2026-11-20T09:00:00.000Z"),
+        "v1:b": _acct("other-user", entitlement=50, remaining=1, retrieved="2026-11-22T09:59:00.000Z"),
+    })
+    plan = copilot_usage.read_plan(cache, NOW, _signed_in(tmp_path / "cfg.json", "sample-user"))
+    assert (plan.state, plan.used_credits, plan.allowance) == ("ok", 400.0, 1000.0)
+
+
+def test_two_refreshes_of_the_signed_in_login_use_the_newest(tmp_path: Path) -> None:
+    cache = _multi_cache(tmp_path / "c.json", {
+        "v1:a": _acct("Sample-User", remaining=900, retrieved="2026-11-21T09:00:00.000Z"),
+        "v1:b": _acct("sample-user", remaining=700, retrieved="2026-11-22T09:00:00.000Z"),
+        "v1:c": _acct("other-user", entitlement=50, remaining=1, retrieved="2026-11-22T09:59:00.000Z"),
+    })
+    plan = copilot_usage.read_plan(cache, NOW, _signed_in(tmp_path / "cfg.json", "sample-user"))
+    assert (plan.state, plan.used_credits) == ("ok", 300.0)
+
+
+def test_signed_in_login_with_no_matching_entry_is_unknown_not_another_account(tmp_path: Path) -> None:
+    cache = _multi_cache(tmp_path / "c.json", {
+        "v1:a": _acct("other-user", remaining=600), "v1:b": _acct("third-user", remaining=100),
+    })
+    plan = copilot_usage.read_plan(cache, NOW, _signed_in(tmp_path / "cfg.json", "sample-user"))
+    assert plan.state == "unknown" and plan.used_credits is None
+    assert "no entry for the account" in plan.reason
+    assert "sample-user" not in plan.reason and "other-user" not in plan.reason
+
+
+def test_lone_entry_of_another_account_is_unknown(tmp_path: Path) -> None:
+    cache = _multi_cache(tmp_path / "c.json", {"v1:a": _acct("other-user", remaining=600)})
+    plan = copilot_usage.read_plan(cache, NOW, _signed_in(tmp_path / "cfg.json", "sample-user"))
+    assert plan.state == "unknown" and "no entry for the account" in plan.reason
+
+
+def test_other_accounts_lapsed_entry_never_beats_the_signed_in_one(tmp_path: Path) -> None:
+    cache = _multi_cache(tmp_path / "c.json", {
+        "v1:a": _acct("sample-user", remaining=600, retrieved="2026-11-20T09:00:00.000Z"),
+        "v1:b": _acct("sample-user", remaining=1, reset="2026-11-15T00:00:00.000Z",
+                      retrieved="2026-11-22T09:59:00.000Z"),
+    })
+    plan = copilot_usage.read_plan(cache, NOW, _signed_in(tmp_path / "cfg.json", "sample-user"))
+    assert (plan.state, plan.used_credits) == ("ok", 400.0)
+
+
+@pytest.mark.parametrize("config, reason", [
+    ("missing", "settings file is missing"),
+    ("{not json", "settings could not be read"),
+    ("nologin", "name no signed-in account"),
+])
+def test_several_entries_without_a_readable_login_are_unknown(tmp_path: Path, config: str, reason: str) -> None:
+    cache = _multi_cache(tmp_path / "c.json", {
+        "v1:a": _acct("sample-user", remaining=600), "v1:b": _acct("other-user", remaining=100),
+    })
+    cfg = tmp_path / "cfg.json"
+    if config == "nologin":
+        _signed_in(cfg, None)
+    elif config != "missing":
+        cfg.write_text(config, encoding="utf-8")
+    plan = copilot_usage.read_plan(cache, NOW, cfg)
+    assert plan.state == "unknown" and plan.used_credits is None
+    assert "2 cached plan entries" in plan.reason and reason in plan.reason
+
+
+def test_single_entry_without_config_reads_as_before(tmp_path: Path) -> None:
+    cache = _multi_cache(tmp_path / "c.json", {"v1:a": _acct("sample-user", remaining=600)})
+    for config in (None, tmp_path / "absent.json"):
+        plan = copilot_usage.read_plan(cache, NOW, config)
+        assert (plan.state, plan.used_credits) == ("ok", 400.0)
 
 
 def test_plan_names_its_billing_unit(tmp_path: Path) -> None:
