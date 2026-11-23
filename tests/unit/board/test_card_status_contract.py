@@ -50,12 +50,12 @@ def test_a_raw_idle_stamp_is_resting_for_the_chief_and_idle_for_the_doorbell():
 
 
 def test_declared_groupings_are_the_ones_consumers_routed_by():
-    assert card_status.NEEDS_HUMAN == {"stalled", "awaiting-decision", "awaiting-input"}
+    assert card_status.NEEDS_HUMAN == {"stalled", "awaiting-decision", "awaiting-input", "turn-failed"}
     assert card_status.CHIEF_RESTING == {
         "idle", "idle-finished", "awaiting-input", "awaiting-decision",
     }
     assert card_status.DOORBELL_IDLE == {
-        "idle", "idle-finished", "awaiting-input", "waiting-on-task", "stalled",
+        "idle", "idle-finished", "awaiting-input", "waiting-on-task", "stalled", "turn-failed",
     }
     assert card_status.SCREEN_CHECKED == {
         "idle-finished", "awaiting-input", "tool-pending", "stalled",

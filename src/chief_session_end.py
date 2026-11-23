@@ -42,11 +42,15 @@ logger = logging.getLogger(__name__)
 EVENT_VERSION = 2
 KIND_SESSION_END = "session-end"
 KIND_TURN_END = "turn-end"
+#: A turn end whose last model round wrote no reply (``copilot/hooks/chief_inbox.py``).
+KIND_TURN_FAILED = "turn-failed"
 SOURCE_REAPER = "reaper"
 #: v1-compatible event name, so ``wait-event`` still names the event.
 LEGACY_EVENT_NAME = "SessionEnd"
 #: v1-compatible event names by kind, as the worker's hook writes them.
-LEGACY_EVENT_NAMES = {KIND_SESSION_END: LEGACY_EVENT_NAME, KIND_TURN_END: "Stop"}
+LEGACY_EVENT_NAMES = {
+    KIND_SESSION_END: LEGACY_EVENT_NAME, KIND_TURN_END: "Stop", KIND_TURN_FAILED: "Stop",
+}
 
 
 #: ``src.webapp_config.WEBAPP_CONFIG_PATH_ENV`` and ``DEFAULT_CONFIG_PATH``. Not

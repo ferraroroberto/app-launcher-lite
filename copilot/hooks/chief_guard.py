@@ -18,7 +18,10 @@ reaches the model, ``agentStop`` ``decision: block`` forces another turn, and
   doorbell: that bell rings only a chief whose composer the session host
   tracks, and it does not track Copilot's, so turning it on would not wake
   this chief.
-- ``preToolUse``: deny ``ask_user`` for the chief and for every chief-managed
+- ``preToolUse``: deny the chief's shell call that reaches the launcher's launch,
+  issue-start or session-input route directly, and name the ``chief_ops.py`` verb
+  to use: a session opened that way is never chief-managed, so the mailbox never
+  hears of it. Deny ``ask_user`` for the chief and for every chief-managed
   lane. It renders only in the session's own terminal, where nobody reads it.
   Also deny a chief-managed lane's shell call that reaches the full fleet (a ``gh``
   command, ``notify_complete``, a helper under the Claude Code user-scope skills
@@ -74,6 +77,12 @@ NOTIFY_RE = re.compile(r"\bnotify_complete\b", re.IGNORECASE)
 # Only a statement that starts with `gh` is a gh command: a commit message or a path that
 # merely contains the letters is not.
 STATEMENT_SPLIT_RE = re.compile(r"&&|\|\||[;|\r\n]")
+# The launcher routes that start a session or type into one. The chief reaches them only through
+# chief_ops.py, whose `open --issue/--lane` and `dispatch` mark a lane chief-managed before its first
+# message: a raw call opens a lane whose turn ends and exit never reach the mailbox.
+LAUNCHER_ROUTE_RE = re.compile(
+    r"/api/apps/[^/\s'\"]+/launch\b|/api/board/issues/start\b|/api/claude-code/sessions/[^/\s'\"]+/input\b",
+    re.IGNORECASE)
 GH_STATEMENT_RE = re.compile(r"""^\s*(?:&\s*)?['"]?(?:[^\s'"]*[\\/])?gh(?:\.exe)?['"]?(?:\s|$)""", re.IGNORECASE)
 # Copilot CLI 1.0.114 hands userPromptSubmitted a skill invocation already expanded:
 # `<skill-context name="X">`, `Base directory for this skill: <dir>`, the SKILL.md body
@@ -246,11 +255,11 @@ def _unwrapped(command: str) -> str:
         return command
 
 
-def foreign_command(payload: Dict[str, Any]) -> Optional[str]:
-    """What a shell tool call reaches that belongs to the full fleet, else None.
+def shell_command(payload: Dict[str, Any]) -> Optional[str]:
+    """The command text of a shell tool call, else None.
 
-    Both fields of the payload are searched as text because Copilot sends ``toolArgs`` as a JSON
-    string and a future harness may send an object; the shell tools are the only ones checked.
+    Searched as text because Copilot sends ``toolArgs`` as a JSON string and a future harness may
+    send an object; the shell tools are the only ones read.
     """
     if payload.get("tool_name") not in SHELL_TOOLS:
         return None
@@ -262,7 +271,14 @@ def foreign_command(payload: Dict[str, Any]) -> Optional[str]:
             text = parsed["command"]
     except ValueError:
         pass
-    text = _unwrapped(text)
+    return _unwrapped(text)
+
+
+def foreign_command(payload: Dict[str, Any]) -> Optional[str]:
+    """What a shell tool call reaches that belongs to the full fleet, else None."""
+    text = shell_command(payload)
+    if text is None:
+        return None
     if FULL_FLEET_PATH_RE.search(text):
         return "a helper from the full fleet's skills folder"
     if NOTIFY_RE.search(text):
@@ -273,6 +289,30 @@ def foreign_command(payload: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def raw_launcher_call(payload: Dict[str, Any]) -> Optional[str]:
+    """The launcher route a shell call reaches directly, else None."""
+    text = shell_command(payload)
+    match = LAUNCHER_ROUTE_RE.search(text) if text else None
+    return match.group(0) if match else None
+
+
+def _deny(why: str) -> Dict[str, Any]:
+    """A preToolUse deny in Copilot's own fields and the Claude Code shape it also reads."""
+    return {"permissionDecision": "deny", "permissionDecisionReason": why,
+            "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                   "permissionDecisionReason": why}}
+
+
+def chief_raw_call_refusal(route: str) -> Dict[str, Any]:
+    """The deny answer for a chief that reached for a launcher route by hand."""
+    return _deny(
+        f"Refused: a direct call to the launcher's `{route}` route. A session opened or steered this way "
+        f"is never marked chief-managed, so its turn ends, failed turns and exit never reach your mailbox "
+        f"or ring your doorbell. Use chief_ops.py: `dispatch <repo> <N>` for an issue, `open <project> "
+        f"--issue N` or `open <project> --lane` for lane work, plain `open <project>` for a session that is "
+        f"not lane work, and `say <sid> --file F --verify` to steer.")
+
+
 def lane_redirect(foreign: str) -> Dict[str, Any]:
     """The deny answer for a lane that reached for the full fleet, naming the skills it must use."""
     skills = (REPO / "skills").as_posix()
@@ -281,14 +321,15 @@ def lane_redirect(foreign: str) -> Dict[str, Any]:
            f"full fleet the skill text you were handed may be that fleet's GitHub one. Follow "
            f"{issue_skills}/issue-start/SKILL.md (or issue-yolo / issue-finish there) instead, use `glab` and the "
            f"helpers under {skills}/_lib, and send no completion notification.")
-    return {"permissionDecision": "deny", "permissionDecisionReason": why,
-            "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                   "permissionDecisionReason": why}}
+    return _deny(why)
 
 
 def on_pre_tool_use(payload: Dict[str, Any], sid: str) -> Optional[Dict[str, Any]]:
     if not sid:
         return None
+    route = raw_launcher_call(payload)
+    if route is not None and is_chief(payload, sid):
+        return chief_raw_call_refusal(route)
     tool = payload.get("tool_name")
     foreign = foreign_command(payload) if tool != ASK_TOOL else None
     if tool != ASK_TOOL and foreign is None:
@@ -303,9 +344,7 @@ def on_pre_tool_use(payload: Dict[str, Any], sid: str) -> Optional[Dict[str, Any
     why = ("ask_user is disabled in a chief session or a chief-managed lane: it renders only in this "
            "terminal, where nobody reads it. State the question and its options as plain output text, "
            "then end the turn or continue with your best judgement.")
-    return {"permissionDecision": "deny", "permissionDecisionReason": why,
-            "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                   "permissionDecisionReason": why}}
+    return _deny(why)
 
 
 def _same_dir(a: Path, b: Path) -> bool:

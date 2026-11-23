@@ -1,0 +1,10 @@
+{"type": "user.message", "data": {"content": "Start one background sleep, then end your turn."}, "timestamp": "2026-11-23T20:44:52.740Z"}
+{"type": "assistant.turn_start", "data": {"turnId": "0"}, "timestamp": "2026-11-23T20:44:52.747Z"}
+{"type": "assistant.message", "data": {"content": "", "toolRequests": [{"toolCallId": "call_bg0001", "name": "powershell"}]}, "timestamp": "2026-11-23T20:44:55.347Z"}
+{"type": "tool.execution_start", "data": {"toolCallId": "call_bg0001", "toolName": "powershell", "arguments": {"mode": "async"}}, "timestamp": "2026-11-23T20:44:55.349Z"}
+{"type": "tool.execution_complete", "data": {"toolCallId": "call_bg0001", "success": true, "result": {"content": "<command started in background with shellId: 0>", "structuredContent": {"shellId": "0"}}, "toolTelemetry": {"properties": {"executionMode": "async", "detached": "false"}}}, "timestamp": "2026-11-23T20:44:56.250Z"}
+{"type": "assistant.turn_end", "data": {"turnId": "0"}, "timestamp": "2026-11-23T20:44:56.260Z"}
+{"type": "assistant.turn_start", "data": {"turnId": "1"}, "timestamp": "2026-11-23T20:44:56.260Z"}
+{"type": "assistant.message", "data": {"content": "started background sleep", "toolRequests": []}, "timestamp": "2026-11-23T20:44:57.790Z"}
+{"type": "assistant.turn_end", "data": {"turnId": "1"}, "timestamp": "2026-11-23T20:44:57.790Z"}
+{"type": "hook.start", "data": {"hookType": "agentStop", "input": {"stopReason": "end_turn"}}, "timestamp": "2026-11-23T20:44:57.792Z"}
