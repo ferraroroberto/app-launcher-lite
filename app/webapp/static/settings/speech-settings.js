@@ -125,9 +125,9 @@ function setStatus(row, status, error, note) {
   word.dataset.status = status;
   word.textContent = _STATUS_WORD[status] || status;
   const err = row.querySelector('.speech-recording-error');
-  // The server keeps an error only on a failed take (src/recordings.py); the
-  // note says why the browser could not convert that take, shown beside it.
-  const why = status === 'failed' ? [error, note && 'Browser conversion: ' + note + '.'] : [];
+  // The server keeps an error only on a failed take (src/recordings.py), so the
+  // note, why the browser could not convert it, shows beside that error only.
+  const why = error ? [error, note && 'Browser conversion: ' + note + '.'] : [];
   err.textContent = why.filter(Boolean).join(' ');
   err.hidden = !err.textContent;
 }
