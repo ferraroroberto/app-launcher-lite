@@ -93,6 +93,10 @@ class Lite:
             (self.copilot / name).write_bytes((_COPILOT / name).read_bytes())
         for template in (_COPILOT / "hooks").glob("*.template.json"):
             (self.copilot / "hooks" / template.name).write_bytes(template.read_bytes())
+        (self.copilot / "hooks" / "chief-ops.template.cmd").write_bytes(
+            (_COPILOT / "hooks" / "chief-ops.template.cmd").read_bytes())
+        (self.copilot / "skills" / "_lib" / "chief_ops.py").write_text(
+            "import os, sys\nprint('ARGS=' + ' '.join(sys.argv[1:]))\nprint('CWD=' + os.getcwd())\n", encoding="utf-8")
         ports = _COPILOT / "skills" / "_lib" / "lite_ports.py"
         (self.copilot / "skills" / "_lib" / "lite_ports.py").write_bytes(ports.read_bytes())
         (self.copilot / "skills" / "demo").mkdir()
@@ -586,3 +590,22 @@ def test_skills_dir_never_writes_inside_a_skills_folder_that_links_into_another_
     lite.ok()
     assert [p.name for p in other.iterdir()] == ["theirs"]
     assert list(claude_other.iterdir()) == []
+
+
+def test_the_chief_launcher_runs_from_any_working_directory_and_is_removed_by_uninstall(lite: Lite, tmp_path: Path) -> None:
+    lite.ok()
+    launcher = lite.hooks / "app-launcher-lite-chief-ops.cmd"
+    assert launcher.is_file()
+    elsewhere = tmp_path / "somewhere else"
+    elsewhere.mkdir()
+    proc = subprocess.run(
+        [str(launcher), "inbox", "--count"], cwd=elsewhere, capture_output=True, text=True, timeout=60,
+        stdin=subprocess.DEVNULL, creationflags=NO_WINDOW,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "ARGS=inbox --count" in proc.stdout
+    assert f"CWD={elsewhere}" in proc.stdout
+    assert "{{" not in launcher.read_text(encoding="utf-8")
+    assert f"[ok] unchanged -> {launcher}" in lite.ok()
+    lite.ok("--uninstall")
+    assert not launcher.exists()
