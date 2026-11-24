@@ -40,6 +40,7 @@ from src.middleware import private_network_switch_gate, terminal_reachability
 from src.session_view import outbox as session_outbox
 from src.webapp_config import (
     MAX_CHIEF_AUTO_COMPACT_THRESHOLD,
+    MAX_CHIEF_FALLBACK_MINUTES,
     MAX_CHIEF_WORKER_CAP,
     MAX_COPILOT_MONTHLY_CREDITS,
     MAX_LARGE_UPLOAD_MAX_MB,
@@ -146,6 +147,9 @@ async def get_config(request: Request) -> Dict[str, Any]:
         "chief_auto_compact_threshold_min": MIN_CHIEF_AUTO_COMPACT_THRESHOLD,
         "chief_auto_compact_threshold_max": MAX_CHIEF_AUTO_COMPACT_THRESHOLD,
         "chief_doorbell": cfg.chief_doorbell,
+        # The launcher's fallback wake for the chief: minutes, 0 = off.
+        "chief_fallback_minutes": cfg.chief_fallback_minutes,
+        "chief_fallback_minutes_max": MAX_CHIEF_FALLBACK_MINUTES,
         "chief_auto_drain": cfg.chief_auto_drain,
         "chief_job_failures": cfg.chief_job_failures,
         "chief_job_self_heal": cfg.chief_job_self_heal,
@@ -287,6 +291,7 @@ _PATCH_KEYS = frozenset({
     "terminal_history_lines",
     "large_upload_max_mb",
     "chief_auto_compact_threshold",
+    "chief_fallback_minutes",
     "chief_doorbell",
     "chief_auto_drain",
     "chief_job_failures",
@@ -373,6 +378,7 @@ async def patch_config(request: Request) -> Any:
         if key in patch:
             patch[key] = str(patch[key] or "").strip()
     _checked_whole_number(patch, "chief_auto_compact_threshold", "an integer percent")
+    _checked_whole_number(patch, "chief_fallback_minutes", "a whole number of minutes")
     _checked_whole_number(patch, "large_upload_max_mb", "a whole number of MB")
     _checked_whole_number(patch, "speech_keep_recordings_hours", "a whole number of hours")
     _checked_whole_number(patch, "copilot_monthly_credits", "a whole number of AI credits")

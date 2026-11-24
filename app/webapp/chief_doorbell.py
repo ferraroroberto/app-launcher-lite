@@ -46,6 +46,12 @@ waited :data:`UNREAD_ALERT_SECONDS`, the tick logs one warning per backlog
 with its current skip reason, and :func:`unread_mailbox_age` lets
 ``GET /api/board`` move the chief's card to Your turn with the wait shown.
 
+A launcher-side fallback (:mod:`src.chief.fallback_wake`) runs on the same
+loop, checked every minute under its own setting (``chief_fallback_minutes``,
+0 = off) whatever the doorbell switch says: it rings the same line through
+the same ring path when a mailbox event or idle worker slots have waited N
+minutes, with the same idle and composer safety.
+
 Breadcrumbs go to ``webapp/chief-doorbell.log``: every ring and its delivery
 verdict, and every skip reason when it changes, repeated every
 :data:`SKIP_REPEAT_SECONDS` while it holds (a 3 s tick logging each skip would
@@ -61,13 +67,16 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
 from app.webapp.route_pools import BOARD_FILES, SESSION_FILES, SESSION_HOST, run_on
 from app.webapp.routers import board_chief
 from app.webapp.routers.board_spawn import read_live_sessions
 from src import board
 from src.board import card_status
+from src.chief import fallback_wake
+from src.chief import plan as chief_plan
+from src.chief_session_end import read_registry
 from src.clients import session as session_client
 from src.session_view.automatic_turns import (
     DOORBELL_LINE,
@@ -257,6 +266,15 @@ async def observe(cfg: Any) -> Observation:
     oldest_age = None if scan is None else scan.oldest_age(now_ms)
     if not pending:
         return Observation(pending=pending)
+    obs, _live = await observe_chief(cfg, pending, oldest_age)
+    return obs
+
+
+async def observe_chief(
+    cfg: Any, pending: Optional[int], oldest_age: Optional[float]
+) -> Tuple[Observation, List[Dict[str, Any]]]:
+    """The chief's facts beside a mailbox reading already taken, plus the
+    live session list they came from (empty when it could not be read)."""
     (live, host_error), state = await asyncio.gather(
         run_on(SESSION_HOST, read_live_sessions, cfg.session_host_port),
         run_on(BOARD_FILES, board.read_sessions_state, Path(cfg.sessions_state_file)),
@@ -266,13 +284,13 @@ async def observe(cfg: Any) -> Observation:
             pending=pending,
             oldest_age=oldest_age,
             blocked=f"session-host unreadable: {host_error}",
-        )
+        ), []
     live = board_chief._reconcile_chief_labels(
         live, state["rows"], cfg.fleet_config_dir
     )
     chief = board_chief._find_chief(live)
     if not chief:
-        return Observation(pending=pending, oldest_age=oldest_age, blocked="no live chief")
+        return Observation(pending=pending, oldest_age=oldest_age, blocked="no live chief"), live
     sid = str(chief.get("session_id") or "")
     # A session-host that predates the composer field sends none: unknown.
     dirty = chief.get("composer_dirty")
@@ -291,7 +309,7 @@ async def observe(cfg: Any) -> Observation:
         dirty=dirty,
         output_age=_output_age(chief.get("last_output_at"), time.time()),
         oldest_age=oldest_age,
-    )
+    ), live
 
 
 class Doorbell:
@@ -402,6 +420,19 @@ async def tick_once(
         skips.note(decision, obs, tick_now)
         return decision
     skips.reset()
+    return await _ring(cfg, obs, send_fn, record_fn, "chief doorbell", "")
+
+
+async def _ring(
+    cfg: Any,
+    obs: Observation,
+    send_fn: Callable[..., Dict[str, Any]],
+    record_fn: Callable[..., bool],
+    who: str,
+    why: str,
+) -> str:
+    """Type the doorbell line into the chief. ``who`` names the caller in the
+    log and ``why`` is appended to its lines (the fallback's reason)."""
     # Taken before the send: the transcript line can land before send_input
     # returns, and the ledger row must not be later than the line it matches.
     sent_at = time.time()
@@ -411,8 +442,8 @@ async def tick_once(
         )
     except session_client.SessionHostError as exc:
         # The back-off already started: a host that refuses the write is
-        # retried in BACKOFF_SECONDS, not hammered every tick.
-        logger.warning("⚠️ chief doorbell ring failed: %s (%s)", exc, obs.summary())
+        # retried later, not hammered every tick.
+        logger.warning("⚠️ %s ring failed: %s (%s)%s", who, exc, obs.summary(), why)
         return "ring failed"
     # The Chat pane folds this turn from the row; a failed write is logged by
     # the ledger and only leaves the turn to the fixed-line match.
@@ -423,15 +454,15 @@ async def tick_once(
     verdict = ring_verdict(body)
     if verdict == "ring":
         logger.info(
-            "🔔 chief doorbell rang, submit confirmed (%s) reason=%s",
-            obs.summary(), body.get("reason"),
+            "🔔 %s rang, submit confirmed (%s) reason=%s%s",
+            who, obs.summary(), body.get("reason"), why,
         )
     else:
         logger.warning(
-            "⚠️ chief doorbell ring not delivered: submit_state=%s delivered=%s "
-            "reason=%s (%s)",
-            body.get("submit_state"), body.get("delivered"), body.get("reason"),
-            obs.summary(),
+            "⚠️ %s ring not delivered: submit_state=%s delivered=%s "
+            "reason=%s (%s)%s",
+            who, body.get("submit_state"), body.get("delivered"), body.get("reason"),
+            obs.summary(), why,
         )
     return verdict
 
@@ -449,9 +480,94 @@ async def tick_forever(app: Any) -> None:
     """The lifespan loop. Reads ``app.state.webapp_config`` every tick."""
     bell = Doorbell()
     skips = _SkipLog()
+    fallback = fallback_wake.FallbackWake()
+    fallback_skips = _SkipLog()
     while True:
+        cfg = getattr(app.state, "webapp_config", None)
         try:
-            await tick_once(getattr(app.state, "webapp_config", None), bell, skips)
+            await tick_once(cfg, bell, skips)
         except Exception:  # noqa: BLE001 — never take the lifespan down
             logger.exception("❌ chief doorbell tick failed")
+        try:
+            await fallback_tick_once(cfg, fallback, fallback_skips)
+        except Exception:  # noqa: BLE001 — never take the lifespan down
+            logger.exception("❌ chief fallback tick failed")
         await asyncio.sleep(TICK_SECONDS)
+
+
+def fallback_minutes(cfg: object) -> int:
+    """The fallback window in minutes; anything but a real positive int is off."""
+    value = getattr(cfg, "chief_fallback_minutes", 0)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    return max(value, 0)
+
+
+def _slot_inputs(cfg: Any) -> Tuple[Optional[int], Optional[Set[str]]]:
+    """``(queued plan rows, chief-managed sids)``, each ``None`` when unreadable."""
+    queued = fallback_wake.queued_rows(chief_plan.read_plan_index(Path(cfg.chief_plan_file)))
+    registry = read_registry(Path(cfg.chief_managed_file))
+    return queued, (None if registry is None else set(registry))
+
+
+async def observe_fallback(cfg: Any) -> Tuple[Observation, fallback_wake.Facts]:
+    """The fallback's facts: the mailbox, the chief and the worker slots."""
+    now_ms = int(time.time() * 1000)
+    scan = await run_on(BOARD_FILES, scan_pending, Path(cfg.chief_inbox_dir), now_ms)
+    pending = None if scan is None else scan.count
+    oldest_age = None if scan is None else scan.oldest_age(now_ms)
+    (obs, live), (queued, managed) = await asyncio.gather(
+        observe_chief(cfg, pending, oldest_age),
+        run_on(BOARD_FILES, _slot_inputs, cfg),
+    )
+    free = None
+    if obs.chief_sid:
+        free = fallback_wake.free_slots(
+            live, obs.chief_sid, int(cfg.chief_worker_cap),
+            str(cfg.chief_worker_cap_scope), managed,
+        )
+    facts = fallback_wake.Facts(
+        oldest_age=oldest_age, free_slots=free, queued=queued,
+        idle=obs.idle, dirty=obs.dirty, blocked=obs.blocked,
+    )
+    return obs, facts
+
+
+async def fallback_tick_once(
+    cfg: Any,
+    fallback: fallback_wake.FallbackWake,
+    skips: _SkipLog,
+    *,
+    now: Callable[[], float] = time.monotonic,
+    observe_fn: Callable[[Any], Awaitable[Tuple[Observation, fallback_wake.Facts]]] = observe_fallback,
+    send_fn: Callable[..., Dict[str, Any]] = session_client.send_input,
+    record_fn: Callable[..., bool] = record_injected,
+) -> str:
+    """One fallback check, at most every :data:`fallback_wake.CHECK_SECONDS`.
+
+    Returns ``"ring"`` or ``"ring not delivered"`` after a ring, else a skip
+    reason, ``"off"`` or ``"not due"``. Runs whatever the doorbell switch says:
+    it is the backup for a doorbell that is off or missed.
+    """
+    tick_now = now()
+    minutes = 0 if cfg is None else fallback_minutes(cfg)
+    if minutes <= 0:
+        fallback.reset()
+        skips.note("fallback off", None, tick_now)
+        return "off"
+    if not fallback.due(tick_now):
+        return "not due"
+    try:
+        obs, facts = await observe_fn(cfg)
+    except Exception as exc:  # noqa: BLE001 — a failed read is a skip, never a crash
+        reason = f"fallback observe failed: {exc}"
+        skips.note(reason, None, tick_now)
+        return reason
+    decision = fallback.decide(minutes, facts, tick_now)
+    if not decision.ring:
+        skips.note(f"fallback skip: {decision.reason}", obs, tick_now)
+        return decision.reason
+    skips.reset()
+    return await _ring(
+        cfg, obs, send_fn, record_fn, "chief fallback", f" fallback={decision.reason}"
+    )

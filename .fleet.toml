@@ -418,7 +418,7 @@ why        = "bounded wait for a sister tray the owner just launched to bind its
 path       = "app/webapp/chief_doorbell.py"
 function   = "tick_forever"
 interval_s = 3
-why        = "wakes the idle fleet chief when its mailbox fills, which must happen while nobody watches; off by default, and an empty mailbox stops each tick at two directory listings"
+why        = "wakes the idle fleet chief when its mailbox fills, which must happen while nobody watches; off by default, and an empty mailbox stops each tick at two directory listings; the fallback wake on the same loop reads the session-host at most once a minute, and nothing at 0"
 
 [[request_budget.loops]]
 path       = "app/webapp/demand_cache.py"

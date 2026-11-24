@@ -237,23 +237,24 @@
             <span>Model</span>
             <span id="chiefModelSelect" class="model-combo model-combo--settings" data-value="">
             <button data-track="chief.model" type="button" class="model-combo-trigger" aria-label="Chief model"
-                    aria-haspopup="listbox" aria-expanded="false" aria-controls="chiefModelMenu">Default</button>
+                    aria-describedby="chiefModelHelp" aria-haspopup="listbox" aria-expanded="false" aria-controls="chiefModelMenu">Default</button>
             <span id="chiefModelMenu" data-surface="settings.chief-model-menu" class="model-combo-menu" role="listbox"
                   aria-label="Chief model" hidden>
               <button data-track="chief.model-option" type="button" role="option" data-value="" aria-selected="true">Default</button>
             </span>
           </span>
           </div>
+          <p id="chiefModelHelp" class="field-help">The Copilot model the chief thinks with. Default lets Copilot pick.</p>
           <p id="chiefModelProblem" class="field-error" role="alert" hidden></p>
           <label class="row">
             <span>Context</span>
-            <select data-track="chief.context" id="chiefContext" class="select-native" aria-label="Chief context window"></select>
+            <select data-track="chief.context" id="chiefContext" class="select-native" aria-label="Chief context window" aria-describedby="chiefLaunchHelp"></select>
           </label>
           <label class="row">
             <span>Effort</span>
             <select data-track="chief.effort" id="chiefEffort" class="select-native" aria-label="Chief reasoning effort" aria-describedby="chiefLaunchHelp"></select>
           </label>
-          <p id="chiefLaunchHelp" class="field-help">Applied when the chief starts. Same as Coding agent uses the Coding agent sheet's value. Effort applies only with a model picked here: the default model refuses it.</p>
+          <p id="chiefLaunchHelp" class="field-help">Context is how much conversation the chief keeps in view, effort how hard it thinks before answering. Applied when the chief starts. Same as Coding agent uses the Coding agent sheet's value. Effort applies only with a model picked here: the default model refuses it.</p>
           <label class="row">
             <span>Worker cap</span>
             <input id="chiefWorkerCap" type="number" class="input-native" inputmode="numeric" step="1" aria-describedby="chiefWorkerCapHelp">
@@ -276,12 +277,17 @@
             <span>Doorbell</span>
             <button data-track="chief.doorbell" type="button" id="chiefDoorbellToggle" class="toggle" role="switch" aria-checked="false" aria-label="Chief doorbell" aria-describedby="chiefDoorbellHelp" title="Wake the chief when workers leave it mail"><span class="knob"></span><span class="toggle-label">OFF</span></button>
           </div>
-          <p id="chiefDoorbellHelp" class="field-help">Wakes the idle chief when its mailbox has worker news, by typing one fixed line into its terminal. Off, nothing is typed and the chief arms its own waiter at its next turn.</p>
+          <p id="chiefDoorbellHelp" class="field-help">Wakes the idle chief when its mailbox has worker news, by typing one fixed line into its terminal. Off, nothing is typed at once, and only the fallback check below or your next message wakes it.</p>
+          <label class="row">
+            <span>Fallback check (minutes, 0 = off)</span>
+            <input data-track="chief.fallback-minutes" id="chiefFallbackMinutes" type="number" class="input-native" inputmode="numeric" min="0" max="1440" step="1" aria-describedby="chiefFallbackHelp">
+          </label>
+          <p id="chiefFallbackHelp" class="field-help">A backup for a missed doorbell. Rings the idle chief once when a mailbox event has waited this many minutes, or worker slots are free while plan rows wait. Never while it is mid-turn or you are typing to it, and at most once per this many minutes, whether the doorbell is on or off.</p>
           <div class="row">
             <span>Auto-drain queue</span>
             <button data-track="chief.auto-drain" type="button" id="chiefAutoDrainToggle" class="toggle" role="switch" aria-checked="true" aria-label="Auto-drain queue" aria-describedby="chiefAutoDrainHelp" title="Let the chief start unattended audit fixes when a worker slot frees"><span class="knob"></span><span class="toggle-label">ON</span></button>
           </div>
-          <p id="chiefAutoDrainHelp" class="field-help">The chief starts unattended audit fixes when a worker slot frees.</p>
+          <p id="chiefAutoDrainHelp" class="field-help">The chief queues unattended audit fixes and starts them when a worker slot frees. Off, it leaves them for you to start.</p>
           <div class="row">
             <span>Auto-compact</span>
             <button data-track="chief.auto-compact" type="button" id="chiefAutoCompactToggle" class="toggle" role="switch" aria-checked="true" aria-label="Chief auto-compact" aria-describedby="chiefAutoCompactHelp" title="Let the chief compact itself when its context fills"><span class="knob"></span><span class="toggle-label">ON</span></button>

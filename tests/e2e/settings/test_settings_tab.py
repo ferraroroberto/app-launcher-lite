@@ -485,4 +485,19 @@ def test_chief_sheet_switches_and_auto_compact_threshold_save_and_reload(
     expect(field).to_be_enabled()
     assert posts[-1] == {"chief_auto_compact_threshold": 30}, posts
 
+    # The fallback wake: 30 by default, explained, 0 saves as off, and it is
+    # put back so the shared webapp is left as found.
+    fallback = page.locator("#chiefFallbackMinutes")
+    expect(fallback).to_have_value("30")
+    expect(page.locator("#chiefFallbackHelp")).to_contain_text("missed doorbell")
+    fallback.fill("0")
+    saving(lambda: fallback.press("Tab"))
+    expect(page.locator("#toast")).to_contain_text("Chief fallback check off")
+    assert posts[-1] == {"chief_fallback_minutes": 0}, posts
+    open_sheet()
+    expect(fallback).to_have_value("0")
+    fallback.fill("30")
+    saving(lambda: fallback.press("Tab"))
+    assert posts[-1] == {"chief_fallback_minutes": 30}, posts
+
     _assert_chief_switches_save_flip_and_reload(page, base_url, posts, saving)

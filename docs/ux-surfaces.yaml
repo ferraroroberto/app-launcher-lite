@@ -1594,10 +1594,12 @@ surfaces:
       - a line naming a saved chief model the Copilot list no longer offers
       - a switch for counting only chief-dispatched sessions
       - a Skills folder field, with a line saying whether each issue skill is found, missing or unknown
-      - Automations - Doorbell, Auto-drain queue, Auto-compact with its threshold, Job failures, Job self-heal and Weekly proposals
+      - Automations - Doorbell, Fallback check in minutes, Auto-drain queue, Auto-compact with its threshold, Job failures, Job self-heal and Weekly proposals
+      - a one-line explanation under every control
       - Done
     does:
       - each switch saves when tapped and no restart is needed
+      - Fallback check saves on change; 0 turns it off
       - model, context and effort apply when the chief next starts; Same as Coding agent follows that sheet
       - a chief model outside the Copilot list starts on Copilot's own pick, with a warning
       - the Skills folder saves on blur; empty uses the bundled issue skills, and a lane start is refused while one is missing

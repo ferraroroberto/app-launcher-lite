@@ -197,5 +197,18 @@ class MailboxTests(unittest.TestCase):
         self.assertEqual(rows["c1"]["status"], "needs-you")
 
 
+class FallbackWakeLineTest(unittest.TestCase):
+    """`wake`'s second line names the launcher's fallback wake, unknown when unread."""
+
+    def test_line_per_setting(self):
+        from chief import lite_lanes
+        cases = [({"chief_fallback_minutes": 30}, "FALLBACK_WAKE=on minutes=30"),
+                 ({"chief_fallback_minutes": 0}, "FALLBACK_WAKE=off"),
+                 ({"chief_fallback_minutes": True}, "FALLBACK_WAKE=unknown"),
+                 ({}, "FALLBACK_WAKE=unknown"), (None, "FALLBACK_WAKE=unknown")]
+        for config, line in cases:
+            self.assertEqual(lite_lanes.fallback_wake_line(config), line)
+
+
 if __name__ == "__main__":
     unittest.main()

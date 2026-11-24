@@ -72,6 +72,7 @@ class TestChiefSettings:
             "auto_drain": True,
             "chief_job_self_heal": False,
             "chief_weekly_proposals": False,
+            "chief_fallback_minutes": 30,
         }
 
     @pytest.mark.parametrize("key", ["chief_job_self_heal", "chief_weekly_proposals"])
