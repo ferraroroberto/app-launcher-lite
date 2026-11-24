@@ -19,7 +19,7 @@
 
 import { els } from '../state.js';
 import { terminalJsonApi } from '../webauthn.js';
-import { AuthRequiredError, apiFailToast, sessionRoute, toast } from '../api.js';
+import { AuthRequiredError, apiFailToast, sessionRoute, toast, writeClipboard } from '../api.js';
 import { setAsyncState } from '../async-state.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { cutoffLabel, timeLabel } from './link-time.js';
@@ -40,9 +40,10 @@ const GROUP_GLYPH = {
 let view = null;   // { sid, seq, data, paged } while the sheet is open
 
 function copyUrl(url) {
-  // iOS only allows a clipboard write inside the tap gesture: writeText is
-  // called synchronously from the click handler.
-  navigator.clipboard.writeText(url).then(
+  // iOS only allows a clipboard write inside the tap gesture: the helper is
+  // called synchronously from the click handler. The host is the modal sheet,
+  // so the fallback textarea can take focus.
+  writeClipboard(url, { host: els.linksSheet }).then(
     function () { toast('Link copied', 'good', { icon: 'link' }); },
     function (exc) { apiFailToast('Copy link failed', exc); }
   );

@@ -10,7 +10,7 @@
  */
 
 import { els, state } from '../state.js';
-import { apiFailToast, jsonApi, toast } from '../api.js';
+import { apiFailToast, jsonApi, toast, writeClipboard } from '../api.js';
 import { confirmDialog } from '../confirm-dialog.js';
 import { revealInCard } from '../dom-utils.js';
 import { renderSettingsValues } from './settings-sheets.js';
@@ -145,11 +145,11 @@ async function copyShown(input) {
   const value = input.value;
   if (!value) return;
   try {
-    await navigator.clipboard.writeText(value);
+    await writeClipboard(value, { host: input });
     toast('Token copied.', 'good');
   } catch (_) {
-    // Clipboard API can be denied (http, permissions) — fall back to a
-    // select-all so a manual copy is one keystroke away.
+    // Even the helper's textarea fallback can be blocked — select the field
+    // so a manual copy is one keystroke away.
     input.focus();
     input.select();
     toast('Copy blocked — token selected, copy manually.', 'error');

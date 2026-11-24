@@ -296,6 +296,41 @@ def test_file_view_download_and_menu_on_the_phone(authed_page: Page, base_url: s
         assert fit["body"] <= 0 and fit["doc"] <= 0, f"sideways scroll at 390px ({theme}): {fit}"
     page.evaluate("document.documentElement.setAttribute('data-theme', 'light')")
 
+    _assert_copy_over_plain_http(page, row)
+
+
+# A page served over plain http has no `navigator.clipboard` at all. The copy
+# then takes the helper's selected hidden textarea; execCommand is stubbed to
+# record what that textarea holds, and to refuse in the last step.
+_PLAIN_HTTP = """
+() => {
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+  window.__selected = [];
+  window.__execAllowed = true;
+  document.execCommand = (cmd) => {
+    if (cmd !== 'copy') return false;
+    window.__selected.push(document.activeElement.value);
+    return window.__execAllowed;
+  };
+}
+"""
+
+
+def _assert_copy_over_plain_http(page: Page, row) -> None:
+    """Copy on a page with no clipboard API copies through the selection
+    fallback, and when the browser blocks that too, says to copy by hand with
+    the helper's own sentence, never a ``writeText`` TypeError."""
+    page.evaluate(_PLAIN_HTTP)
+    toast = page.locator("#toast")
+    _open_kebab(page, row).locator("[data-item='chg-copy-content']").click()
+    expect(toast).to_contain_text("Content copied")
+    assert page.evaluate("() => window.__selected") == [_NOTES]
+
+    page.evaluate("() => { window.__execAllowed = false; }")
+    _open_kebab(page, row).locator("[data-item='chg-copy-content']").click()
+    expect(toast).to_contain_text("browser blocked the clipboard")
+    expect(toast).not_to_contain_text("writeText")
+
 
 def test_download_open_on_pc_code_gutter_and_a_file_gone_from_disk(
     authed_page: Page, base_url: str
