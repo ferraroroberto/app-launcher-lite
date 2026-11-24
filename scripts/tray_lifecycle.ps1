@@ -9,7 +9,10 @@
       .venv in its command line, fails when an owned holder survives, matches
       this repo's paths under either drive spelling of a junctioned root,
       says so when a restart found nothing to stop, and claims processes
-      started from this repo's own `-wt-<N>` git worktrees.
+      started from this repo's own `-wt-<N>` git worktrees, ends a plain start
+      on the same build check as a restart, and appends the failing phase
+      (helper, reclaim, launch, readiness) with the old and new PID, the scheme
+      and the last error line to webapp\restart.log.
       Vendored for the lite fork so the tray has zero external dependencies;
       this repo-local copy replaces the machine-shared
       %USERPROFILE%\.claude\tray\tray_lifecycle.ps1. Keep ASCII-only.
@@ -238,6 +241,38 @@ function Get-OwnedPorts {
     return $result
 }
 
+# A failed launch leaves one line in webapp\restart.log (the file restart_check appends to), naming
+# the phase that failed, the old and new PIDs, the scheme that answered and the last error line. The
+# tray.bat output alone is gone once the caller's console closes, so the reason is kept here. Never
+# throws: a log-write failure must not replace the error it is reporting.
+$script:Phase = 'helper'
+$script:OldPids = @()
+$script:NewPid = $null
+$script:Scheme = $null
+
+function Format-OneLine {
+    param([string] $Text, [int] $Max = 300)
+    $flat = (($Text -replace '[\r\n]+', ' ') -replace '\s+', ' ').Trim()
+    if ($flat.Length -gt $Max) { return $flat.Substring(0, $Max) }
+    return $flat
+}
+
+function Write-RestartBreadcrumb {
+    param([string] $Mode, [string] $ErrorText)
+    try {
+        $dir = Join-Path (Get-RepoRoot) 'webapp'
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $oldPid = if ($script:OldPids.Count -gt 0) { (@($script:OldPids | Select-Object -Unique)) -join ',' } else { 'none' }
+        $newPid = if ($script:NewPid) { [string] $script:NewPid } else { 'none' }
+        $scheme = if ($script:Scheme) { [string] $script:Scheme } else { 'none' }
+        $line = '{0} tray.bat {1} FAILED phase={2} old_pid={3} new_pid={4} scheme={5} error={6}' -f `
+            (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss'), $Mode, $script:Phase, $oldPid, $newPid, $scheme, (Format-OneLine $ErrorText)
+        [System.IO.File]::AppendAllText((Join-Path $dir 'restart.log'), $line + "`n", (New-Object System.Text.UTF8Encoding $false))
+    } catch {
+        Write-Host ("NOTE: could not write the restart breadcrumb: {0}" -f $_.Exception.Message)
+    }
+}
+
 function Wait-ProcessGone {
     param([int] $ProcessId, [int] $TimeoutSeconds = 5)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -262,9 +297,11 @@ function Invoke-ReclaimPorts {
             if ($checkout) {
                 $script:ReclaimedCount++
                 Write-Host ("Reclaiming :{0} from PID {1} ({2} checkout {3})" -f $port, $ownerProcessId, $checkout.Kind, $checkout.Root)
+                $script:OldPids += $ownerProcessId
                 Stop-Process -Id $ownerProcessId -Force -ErrorAction SilentlyContinue
                 if (-not (Wait-ProcessGone -ProcessId $ownerProcessId)) {
-                    Write-Host ("FAILED: old holder PID {0} is still running on :{1} after the stop; the restart did not replace it." -f $ownerProcessId, $port)
+                    $script:ReclaimFailure = ("old holder PID {0} is still running on :{1} after the stop; the restart did not replace it." -f $ownerProcessId, $port)
+                    Write-Host ("FAILED: {0}" -f $script:ReclaimFailure)
                     $survivors++
                 }
             } else {
@@ -296,7 +333,8 @@ function Start-TrayProcess {
     if (-not $TrayLaunch) { throw "launch requires -TrayLaunch" }
     $python = Get-PythonLauncher
     Write-Host ("Starting {0} tray..." -f $AppName)
-    Start-Process -FilePath $python -ArgumentList $TrayLaunch -WorkingDirectory $ScriptDir -WindowStyle Hidden
+    $started = Start-Process -FilePath $python -ArgumentList $TrayLaunch -WorkingDirectory $ScriptDir -WindowStyle Hidden -PassThru
+    if ($started) { $script:NewPid = $started.Id }
 }
 
 function Get-GitHead {
@@ -391,10 +429,13 @@ function Wait-VersionMatchesHead {
             foreach ($url in $urls) {
                 try {
                     $response = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 3
+                    $script:Scheme = ([System.Uri] $url).Scheme
                     $servedSha = $response.git_sha
                     if (-not $servedSha) { $servedSha = $response.gitSha }
                     $lastSha = [string] $servedSha
                     if (Test-GitShaMatches -ServedSha $lastSha -HeadSha $head) {
+                        # The answering process's own pid, not the launcher stub Start-Process returned.
+                        if ($response.pid -is [int] -or $response.pid -is [long]) { $script:NewPid = [int] $response.pid }
                         $assetHash = $response.asset_hash
                         if (-not $assetHash) { $assetHash = $response.assetHash }
                         if ($assetHash) {
@@ -428,37 +469,49 @@ switch ($Action) {
         if ((Invoke-ReclaimPorts) -gt 0) { exit 1 }
     }
     'launch' {
-        if (-not $AppName) { throw "launch requires -AppName" }
-        $trays = @(Get-TrayProcesses)
-        $trayPids = @($trays | ForEach-Object { $_.ProcessId })
-        if ($trayPids.Count -gt 0 -and -not $Restart) {
-            Write-Host ("{0} tray is already running (PID: {1})." -f $AppName, ($trayPids -join " "))
-            Write-Host 'Run "tray.bat --restart" to stop it and start fresh.'
-            exit 0
-        }
+        # A plain start and a restart both end on the same health and build check; a running tray is
+        # found by its live command line (never a PID file), so nothing stale can make it look running.
+        $mode = if ($Restart) { 'restart' } else { 'start' }
+        try {
+            if (-not $AppName) { throw "launch requires -AppName" }
+            $trays = @(Get-TrayProcesses)
+            $trayPids = @($trays | ForEach-Object { $_.ProcessId })
+            $script:OldPids = @($trayPids)
+            if ($trayPids.Count -gt 0 -and -not $Restart) {
+                Write-Host ("{0} tray is already running (PID: {1})." -f $AppName, ($trayPids -join " "))
+                Write-Host 'Run "tray.bat --restart" to stop it and start fresh.'
+                exit 0
+            }
 
-        if ($Restart) {
-            if ($trayPids.Count -gt 0) {
-                Write-Host ("Stopping previous {0} tray (PID: {1})..." -f $AppName, ($trayPids -join " "))
-                foreach ($tray in $trays) {
-                    Write-Host ("  PID {0}: {1} checkout {2}" -f $tray.ProcessId, $tray.Kind, $tray.Root)
+            if ($Restart) {
+                $script:Phase = 'reclaim'
+                if ($trayPids.Count -gt 0) {
+                    Write-Host ("Stopping previous {0} tray (PID: {1})..." -f $AppName, ($trayPids -join " "))
+                    foreach ($tray in $trays) {
+                        Write-Host ("  PID {0}: {1} checkout {2}" -f $tray.ProcessId, $tray.Kind, $tray.Root)
+                    }
+                    Stop-TrayProcesses -ProcessIds $trayPids
                 }
-                Stop-TrayProcesses -ProcessIds $trayPids
+                $script:ReclaimedCount = 0
+                $script:ReclaimFailure = $null
+                if ((Invoke-ReclaimPorts) -gt 0) {
+                    $why = if ($script:ReclaimFailure) { $script:ReclaimFailure } else { "an old process still holds an owned port" }
+                    throw ("restart failed: {0}" -f $why)
+                }
+                if ($trayPids.Count -eq 0 -and $script:ReclaimedCount -eq 0) {
+                    # Starting fresh is not a restart: nothing was replaced, so a stale build may still be serving.
+                    Write-Host ("NOTE: no running {0} tray or owned port holder matched {1}; nothing was stopped, so this starts a tray beside whatever else is running. The build check below says whether the new one is the one serving." -f $AppName, $VenvDir)
+                }
+                Start-Sleep -Seconds 2
             }
-            $script:ReclaimedCount = 0
-            if ((Invoke-ReclaimPorts) -gt 0) {
-                throw "restart failed: an old process still holds an owned port"
-            }
-            if ($trayPids.Count -eq 0 -and $script:ReclaimedCount -eq 0) {
-                # Starting fresh is not a restart: nothing was replaced, so a stale build may still be serving.
-                Write-Host ("NOTE: no running {0} tray or owned port holder matched {1}; nothing was stopped, so this starts a tray beside whatever else is running. The build check below says whether the new one is the one serving." -f $AppName, $VenvDir)
-            }
-            Start-Sleep -Seconds 2
-        }
 
-        Start-TrayProcess
-        if ($Restart) {
+            $script:Phase = 'launch'
+            Start-TrayProcess
+            $script:Phase = 'readiness'
             Wait-VersionMatchesHead
+        } catch {
+            Write-RestartBreadcrumb -Mode $mode -ErrorText $_.Exception.Message
+            throw
         }
     }
 }

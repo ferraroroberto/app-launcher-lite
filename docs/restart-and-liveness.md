@@ -50,6 +50,17 @@ process is restarted.
    name; or nothing answers); exit 2 = no baseline or no `tray.bat`, so a
    restart cannot be confirmed. Neither is a pass. Report the last line.
    `snapshot` and `verify` also run alone, around a hand-run restart.
+
+   When `tray.bat` exits non-zero, the helper behind it has already appended
+   one `tray.bat restart FAILED phase=<phase> old_pid=.. new_pid=.. scheme=..
+   error=<first error line>` line to the same `webapp/restart.log`, just above
+   the `restart FAILED` line. The phase is `helper` (arguments or the process
+   scan), `reclaim` (an old holder survived the stop), `launch` (the new tray
+   did not start) or `readiness` (nothing served `HEAD` within 30 s); `scheme`
+   is the one that answered (`none` when neither did). A plain `tray.bat` start
+   ends on the same build check and leaves the same line (`tray.bat start`).
+   A running tray is found by its live command line, never a PID file, so a
+   stale file cannot make a start look like a no-op.
 5. **Never type a bare `tray.bat --restart`.** This machine sets
    `NoDefaultCurrentDirectoryInExePath`, so the current folder is not searched:
    Git Bash answers `command not found` (exit 127), PowerShell errors but leaves
