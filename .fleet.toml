@@ -732,6 +732,14 @@ path = "src/chief_session_end.py"
 label = "session-host/launcher"
 [[e2e.rule]]
 tier = "full"
+path = "src/chief/__init__.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
+path = "src/chief/copilot_state.py"
+label = "session-host/launcher"
+[[e2e.rule]]
+tier = "full"
 path = "src/diagnostics.py"
 label = "session-host/launcher"
 [[e2e.rule]]

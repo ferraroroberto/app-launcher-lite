@@ -70,8 +70,7 @@ MANAGED = "managed"
 
 
 def state_dir() -> Path:
-    root = os.environ.get("COPILOT_HOOKS_STATE_DIR")
-    return Path(root) if root else Path.home() / ".copilot" / "hooks" / "state"
+    return _lib.state_dir()
 
 
 def managed_row(sid: str, path: Optional[Path] = None) -> Tuple[Optional[Dict[str, Any]], str]:

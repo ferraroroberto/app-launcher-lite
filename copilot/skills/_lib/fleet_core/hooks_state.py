@@ -1,7 +1,7 @@
 """Shared resolution for the hooks-state base directory.
 
 Lite: the one file of the ported `skills/_lib` closure that is not byte-identical
-to fleet-config's. Copilot keeps its state under `~/.copilot/hooks/state/`, with
+to fleet-config's. Copilot keeps its state under `~/.copilot/app-launcher-lite-state/`, with
 `COPILOT_HOOKS_STATE_DIR` as the override `hooks/session_state.py` already honours.
 
 Every `skills/_lib` module that persists advisory state under
@@ -33,6 +33,9 @@ from pathlib import Path
 from typing import Optional
 
 STATE_DIR_ENV_VAR = "COPILOT_HOOKS_STATE_DIR"
+# Outside hooks/: Copilot CLI loads every .json below it as a hook config. The hook tier's copy
+# is hooks/_lib.py and the webapp's src/chief/copilot_state.py; a test pins all three equal.
+STATE_DIRNAME = "app-launcher-lite-state"
 
 # An abrupt death between mkstemp and os.replace runs no Python handler, so a
 # writer's own except-branch unlink never fires and the temp is stranded.
@@ -44,9 +47,13 @@ ATOMIC_TMP_SWEEP_AFTER_SECONDS = 3600.0
 
 
 def state_dir() -> Path:
-    """The shared hooks-state base directory, honoring `COPILOT_HOOKS_STATE_DIR`."""
+    """The state folder: the override, else the old hooks/state until install.py --migrate moves it, else the new one."""
     root = os.environ.get(STATE_DIR_ENV_VAR)
-    return Path(root) if root else Path.home() / ".copilot" / "hooks" / "state"
+    if root:
+        return Path(root)
+    home = Path.home() / ".copilot"
+    current, legacy = home / STATE_DIRNAME, home / "hooks" / "state"
+    return legacy if legacy.is_dir() and not current.is_dir() else current
 
 
 # The atomic-write helpers below mirror hooks/_lib.py's copy on purpose: the tree

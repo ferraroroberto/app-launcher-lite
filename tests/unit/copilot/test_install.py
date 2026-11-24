@@ -89,7 +89,7 @@ class Lite:
         (self.copilot / "hooks").mkdir(parents=True)
         (self.copilot / "skills" / "_lib").mkdir(parents=True)
         (self.repo / "config").mkdir()
-        for name in ("install.py", "install.ps1", "install.bat"):
+        for name in ("install.py", "install_state.py", "install.ps1", "install.bat"):
             (self.copilot / name).write_bytes((_COPILOT / name).read_bytes())
         for template in (_COPILOT / "hooks").glob("*.template.json"):
             (self.copilot / "hooks" / template.name).write_bytes(template.read_bytes())
@@ -112,6 +112,10 @@ class Lite:
     @property
     def skills(self) -> Path:
         return self.home / "skills"
+
+    @property
+    def state(self) -> Path:
+        return self.home / "app-launcher-lite-state"
 
     def run(self, *flags: str, answer: Optional[str] = None) -> subprocess.CompletedProcess:
         env = {**os.environ, "COPILOT_HOME": str(self.home), "USERPROFILE": str(self.profile)}
@@ -254,12 +258,12 @@ def test_migrate_removes_the_old_install_installs_the_new_and_keeps_state(lite: 
     assert (lite.skills / "demo").is_junction() and (lite.copilot / "skills" / "demo" / "SKILL.md").exists()
     assert (lite.skills / "linked").is_junction(), "a link that is not the old install's is never removed"
     assert (lite.root / "fleet-config-lite" / "skills" / "demo").exists(), "the old checkout itself stays"
-    assert state.read_text(encoding="utf-8") == _STATE_BODY
+    assert not state.exists() and (lite.state / _STATE_FILE).read_text(encoding="utf-8") == _STATE_BODY
     assert "[ok] old hook config removed" in out
 
     again = lite.ok("--migrate", "--yes")
     assert "[ok] no fleet-config-lite hook config or skill link to remove" in again
-    assert state.read_text(encoding="utf-8") == _STATE_BODY
+    assert (lite.state / _STATE_FILE).read_text(encoding="utf-8") == _STATE_BODY
 
 
 @pytest.mark.parametrize("answer", [None, "n\n", "\n"])
@@ -403,7 +407,7 @@ def test_install_bat_migrates_like_install_py(lite: Lite) -> None:
     assert (lite.hooks / "app-launcher-lite-session-state.json").exists()
     assert (lite.hooks / "app-launcher-lite-chief-guard.json").exists()
     assert (lite.skills / "demo").is_junction() and (lite.copilot / "skills" / "demo" / "SKILL.md").exists()
-    assert state.read_text(encoding="utf-8") == _STATE_BODY
+    assert not state.exists() and (lite.state / _STATE_FILE).read_text(encoding="utf-8") == _STATE_BODY
 
 
 def test_install_bat_runs_from_powershell_under_allsigned_and_passes_the_exit_code_back(lite: Lite) -> None:
@@ -609,3 +613,77 @@ def test_the_chief_launcher_runs_from_any_working_directory_and_is_removed_by_un
     assert f"[ok] unchanged -> {launcher}" in lite.ok()
     lite.ok("--uninstall")
     assert not launcher.exists()
+
+
+def _lite_json_under_hooks(lite: Lite) -> List[str]:
+    return sorted(p.relative_to(lite.hooks).as_posix() for p in lite.hooks.rglob("*.json"))
+
+
+def test_a_fresh_install_keeps_state_out_of_the_hooks_folder(lite: Lite) -> None:
+    out = lite.ok()
+    assert lite.state.is_dir() and not (lite.hooks / "state").exists()
+    assert _lite_json_under_hooks(lite) == ["app-launcher-lite-chief-guard.json", "app-launcher-lite-session-state.json"]
+    assert f"State file will appear at: {lite.state}" in out
+
+
+def test_a_plain_install_leaves_old_state_where_it_is_and_says_to_migrate(lite: Lite) -> None:
+    state = lite.seed_state()
+    out = lite.ok()
+    assert "[warn] Lite's state is still in hooks\\state" in out
+    assert state.read_text(encoding="utf-8") == _STATE_BODY
+    assert not lite.state.exists(), "an empty new folder would switch every writer away from the live state"
+
+
+def _seed_full_state(lite: Lite) -> dict:
+    """What a machine with a live chief holds: plan, journal, handover, registry, pending and claimed events."""
+    legacy = lite.hooks / "state"
+    files = {
+        "sessions-state.json": '{"rows": []}',
+        "chief-plan.json": '{"version": 1, "items": []}',
+        "chief-managed.json": '{"sid-1": {"ref": "x#1"}}',
+        "active-issues.json": "{}",
+        "chief-journal.jsonl": '{"at": 1}\n{"at": 2}\n',
+        "chief-handover.md": "# handover",
+        "chief-inbox/1-turn-end-a.json": '{"kind": "turn-end"}',
+        "chief-inbox/claimed/0-turn-end-b.json": '{"kind": "turn-end"}',
+        "chief-inbox/.turn-end-sid-1.stamp": "",
+    }
+    for rel, body in files.items():
+        (legacy / rel).parent.mkdir(parents=True, exist_ok=True)
+        (legacy / rel).write_text(body, encoding="utf-8")
+    return files
+
+
+def test_migrate_moves_every_state_file_readable_and_a_second_run_changes_nothing(lite: Lite) -> None:
+    files = _seed_full_state(lite)
+    out = lite.ok("--migrate", "--yes")
+    assert not (lite.hooks / "state").exists() and "[ok] old state folder removed" in out
+    for rel, body in files.items():
+        assert (lite.state / rel).read_text(encoding="utf-8") == body, rel
+    assert _lite_json_under_hooks(lite) == ["app-launcher-lite-chief-guard.json", "app-launcher-lite-session-state.json"]
+
+    before = _snapshot(lite.profile)
+    again = lite.ok("--migrate", "--yes")
+    assert "[ok] state already lives outside Copilot's hooks folder" in again
+    assert _snapshot(lite.profile) == before
+
+
+def test_migrate_points_settings_pinned_at_the_old_folder_at_the_new_one(lite: Lite) -> None:
+    lite.seed_state()
+    legacy = lite.hooks / "state"
+    config = lite.write_config({"chief_inbox_dir": str(legacy / "chief-inbox"),
+                                "chief_plan_file": str(lite.root / "elsewhere" / "plan.json"),
+                                "gitlab_host": "git.example.test"})
+    lite.ok("--migrate", "--yes")
+    body = json.loads(config.read_text(encoding="utf-8"))
+    assert body["chief_inbox_dir"] == str(lite.state / "chief-inbox")
+    assert body["chief_plan_file"] == str(lite.root / "elsewhere" / "plan.json"), "a path of the owner's own stays"
+    assert body["gitlab_host"] == "git.example.test"
+    assert list((lite.repo / "config").glob("webapp_config.json.bak-*")), "a backup comes first"
+
+
+def test_whatif_migrate_moves_no_state(lite: Lite) -> None:
+    state = lite.seed_state()
+    out = lite.ok("--migrate", "--yes", "--what-if")
+    assert "[whatif] state copied, then switched ->" in out
+    assert state.read_text(encoding="utf-8") == _STATE_BODY and not lite.state.exists()

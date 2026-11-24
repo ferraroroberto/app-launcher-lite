@@ -19,7 +19,7 @@ env values; when present this writer persists them for an exact agent-aware
 consumer join. External sessions keep the normalized-cwd fallback join.
 
 Advisory-only: any failure is swallowed and the hook exits 0. The state file
-lives under ``~/.copilot/hooks/state/``; ``COPILOT_HOOKS_STATE_DIR``
+lives under ``~/.copilot/app-launcher-lite-state/`` (``_lib.state_dir()``); ``COPILOT_HOOKS_STATE_DIR``
 overrides the directory so tests stay hermetic. Rows untouched for 24h are
 pruned on each write.
 """
@@ -107,9 +107,7 @@ def _stored_status(row: Any) -> Optional[SessionStatus]:
 
 def state_file() -> Path:
     """Resolve the state-file path at call time so the env override always wins."""
-    root = os.environ.get("COPILOT_HOOKS_STATE_DIR")
-    base = Path(root) if root else Path.home() / ".copilot" / "hooks" / "state"
-    return base / STATE_FILENAME
+    return _lib.state_dir() / STATE_FILENAME
 
 
 def _now() -> datetime:

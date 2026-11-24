@@ -42,7 +42,7 @@ A line without a timestamp of its own (a traceback, a server's bare warning) sta
 
 Left out on purpose: the per-session logs under `webapp/sessions/` (they hold what was typed into each session), Job run output, and the disposable gate instances' `e2e-*` and `verify-progress*` logs.
 
-`chief-decisions.log` lives beside the chief mailbox (`~/.copilot/hooks/state/` by default), because the processes that write it (the Copilot hooks and `chief_ops.py`) are not the webapp; it rolls to `chief-decisions.log.1` past 5 MB.
+`chief-decisions.log` lives beside the chief mailbox (`~/.copilot/app-launcher-lite-state/` by default), because the processes that write it (the Copilot hooks and `chief_ops.py`) are not the webapp; it rolls to `chief-decisions.log.1` past 5 MB.
 
 ## Redaction
 

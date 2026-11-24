@@ -2,7 +2,7 @@
 
     python copilot\\install.py               install (idempotent; re-run after moving the checkout)
     python copilot\\install.py --uninstall   remove exactly what this installer put in ~/.copilot
-    python copilot\\install.py --migrate     move a machine off the old fleet-config-lite install, then install
+    python copilot\\install.py --migrate     move Lite's state out of ~/.copilot/hooks, leave fleet-config-lite, install
     add --what-if to any of them           list every change it would make, and make none
 
 Run it with this checkout's `.venv\\Scripts\\python.exe` (stdlib only, so any Python 3 works).
@@ -15,7 +15,10 @@ repo, uninstall): copilot/docs/install.md.
 What install writes, and where:
 1. Hook configs: renders hooks/session-state.template.json and hooks/chief-guard.template.json
    with this checkout's absolute path and a resolved Python executable, into
-   ~/.copilot/hooks/app-launcher-lite-<name>.json, and makes sure hooks/state exists.
+   ~/.copilot/hooks/app-launcher-lite-<name>.json, and makes sure the state folder
+   ~/.copilot/app-launcher-lite-state exists (not on a machine whose state still sits in the
+   old hooks/state: --migrate moves that). Nothing else Lite writes goes under hooks/, because
+   Copilot CLI loads every .json there as a hook config.
 2. Skills: junctions skills/<name> into ~/.copilot/skills/<name>, only into a real folder and
    never over a skill this checkout does not own. When Lite's skills_dir setting
    (config/webapp_config.json) names a folder, the four issue skills come from it instead:
@@ -40,10 +43,11 @@ What is Lite's own, so what --uninstall may remove:
 - a skills_dir link recorded in app-launcher-lite-install.json that still points where it
   was recorded.
 A re-run reports each item it already has as unchanged and rewrites nothing. Anything else in
-~/.copilot is the owner's or another tool's and is never touched. hooks/state (the
-session-state file, the chief's plan, journal and mailbox) is never read, moved or deleted.
+~/.copilot is the owner's or another tool's and is never touched. The state folder (the
+session-state file, the chief's plan, journal and mailbox) is never deleted; only --migrate
+moves it, out of the old hooks/state (install_state.py says how, with a chief live).
 
---migrate removes the old fleet-config-lite install first (its two hook configs and its skill
+--migrate moves that state folder first, then removes the old fleet-config-lite install first (its two hook configs and its skill
 junctions), because two session-state hooks would race on the same state file. It lists what
 it would remove and asks; --yes answers for it. It also checks Lite's Copilot folder setting
 (fleet_config_dir): an explicit path to the old fleet-config-lite folder keeps the chief there,
@@ -74,6 +78,8 @@ import sys
 import urllib.request
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
+
+import install_state
 
 COPILOT_REPO = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(COPILOT_REPO)
@@ -107,7 +113,8 @@ class Paths:
         profile = os.environ.get("USERPROFILE") or os.path.expanduser("~")
         self.home = os.environ.get("COPILOT_HOME") or os.path.join(profile, ".copilot")
         self.hooks = os.path.join(self.home, "hooks")
-        self.state = os.path.join(self.hooks, "state")
+        self.state = os.path.join(self.home, install_state.STATE_DIRNAME)
+        self.legacy_state = os.path.join(self.hooks, "state")
         self.skills = os.path.join(self.home, "skills")
         self.agents_skills = os.path.join(profile, ".agents", "skills")
         self.claude_skills = os.path.join(profile, ".claude", "skills")
@@ -398,10 +405,16 @@ class Installer:
                 result.append({"path": link, "target": target})
         return result
 
+    def state_now(self) -> str:
+        """Where Lite's writers put state today: the old hooks/state until --migrate has moved it."""
+        if os.path.isdir(self.p.legacy_state) and not os.path.isdir(self.p.state):
+            return self.p.legacy_state
+        return self.p.state
+
     # --- modes -----------------------------------------------------------------------------------
 
     def uninstall(self, hooks_link: Optional[str], skills_link: Optional[str]) -> int:
-        """Remove only what carries Lite's marker; hooks/state is left alone."""
+        """Remove only what carries Lite's marker; the state folder is left alone."""
         if hooks_link:
             self.say(f"[skip] hooks folder is a link into another tree, no hook removed -> {self.p.hooks} ({hooks_link})")
         else:
@@ -439,7 +452,7 @@ class Installer:
         self.say()
         if self.what_if:
             self.say("WhatIf: nothing was changed.")
-        self.say(f"Done. hooks\\state was not touched: {self.p.state}")
+        self.say(f"Done. The state folder was not touched: {self.state_now()}")
         self.say("Restart any running Copilot CLI session so it drops the hooks.")
         return 0
 
@@ -461,7 +474,7 @@ class Installer:
         if not old_hooks and not old_skills:
             self.say("[ok] no fleet-config-lite hook config or skill link to remove")
         else:
-            self.say("Migrating off fleet-config-lite. These would be removed (hooks\\state stays):")
+            self.say("Migrating off fleet-config-lite. These would be removed (the state folder stays):")
             for path in old_hooks:
                 self.say(f"  hook config -> {path}")
             for entry in old_skills:
@@ -489,8 +502,7 @@ class Installer:
         if hooks_link:
             self.say(f"[skip] hooks folder is a link into another tree, no hook written -> {self.p.hooks} ({hooks_link})")
         else:
-            for folder in (self.p.hooks, self.p.state):
-                # Creating the folder is all: hooks/state's contents are never read or touched.
+            for folder in (self.p.hooks, self.state_now()):
                 if not exists(folder):
                     self.change(f"folder created -> {folder}", make_dir, folder)
             scope = " --lite-sessions-only" if shared else ""
@@ -741,6 +753,11 @@ class Installer:
         if migrate:
             if not self.migrate_old(old_hooks, old_skills):
                 return 1
+            install_state.migrate_state(self.p.legacy_state, self.p.state, WEBAPP_CONFIG, self.say, self.change,
+                                        self.what_if, is_link, write_text)
+        elif os.path.isdir(self.p.legacy_state):
+            self.say("[warn] Lite's state is still in hooks\\state, where Copilot CLI reports each .json as an invalid")
+            self.say(f"       hook config in every session. Re-run with --migrate to move it -> {self.p.legacy_state}")
         elif old_hooks:
             self.say("[warn] the old fleet-config-lite hook configs are still installed: two session-state hooks race on the same state file.")
             self.say("       Stop the chief at a turn end, then re-run with --migrate:")
@@ -761,7 +778,7 @@ class Installer:
         if self.what_if:
             self.say("WhatIf: nothing was changed. Run again without --what-if to make the changes listed above.")
         self.say("Done. Restart any running Copilot CLI session to pick up the hooks.")
-        self.say(f"State file will appear at: {self.p.state}\\sessions-state.json")
+        self.say(f"State file will appear at: {self.state_now()}\\sessions-state.json")
         return 0
 
 

@@ -51,7 +51,7 @@ A plan command that exits 2 wrote nothing. Read the `ERROR:` line, fix the argum
 
 ## The handover log
 
-Keep one handover log at `~/.copilot/hooks/state/chief-handover.md`. It is machine-local, so never treat it as a repo file. Write dense prose about intent, not a Board restate: the current batch, what shipped, what is parked and why, decisions and their reasons, what each lane was last told, and what waits on Roberto. Update it at natural checkpoints and always right before `self-compact`, which refuses when the log or the plan is older than 10 minutes. Live data always wins over the log on facts.
+Keep one handover log at `~/.copilot/app-launcher-lite-state/chief-handover.md`. It is machine-local, so never treat it as a repo file. Write dense prose about intent, not a Board restate: the current batch, what shipped, what is parked and why, decisions and their reasons, what each lane was last told, and what waits on Roberto. Update it at natural checkpoints and always right before `self-compact`, which refuses when the log or the plan is older than 10 minutes. Live data always wins over the log on facts.
 
 ## Filing an issue
 

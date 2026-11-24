@@ -53,7 +53,13 @@ class StateDirTests(unittest.TestCase):
             # Path.home() reads USERPROFILE on Windows and HOME elsewhere; point both at a fake home.
             with mock.patch.dict(os.environ, {"HOME": fake_home, "USERPROFILE": fake_home}, clear=False):
                 os.environ.pop(hooks_state.STATE_DIR_ENV_VAR, None)
-                self.assertEqual(hooks_state.state_dir(), Path(fake_home) / ".copilot" / "hooks" / "state")
+                current = Path(fake_home) / ".copilot" / "app-launcher-lite-state"
+                legacy = Path(fake_home) / ".copilot" / "hooks" / "state"
+                self.assertEqual(hooks_state.state_dir(), current)
+                legacy.mkdir(parents=True)
+                self.assertEqual(hooks_state.state_dir(), legacy, "unmigrated state stays where its writers left it")
+                current.mkdir()
+                self.assertEqual(hooks_state.state_dir(), current)
         with mock.patch.dict(os.environ, {"COPILOT_HOOKS_STATE_DIR": "X"}):
             self.assertEqual(hooks_state.state_dir(), Path("X"))
 

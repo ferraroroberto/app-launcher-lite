@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from src import runtime_files
+from src.chief import copilot_state
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +60,6 @@ LEGACY_EVENT_NAMES = {
 CONFIG_PATH_ENV = "LAUNCHER_WEBAPP_CONFIG"
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "webapp_config.json"
 
-#: Mirror of ``WebappConfig.chief_managed_file`` / ``chief_inbox_dir`` defaults.
-DEFAULT_STATE_DIR = Path.home() / ".copilot" / "hooks" / "state"
 REGISTRY_KEY = "chief_managed_file"
 INBOX_KEY = "chief_inbox_dir"
 
@@ -81,14 +80,14 @@ def resolve_paths() -> Tuple[Path, Path]:
     if not isinstance(raw, dict):
         raw = {}
 
-    def pick(key: str, default: Path) -> Path:
+    def pick(key: str, name: str) -> Path:
+        # The same defaults as WebappConfig.chief_managed_file / chief_inbox_dir, old hooks/state pin included.
         value = raw.get(key)
-        return Path(value) if isinstance(value, str) and value.strip() else default
+        if isinstance(value, str) and value.strip() and not copilot_state.is_legacy_default(value, name):
+            return Path(value)
+        return copilot_state.state_dir() / name
 
-    return (
-        pick(REGISTRY_KEY, DEFAULT_STATE_DIR / "chief-managed.json"),
-        pick(INBOX_KEY, DEFAULT_STATE_DIR / "chief-inbox"),
-    )
+    return pick(REGISTRY_KEY, "chief-managed.json"), pick(INBOX_KEY, "chief-inbox")
 
 
 def read_registry(registry: Path) -> Optional[Dict[str, Any]]:

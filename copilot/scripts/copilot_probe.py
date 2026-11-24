@@ -26,7 +26,7 @@ Subcommands
   hook <event> --dir <folder>
         Internal: the hook command the live probe installs.
 
-Report: ``~/.copilot/hooks/state/copilot-probe.json`` (``--report`` overrides).
+Report: ``copilot-probe.json`` in Lite's state folder (``fleet_core.hooks_state.state_dir()``) (``--report`` overrides).
 """
 
 from __future__ import annotations
@@ -45,12 +45,14 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "_lib"))
+from fleet_core.hooks_state import state_dir  # noqa: E402
+
 import runtime_files  # noqa: E402
 
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 REPORT_VERSION = 1
 STATUSES = ("verified", "unsupported", "unknown")
-DEFAULT_REPORT = Path.home() / ".copilot" / "hooks" / "state" / "copilot-probe.json"
+REPORT_FILENAME = "copilot-probe.json"
 SESSION_STATE_DIR = Path.home() / ".copilot" / "session-state"
 HOOK_EVENTS = ("sessionStart", "userPromptSubmitted", "agentStop", "sessionEnd")
 # The second live run also installs preToolUse, which denies every tool call.
@@ -355,7 +357,7 @@ def print_report(report: Dict[str, Any]) -> None:
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
+    parser.add_argument("--report", type=Path, default=None)
     sub = parser.add_subparsers(dest="cmd", required=True)
     run_p = sub.add_parser("run")
     run_p.add_argument("--live", action="store_true")
@@ -375,6 +377,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if out:
             print(out)
         return 0
+    args.report = args.report or state_dir() / REPORT_FILENAME
     report = load_report(args.report)
     if args.cmd == "report":
         print_report(merge(report, report.get("cli_version") or "unknown", {}))
