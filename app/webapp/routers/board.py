@@ -400,8 +400,8 @@ def _read_plan_with_answers(cfg: WebappConfig) -> Dict[str, Any]:
 async def post_chief_plan_prune(request: Request) -> Dict[str, Any]:
     """Clear every ``merged`` row from the chief's plan (Tailscale + passkey).
 
-    The edit is fleet-config's own plan writer; the app never writes the file.
-    ``{"pruned": n}`` on success. 503 when fleet-config cannot serve the verb
+    The edit is the Copilot folder's own plan writer; the app never writes the file.
+    ``{"pruned": n}`` on success. 503 when that folder cannot serve the verb
     (the plan file is untouched), 409 when the writer refuses the plan on disk.
     """
     cfg: WebappConfig = request.app.state.webapp_config

@@ -74,22 +74,22 @@ def _default_fleet_config_dir() -> str:
 
 
 def _default_sessions_state_file() -> str:
-    """Where fleet-config's ``session_state`` hook writes the board rows."""
+    """Where ``copilot/hooks/session_state.py`` writes the board rows."""
     return str(Path.home() / ".copilot" / "hooks" / "state" / "sessions-state.json")
 
 
 def _default_chief_plan_file() -> str:
-    """Where fleet-config's ``chief_ops.py plan`` writes the chief's plan."""
+    """Where ``copilot/skills/_lib/chief_ops.py plan`` writes the chief's plan."""
     return str(Path.home() / ".copilot" / "hooks" / "state" / "chief-plan.json")
 
 
 def _default_chief_managed_file() -> str:
-    """Where fleet-config's ``chief_managed.py`` records chief-dispatched sessions."""
+    """Where ``copilot/skills/_lib/chief_managed.py`` records chief-dispatched sessions."""
     return str(Path.home() / ".copilot" / "hooks" / "state" / "chief-managed.json")
 
 
 def _default_chief_inbox_dir() -> str:
-    """The chief's mailbox directory (fleet-config ``docs/chief-mailbox.md``)."""
+    """The chief's mailbox directory, written by ``copilot/hooks/chief_inbox.py``."""
     return str(Path.home() / ".copilot" / "hooks" / "state" / "chief-inbox")
 
 

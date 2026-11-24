@@ -1,11 +1,12 @@
 """Clear the chief's finished plan rows from the Board.
 
-The plan file is written only through fleet-config's ``skills/_lib/chief_plan.py``,
-which owns the format and the locking. This module loads that contract by path
+The plan file is written only through the Copilot folder's ``skills/_lib/chief_plan.py``
+(this checkout's ``copilot/`` unless Settings names another folder), which owns the
+format and the locking. This module loads that contract by path
 (the load :mod:`src.board.active_issue_claims` uses) and calls ``prune_plan_file``; it never
 opens the plan itself.
 
-A missing or older fleet-config is its own outcome, :class:`PlanPruneUnavailable`,
+A missing or older writer is its own outcome, :class:`PlanPruneUnavailable`,
 never a pruned count of zero: a tap that wrote nothing must not read as success.
 """
 
@@ -22,14 +23,14 @@ logger = logging.getLogger(__name__)
 
 MERGED = "merged"
 
-# One warning per distinct failure per process: a fleet-config checkout that
-# is absent stays absent across taps.
+# One warning per distinct failure per process: a writer that is absent
+# stays absent across taps.
 _logged_failures: set[str] = set()
 _FAILURE_LOG_CAP = 64
 
 
 class PlanPruneUnavailable(Exception):
-    """fleet-config cannot serve the prune; the plan file was not touched."""
+    """The Copilot folder cannot serve the prune; the plan file was not touched."""
 
 
 class PlanPruneRefused(Exception):
@@ -38,10 +39,10 @@ class PlanPruneRefused(Exception):
 
 def _load(fleet_config_dir: str) -> ModuleType:
     if not str(fleet_config_dir or "").strip():
-        raise PlanPruneUnavailable("The fleet-config folder is not set in Settings.")
+        raise PlanPruneUnavailable("The Copilot folder is not set in Settings.")
     path = Path(fleet_config_dir) / "skills" / "_lib" / "chief_plan.py"
     if not path.is_file():
-        raise PlanPruneUnavailable("This fleet-config checkout has no chief plan writer.")
+        raise PlanPruneUnavailable("The Copilot folder in Settings has no chief plan writer.")
     try:
         module = load_fleet_contract(str(path.resolve()), "launcher_chief_plan", "chief-plan")
         if not callable(getattr(module, "prune_plan_file", None)):
@@ -52,7 +53,7 @@ def _load(fleet_config_dir: str) -> ModuleType:
             "⚠️ chief plan: cannot load %s: %s", path, exc,
         )
         raise PlanPruneUnavailable(
-            "This fleet-config is too old to clear merged items; update it."
+            "The chief plan writer in the Copilot folder is too old to clear merged items; update it."
         ) from exc
     return module
 
@@ -60,7 +61,7 @@ def _load(fleet_config_dir: str) -> ModuleType:
 def prune_merged(fleet_config_dir: str, plan_file: str) -> int:
     """Remove every ``merged`` queue row; returns how many went. Blocking.
 
-    Raises :class:`PlanPruneUnavailable` when fleet-config cannot serve it and
+    Raises :class:`PlanPruneUnavailable` when the Copilot folder cannot serve it and
     :class:`PlanPruneRefused` when the writer refuses the plan on disk.
     """
     module = _load(fleet_config_dir)
