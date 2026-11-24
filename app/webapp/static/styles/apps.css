@@ -166,7 +166,7 @@
 .git-toolbar-actions { display: inline-flex; gap: 8px; }
 
 /* Sync all's report: one line per repo, its outcome as a chip. */
-.git-sync-body { list-style: none; margin: 0 0 12px; padding: 0; max-height: 60vh; overflow-y: auto; }
+.git-sync-body { list-style: none; margin: 0 0 12px; padding: 0; max-height: 45vh; overflow-y: auto; }
 .git-sync-body li {
   display: flex;
   align-items: center;
@@ -178,6 +178,11 @@
 }
 .git-sync-body li:last-child { border-bottom: 0; }
 .git-sync-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The report's head: the counts by outcome, the skip reasons wrapping under their count. */
+.git-sync-body.git-sync-summary { max-height: none; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.git-sync-summary li { flex-wrap: wrap; }
+.git-sync-summary .git-sync-name { flex: 1; }
+.git-sync-reasons { flex-basis: 100%; padding-bottom: 8px; color: var(--muted); font-size: var(--font-caption); }
 
 /* The launch toolbar (launch-toolbar.js): the switch pair, each switch with
    its word, a trailing control pinned right. The word is the switch's

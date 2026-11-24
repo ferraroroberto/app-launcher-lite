@@ -408,9 +408,11 @@ flowchart LR
 - **Root:** `data-surface`
 - **Reach:** Sync all in the Projects card
 - **Holds:**
+  - while it runs, "Syncing 3 of 26" with the project being synced
+  - the report: how many projects were fast-forwarded, already current, skipped (grouped by reason) and failed
   - the result of the run, project by project
   - Done
-- **Does:** Done closes the sheet
+- **Does:** Done closes the sheet; closed mid-run, the same count stays in a toast and the totals replace it when the run ends, with Report to reopen the sheet
 
 ### `code.history-sheet` History sheet
 
