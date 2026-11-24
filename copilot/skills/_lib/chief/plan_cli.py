@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from chief_plan import (
     LANE_STATUSES,
     MODELS,
+    NothingWaiting,
     QUEUE_STATUSES,
     QueueStatus,
     add_item,
@@ -84,8 +85,12 @@ def _lane_mutation(args: argparse.Namespace, events: List[JournalEvent]) -> Call
         set_lane(doc, args.repo, args.status, args.item, args.session, args.model)
         # A status change on a lane already on the item is not a new dispatch.
         if args.item and args.item != prior:
-            ref = f"{args.repo}{args.item}"
-            events.append(("dispatched", f"lane started on {ref}", ref))
+            if args.item.startswith("skill:"):
+                skill = args.item[len("skill:"):]
+                events.append(("dispatched", f"lane started on {args.repo} running {skill}", None))
+            else:
+                ref = f"{args.repo}{args.item}"
+                events.append(("dispatched", f"lane started on {ref}", ref))
     return mutate
 
 
@@ -166,7 +171,12 @@ def _run(args: argparse.Namespace) -> int:
         return 0
     added: List[str] = []
     events: List[JournalEvent] = []
-    doc = update(path, _mutation(action, args, added, events), reset=action == "clear")
+    try:
+        doc = update(path, _mutation(action, args, added, events), reset=action == "clear")
+    except NothingWaiting:
+        # Nothing was written: an unknown id is a harmless no-op, not a failed call.
+        print(f"UNWAIT=none id={args.key}")
+        return 0
     # The plan is already written; a journal failure must not turn it into a failed command.
     for kind, text, ref in events:
         journal.log_transition(journal.journal_for_plan(path), kind, text, ref)
@@ -191,7 +201,8 @@ def add_cli(parser: argparse.ArgumentParser) -> None:
     lane = acts.add_parser("lane", help="set the lane for a repo (upsert)")
     lane.add_argument("repo")
     lane.add_argument("status", choices=LANE_STATUSES)
-    lane.add_argument("--item", default=None, help="#N the lane is on")
+    lane.add_argument("--item", default=None,
+                      help="#N the lane is on, or skill:<name> for a skill run with no issue")
     lane.add_argument("--session", default=None)
     lane.add_argument("--model", default=None, help=f"{'|'.join(MODELS)}; omitted keeps it, \"\" clears it")
 
