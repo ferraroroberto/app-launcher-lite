@@ -17,8 +17,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from chief_plan import (
     LANE_STATUSES,
     MODELS,
-    NothingWaiting,
     QUEUE_STATUSES,
+    NothingWaiting,
     QueueStatus,
     add_item,
     add_question,
