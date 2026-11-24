@@ -6,7 +6,9 @@ totals (:func:`src.progress.totals.snapshot`, no ``git`` or ``glab`` call).
 the cache, with ``refreshing`` true while it runs. The two sources fail
 separately: lines (local git) and merge requests / issues (GitLab) each carry
 their own state and age, and a figure never measured is ``None`` / ``unknown``,
-never zero. A project with no GitLab remote has ``None`` for the GitLab
+never zero. ``refresh`` is the running or last finished recalculation's progress
+(projects done of total, and one result per project: ``ok``, ``skipped`` or
+``failed``), or ``None`` before the first one since the server started. A project with no GitLab remote has ``None`` for the GitLab
 figures and is listed under ``gitlab.skipped``.
 
 Days are the local calendar day for both sources.
@@ -162,6 +164,7 @@ def read(
         "to": stop,
         "generated_at": now.isoformat(timespec="seconds"),
         "refreshing": git["refreshing"],
+        "refresh": snap.get("refresh"),
         "git": git,
         "gitlab": gitlab,
         "buckets": [

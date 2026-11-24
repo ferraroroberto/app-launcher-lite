@@ -397,8 +397,9 @@ flowchart LR
   - the data sources, each with its age, and the projects skipped for having no GitLab remote
   - Refresh and Done
 - **Does:**
-  - opens on the saved figures at once, however old, and makes no git or GitLab call
-  - Refresh re-reads local git and GitLab for every project, with a toast while it runs, then updates in place
+  - opens on the saved figures at once, however old, with a line saying when they were last refreshed, and makes no refresh, git or GitLab call
+  - Refresh re-reads local git and GitLab for every project; a neutral toast counts them (Checking 3 of 26) while it runs, the sheet updates in place, and the toast ends on a summary such as Refreshed 25 of 26 with 1 skipped (no GitLab remote)
+  - the summary toast takes the error style only when a read failed, and then names the projects it failed for; a skipped project never does
   - a column header sorts the project table
   - Done or the header close closes the sheet
 - **States:**
@@ -407,6 +408,7 @@ flowchart LR
   - stale - the last figures stay under a stale line when a later read fails
   - a source that was never read shows unknown, one whose last read failed shows stale, a project with no GitLab remote shows skipped; none of them is drawn as zero
   - a GitLab read that filled a page of 100 says older days may be incomplete
+  - the By project card keeps its title on one line with the project count as a subtitle below it, down to a 360 px screen
 
 ### `code.changes-overlay` Changes overlay
 

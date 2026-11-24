@@ -14,6 +14,14 @@
   font-size: var(--font-body-sm);
   color: var(--muted);
 }
+/* The "last refreshed" line sits right under the range line. */
+.progress-sub + .progress-sub { margin-top: -10px; }
+
+/* "By project": the title stays on one line and its count is a subtitle on the
+   line below, not a flex sibling that crowds a wrapped title on a narrow phone. */
+.progress-table-head { flex-direction: column; align-items: flex-start; gap: 2px; }
+.progress-table-head .card-title { white-space: nowrap; }
+.progress-table-head .card-head-meta { white-space: normal; }
 .progress-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

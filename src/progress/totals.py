@@ -79,6 +79,17 @@ _REMOTE_URL = re.compile(
 _run_lock = threading.Lock()
 _in_flight = False
 
+# What the running (or last finished) refresh has done, in memory only: a
+# restart forgets it, and the saved totals keep the figures. Replaced whole,
+# never edited in place, so a reader on another thread sees one consistent run.
+RUNNING = "running"
+DONE = "done"
+RESULT_OK = "ok"
+RESULT_SKIPPED = "skipped"
+RESULT_FAILED = "failed"
+_progress: Optional[Dict[str, Any]] = None
+_run_seq = 0
+
 # (checkout, since) -> [(commit stamp, lines added, lines removed)]
 GitReader = Callable[[Path, datetime], List[Tuple[str, int, int]]]
 # (project path, since, host) -> gitlab_client.project_history's answer
@@ -140,6 +151,7 @@ def snapshot(path: Optional[Path] = None) -> Dict[str, Any]:
     return {
         "refreshed_at": {s: store[f"{s}_refreshed_at"] for s in SOURCES},
         "in_flight": _in_flight,
+        "refresh": _progress,
         "error": problem or store["error"],
         "repos": repos,
         "skipped": list(store["skipped"]),
@@ -289,20 +301,72 @@ def refresh(
     Blocking and slow: call it on the owner's demand only, off the event loop.
     A refresh already running makes this a plain :func:`snapshot`.
     """
-    global _in_flight
     target = path or TOTALS_FILE
-    if not _run_lock.acquire(blocking=False):
+    if not _begin():
         return snapshot(target)
+    _run(
+        projects_dir, ignore, host, target, now or datetime.now(timezone.utc), tz,
+        git_reader or read_git, forge_reader or _read_forge,
+    )
+    return snapshot(target)
+
+
+def _begin() -> bool:
+    """Claim the one refresh slot and open its progress; False when one is running.
+
+    Taken by the caller, before any thread starts, so the answer to the tap that
+    began a refresh already says it is running.
+    """
+    global _in_flight, _progress, _run_seq
+    if not _run_lock.acquire(blocking=False):
+        return False
     _in_flight = True
+    _run_seq += 1
+    _progress = {
+        "run": _run_seq, "state": RUNNING, "done": 0, "total": None, "current": None,
+        "results": {}, "error": None, "started_at": _stamp(datetime.now(timezone.utc)), "finished_at": None,
+    }
+    return True
+
+
+def _run(
+    projects_dir: str, ignore: Sequence[str], host: str, target: Path, now: datetime,
+    tz: Optional[tzinfo], git_reader: GitReader, forge_reader: ForgeReader,
+) -> None:
+    """Run the refresh the slot was claimed for, then close its progress and free the slot."""
+    global _in_flight
+    error: Optional[str] = None
     try:
-        _refresh_locked(
-            projects_dir, ignore, host, target, now or datetime.now(timezone.utc), tz,
-            git_reader or read_git, forge_reader or _read_forge,
-        )
+        _refresh_locked(projects_dir, ignore, host, target, now, tz, git_reader, forge_reader)
+    except Exception as exc:  # the progress must end, or a poller waits on it for ever
+        error = f"{type(exc).__name__}: {exc}"
+        logger.exception("❌ progress totals: the refresh stopped")
+        raise
     finally:
+        _end_progress(error)
         _in_flight = False
         _run_lock.release()
-    return snapshot(target)
+
+
+def _update_progress(**changes: Any) -> None:
+    global _progress
+    if _progress is not None:
+        _progress = {**_progress, **changes}
+
+
+def _end_progress(error: Optional[str]) -> None:
+    _update_progress(
+        state=DONE, current=None, error=error, finished_at=_stamp(datetime.now(timezone.utc)),
+    )
+
+
+def _result(failures: Dict[str, str], has_remote: bool) -> Dict[str, Any]:
+    """One project's outcome: failed names the source that could not be read; a skip is not a failure."""
+    if failures:
+        return {"status": RESULT_FAILED, "error": "; ".join(f"{s}: {e}" for s, e in failures.items())}
+    if not has_remote:
+        return {"status": RESULT_SKIPPED, "reason": NO_REMOTE}
+    return {"status": RESULT_OK}
 
 
 def _read_forge(path: str, since: datetime, host: str) -> Dict[str, Any]:
@@ -338,8 +402,12 @@ def _refresh_locked(
     store["repos"] = {n: e for n, e in store["repos"].items() if n in {p["name"] for p in projects}}
     ok = dict.fromkeys(SOURCES, 0)
     failed = dict.fromkeys(SOURCES, 0)
+    results: Dict[str, Dict[str, Any]] = {}
+    _update_progress(total=len(projects))
     for project in projects:
         name = project["name"]
+        _update_progress(current=name)
+        failures: Dict[str, str] = {}
         entry = store["repos"].setdefault(name, {})
         git_entry = entry.setdefault("git", {"days": {}})
         if _read_source(
@@ -349,6 +417,7 @@ def _refresh_locked(
             ok["git"] += 1
         else:
             failed["git"] += 1
+            failures["git"] = git_entry.get("error") or "read failed"
         forge_entry = entry.setdefault("gitlab", {"days": {}})
         if not project["gitlab"]:
             forge_entry.clear()
@@ -360,6 +429,9 @@ def _refresh_locked(
             ok["gitlab"] += 1
         else:
             failed["gitlab"] += 1
+            failures["gitlab"] = forge_entry.get("error") or "read failed"
+        results[name] = _result(failures, bool(project["gitlab"]))
+        _update_progress(done=len(results), results=dict(results))
         _save(path, store)
     for source in SOURCES:
         if ok[source] or not failed[source]:
@@ -378,10 +450,14 @@ def _save(path: Path, store: Dict[str, Any]) -> None:
 
 def start_refresh(projects_dir: str, ignore: Sequence[str], host: str, **kwargs: Any) -> bool:
     """Refresh in a background thread unless one is running; True when it started."""
-    if _in_flight:
+    if not _begin():
         return False
     threading.Thread(
-        target=refresh, args=(projects_dir, ignore, host), kwargs=kwargs,
+        target=_run, args=(
+            projects_dir, ignore, host, kwargs.get("path") or TOTALS_FILE,
+            kwargs.get("now") or datetime.now(timezone.utc), kwargs.get("tz"),
+            kwargs.get("git_reader") or read_git, kwargs.get("forge_reader") or _read_forge,
+        ),
         name="progress-totals-refresh", daemon=True,
     ).start()
     return True

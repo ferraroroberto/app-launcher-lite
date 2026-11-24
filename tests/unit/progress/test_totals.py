@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -279,3 +280,82 @@ def test_read_git_raises_when_git_cannot_answer(tmp_path):
     )
     with pytest.raises(RuntimeError):
         totals.read_git(tmp_path / "empty", datetime(2026, 11, 1, tzinfo=UTC))
+
+
+def test_the_refresh_counts_projects_as_it_goes_and_ends_with_a_result_each(tmp_path, projects):
+    seen: List[Any] = []
+
+    class Counting(FakeGit):
+        def __call__(self, checkout, since):
+            progress = totals.snapshot(tmp_path / "t.json")["refresh"]
+            seen.append((checkout.name, progress["state"], progress["done"], progress["total"], progress["current"]))
+            return super().__call__(checkout, since)
+
+    snap = _refresh(tmp_path, Counting({}), FakeForge({}))
+    assert seen == [
+        ("alpha", totals.RUNNING, 0, 3, "alpha"),
+        ("beta", totals.RUNNING, 1, 3, "beta"),
+        ("local-only", totals.RUNNING, 2, 3, "local-only"),
+    ]
+    done = snap["refresh"]
+    assert (done["state"], done["done"], done["total"], done["current"]) == (totals.DONE, 3, 3, None)
+    assert done["error"] is None and done["finished_at"]
+    assert snap["in_flight"] is False
+
+
+def test_a_project_with_no_remote_is_a_skip_in_the_result_never_a_failure(tmp_path, projects):
+    snap = _refresh(tmp_path, FakeGit({}), FakeForge({}))
+    assert snap["refresh"]["results"] == {
+        "alpha": {"status": totals.RESULT_OK},
+        "beta": {"status": totals.RESULT_OK},
+        "local-only": {"status": totals.RESULT_SKIPPED, "reason": totals.NO_REMOTE},
+    }
+
+
+def test_a_read_that_fails_names_its_project_and_source_in_the_result(tmp_path, projects):
+    git = FakeGit({})
+    forge = FakeForge({})
+    git.fail.add("alpha")
+    forge.fail.add("grp/sub/beta")
+    results = _refresh(tmp_path, git, forge)["refresh"]["results"]
+    assert results["alpha"]["status"] == totals.RESULT_FAILED and results["alpha"]["error"].startswith("git: ")
+    assert results["beta"]["status"] == totals.RESULT_FAILED and "401 Unauthorized" in results["beta"]["error"]
+    assert results["local-only"]["status"] == totals.RESULT_SKIPPED
+
+
+def test_start_refresh_claims_the_slot_before_its_thread_runs(tmp_path, projects):
+    """The answer to the tap that starts a refresh must already say it is running."""
+    release = threading.Event()
+
+    class Held(FakeGit):
+        def __call__(self, checkout, since):
+            release.wait(5)
+            return super().__call__(checkout, since)
+
+    started = totals.start_refresh(
+        "projects", [], "", path=tmp_path / "t.json", now=NOW, tz=UTC, git_reader=Held({}), forge_reader=FakeForge({}),
+    )
+    try:
+        assert started is True
+        snap = totals.snapshot(tmp_path / "t.json")
+        assert snap["in_flight"] is True and snap["refresh"]["state"] == totals.RUNNING
+        assert totals.start_refresh("projects", [], "") is False  # one at a time
+    finally:
+        release.set()
+        for thread in threading.enumerate():
+            if thread.name == "progress-totals-refresh":
+                thread.join(10)
+    assert totals.snapshot(tmp_path / "t.json")["refresh"]["state"] == totals.DONE
+
+
+def test_a_refresh_that_stops_ends_its_progress_with_the_error(tmp_path, monkeypatch):
+    def boom(*_a):
+        raise OSError("projects folder gone")
+
+    monkeypatch.setattr(totals, "resolve_projects", boom)
+    with pytest.raises(OSError):
+        _refresh(tmp_path, FakeGit({}), FakeForge({}))
+    ended = totals.snapshot(tmp_path / "t.json")["refresh"]
+    assert ended["state"] == totals.DONE and "projects folder gone" in ended["error"]
+    assert totals._in_flight is False and totals._run_lock.acquire(blocking=False)
+    totals._run_lock.release()

@@ -1,10 +1,12 @@
 """The History button in the Projects card and the sheet it opens.
 
 The sheet answers from ``/api/progress``'s cache at once, however old, says how
-old each source is, and asks for nothing: only its Refresh button asks the
-server to re-read, shows a toast while that runs and updates in place when it
-ends. A figure that was not measured shows its word (unknown, skipped), never
-zero.
+old each source is and when it was last refreshed, and asks for nothing: only
+its Refresh button asks the server to re-read. That runs behind a neutral toast
+that counts the projects, updates the sheet in place and ends on a summary: a
+skipped project is counted there and is not an error, a failed read is the
+error style and names its project. A figure that was not measured shows its
+word (unknown, skipped), never zero.
 
 Hermetic: ``/api/progress`` and the sessions and git-status lists are
 route-mocked before ``goto()`` with invented numbers, so nothing runs git or
@@ -45,11 +47,26 @@ def _row(name: str, added: Optional[int], removed: Optional[int], forge: Optiona
     }
 
 
-def _payload(*, added: int, refreshing: bool = False, gitlab_state: str = "ok", age: float = 4000.0) -> Dict[str, Any]:
+_OK = {"status": "ok"}
+_SKIP = {"status": "skipped", "reason": "no GitLab remote"}
+
+
+def _run(done: int, results: Optional[Dict[str, Dict[str, str]]] = None) -> Dict[str, Any]:
+    """The server's refresh progress: ``done`` of three projects, the finished ones with a result."""
+    finished = len(results or {}) == 3
+    return {"run": 1, "state": "done" if finished else "running", "done": done, "total": 3,
+            "current": None if finished else "beacon-api", "results": results or {}, "error": None,
+            "finished_at": "2026-11-04T10:00:05Z" if finished else None}
+
+
+def _payload(
+    *, added: int, refreshing: bool = False, gitlab_state: str = "ok", age: float = 4000.0,
+    refresh: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     forge_ok = gitlab_state == "ok"
     return {
         "bucket": "day", "from": "2026-10-06", "to": "2026-11-04",
-        "generated_at": "2026-11-04T10:00:00+00:00", "refreshing": refreshing,
+        "generated_at": "2026-11-04T10:00:00+00:00", "refreshing": refreshing, "refresh": refresh,
         "git": {"state": "ok", "reason": None, "refreshed_at": "2026-11-04T08:53:00+00:00",
                 "age_seconds": age, "refreshing": refreshing, "unknown_repos": []},
         "gitlab": {"state": gitlab_state, "reason": None if forge_ok else "Could not be read.",
@@ -69,12 +86,13 @@ def _payload(*, added: int, refreshing: bool = False, gitlab_state: str = "ok", 
 
 
 class _Progress:
-    """Stands in for ``GET /api/progress``: the cache, and a refresh that runs until released."""
+    """Stands in for ``GET /api/progress``: the cache, and a slow refresh that reports ``step`` until released."""
 
     def __init__(self, cached: Dict[str, Any], refreshed: Dict[str, Any]) -> None:
         self.cached = cached
         self.refreshed = refreshed
         self.released = False
+        self.step: Optional[Dict[str, Any]] = None
         self.requests: List[str] = []
 
     def __call__(self, route) -> None:
@@ -83,7 +101,7 @@ class _Progress:
         if self.released:
             body = self.refreshed
         elif any("refresh=true" in u for u in self.requests):
-            body = dict(self.cached, refreshing=True)
+            body = dict(self.cached, refreshing=True, refresh=self.step)
         else:
             body = self.cached
         route.fulfill(status=200, content_type="application/json", body=_json.dumps(body))
@@ -109,6 +127,78 @@ def _tile(page: Page, key: str):
     return page.locator(f'#progressTiles .progress-tile[data-tile="{key}"]')
 
 
+def _refresh_counts_then_summarises(page: Page, progress: _Progress) -> None:
+    """Two refreshes: one whose skip is a neutral summary, one whose failed read is the error style."""
+    # Refresh toasts while the server recalculates, counting projects in a neutral toast.
+    progress.step = _run(0)
+    page.locator("#progressRefresh").click()
+    toast = page.locator("#progressToast")
+    expect(toast).to_be_visible()
+    expect(toast).to_have_text(re.compile(r"Checking 1 of 3"))
+    expect(toast).not_to_have_class(re.compile(r"error"))
+    expect(page.locator("#progressRefresh")).to_be_disabled()
+    progress.step = _run(1)
+
+    def second_project_counted() -> bool:
+        _fake_clock.advance(page, 4000)
+        return "Checking 2 of 3" in toast.inner_text()
+
+    wait_until(page, second_project_counted, "the toast to count the second project")
+
+    # It ends on a summary where the skip is counted and is not an error, and the sheet updates in place.
+    progress.released = True
+
+    def next_poll_landed() -> bool:
+        _fake_clock.advance(page, 4000)
+        return "+300" in _tile(page, "lines").inner_text()
+
+    wait_until(page, next_poll_landed, "the sheet to read the finished refresh")
+    expect(toast).to_have_text(re.compile(r"Refreshed 2 of 3 · 1 skipped \(no GitLab remote\)"))
+    expect(toast).not_to_have_class(re.compile(r"error"))
+    expect(page.locator("#progressRefresh")).to_be_enabled()
+    expect(page.locator('#progressSources li[data-source="git"]')).to_contain_text("just now")
+    asks = [u for u in progress.requests if "refresh=true" in u]
+    assert len(asks) == 1, asks  # one tap, one recalculation
+
+    # A read that really failed is the error style and names the project.
+    progress.released = False
+    progress.step = _run(0)
+    progress.refreshed = _payload(
+        added=250, age=5.0,
+        refresh=_run(3, {"atlas-web": _OK, "beacon-api": {"status": "failed", "error": "gitlab: 401"}, "scratch-pad": _SKIP}),
+    )
+    page.locator("#progressRefresh").click()
+    expect(toast).to_have_text(re.compile(r"Checking 1 of 3"))
+    progress.released = True
+
+    def failure_reported() -> bool:
+        _fake_clock.advance(page, 4000)
+        return "could not read" in toast.inner_text()
+
+    wait_until(page, failure_reported, "the summary to name the failed project")
+    expect(toast).to_have_text(re.compile(r"Refreshed 1 of 3 · 1 skipped \(no GitLab remote\) · could not read beacon-api"))
+    expect(toast).to_have_class(re.compile(r"error"))
+
+
+def _assert_by_project_header_fits(page: Page) -> None:
+    """At 360 px, in both themes, the title does not wrap and the count is a subtitle under it, not drawn over it."""
+    page.set_viewport_size({"width": 360, "height": 740})
+    for theme in ("light", "dark"):
+        page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
+        boxes = page.locator("#progressReposTitle").evaluate("""title => {
+          const meta = document.getElementById('progressReposMeta');
+          const line = parseFloat(getComputedStyle(title).lineHeight) || title.getBoundingClientRect().height;
+          const t = title.getBoundingClientRect();
+          const m = meta.getBoundingClientRect();
+          return { titleHeight: t.height, line: line, titleBottom: t.bottom, metaTop: m.top, metaRight: m.right,
+                   cardRight: title.closest('.card').getBoundingClientRect().right };
+        }""")
+        assert boxes["titleHeight"] <= boxes["line"] * 1.5, (theme, boxes)  # one line, not two
+        assert boxes["metaTop"] >= boxes["titleBottom"] - 1, (theme, boxes)  # below it, not over it
+        assert boxes["metaRight"] <= boxes["cardRight"] + 1, (theme, boxes)
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'light')")
+
+
 @pytest.mark.iphone
 def test_history_sheet_answers_from_the_cache_refreshes_on_request_and_never_reads_an_unknown_as_zero(
     authed_page: Page, base_url: str
@@ -119,7 +209,10 @@ def test_history_sheet_answers_from_the_cache_refreshes_on_request_and_never_rea
     page = authed_page
     page.set_viewport_size({"width": 390, "height": 844})
     _fake_clock.install(page)
-    progress = _Progress(_payload(added=100), _payload(added=250, age=5.0))
+    progress = _Progress(
+        _payload(added=100),
+        _payload(added=250, age=5.0, refresh=_run(3, {"atlas-web": _OK, "beacon-api": _OK, "scratch-pad": _SKIP})),
+    )
     _boot(page, base_url, progress)
     _open_history(page)
 
@@ -127,6 +220,7 @@ def test_history_sheet_answers_from_the_cache_refreshes_on_request_and_never_rea
     expect(page.locator("#progressSheetTitle")).to_have_text("History")
     expect(_tile(page, "lines")).to_contain_text("+150")
     expect(page.locator('#progressSources li[data-source="git"]')).to_contain_text("1 h ago")
+    expect(page.locator("#progressRefreshed")).to_have_text("Last refreshed 1 h ago. Tap Refresh to update.")
     expect(page.locator("#progressToast")).to_be_hidden()
     assert [u for u in progress.requests if "refresh=true" in u] == []
 
@@ -152,24 +246,7 @@ def test_history_sheet_answers_from_the_cache_refreshes_on_request_and_never_rea
     done = page.locator("#progressSheetDone").bounding_box()
     assert done is not None and done["height"] >= 44, done
 
-    # Refresh toasts while the server recalculates, then the sheet updates in place.
-    page.locator("#progressRefresh").click()
-    toast = page.locator("#progressToast")
-    expect(toast).to_be_visible()
-    expect(toast).to_contain_text("Refreshing")
-    expect(page.locator("#progressRefresh")).to_be_disabled()
-    progress.released = True
-
-    def next_poll_landed() -> bool:
-        _fake_clock.advance(page, 4000)
-        return "+300" in _tile(page, "lines").inner_text()
-
-    wait_until(page, next_poll_landed, "the sheet to read the finished refresh")
-    expect(toast).to_be_hidden()
-    expect(page.locator("#progressRefresh")).to_be_enabled()
-    expect(page.locator('#progressSources li[data-source="git"]')).to_contain_text("just now")
-    asks = [u for u in progress.requests if "refresh=true" in u]
-    assert len(asks) == 1, asks  # one tap, one recalculation
+    _refresh_counts_then_summarises(page, progress)
 
     # GitLab unreadable: its tiles carry the word and never a zero, local git still draws.
     progress.cached = progress.refreshed = _payload(added=100, gitlab_state="unavailable")
@@ -185,3 +262,6 @@ def test_history_sheet_answers_from_the_cache_refreshes_on_request_and_never_rea
     expect(scratch.locator('[data-metric="mrs_merged"]')).to_have_text("skipped")
     expect(scratch.locator('[data-metric="lines_added"]')).to_have_text("+7")
     expect(page.locator('#progressSources li[data-source="gitlab"]')).to_contain_text("scratch-pad")
+
+    # The "By project" header holds at the narrowest phone, light and dark.
+    _assert_by_project_header_fits(page)

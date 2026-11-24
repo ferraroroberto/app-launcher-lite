@@ -110,4 +110,40 @@ assert.ok(progressUrl('day', '2026-10-01', '2026-10-31', true).endsWith('&refres
 assert.equal(bucketLabel('2026-11-04', 'day'), '4 Nov');
 assert.equal(bucketLabel('2026-11-01', 'month'), 'Nov');
 
+
+// --- the refresh toast and its summary
+import {
+  lastRefreshedText, refreshProgressText, refreshSummary,
+} from '../../app/webapp/static/progress/progress-model.js';
+
+assert.equal(refreshProgressText(null), 'Checking projects…');
+assert.equal(refreshProgressText({ done: 0, total: null }), 'Checking projects…');
+assert.equal(refreshProgressText({ done: 0, total: 26 }), 'Checking 1 of 26');
+assert.equal(refreshProgressText({ done: 1, total: 26 }), 'Checking 2 of 26');
+assert.equal(refreshProgressText({ done: 26, total: 26 }), 'Checking 26 of 26');
+
+const ran = (results, extra) => ({ state: 'done', results: results, ...extra });
+const okRow = { status: 'ok' };
+const skipRow = { status: 'skipped', reason: 'no GitLab remote' };
+
+// A skip is counted and neutral, never an error.
+const skipped = refreshSummary(ran({ a: okRow, b: okRow, c: skipRow }));
+assert.equal(skipped.text, 'Refreshed 2 of 3 · 1 skipped (no GitLab remote)');
+assert.equal(skipped.kind, '');
+assert.deepEqual(skipped.failed, []);
+
+// A real read failure is the error style and names the project.
+const failed = refreshSummary(ran({ a: okRow, b: { status: 'failed', error: 'gitlab: 401' }, c: skipRow, d: { status: 'failed', error: 'git: x' } }));
+assert.equal(failed.kind, 'error');
+assert.deepEqual(failed.failed, ['b', 'd']);
+assert.equal(failed.text, 'Refreshed 1 of 4 · 1 skipped (no GitLab remote) · could not read b, d');
+
+assert.equal(refreshSummary(ran({ a: okRow })).text, 'Refreshed 1 of 1');
+assert.equal(refreshSummary(ran({})).kind, '');
+assert.equal(refreshSummary(ran({ a: okRow }, { error: 'OSError: gone' })).kind, 'error');
+
+assert.equal(lastRefreshedText({}), 'Not refreshed yet. Tap Refresh to read the history.');
+assert.equal(lastRefreshedText({ git: { age_seconds: 4000 }, gitlab: { age_seconds: 200 } }), 'Last refreshed 3 min ago. Tap Refresh to update.');
+assert.equal(lastRefreshedText({ git: { age_seconds: 4000 }, gitlab: { age_seconds: null } }), 'Last refreshed 1 h ago. Tap Refresh to update.');
+
 console.log('OK');

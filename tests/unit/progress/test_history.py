@@ -212,3 +212,12 @@ def test_refresh_starts_a_background_refresh_and_still_answers_from_the_cache(tm
     assert out["refreshing"] is True
     assert out["buckets"][-2]["git"]["lines_added"] == 4
     assert _read(refresh=False)["refreshing"] is False
+
+
+def test_the_answer_carries_the_refresh_progress_and_none_before_a_first_run(tmp_path, monkeypatch):
+    _write(tmp_path, monkeypatch, {})
+    monkeypatch.setattr(totals, "_progress", None)
+    assert _read()["refresh"] is None
+    run = {"run": 1, "state": "running", "done": 2, "total": 26, "current": "alpha", "results": {}}
+    monkeypatch.setattr(totals, "_progress", run)
+    assert _read()["refresh"] == run
