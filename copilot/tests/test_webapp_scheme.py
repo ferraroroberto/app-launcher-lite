@@ -20,8 +20,10 @@ from unittest import mock
 
 from test_chief_lanes import StubbedLauncherCase, StubLauncher, _card, _ops
 
-import lite_webapp
 from chief import launcher
+
+# The resolver under test; `skills/_lib` is on sys.path only once test_chief_lanes is imported.
+lite_webapp = launcher.lite_webapp
 
 # What the webapp port serves in each `serve_over` mode (app/webapp/serve_modes.py's
 # `serve_plan`): `both` puts HTTPS on the webapp port and plain HTTP on a second port.
