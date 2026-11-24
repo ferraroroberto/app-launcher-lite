@@ -141,6 +141,12 @@ DEFAULT_CHIEF_AUTO_COMPACT_THRESHOLD = 30
 MIN_CHIEF_AUTO_COMPACT_THRESHOLD = 10
 MAX_CHIEF_AUTO_COMPACT_THRESHOLD = 90
 
+# The launcher's fallback wake for the chief, in minutes; 0 turns it off. A
+# backup for a doorbell that missed or held off, so the default is the old
+# chief waiter's 30 minutes and the ceiling a day: a longer gap is no backup.
+DEFAULT_CHIEF_FALLBACK_MINUTES = 30
+MAX_CHIEF_FALLBACK_MINUTES = 1440
+
 # Copilot CLI launch values. The model ids are a starting list for a fresh
 # install: which ids an account may use depends on its plan, so the list is
 # edited per install in Settings. "" (or "default") omits `--model`.

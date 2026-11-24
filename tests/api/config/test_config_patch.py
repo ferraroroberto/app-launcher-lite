@@ -239,6 +239,26 @@ class TestPatchConfig:
         assert client.post("/api/config", json={key: junk}).status_code == 400
         assert getattr(app.state.webapp_config, key) is False
 
+    def test_chief_fallback_minutes_defaults_to_30_and_round_trips(self, webapp_client):
+        """The fallback wake's window: 30 until changed, 0 turns it off, and
+        the chief reads the saved value from its settings block."""
+        from src.webapp_config import load_webapp_config
+
+        client, app, overrides = webapp_client
+        body = client.get("/api/config").json()
+        assert body["chief_fallback_minutes"] == 30
+        assert body["chief_fallback_minutes_max"] == 1440
+        for value in (0, 45):
+            assert client.post("/api/config", json={"chief_fallback_minutes": value}).status_code == 200
+            assert load_webapp_config(overrides["tmp_webapp_cfg_path"]).chief_fallback_minutes == value
+        assert app.state.webapp_config.chief_fallback_minutes == 45
+
+    @pytest.mark.parametrize("junk", [True, 1.5, "30", -1, 1441])
+    def test_chief_fallback_minutes_rejects_junk(self, webapp_client, junk):
+        client, app, _ = webapp_client
+        assert client.post("/api/config", json={"chief_fallback_minutes": junk}).status_code == 400
+        assert app.state.webapp_config.chief_fallback_minutes == 30
+
 
     def test_chief_auto_drain_defaults_on_and_round_trips(self, webapp_client):
         """The queue drain is on until the owner turns it off, and the save

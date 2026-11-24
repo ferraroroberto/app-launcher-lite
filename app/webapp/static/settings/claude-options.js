@@ -57,6 +57,10 @@ export async function fetchConfig(shouldApply) {
   if (els.chiefDoorbellToggle) {
     setSwitch(els.chiefDoorbellToggle, body.chief_doorbell === true);
   }
+  if (els.chiefFallbackMinutes) {
+    if (body.chief_fallback_minutes_max != null) els.chiefFallbackMinutes.max = body.chief_fallback_minutes_max;
+    setFieldValue(els.chiefFallbackMinutes, String(Number(body.chief_fallback_minutes) || 0));
+  }
   if (els.chiefAutoDrainToggle) {
     setSwitch(els.chiefAutoDrainToggle, body.chief_auto_drain !== false);
   }

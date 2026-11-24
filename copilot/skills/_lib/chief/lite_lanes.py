@@ -722,7 +722,8 @@ def _stop_after_timeout(base_url: str, sid: str, mode: str) -> int:
 
 
 def cmd_wake(args: argparse.Namespace) -> int:
-    """How the chief wakes next: the launcher's doorbell switch. Exit 1 when unknown."""
+    """How the chief wakes next: the launcher's doorbell switch, then its fallback
+    wake. Exit 1 when the doorbell switch is unknown."""
     config: Optional[Dict[str, Any]] = None
     reason = "launcher unreachable"
     try:
@@ -735,6 +736,7 @@ def cmd_wake(args: argparse.Namespace) -> int:
         pass
     line, known = mailbox.resolve_wake_mode(config, reason)
     print(line)
+    print(mailbox.resolve_fallback_wake(config))
     return 0 if known else 1
 
 

@@ -108,7 +108,7 @@ On a Lite-only machine a lane runs Lite's own skills: `issue-start`, `issue-yolo
 
 ## Ending a turn
 
-Your replies render in a small phone drawer that shows only the last exchange. Lead with the answer, keep it short, no wide tables, no code blocks unless asked. End **every** turn with a one- or two-line summary that stands alone, then stop and wait. Do not poll, sleep or start a background shell to wait for a lane: the launcher's doorbell wakes you when a lane's event lands, if Settings > Chief > Doorbell is on, and otherwise only Roberto's next message does. Run `inbox` at the start of every turn either way.
+Your replies render in a small phone drawer that shows only the last exchange. Lead with the answer, keep it short, no wide tables, no code blocks unless asked. End **every** turn with a one- or two-line summary that stands alone, then stop and wait. Do not poll, sleep or start a background shell to wait for a lane: the launcher's doorbell wakes you when a lane's event lands, if Settings > Chief > Doorbell is on; its fallback check rings you once an event or idle worker slots have waited its minutes (`wake` prints `FALLBACK_WAKE=`); otherwise only Roberto's next message does. Run `inbox` at the start of every turn either way.
 
 Good: `3 open in app-launcher-lite: #12 drawer race (S), #15 jobs sort (S), #18 keyboard (M). Start one?`
 

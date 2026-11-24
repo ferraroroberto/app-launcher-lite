@@ -42,11 +42,11 @@ from src.chief import copilot_state
 from src.webapp_settings import performance
 from src.webapp_settings.values import (  # noqa: F401 — re-exported for webapp_config.<name> callers
     CREDENTIAL_KEYS,
-    DEFAULT_CHIEF_AUTO_COMPACT_THRESHOLD, DEFAULT_CHIEF_MODEL, DEFAULT_CHIEF_WORKER_CAP,
+    DEFAULT_CHIEF_AUTO_COMPACT_THRESHOLD, DEFAULT_CHIEF_FALLBACK_MINUTES, DEFAULT_CHIEF_MODEL, DEFAULT_CHIEF_WORKER_CAP,
     DEFAULT_CHIEF_WORKER_CAP_SCOPE, DEFAULT_COPILOT_CONTEXT, DEFAULT_COPILOT_EFFORT,
     DEFAULT_COPILOT_MODEL, DEFAULT_COPILOT_MODELS, DEFAULT_COPILOT_MONTHLY_CREDITS, DEFAULT_HOST, DEFAULT_LARGE_UPLOAD_MAX_MB,
     DEFAULT_MIRROR_BROWSER, DEFAULT_PORT, DEFAULT_SESSION_HOST_PORT, DEFAULT_TERMINAL_HISTORY_LINES,
-    MAX_CHIEF_AUTO_COMPACT_THRESHOLD, MAX_CHIEF_WORKER_CAP, MAX_COPILOT_MONTHLY_CREDITS,
+    MAX_CHIEF_AUTO_COMPACT_THRESHOLD, MAX_CHIEF_FALLBACK_MINUTES, MAX_CHIEF_WORKER_CAP, MAX_COPILOT_MONTHLY_CREDITS,
     MAX_LARGE_UPLOAD_MAX_MB,
     MAX_TERMINAL_HISTORY_LINES, MIN_CHIEF_AUTO_COMPACT_THRESHOLD, MIN_CHIEF_WORKER_CAP,
     MIN_COPILOT_MONTHLY_CREDITS, MIN_LARGE_UPLOAD_MAX_MB, MIN_TERMINAL_HISTORY_LINES, SESSION_HOST_PORT_ENV,
@@ -228,6 +228,12 @@ class WebappConfig:
     # session, and the chief only understands the line once fleet-config
     # ships its side, which is what turns this on.
     chief_doorbell: bool = False
+    # The launcher's fallback wake, in minutes (0 = off): rings the idle chief
+    # once when a mailbox event has waited that long or free worker slots sit
+    # beside queued plan rows (app.webapp.chief_doorbell). Independent of the
+    # doorbell switch, since it is the backup for a doorbell that is off or
+    # missed.
+    chief_fallback_minutes: int = DEFAULT_CHIEF_FALLBACK_MINUTES
     # Queue drain for unattended audit issues. On by default: the chief
     # adds them to its plan and dispatches into a free worker slot.
     # Settings > Chief turns it off; readers take auto_drain from the
@@ -824,6 +830,11 @@ def _validate(cfg: WebappConfig) -> None:
             cfg.copilot_model,
         )
         cfg.copilot_model = ""
+    if not (0 <= cfg.chief_fallback_minutes <= MAX_CHIEF_FALLBACK_MINUTES):
+        raise ValueError(
+            "chief_fallback_minutes must be 0 (off) or up to "
+            f"{MAX_CHIEF_FALLBACK_MINUTES} minutes; got {cfg.chief_fallback_minutes}"
+        )
     threshold = cfg.chief_auto_compact_threshold
     if threshold != 0 and not (
         MIN_CHIEF_AUTO_COMPACT_THRESHOLD <= threshold <= MAX_CHIEF_AUTO_COMPACT_THRESHOLD

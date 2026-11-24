@@ -30,7 +30,7 @@ Then every log record from the window, oldest first, each line tagged with its s
 |---|---|---|
 | `webapp-warnings` | webapp | every warning and error the webapp logs (rotated `.log.N` files too) |
 | `slow-requests` | webapp | slow and over-budget requests, in-flight spikes, hot-poll step timings |
-| `chief-doorbell` | webapp | each doorbell ring and its delivery verdict, each skip reason |
+| `chief-doorbell` | webapp | each doorbell and fallback ring with its delivery verdict and reason, each skip reason |
 | `chief-events` | webapp | the mailbox events the webapp publishes (job failed, cap raised, script missing, a lane's missed turn end) and why one was skipped, and each lane mark a Board dispatch writes |
 | `chief-decisions` | Copilot hooks and chief helpers | each mailbox event written or skipped, each claim and ack, each lane mark `chief_ops.py` writes |
 | `terminal_audit` | webapp | session starts and stops |

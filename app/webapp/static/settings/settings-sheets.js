@@ -494,6 +494,15 @@ function wireChief() {
 // failed run.
 function wireChiefDoorbell() {
   wireConfigSwitch(els.chiefDoorbellToggle, 'chief_doorbell', { label: 'Chief doorbell' });
+  const fallback = els.chiefFallbackMinutes;
+  if (fallback) {
+    fallback.addEventListener('change', function () {
+      const value = wholeNumberIn(fallback, 'Fallback check');
+      if (value === null) return;
+      saveConfigField(fallback, { chief_fallback_minutes: value },
+        value ? 'Chief fallback check every ' + value + ' min.' : 'Chief fallback check off.');
+    });
+  }
   wireConfigSwitch(els.chiefAutoDrainToggle, 'chief_auto_drain', { label: 'Auto-drain queue' });
   wireConfigSwitch(els.chiefJobFailuresToggle, 'chief_job_failures', { label: 'Chief job failures' });
   wireConfigSwitch(els.chiefJobSelfHealToggle, 'chief_job_self_heal', { label: 'Job self-heal' });

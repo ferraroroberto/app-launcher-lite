@@ -71,6 +71,8 @@
   "chief_model": "gpt-6-luna",
   "chief_context": "",
   "chief_effort": "",
+  "_comment_chief_fallback_minutes": "The launcher's fallback wake for the chief, in minutes (0 = off, up to 1440): it rings the idle chief once when a mailbox event has waited that long, or worker slots are free while plan rows wait as queued. Works whether or not the doorbell is on. Also set from Settings > Chief.",
+  "chief_fallback_minutes": 30,
   "auth_token": "",
   "auth_password": "",
   "session_host_port": 8466,

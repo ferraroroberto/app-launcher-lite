@@ -457,6 +457,7 @@ export const els = {
   voiceRemoteHelp: document.getElementById('voiceRemoteHelp'),
   chiefAutoCompactToggle: document.getElementById('chiefAutoCompactToggle'),
   chiefDoorbellToggle: document.getElementById('chiefDoorbellToggle'),
+  chiefFallbackMinutes: document.getElementById('chiefFallbackMinutes'),
   chiefAutoDrainToggle: document.getElementById('chiefAutoDrainToggle'),
   chiefJobFailuresToggle: document.getElementById('chiefJobFailuresToggle'),
   chiefJobSelfHealToggle: document.getElementById('chiefJobSelfHealToggle'),
