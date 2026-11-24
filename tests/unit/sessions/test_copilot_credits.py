@@ -45,6 +45,72 @@ def test_the_footer_figure_is_read_as_the_screen_shows_it(lines, expected):
     assert ai_credits_used(lines) == expected
 
 
+# ---- the two-row footer: the figure above the input box -----------------------
+
+STATUS = " Plan: 26.957/35.100 (76% used) · Session: 15.99 AIC used · YOLO"
+MODEL = " GPT-6 Luna · Extra High · (9%)"
+WIDE_RULE = "─" * 120
+
+
+def _two_row(status: str = STATUS, above=(" ● Done.", ""), box=("> ",), rule: str = WIDE_RULE):
+    return [*above, status, rule, *box, rule, MODEL, "", ""]
+
+
+def test_the_figure_above_the_input_box_is_read_when_the_bottom_row_has_none():
+    assert ai_credits_used(_two_row()) == 15.99
+    # A wrapped, multi-line prompt in the box and blank rows above the status row.
+    wrapped = _two_row(box=("> fix the", "  failing tests", "  please"), above=(" ● Done.", "", ""))
+    assert ai_credits_used(wrapped) == 15.99
+    # A narrow terminal: shorter rules, the row still carries the figure.
+    narrow = _two_row(" Session: 15.99 AIC used · YOLO", rule="━" * 46)
+    assert ai_credits_used(narrow) == 15.99
+
+
+def test_a_two_row_footer_cut_before_the_figure_reads_none():
+    cut = _two_row(" Plan: 26.957/35.100 (76% used) · Sess…", rule="─" * 46)
+    assert ai_credits_used(cut) is None
+    assert ai_credits_used(_two_row(" Plan: 26.957/35.100 (76% used) · YOLO")) is None
+
+
+def test_a_figure_only_in_the_conversation_above_the_input_box_is_not_credits():
+    quoted = [" The footer says Session: 15.99 AIC used", " ● Done.", ""]
+    assert ai_credits_used(_two_row(" Plan: 26.957/35.100 (76% used) · YOLO", above=quoted)) is None
+    # Past the status row's gap it is out of reach even with nothing between.
+    far = [" Session: 15.99 AIC used", "", "", "", ""]
+    assert ai_credits_used(_two_row(" Plan: 26.957/35.100 (76% used)", above=far)) is None
+
+
+def test_a_screen_with_no_input_box_reads_none_below_the_bottom_row():
+    assert ai_credits_used([STATUS, " ● Done.", MODEL]) is None
+    assert ai_credits_used([STATUS, RULE, "❯", " one", " two", " three"]) is None
+
+
+@pytest.mark.parametrize("figure,expected", [
+    ("15.99", 15.99),
+    ("0.5", 0.5),
+    ("1,234.5", 1234.5),
+    ("1,234", 1234.0),
+    ("12,345,678.9", 12345678.9),
+    ("1.234,5", 1234.5),
+    ("1.234.567", 1234567.0),
+    ("12.3456", 12.3456),
+    ("0.123", 0.123),
+    ("0", 0.0),
+    # One dot and three digits is 1.234 or 1234: unreadable one way only.
+    ("1.234", None),
+    ("26.957", None),
+    ("1,5", None),
+    ("1,23,456", None),
+    ("1,2345.6", None),
+    ("1.23.456", None),
+    ("1.234,56,7", None),
+    ("1,234,5.6", None),
+])
+def test_the_number_is_read_one_way_or_not_at_all(figure, expected):
+    assert ai_credits_used([f" Session: {figure} AIC used"]) == expected
+    assert ai_credits_used(_two_row(f" Plan: 26.957/35.100 · Session: {figure} AIC used")) == expected
+
+
 def test_only_the_bottom_most_row_counts():
     older = ["  Session: 9.99 AIC used", RULE, "❯", RULE]
     assert ai_credits_used(older + _screen(WIDE_FOOTER)) == 5.62

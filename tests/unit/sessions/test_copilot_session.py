@@ -46,6 +46,9 @@ PICKER = [
     (NARROW, None),
     ([], None),
     ([" Plan: 459/1500 (30% used)"], None),
+    # The two-row footer: the figure stays on the bottom row.
+    ([" Plan: 26.957/35.100 (76% used) · Session: 15.99 AIC used · YOLO", RULE, "> ", RULE,
+      " GPT-6 Luna · Extra High · (9%)", ""], 9),
 ])
 def test_context_percent_is_the_status_lines_own_figure(lines, expected):
     assert cs.context_percent(lines) == expected
