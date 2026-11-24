@@ -42,11 +42,11 @@ STATE_DIRNAME = "app-launcher-lite-state"
 
 
 def state_dir() -> Path:
-    """The state folder: the override, else the old hooks/state until install.py --migrate moves it, else the new one."""
+    """The state folder, under COPILOT_HOME (else ~/.copilot) as install.py has it: the override, else the old hooks/state until install.py --migrate moves it, else the new one."""
     root = os.environ.get("COPILOT_HOOKS_STATE_DIR")
     if root:
         return Path(root)
-    home = Path.home() / ".copilot"
+    home = Path(os.environ.get("COPILOT_HOME") or Path.home() / ".copilot")
     current, legacy = home / STATE_DIRNAME, home / "hooks" / "state"
     return legacy if legacy.is_dir() and not current.is_dir() else current
 
