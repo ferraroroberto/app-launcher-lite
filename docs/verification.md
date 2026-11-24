@@ -69,7 +69,7 @@ C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -File scripts\verify-b
 Run it before declaring any change to `app/webapp/`, `src/launching/launcher.py` or the session-host done. It runs, as one pass/fail, in order:
 
 1. **Byte-compile** `app`, `src` and `tests`.
-2. **Ratchets**, each failing only when a count rises above its committed `.<name>-ratchet-baseline.json`: comment, suite weight, static, docs, structure, instruction, doc refs, dead code, conventions, runtime write, usage track, UX surface, request budget and windows only. Every ratchet reads the whole tree and is never diff-routed. Exit 3 means the ratchet could not establish its fact (git unusable, a file unreadable) and fails as NOT CONFIRMED, never as a skip. Where code goes: [layout.md](layout.md).
+2. **Ratchets**, each failing only when a count rises above its committed `.<name>-ratchet-baseline.json`: comment, suite weight, static, docs, structure, instruction, doc refs, dead code, conventions, runtime write, usage track, UX surface, request budget, windows only, port host and clean tree (a disposable plain-HTTP boot on a free port with scratch runtime data; it never touches the tray). Every ratchet reads the whole tree and is never diff-routed. Exit 3 means the ratchet could not establish its fact (git unusable, a file unreadable) and fails as NOT CONFIRMED, never as a skip. Where code goes: [layout.md](layout.md).
 3. **Runtime write probe** snapshot, then the **non-e2e pytest suite**.
 4. **Browser slice**, routed to the diff (below), against a disposable webapp and session-host.
 5. **Screenshot baseline**, the last browser stage.

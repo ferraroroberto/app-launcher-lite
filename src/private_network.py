@@ -35,6 +35,7 @@ _PRIVATE_RANGES = tuple(
 
 # Any address works: connecting a UDP socket transmits nothing, and a private
 # destination keeps the OS from preferring a VPN or tunnel adapter's route.
+# port-host-exempt: an unroutable address used only to read the LAN route, never reached
 _ROUTE_PROBE = ("10.255.255.255", 9)
 
 _lock = threading.Lock()

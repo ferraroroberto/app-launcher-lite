@@ -18,10 +18,15 @@ if not exist "%VENV_PY%" (
 
 cd /d "%SCRIPT_DIR%" || exit /b 1
 
-REM  The port is config\config.json webapp.port (default 8465 when unset) -- the
-REM  same single setting the tray and the Python code read.
-set "WEBAPP_PORT=8465"
+REM  The port is config\config.json webapp.port (the resolver supplies its own
+REM  default when unset) -- the same single setting the tray and the Python code
+REM  read. No fallback is written here: a resolver that fails stops the start.
+set "WEBAPP_PORT="
 for /f "usebackq delims=" %%P in (`"%VENV_PY%" -m scripts.webapp_port`) do set "WEBAPP_PORT=%%P"
+if not defined WEBAPP_PORT (
+    echo [ERROR] scripts.webapp_port printed no port. Check config\config.json.
+    exit /b 1
+)
 
 set "CERT_DIR=%SCRIPT_DIR%webapp\certificates"
 set "CERT=%CERT_DIR%\cert.pem"

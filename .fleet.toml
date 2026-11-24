@@ -44,6 +44,8 @@ extra_junctions = ["webapp/certificates"]
 
 [vendored]
 windows_only_ratchet = { src = "scripts/windows_only_ratchet.py", sha = "5ba99b0a04b1b5d7b3689f8f7a59bd3fe625a9bc", dest = "scripts/windows_only_ratchet.py" }
+port_host_ratchet = { src = "scripts/port_host_ratchet.py", sha = "b7959a6bf1a80ae18e1960679500c0c0f9120238", dest = "scripts/port_host_ratchet.py" }
+clean_tree_ratchet = { src = "scripts/clean_tree_ratchet.py", sha = "b7959a6bf1a80ae18e1960679500c0c0f9120238", dest = "scripts/clean_tree_ratchet.py" }
 icons = { src = "app/webapp/static/_vendored/icons", sha = "e14844faa70acbd89dc43011c5bc98025052c2c3", dest = "app/webapp/static/_vendored/icons" }
 fullscreen = { src = "app/webapp/static/_vendored/fullscreen", sha = "e14844faa70acbd89dc43011c5bc98025052c2c3", dest = "app/webapp/static/_vendored/fullscreen" }
 switch = { src = "app/webapp/static/_vendored/switch", sha = "8f15c49560adbc076d24a8a63dd671868ffa7a4e", dest = "app/webapp/static/_vendored/switch" }
@@ -588,6 +590,26 @@ why        = "samples CPU and memory only while the header polled within the dem
 # clean. Mechanism: project-scaffolding docs/windows-only-ratchet.md.
 [windows_only_ratchet]
 enabled = true
+
+# [port_host_ratchet] -- scripts/port_host_ratchet.py fails when a file's count of port or
+# machine-local host literals rises above .port-host-ratchet-baseline.json. A port or host
+# lives in ignored config and is read through the resolver listed here, so a clean
+# `git pull --ff-only` plus the restart recipe is the whole update. Mechanism:
+# project-scaffolding docs/port-host-ratchet.md.
+[port_host_ratchet]
+enabled   = true
+resolvers = ["src/app_config.py"]
+
+# [clean_tree_ratchet] -- scripts/clean_tree_ratchet.py boots a disposable plain-HTTP
+# server on a free port with its runtime data in a scratch folder and fails when the boot
+# adds, changes or deletes a path .clean-tree-ratchet-baseline.json does not list. The smoke
+# never touches the tray or its ports. /healthz answers 200 without a token. Mechanism:
+# project-scaffolding docs/clean-tree-ratchet.md.
+[clean_tree_ratchet]
+enabled      = true
+smoke        = ["{python}", "-m", "app.webapp.serve", "--host", "127.0.0.1", "--port", "{port}", "--server", "uvicorn"]
+ready_path   = "/healthz"
+data_dir_env = "APP_LAUNCHER_DATA_DIR"
 
 [test_weight]
 ratio_ceiling = "1.0034"
