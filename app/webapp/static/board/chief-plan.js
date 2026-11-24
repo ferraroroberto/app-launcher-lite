@@ -250,15 +250,19 @@ function queueRow(q) {
   });
 }
 
-// A lane: the repo is its title, the item (`#N`) its meta.
+// A lane: the repo is its title, the item its meta. An issue lane's item is
+// `#N` and links to the issue; a skill run's is `skill:<name>`, shown as the
+// skill's name with no link, because no issue stands behind it.
 function planLaneRow(l) {
+  const item = l.item || '';
+  const skill = item.indexOf('skill:') === 0 ? item.slice('skill:'.length) : '';
   return planRow({
     title: l.repo || 'lane',
-    meta: l.item ? [l.item] : [],
+    meta: skill ? [skill + ' skill'] : (item ? [item] : []),
     status: l.status,
     model: l.model,
-    url: l.ref_url,
-    ref: l.item ? (l.repo || '') + l.item : '',
+    url: skill ? '' : l.ref_url,
+    ref: item && !skill ? (l.repo || '') + item : '',
   });
 }
 

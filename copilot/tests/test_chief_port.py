@@ -47,6 +47,18 @@ class ProvenanceTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(data).hexdigest(), expected, f"{rel} drifted from its port")
 
 
+class SkillCommandTests(unittest.TestCase):
+    def test_the_skill_command_finds_the_launcher_where_the_installer_writes_it(self) -> None:
+        sys.path.insert(0, str(REPO))
+        import install  # noqa: PLC0415 -- copilot/install.py, only importable once REPO is on sys.path
+
+        skill = (REPO / ".github" / "skills" / "chief" / "SKILL.md").read_text(encoding="utf-8")
+        home = '$(if ($env:COPILOT_HOME) { $env:COPILOT_HOME } else { "$HOME/.copilot" })'
+        self.assertIn(f'& "{home}/hooks/{install.CHIEF_LAUNCHER[1]}"', skill)
+        with mock.patch.dict(os.environ, {"COPILOT_HOME": "elsewhere"}):
+            self.assertEqual(install.Paths().hooks, os.path.join("elsewhere", "hooks"))
+
+
 class StateDirTests(unittest.TestCase):
     def test_default_is_copilot_and_env_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as fake_home:
@@ -113,6 +125,31 @@ class ChiefOpsTests(unittest.TestCase):
         code, _out, err = _run("plan", "set", "fleet-config-lite#404", "--status", "merged")
         self.assertEqual(code, 2)
         self.assertIn("ERROR:", err)
+
+    def test_unwait_with_no_match_is_a_no_op_not_a_failure(self) -> None:
+        self.assertEqual(_run("plan", "ask", "Pick one?", "--id", "pick")[0], 0)
+        plan_path = self.state / "chief-plan.json"
+        before = plan_path.read_bytes()
+        code, out, err = _run("plan", "unwait", "slots-idle")
+        self.assertEqual((code, out.strip(), err), (0, "UNWAIT=none id=slots-idle", ""))
+        self.assertEqual(plan_path.read_bytes(), before, "a no-op unwait writes nothing")
+        code, out, _ = _run("plan", "unwait", "pick")
+        self.assertEqual(code, 0)
+        self.assertNotIn("UNWAIT=none", out)
+
+    def test_a_lane_can_carry_a_skill_run(self) -> None:
+        code, out, _ = _run("plan", "lane", "task-os", "building", "--item", "skill:upstream-sync")
+        self.assertEqual(code, 0, out)
+        plan = json.loads((self.state / "chief-plan.json").read_text(encoding="utf-8"))
+        self.assertEqual(plan["lanes"], [{"repo": "task-os", "status": "building",
+                                          "item": "skill:upstream-sync"}])
+        entry = json.loads((self.state / "chief-journal.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+        self.assertEqual(entry["kind"], "dispatched")
+        self.assertIn("running upstream-sync", entry["text"])
+        for bad in ("upstream-sync task-os", "skill:", "skill:Upstream Sync"):
+            code, _out, err = _run("plan", "lane", "task-os", "building", "--item", bad)
+            self.assertEqual(code, 2, bad)
+            self.assertIn("must be #N, skill:<name> or empty", err)
 
 
 if __name__ == "__main__":

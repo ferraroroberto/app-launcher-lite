@@ -77,6 +77,9 @@ WAITING_FIELDS = {"text", "ref", "id", "repo", "question", "detail", "recommenda
 OPTION_FIELDS = {"label", "description", "recommended"}
 
 _LOCAL_REF = re.compile(r"#[1-9][0-9]*")
+# A lane runs an issue (`#N`) or a skill on the repo with no issue behind it
+# (`skill:upstream-sync`), so the Board can show a skill run honestly.
+_LANE_ITEM = re.compile(r"#[1-9][0-9]*|skill:[a-z][a-z0-9-]{0,39}")
 _REPO = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 _QUALIFIED_REF = re.compile(r"([A-Za-z0-9][A-Za-z0-9._-]*)(#[1-9][0-9]*)")
 _NO_LANE = re.compile(r"no-lane:([A-Za-z0-9][A-Za-z0-9._-]*)")
@@ -166,8 +169,8 @@ def validate(doc: Any) -> List[str]:
         if "session" in lane:
             _check_text(errors, f"{where}.session", lane["session"], required=False)
         item = lane.get("item", "")
-        if item and (not isinstance(item, str) or not _LOCAL_REF.fullmatch(item)):
-            errors.append(f"{where}.item: must be #N or empty")
+        if item and (not isinstance(item, str) or not _LANE_ITEM.fullmatch(item)):
+            errors.append(f"{where}.item: must be #N, skill:<name> or empty")
         _check_model(errors, where, lane)
 
     seen = set()
@@ -618,7 +621,7 @@ def prune_items(doc: Dict[str, Any], statuses: Sequence[str] = (QueueStatus.MERG
     """Drop every queue row whose status is in `statuses`; returns how many went.
 
     Lanes and waiting items are never touched: a lane's `item` is only a `#N`
-    pointer, and a question outlives the row it was asked about.
+    or `skill:<name>` pointer, and a question outlives the row it was asked about.
     """
     unknown = sorted(set(statuses) - set(QUEUE_STATUSES))
     if unknown:
@@ -724,6 +727,11 @@ def add_question(
     return row["id"]
 
 
+class NothingWaiting(ValueError):
+    """`unwait` named no waiting item: a no-op, such as an instruction typed into the
+    terminal that was never a Board question, not a failure."""
+
+
 def clear_waiting(doc: Dict[str, Any], key: str) -> None:
     """Drop a waiting item by 1-based index, by its id, by its `repo#N` ref, or by exact text."""
     rows = doc["waiting_on_roberto"]
@@ -732,5 +740,5 @@ def clear_waiting(doc: Dict[str, Any], key: str) -> None:
         return
     kept = [row for row in rows if key not in (row.get("id"), row.get("ref"), row["text"])]
     if len(kept) == len(rows):
-        raise ValueError(f"nothing waiting matches {key!r}")
+        raise NothingWaiting(f"nothing waiting matches {key!r}")
     doc["waiting_on_roberto"] = kept

@@ -37,7 +37,8 @@ def test_plan_rows_show_the_model_only_when_the_chief_named_one(
 ) -> None:
     """#1352: a lane or queue row that carries a `model` shows it as quiet
     text before its status chip; a row without one (or with a non-string one)
-    shows nothing extra, and keeps its status chip and title."""
+    shows nothing extra, and keeps its status chip and title. A skill-run lane
+    (`skill:<name>`, no issue behind it) shows the skill's name and no link."""
     _mock_board(authed_page, _board_payload(with_chief=True))
     f = tmp_path / "chief-plan.json"
     f.write_text(_json.dumps({
@@ -46,6 +47,7 @@ def test_plan_rows_show_the_model_only_when_the_chief_named_one(
             {"repo": "app-launcher", "session": "s-a", "item": "#1352", "status": "building",
              "model": "opus"},
             {"repo": "fleet-config", "session": "s-f", "item": "#959", "status": "gate"},
+            {"repo": "task-os", "session": "s-t", "item": "skill:upstream-sync", "status": "building"},
         ],
         "queue": [
             {"repo": "app-launcher", "ref": "#1199", "title": "pin the model", "status": "queued",
@@ -61,7 +63,7 @@ def test_plan_rows_show_the_model_only_when_the_chief_named_one(
     expect(plan_body).to_have_attribute("data-state", "ok")
     lanes = plan_body.locator(".board-plan-group").nth(0).locator("li")
     queue = plan_body.locator(".board-plan-group").nth(1).locator("li")
-    expect(lanes).to_have_count(2)
+    expect(lanes).to_have_count(3)
     expect(queue).to_have_count(2)
 
     expect(lanes.nth(0).locator(".board-plan-model")).to_have_text("Opus")
@@ -74,6 +76,9 @@ def test_plan_rows_show_the_model_only_when_the_chief_named_one(
     # No model (missing, or the wrong type): today's row, no extra text.
     expect(lanes.nth(1).locator(".board-plan-model")).to_have_count(0)
     expect(lanes.nth(1).locator(".board-plan-chip")).to_have_text("gate")
+    expect(lanes.nth(2)).to_contain_text("upstream-sync skill")
+    expect(lanes.nth(2)).not_to_contain_text("skill:")
+    expect(lanes.nth(2)).not_to_have_class(re.compile(r"\bis-link\b"))
     expect(queue.nth(1).locator(".board-plan-model")).to_have_count(0)
     expect(queue.nth(1)).to_contain_text("photo batch")
     expect(queue.nth(1).locator(".board-plan-chip")).to_have_text("queued")
