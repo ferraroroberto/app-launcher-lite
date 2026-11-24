@@ -151,6 +151,25 @@
     </div>
   </dialog>
 
+  <!-- Usage details: the Usage card's menu entry. The rows are the figures the
+       card's bar and tooltip carry, written out so a phone reads them without
+       hovering. Read-only: header ✕ plus one full-width Done (modal contract).
+       Driven by copilot-usage.js. -->
+  <dialog id="usageSheet" class="detail-dialog" data-surface="code.usage-sheet" data-track-view="sheet.usage" aria-labelledby="usageSheetTitle">
+    <div class="detail-card">
+      <div class="detail-header">
+        <h2 id="usageSheetTitle" tabindex="-1" autofocus>Usage details</h2>
+        <button data-track="usage-sheet.close" type="button" id="usageSheetClose" class="icon-button detail-close" aria-label="Close">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+        </button>
+      </div>
+      <dl id="usageSheetList" class="context-sheet-list"></dl>
+      <div class="detail-actions">
+        <button data-track="usage-sheet.done" type="button" id="usageSheetDone" class="button-primary detail-save-btn">Done</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- Switch model: the model chip's sheet, one row per model the session's
        agent offers. Header ✕ plus one full-width Done (modal contract). -->
   <dialog id="modelSwitchSheet" class="detail-dialog model-switch-sheet" data-surface="terminal.model-sheet" data-track-view="sheet.model-switch" aria-labelledby="modelSwitchSheetTitle">

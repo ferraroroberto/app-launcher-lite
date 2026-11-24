@@ -262,12 +262,46 @@ surfaces:
       - the pace words beside the title, under pace or ahead of pace in their tone
       - one Copilot · Month row with a bar filled to the share of the Copilot plan's monthly allowance used, as the Copilot CLI's own status line shows it, a tick at the share of the month gone, the percent and the reset date
       - a footnote with today's credits on this machine, after the reason when the plan figure could not be read
+      - a kebab on the card's head
     does:
+      - a tap anywhere on the card, the kebab included, opens the Usage menu
       - the bar is accent on or under pace, attention ahead of it and danger at 90% or more
       - an unreadable plan figure reads unknown with its reason, never 0% and never this machine's share in its place
       - the row's tooltip names the source, the Copilot plan as the CLI last fetched it, its scope, and this machine's credits this month
       - reads every 60 s while the Code tab is on screen, never during page load
+    links:
+      - to: code.usage-menu
+        via: card tap or kebab
     why: one glance says whether the month's Copilot allowance will last
+
+  - id: code.usage-menu
+    area: code
+    title: Usage menu
+    root: data-surface
+    reach:
+      - a tap on the Usage card, or its kebab
+    holds:
+      - Usage details and History
+    does:
+      - Usage details opens the Usage details sheet
+      - History opens the History sheet
+    links:
+      - to: code.usage-sheet
+        via: Usage details
+      - to: code.history-sheet
+        via: History
+
+  - id: code.usage-sheet
+    area: code
+    title: Usage details sheet
+    root: data-surface
+    reach:
+      - Usage details in the Usage menu
+    holds:
+      - the figures the card's bar and tooltip carry, written out - credits used of the allowance, the share of the month gone, the reset date, this machine's credits this month and today, and the source
+    does:
+      - an unreadable plan figure reads unknown with its reason and shows no used count
+      - Done or the header close closes the sheet
 
   - id: code.sessions
     area: code
@@ -340,7 +374,7 @@ surfaces:
       - the second card on the Code tab, closed by default
     holds:
       - the launch toolbar, with a launch preset dropdown when a preset is saved
-      - History, Sync all and Refresh for the git check
+      - Sync all and Refresh for the git check
       - a filter box with a favorites toggle
       - one row per project folder, with its git flag
       - the time of the last git check
@@ -349,7 +383,6 @@ surfaces:
       - a preset picked in the toolbar launches it on that preset's model, effort and context
       - Refresh fetches every remote and re-reads branch, changes and ahead or behind
       - Sync all fast-forwards every clean project that is only behind
-      - History opens the History sheet
     states:
       - empty - No projects found, with an Open Settings action that opens the Folders sheet
       - filtered to nothing - No projects match the filter, with Clear filter
@@ -361,8 +394,6 @@ surfaces:
         via: preset dropdown
       - to: code.git-sync-sheet
         via: Sync all
-      - to: code.history-sheet
-        via: History
       - to: settings.folders
         via: Open Settings
       - to: terminal.overlay
@@ -412,7 +443,7 @@ surfaces:
     title: History sheet
     root: data-surface
     reach:
-      - History in the Projects card toolbar
+      - History in the Usage menu
     holds:
       - a day, week or month grouping and a range of 30 days, 90 days, 6 months or a custom pair of days
       - tiles for lines added and removed, merge requests merged and issues opened and closed, each with a chart

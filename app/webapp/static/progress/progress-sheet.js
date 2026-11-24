@@ -1,6 +1,6 @@
 /* The History sheet: what the projects shipped.
  *
- * Opened from the History button in the Projects card. It reads GET
+ * Opened from History in the Usage card's menu. It reads GET
  * /api/progress, which answers from its cache and runs no git or GitLab call,
  * so the sheet draws the cached figures the moment it opens, however old, and
  * says how old each source is. Only the Refresh button asks the server to

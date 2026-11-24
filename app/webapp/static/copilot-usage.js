@@ -109,9 +109,64 @@ function el(tag, cls) {
   return node;
 }
 
+// The Usage details sheet's rows: the figures the bar and its tooltip carry,
+// as [label, value] pairs. A plan nobody could read says unknown with its
+// reason; it never shows 0.
+export function detailRows(body) {
+  if (!body || usageState(body) === UsageState.PENDING) {
+    return [['Plan usage', 'Still reading the plan']];
+  }
+  const rows = [];
+  if (usageState(body) === UsageState.OK) {
+    rows.push(['Used this month', formatCredits(body.used_credits) + ' of ' + formatCredits(body.allowance) + ' AI credits']);
+  } else {
+    rows.push(['Plan usage', 'Unknown, ' + (body.reason || 'the plan could not be read')]);
+    rows.push(['Allowance from Settings', formatCredits(body.allowance) + ' AI credits']);
+  }
+  rows.push(['Month gone', body.pace_pct + '%']);
+  const reset = resetLabel(body.reset_at);
+  if (reset) rows.push(['Allowance', reset]);
+  if (body.machine_month_credits != null) {
+    rows.push(['This machine this month', formatCredits(body.machine_month_credits) + ' credits']);
+  }
+  if (body.today_credits != null) {
+    rows.push(['This machine today', formatCredits(body.today_credits) + ' credits']);
+  }
+  rows.push(['Source', body.source + ', counting ' + body.scope]);
+  return rows;
+}
+
+let lastBody = null;
+let sheetWired = false;
+
+// The sheet reads what the card last drew, so the two never disagree.
+export function openUsageSheet() {
+  const sheet = document.getElementById('usageSheet');
+  const list = document.getElementById('usageSheetList');
+  if (!sheet || !list) return;
+  if (!sheetWired) {
+    sheetWired = true;
+    const close = function () { if (sheet.open) sheet.close(); };
+    document.getElementById('usageSheetClose').addEventListener('click', close);
+    document.getElementById('usageSheetDone').addEventListener('click', close);
+  }
+  list.replaceChildren();
+  detailRows(lastBody).forEach(function (pair) {
+    const row = el('div', 'context-sheet-row');
+    const term = document.createElement('dt');
+    term.textContent = pair[0];
+    const value = document.createElement('dd');
+    value.textContent = pair[1];
+    row.append(term, value);
+    list.appendChild(row);
+  });
+  if (!sheet.open) sheet.showModal();
+}
+
 export function renderUsage(body) {
   const meter = document.getElementById('codingUsage');
   if (!meter || !body || usageState(body) === UsageState.PENDING) return;
+  lastBody = body;
   const row = meter.querySelector('.um-row');
   const bar = meter.querySelector('.um-bar');
   const pctEl = meter.querySelector('.um-pct');

@@ -1,6 +1,6 @@
 # History
 
-The **History** sheet answers "what did I ship this month?". It opens from the clock button in the Projects card on the Code tab, and shows lines of code added and removed, merge requests merged, and issues opened and closed, grouped by day, week or month over 30 days, 90 days, 6 months or a custom range. Three tiles (each with a chart) and a per-project table sortable by column sit under the controls; a Data sources card lists each source's age. There are no token or usage figures: Copilot's token history is not probed, so those tiles are left out rather than shown empty.
+The **History** sheet answers "what did I ship this month?". It opens from the Usage card's menu on the Code tab (tap the card, then History), and shows lines of code added and removed, merge requests merged, and issues opened and closed, grouped by day, week or month over 30 days, 90 days, 6 months or a custom range. Three tiles (each with a chart) and a per-project table sortable by column sit under the controls; a Data sources card lists each source's age. There are no token or usage figures: Copilot's token history is not probed, so those tiles are left out rather than shown empty.
 
 ## Two sources
 

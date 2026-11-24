@@ -39,4 +39,16 @@ assert.equal(m.footerText({ state: 'pending' }), '–');
 assert.match(m.rowTitle(ok), /180 of 300 AI credits used this month on the plan/);
 assert.match(m.rowTitle({ ...ok, machine_month_credits: 12 }), /12 credits this month on this machine/);
 
+// The details sheet writes the same figures out; an unreadable plan says
+// unknown with its reason and never shows a used count.
+assert.deepEqual(m.detailRows(ok).slice(0, 3), [
+  ['Used this month', '180 of 300 AI credits'], ['Month gone', '40%'], ['Allowance', 'resets Dec 1']]);
+assert.deepEqual(m.detailRows({ ...ok, machine_month_credits: 12 }).find(function (r) { return r[0] === 'This machine this month'; }),
+  ['This machine this month', '12 credits']);
+const unknownRows = m.detailRows(planUnknown);
+assert.deepEqual(unknownRows[0], ['Plan usage', 'Unknown, no plan cached']);
+assert.ok(!unknownRows.some(function (r) { return r[0] === 'Used this month'; }));
+assert.deepEqual(m.detailRows({ state: 'pending' }), [['Plan usage', 'Still reading the plan']]);
+assert.deepEqual(m.detailRows(null), [['Plan usage', 'Still reading the plan']]);
+
 console.log('OK');
