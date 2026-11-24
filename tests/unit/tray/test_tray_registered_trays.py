@@ -14,7 +14,13 @@ from unittest.mock import MagicMock
 import pytest
 
 import app.tray.registered_trays as rt_mod
-from app.tray.registered_trays import _fleet_toml_port
+from app.tray.registered_trays import (
+    TRAY_ANSWERING,
+    TRAY_BOUND_NOT_ANSWERING,
+    TRAY_DOWN,
+    TrayProbe,
+    _fleet_toml_port,
+)
 from src.registry import AppEntry, Registry, RegistryReadError
 
 
@@ -320,23 +326,23 @@ class TestWaitForTrayReady:
         assert ready is False
         assert sleeps == [rt_mod._TRAY_FALLBACK_DELAY_S]
 
-    def test_polls_until_port_listening(self, monkeypatch, tmp_path: Path):
+    def test_polls_until_the_tray_answers(self, monkeypatch, tmp_path: Path):
         _write_fleet_toml(tmp_path, "port = 8447")
         calls = {"n": 0}
 
-        def fake_port_listening(port):
+        def fake_probe(port, repo_dir=None):
             calls["n"] += 1
             assert port == 8447
-            return calls["n"] >= 3
+            return TrayProbe(TRAY_ANSWERING if calls["n"] >= 3 else TRAY_BOUND_NOT_ANSWERING, "")
 
-        monkeypatch.setattr(rt_mod, "port_listening", fake_port_listening)
+        monkeypatch.setattr(rt_mod, "probe_tray", fake_probe)
         monkeypatch.setattr(rt_mod.time, "sleep", lambda s: None)
         assert rt_mod._wait_for_tray_ready(tmp_path) is True
         assert calls["n"] == 3
 
-    def test_times_out_when_port_never_listens(self, monkeypatch, tmp_path: Path):
+    def test_times_out_when_the_tray_never_answers(self, monkeypatch, tmp_path: Path):
         _write_fleet_toml(tmp_path, "port = 8447")
-        monkeypatch.setattr(rt_mod, "port_listening", lambda port: False)
+        monkeypatch.setattr(rt_mod, "probe_tray", lambda port, repo_dir=None: TrayProbe(TRAY_DOWN, "down"))
         # Simulate the timeout clock without a real 30s wall-clock wait.
         clock = {"t": 0.0}
         monkeypatch.setattr(rt_mod.time, "monotonic", lambda: clock["t"])
@@ -431,7 +437,12 @@ class TestReconcileMissedAutostarts:
             return 4242
 
         monkeypatch.setattr(rt_mod, "_spawn_tray_bat_detached", _spawn)
-        monkeypatch.setattr(rt_mod, "port_listening", lambda port: state["up"])
+        monkeypatch.setattr(
+            rt_mod, "probe_tray",
+            lambda port, repo_dir=None: TrayProbe(
+                TRAY_ANSWERING if state["up"] else state.get("probe", TRAY_DOWN), "probe"
+            ),
+        )
         monkeypatch.setattr(rt_mod, "_wait_for_tray_ready", lambda repo_dir: state["up"])
         monkeypatch.setattr(rt_mod, "find_running_target", lambda b: state["running_pid"])
         def log() -> str:
@@ -625,3 +636,66 @@ class TestMiniAppsAutostart:
         monkeypatch.setattr(rt_mod, "_wait_for_tray_ready", lambda repo_dir: True)
 
         rt_mod.launch_all()
+
+
+class TestReadinessIsHealthNotAnOpenPort:
+    """A sister tray whose port is bound is not ready until it answers: autostart never
+    launches over it, never counts it ready, and says which state it found."""
+
+    @pytest.fixture
+    def world(self, monkeypatch, tmp_path: Path):
+        (bat,) = _stub_tray_registry(monkeypatch, tmp_path, "a")
+        _write_fleet_toml(bat.parent, "port = 8447")
+        spawn = MagicMock(return_value=4242)
+        monkeypatch.setattr(rt_mod, "_spawn_tray_bat_detached", spawn)
+        monkeypatch.setattr(rt_mod, "find_running_target", lambda b: None)
+
+        def log() -> str:
+            return (tmp_path / "webapp" / "registered_trays.log").read_text(encoding="utf-8")
+
+        return spawn, log
+
+    def test_a_bound_port_that_does_not_answer_is_reported_and_retried_not_launched_over(
+        self, world, monkeypatch
+    ):
+        spawn, log = world
+        monkeypatch.setattr(
+            rt_mod, "probe_tray",
+            lambda port, repo_dir=None: TrayProbe(TRAY_BOUND_NOT_ANSWERING, ":8447 accepts connections but no answer"),
+        )
+        stop = _FakeStop()
+
+        rt_mod.launch_all(stop=stop)
+
+        spawn.assert_not_called()
+        assert stop.waits == list(rt_mod._RETRY_DELAYS_S)
+        text = log()
+        assert "A: bound_not_answering: :8447 accepts connections" in text
+        assert "A: failed after 3 retries" in text
+        assert "already answering" not in text
+
+    def test_a_stale_build_is_reported_and_never_counted_ready(self, world, monkeypatch):
+        spawn, log = world
+        monkeypatch.setattr(
+            rt_mod, "probe_tray",
+            lambda port, repo_dir=None: TrayProbe(rt_mod.TRAY_STALE, "https answering but serves git_sha aaa, HEAD is bbb"),
+        )
+        stop = _FakeStop()
+
+        rt_mod.launch_all(stop=stop)
+
+        spawn.assert_not_called()
+        assert stop.waits == []
+        text = log()
+        assert "A: stale: https answering but serves git_sha aaa, HEAD is bbb — not launched" in text
+        assert "already answering" not in text
+
+    def test_a_bound_port_that_starts_answering_ends_ready_without_a_launch(self, world, monkeypatch):
+        spawn, log = world
+        answers = iter([TrayProbe(TRAY_BOUND_NOT_ANSWERING, "starting"), TrayProbe(TRAY_ANSWERING, "up")])
+        monkeypatch.setattr(rt_mod, "probe_tray", lambda port, repo_dir=None: next(answers))
+
+        rt_mod.launch_all(stop=_FakeStop())
+
+        spawn.assert_not_called()
+        assert "A: retry 1/3: :8447 answering — ready, not relaunched" in log()

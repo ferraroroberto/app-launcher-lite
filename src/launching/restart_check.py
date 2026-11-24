@@ -201,7 +201,11 @@ def restart(
         _log_line(f"restart FAILED: tray.bat did not complete ({exc})")
         return 1
     if done.returncode != 0:
-        _log_line(f"restart FAILED: tray.bat exited {done.returncode}, so the old process was not replaced")
+        _log_line(
+            f"restart FAILED: tray.bat exited {done.returncode}, so the old process was not replaced; "
+            "the failing phase and first error are on the `tray.bat restart FAILED phase=` line above, "
+            "when the helper got that far"
+        )
         return 1
     return verify(port, timeout_s)
 
