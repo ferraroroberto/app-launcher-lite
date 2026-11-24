@@ -87,6 +87,10 @@ HOOK_CONFIGS = (
     ("session-state.template.json", "app-launcher-lite-session-state.json", "session_state.py"),
     ("chief-guard.template.json", "app-launcher-lite-chief-guard.json", "chief_guard.py"),
 )
+# The one command the chief skill runs: a cmd shim with this checkout's absolute paths, so the skill's
+# text names no machine path and the call works from any working directory.
+CHIEF_LAUNCHER = ("chief-ops.template.cmd", "app-launcher-lite-chief-ops.cmd")
+CHIEF_LAUNCHER_MARKER = "REM app-launcher-lite chief launcher"
 # What the old two-repo install wrote, and the folder name its skill junctions point into.
 OLD_HOOK_FILES = ("fleet-config-lite-session-state.json", "fleet-config-lite-chief-guard.json")
 OLD_SKILL_TARGET = re.compile(r"[\\/]fleet-config-lite[^\\/]*[\\/]skills[\\/]", re.IGNORECASE)
@@ -243,6 +247,9 @@ class Installer:
         if not os.path.isfile(path):
             return False
         return f"copilot/hooks/{script}" in read_text(path)
+
+    def our_launcher(self, path: str) -> bool:
+        return os.path.isfile(path) and CHIEF_LAUNCHER_MARKER in read_text(path)
 
     def our_skill(self, path: str) -> bool:
         if is_link(path):
@@ -406,6 +413,9 @@ class Installer:
                     self.change(f"hook config removed -> {target}", os.remove, target)
                 else:
                     self.say(f"[skip] hook config is not ours (it does not run this checkout's hooks) -> {target}")
+            launcher = os.path.join(self.p.hooks, CHIEF_LAUNCHER[1])
+            if exists(launcher) and self.our_launcher(launcher):
+                self.change(f"chief launcher removed -> {launcher}", os.remove, launcher)
         if not exists(self.p.skills):
             self.say(f"[ok] no skills folder -> {self.p.skills}")
         elif skills_link:
@@ -501,10 +511,30 @@ class Installer:
                     continue
                 # BOM-less UTF-8: Copilot CLI 1.0.70 silently ignores BOM'd hook configs (verified live).
                 self.change(f"hook config -> {target}", write_text, target, rendered)
+            self.write_chief_launcher()
             if shared:
                 self.say("     session-state records only sessions app-launcher-lite launched (--lite-sessions-only);")
                 self.say("     chief-guard acts only for lite's chief and its lanes")
         self.say(f"     python      -> {self.python}")
+
+    def write_chief_launcher(self) -> None:
+        """Render the chief's launcher next to the hook configs, CRLF and BOM-less as cmd expects."""
+        template, file = CHIEF_LAUNCHER
+        target = os.path.join(self.p.hooks, file)
+        target_link = foreign_link(target)
+        if target_link:
+            self.say(f"[skip] chief launcher is a link into another tree -> {target} ({target_link})")
+            return
+        if os.path.isfile(target) and not self.our_launcher(target):
+            self.say(f"[ok] kept (not Lite's chief launcher) -> {target}")
+            return
+        text = read_text(os.path.join(COPILOT_REPO, "hooks", template))
+        rendered = (text.replace("{{PYTHON}}", self.python or "").replace("{{COPILOT}}", COPILOT_REPO)
+                    .replace("\r\n", "\n").replace("\n", "\r\n"))
+        if os.path.isfile(target) and read_text(target) == rendered:
+            self.say(f"[ok] unchanged -> {target}")
+            return
+        self.change(f"chief launcher -> {target}", write_text, target, rendered)
 
     def install_skills(self, shared: bool, skills_link: Optional[str]) -> None:
         """Junction Lite's skills; the four issue skills come from skills_dir when it is set."""

@@ -1,6 +1,6 @@
 # Installing the Copilot side
 
-`copilot/install.py` connects this checkout to GitHub Copilot CLI for the current Windows user. It writes the two hook configs (session state for the Board, and the chief's guard), links the skills, adds any missing Lite config key, and prints a checklist. It never edits `~/.claude/settings.json`, an agent's trust settings or git config, and it never reads, moves or deletes `~/.copilot/hooks/state/`, where the chief's handover, plan, journal and mailbox live.
+`copilot/install.py` connects this checkout to GitHub Copilot CLI for the current Windows user. It writes the two hook configs (session state for the Board, and the chief's guard) and the chief's launcher (`app-launcher-lite-chief-ops.cmd`, the one command the chief skill runs from any folder), links the skills, adds any missing Lite config key, and prints a checklist. It never edits `~/.claude/settings.json`, an agent's trust settings or git config, and it never reads, moves or deletes `~/.copilot/hooks/state/`, where the chief's handover, plan, journal and mailbox live.
 
 There are four cases below. Pick the one that matches the machine. Run every command from the checkout's root in PowerShell. The installer is plain Python and runs no PowerShell script, so it works under every execution policy, `AllSigned` included, and never reads or changes it. `copilot\install.ps1` takes the same switches as `-Uninstall`, `-Migrate`, `-Yes` and `-WhatIf` and forwards them to it, for a machine where scripts may run.
 
@@ -106,7 +106,7 @@ Clearing the Skills folder later and running the install again removes Lite's li
 .\.venv\Scripts\python.exe copilot\install.py --uninstall
 ```
 
-It removes only what is Lite's: the two `app-launcher-lite-*.json` hook configs that run this checkout's hooks, the skill links into this checkout, and the links into your skills folder that it recorded and that still point where it recorded them. It never deletes inside a linked folder, never touches `hooks/state`, and never edits a config file. Restart any open Copilot session afterwards.
+It removes only what is Lite's: the two `app-launcher-lite-*.json` hook configs that run this checkout's hooks, the chief launcher, the skill links into this checkout, and the links into your skills folder that it recorded and that still point where it recorded them. It never deletes inside a linked folder, never touches `hooks/state`, and never edits a config file. Restart any open Copilot session afterwards.
 
 **Check:** each item reads `[ok] ... removed` or `[ok] not installed`, and a second run removes nothing.
 

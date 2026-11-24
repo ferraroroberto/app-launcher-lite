@@ -10,26 +10,26 @@ It is written for any model behind Copilot. It gives one table from what woke th
 
 ## Entry point
 
-The chief calls one CLI, `skills/_lib/chief_ops.py`, and acts only on the `KEY=value` lines it prints to stdout. Breadcrumbs go to stderr. A refused write exits 2 with `ERROR: ...` on stderr and leaves the state file as it was.
+The chief calls one CLI, `skills/_lib/chief_ops.py`, through the launcher `install.py` writes to `~/.copilot/hooks/app-launcher-lite-chief-ops.cmd`. The launcher carries this checkout's interpreter and script paths, so the one command `& "$HOME/.copilot/hooks/app-launcher-lite-chief-ops.cmd" <verb>` works from any working directory; the chief's folder is `copilot/`, which has no `.venv` of its own. `chief-ops` below stands for that command. The chief acts only on the `KEY=value` lines it prints to stdout. Breadcrumbs go to stderr. A refused write exits 2 with `ERROR: ...` on stderr and leaves the state file as it was.
 
 ```powershell
-.venv\Scripts\python.exe skills\_lib\chief_ops.py plan show
-.venv\Scripts\python.exe skills\_lib\chief_ops.py plan add <repo>#<N> "<title>" [--status S] [--model M] [--kind K]
-.venv\Scripts\python.exe skills\_lib\chief_ops.py plan lane <repo> building|gate|idle|waiting [--item "#N"]
-.venv\Scripts\python.exe skills\_lib\chief_ops.py plan ask "<question>" --ref <repo>#<N> --option "Label::why" ...
-.venv\Scripts\python.exe skills\_lib\chief_ops.py plan prune             # drop merged rows
-.venv\Scripts\python.exe skills\_lib\chief_ops.py note "<one line>" [--kind K] [--ref <repo>#<N>]
-.venv\Scripts\python.exe skills\_lib\chief_ops.py inbox [--count]     # claim pending mailbox events
-.venv\Scripts\python.exe skills\_lib\chief_ops.py ack <id> [<id> ...]  # retire handled events
+chief-ops plan show
+chief-ops plan add <repo>#<N> "<title>" [--status S] [--model M] [--kind K]
+chief-ops plan lane <repo> building|gate|idle|waiting [--item "#N"]
+chief-ops plan ask "<question>" --ref <repo>#<N> --option "Label::why" ...
+chief-ops plan prune             # drop merged rows
+chief-ops note "<one line>" [--kind K] [--ref <repo>#<N>]
+chief-ops inbox [--count]     # claim pending mailbox events
+chief-ops ack <id> [<id> ...]  # retire handled events
 .venv\Scripts\python.exe skills\_lib\chief_managed.py mark <sid> <repo> <number>
-.venv\Scripts\python.exe skills\_lib\chief_ops.py board | sessions | chief-sid
-.venv\Scripts\python.exe skills\_lib\chief_ops.py dispatch <repo> <N> [--mode start|yolo] [--model M] [--brief-file F]
-.venv\Scripts\python.exe skills\_lib\chief_ops.py open <project> [--message-file F] [--issue N | --lane]
-.venv\Scripts\python.exe skills\_lib\chief_ops.py file <repo> --title T --body-file F
-.venv\Scripts\python.exe skills\_lib\chief_ops.py say <sid> --file brief.md --verify
-.venv\Scripts\python.exe skills\_lib\chief_ops.py exchange <sid> | stop <sid> [--kill]
-.venv\Scripts\python.exe skills\_lib\chief_ops.py issues <repo>#<N> ...
-.venv\Scripts\python.exe skills\_lib\chief_ops.py verify <repo> --expect mr-open|merged [--branch B]
+chief-ops board | sessions | chief-sid
+chief-ops dispatch <repo> <N> [--mode start|yolo] [--model M] [--brief-file F]
+chief-ops open <project> [--message-file F] [--issue N | --lane]
+chief-ops file <repo> --title T --body-file F
+chief-ops say <sid> --file brief.md --verify
+chief-ops exchange <sid> | stop <sid> [--kill]
+chief-ops issues <repo>#<N> ...
+chief-ops verify <repo> --expect mr-open|merged [--branch B]
 ```
 
 Launcher calls go to app-launcher-lite on the webapp port its own `config/config.json` sets (`webapp.port`, default 8465; read by `skills/_lib/lite_ports.py` from app-launcher-lite's own `config/config.json`, the checkout `copilot/` sits in, or from the file `FLEET_LITE_CONFIG` names, so a Lite running beside another launcher is the one addressed; `--base-url` overrides; any non-loopback host is refused). A launcher that stays silent prints `UNCONFIRMED=...` and one that refuses the connection prints `UNREACHABLE=...`; neither is folded into a verdict. Repos are found under app-launcher-lite's `projects_dir` (`config/webapp_config.json`; read by `skills/_lib/lite_repos.py`), or beside the checkout when that is empty or not a folder, so `<projects_dir>/<repo>` is where `dispatch`, `verify`, `merge` and `sweep` look. Forge reads go through `glab` against `<namespace>/<repo>` on GitLab. The namespace is app-launcher-lite's `gitlab_group` (`GET /api/config` on loopback); when that is empty, the checkout's own `origin` remote names it, and `--owner` overrides both on `issues`, `verify` and `merge`. `dispatch`'s owner check, `drain` and `sweep` resolve it the same way. The host works like the namespace: `gitlab_host` from the launcher, else the host of the checkout's `origin` (a GitHub remote does not count), else gitlab.com. Every chief and owner-check `glab` call carries it as `GITLAB_HOST`, because `glab` sends a bare `<namespace>/<repo>` to gitlab.com, which answers a self-hosted project with a 404. A `glab` failure on `issues`, `verify`, `merge` or an owner-check read ends with `(tried host <host>, project <path>)`, so a wrong host or group reads off one line. The token stays in `glab`'s own store (`glab auth status` shows it per host); the chief never reads, stores or logs one. When no source names one, the read is `OWNER=unknown` (`issues` exits 1, `verify` prints `STATUS=UNKNOWN`, `merge` prints `MERGE=unknown`), never a 404 that reads as "no such issue". When `glab` is missing or signed out, `issues` prints an `error:` row for the ref and `verify` prints `STATUS=UNKNOWN`.
