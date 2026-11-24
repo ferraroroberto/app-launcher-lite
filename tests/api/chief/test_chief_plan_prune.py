@@ -105,9 +105,13 @@ class TestLogic:
     )
     def test_unusable_contract_is_unavailable_and_leaves_the_file(self, tmp_path, make):
         plan = _plan_file(tmp_path)
-        with pytest.raises(chief_plan_prune.PlanPruneUnavailable):
+        with pytest.raises(chief_plan_prune.PlanPruneUnavailable) as raised:
             chief_plan_prune.prune_merged(make(tmp_path), str(plan))
         assert json.loads(plan.read_text()) == _PLAN
+        # The reason reaches the Board, so it names the Settings row a person can fix.
+        reason = str(raised.value)
+        assert "Copilot folder" in reason
+        assert "fleet-config" not in reason
 
 
 class TestApi:

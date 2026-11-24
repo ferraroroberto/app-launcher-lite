@@ -1,6 +1,6 @@
 # The lite fleet chief: helpers
 
-app-launcher-lite carries the launcher side of the fleet chief (the plan and journal cards, the mailbox, the doorbell, the dispatch brief). This repo carries the helper side: the code the chief session runs and the state files the launcher reads. Every state file keeps the full `fleet-config` format byte for byte, so app-launcher-lite's readers parse it unchanged; only the location moves, from `~/.claude/hooks/state/` to `~/.copilot/hooks/state/`.
+app-launcher-lite carries both sides of the fleet chief. The launcher (`app/`, `src/`) holds the plan and journal cards, the mailbox, the doorbell and the dispatch brief. This `copilot/` folder holds the helper side: the code the chief session runs and the state files the launcher reads. Every state file keeps the full fleet's format byte for byte, so the launcher's readers parse it unchanged; only the location differs, `~/.copilot/hooks/state/` instead of `~/.claude/hooks/state/`.
 
 ## The chief skill
 
