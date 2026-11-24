@@ -36,6 +36,21 @@ from typing import Any, Dict
 
 _CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")
 
+# Outside hooks/: Copilot CLI loads every .json below it as a hook config. The webapp's copy of
+# this rule is src/chief/copilot_state.py; tests/unit/copilot/test_state_location.py pins them equal.
+STATE_DIRNAME = "app-launcher-lite-state"
+
+
+def state_dir() -> Path:
+    """The state folder: the override, else the old hooks/state until install.py --migrate moves it, else the new one."""
+    root = os.environ.get("COPILOT_HOOKS_STATE_DIR")
+    if root:
+        return Path(root)
+    home = Path.home() / ".copilot"
+    current, legacy = home / STATE_DIRNAME, home / "hooks" / "state"
+    return legacy if legacy.is_dir() and not current.is_dir() else current
+
+
 # camelCase → snake_case for the envelope fields the writers actually read.
 # Anything else falls through the generic converter so new fields still
 # arrive under a predictable name.

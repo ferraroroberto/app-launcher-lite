@@ -1,8 +1,8 @@
 # Installing the Copilot side
 
-`copilot/install.py` connects this checkout to GitHub Copilot CLI for the current Windows user. It writes the two hook configs (session state for the Board, and the chief's guard) and the chief's launcher (`app-launcher-lite-chief-ops.cmd`, the one command the chief skill runs from any folder), links the skills, adds any missing Lite config key, and prints a checklist. It never edits `~/.claude/settings.json`, an agent's trust settings or git config, and it never reads, moves or deletes `~/.copilot/hooks/state/`, where the chief's handover, plan, journal and mailbox live.
+`copilot/install.py` connects this checkout to GitHub Copilot CLI for the current Windows user. It writes the two hook configs (session state for the Board, and the chief's guard) and the chief's launcher (`app-launcher-lite-chief-ops.cmd`, the one command the chief skill runs from any folder), links the skills, adds any missing Lite config key, and prints a checklist. It never edits `~/.claude/settings.json`, an agent's trust settings or git config, and it never deletes Lite's state folder, `~/.copilot/app-launcher-lite-state/`, where the session state and the chief's handover, plan, journal and mailbox live. That folder sits outside `~/.copilot/hooks/` because Copilot CLI loads every `.json` below `hooks/` as a hook config and logs an `Invalid hook configuration` error for each other file there, in every session; the two `app-launcher-lite-*.json` hook configs are the only `.json` files Lite writes under `hooks/`.
 
-There are four cases below. Pick the one that matches the machine. Run every command from the checkout's root in PowerShell. The installer is plain Python and runs no PowerShell script, so it works under every execution policy, `AllSigned` included, and never reads or changes it. `copilot\install.ps1` takes the same switches as `-Uninstall`, `-Migrate`, `-Yes` and `-WhatIf` and forwards them to it, for a machine where scripts may run.
+There are five cases below. Pick the one that matches the machine. Run every command from the checkout's root in PowerShell. The installer is plain Python and runs no PowerShell script, so it works under every execution policy, `AllSigned` included, and never reads or changes it. `copilot\install.ps1` takes the same switches as `-Uninstall`, `-Migrate`, `-Yes` and `-WhatIf` and forwards them to it, for a machine where scripts may run.
 
 ## What the installer prints
 
@@ -106,9 +106,24 @@ Clearing the Skills folder later and running the install again removes Lite's li
 .\.venv\Scripts\python.exe copilot\install.py --uninstall
 ```
 
-It removes only what is Lite's: the two `app-launcher-lite-*.json` hook configs that run this checkout's hooks, the chief launcher, the skill links into this checkout, and the links into your skills folder that it recorded and that still point where it recorded them. It never deletes inside a linked folder, never touches `hooks/state`, and never edits a config file. Restart any open Copilot session afterwards.
+It removes only what is Lite's: the two `app-launcher-lite-*.json` hook configs that run this checkout's hooks, the chief launcher, the skill links into this checkout, and the links into your skills folder that it recorded and that still point where it recorded them. It never deletes inside a linked folder, never touches the state folder, and never edits a config file. Restart any open Copilot session afterwards.
 
 **Check:** each item reads `[ok] ... removed` or `[ok] not installed`, and a second run removes nothing.
+
+## 5. A machine whose state is still in `hooks/state`
+
+An install from before the state folder moved keeps it in `~/.copilot/hooks/state/`. A plain install says so with a `[warn]` line and leaves it there: every writer keeps using the old folder until it is moved, so nothing splits. To move it:
+
+```powershell
+.\.venv\Scripts\python.exe copilot\install.py --migrate --what-if
+.\.venv\Scripts\python.exe copilot\install.py --migrate --yes
+.\tray.bat --restart
+.\.venv\Scripts\python.exe copilot\install.py --migrate --yes
+```
+
+The chief and its lanes can stay up. The move copies the old folder, then switches every writer to the new one in a single folder rename, then moves across anything written to the old folder in the meantime (a mailbox event, a newer plan) and removes it once empty. Stopping the chief would also work, but a lane that ends its turn while stopped would lose that event, and every lane would need a restart. Lite settings still naming the old folder (a Settings save stores every default) are pointed at the new one after a backup, and the webapp reads a stored old default as the new folder. The running webapp keeps the paths it loaded until its restart, so the second `--migrate` moves whatever it wrote before then; with nothing left to move, a run changes nothing.
+
+**Check:** `[ok] state copied (... files), writers switched`, then `[ok] old state folder removed`; the second run prints `[ok] state already lives outside Copilot's hooks folder`. A `[warn] changed in both folders` line names a file that was written on both sides: the new folder's copy is the live one, and the old one is kept beside it with a `.from-hooks-state` suffix.
 
 ## Config files
 

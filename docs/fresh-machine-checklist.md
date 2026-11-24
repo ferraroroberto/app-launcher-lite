@@ -80,7 +80,7 @@ Preview, install, and read the checklist the installer prints:
 
 Restart any open Copilot session afterwards: hook configs load at CLI startup only.
 
-**Proof of the hooks:** `copilot -p "hi" --allow-all-tools`, then `Test-Path $HOME\.copilot\hooks\state\sessions-state.json` prints `True`.
+**Proof of the hooks:** `copilot -p "hi" --allow-all-tools`, then `Test-Path $HOME\.copilot\app-launcher-lite-state\sessions-state.json` prints `True`.
 
 ## 7. Start the tray
 

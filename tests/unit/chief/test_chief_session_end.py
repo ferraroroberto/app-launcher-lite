@@ -17,6 +17,7 @@ from types import SimpleNamespace
 import pytest
 
 from src import chief_session_end
+from src.chief import copilot_state
 from src.chief_session_end import publish_session_ends, resolve_paths
 
 NOW = datetime(2026, 10, 17, 9, 30, 5, tzinfo=timezone.utc)
@@ -194,13 +195,31 @@ def test_resolve_paths_reads_config_then_falls_back(
     monkeypatch.setenv(chief_session_end.CONFIG_PATH_ENV, str(config))
     registry, inbox = resolve_paths()
     assert registry == tmp_path / "m.json"
-    assert inbox == chief_session_end.DEFAULT_STATE_DIR / "chief-inbox"
+    assert inbox == copilot_state.state_dir() / "chief-inbox"
 
     monkeypatch.setenv(chief_session_end.CONFIG_PATH_ENV, str(tmp_path / "absent.json"))
     assert resolve_paths() == (
-        chief_session_end.DEFAULT_STATE_DIR / "chief-managed.json",
-        chief_session_end.DEFAULT_STATE_DIR / "chief-inbox",
+        copilot_state.state_dir() / "chief-managed.json",
+        copilot_state.state_dir() / "chief-inbox",
     )
+
+
+def test_a_path_pinned_at_the_old_hooks_state_default_follows_the_state_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Settings save pinned the old default; once state moves, session-end follows it, as the webapp does."""
+    monkeypatch.setattr(copilot_state.Path, "home", lambda: tmp_path)
+    monkeypatch.delenv(copilot_state.STATE_DIR_ENV_VAR, raising=False)
+    legacy = tmp_path / ".copilot" / "hooks" / "state"
+    config = tmp_path / "webapp_config.json"
+    config.write_text(json.dumps({"chief_managed_file": str(legacy / "chief-managed.json"),
+                                  "chief_inbox_dir": str(legacy / "chief-inbox")}), encoding="utf-8")
+    monkeypatch.setenv(chief_session_end.CONFIG_PATH_ENV, str(config))
+    legacy.mkdir(parents=True)
+    assert resolve_paths() == (legacy / "chief-managed.json", legacy / "chief-inbox")
+    moved = tmp_path / ".copilot" / copilot_state.STATE_DIRNAME
+    moved.mkdir()
+    assert resolve_paths() == (moved / "chief-managed.json", moved / "chief-inbox")
 
 
 def test_resolve_paths_matches_webapp_config() -> None:
@@ -210,8 +229,8 @@ def test_resolve_paths_matches_webapp_config() -> None:
     cfg = webapp_config.WebappConfig()
     assert chief_session_end.CONFIG_PATH_ENV == webapp_config.WEBAPP_CONFIG_PATH_ENV
     assert chief_session_end.DEFAULT_CONFIG_PATH == webapp_config.DEFAULT_CONFIG_PATH
-    assert Path(cfg.chief_managed_file) == chief_session_end.DEFAULT_STATE_DIR / "chief-managed.json"
-    assert Path(cfg.chief_inbox_dir) == chief_session_end.DEFAULT_STATE_DIR / "chief-inbox"
+    assert Path(cfg.chief_managed_file) == copilot_state.state_dir() / "chief-managed.json"
+    assert Path(cfg.chief_inbox_dir) == copilot_state.state_dir() / "chief-inbox"
     assert chief_session_end.REGISTRY_KEY == "chief_managed_file"
     assert chief_session_end.INBOX_KEY == "chief_inbox_dir"
 

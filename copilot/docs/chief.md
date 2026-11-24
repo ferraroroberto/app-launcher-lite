@@ -1,6 +1,6 @@
 # The lite fleet chief: helpers
 
-app-launcher-lite carries both sides of the fleet chief. The launcher (`app/`, `src/`) holds the plan and journal cards, the mailbox, the doorbell and the dispatch brief. This `copilot/` folder holds the helper side: the code the chief session runs and the state files the launcher reads. Every state file keeps the full fleet's format byte for byte, so the launcher's readers parse it unchanged; only the location differs, `~/.copilot/hooks/state/` instead of `~/.claude/hooks/state/`.
+app-launcher-lite carries both sides of the fleet chief. The launcher (`app/`, `src/`) holds the plan and journal cards, the mailbox, the doorbell and the dispatch brief. This `copilot/` folder holds the helper side: the code the chief session runs and the state files the launcher reads. Every state file keeps the full fleet's format byte for byte, so the launcher's readers parse it unchanged; only the location differs, `~/.copilot/app-launcher-lite-state/` instead of `~/.claude/hooks/state/`.
 
 ## The chief skill
 
@@ -53,7 +53,7 @@ Launcher calls go to app-launcher-lite on the webapp port its own `config/config
 | `inbox`, `ack` | claims events into `chief-inbox/.claimed/`, deletes them on ack | the chief itself; the launcher publishes `session-end`, `job-failed`, `cap-raised` and other events into the same directory |
 | `chief_managed.py mark` | `chief-managed.json`, one row per chief-dispatched launcher session | called by the launcher's `POST /api/board/issues/start` through `<this repo>/.venv/Scripts/python.exe`; read by `hooks/chief_inbox.py` and the launcher's reaper (`src/chief_session_end.py`) |
 
-The state directory is `~/.copilot/hooks/state/`, or `COPILOT_HOOKS_STATE_DIR` when set (the same override `hooks/session_state.py` honours). `skills/_lib/fleet_core/hooks_state.py` is the one place that resolves it.
+The state directory is `~/.copilot/app-launcher-lite-state/`, or `COPILOT_HOOKS_STATE_DIR` when set (the same override `hooks/session_state.py` honours). `skills/_lib/fleet_core/hooks_state.py` is the one place that resolves it.
 
 ## The mailbox
 

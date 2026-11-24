@@ -8,7 +8,7 @@ A machine that never ran fleet-config-lite needs none of this: `setup.bat` offer
 
 | | Moves? |
 |---|---|
-| `~/.copilot/hooks/state/` (session state, the chief's plan, journal, handover and mailbox) | **No.** The installer never reads, moves or deletes it, in any mode. The chief resumes from it. |
+| `~/.copilot/hooks/state/` (session state, the chief's plan, journal, handover and mailbox) | Moved to `~/.copilot/app-launcher-lite-state/` by `--migrate`, every file kept, so Copilot CLI stops reading it as hook configs. The chief resumes from it. How the move works with a chief live: [install.md](../copilot/docs/install.md#5-a-machine-whose-state-is-still-in-hooksstate). |
 | The two hook configs `fleet-config-lite-session-state.json` and `fleet-config-lite-chief-guard.json` in `~/.copilot/hooks/` | Removed, replaced by `app-launcher-lite-session-state.json` and `app-launcher-lite-chief-guard.json`, which run this checkout's `copilot/hooks/`. |
 | Skill junctions in `~/.copilot/skills/` that point into a `fleet-config-lite` checkout | Removed, replaced by junctions into `copilot/skills/`. |
 | Anything else in `~/.copilot` (another tool's skills, a hand-written hook config, `copilot-instructions.md`) | **No.** Only entries that carry Lite's own marker, or the old install's, are touched. |
@@ -19,7 +19,7 @@ A machine that never ran fleet-config-lite needs none of this: `setup.bat` offer
 
 The order matters because the chief's folder is a setting. Lite defaults it to its own `copilot/` only while it is empty; a machine whose Settings hold an explicit path (the old sibling folder) keeps it, and a chief started there is not recognised once Lite looks in `copilot/`.
 
-1. **Stop the chief at a turn end.** Wait until it is idle (a **Your turn** card, not mid-turn), then stop it from the Board. Its plan and handover are in `hooks/state/`, which does not move.
+1. **Stop the chief at a turn end.** Wait until it is idle (a **Your turn** card, not mid-turn), then stop it from the Board. Its plan and handover move with the state folder and are all kept.
 2. **Update Lite:** `git pull --ff-only` in this checkout. Leave the tray running: step 3 reaches Lite's Settings API.
 3. **Migrate:**
 
@@ -38,7 +38,7 @@ Run the commands from this checkout's root. The installer is plain Python, so it
 
 - `~/.copilot/hooks/` holds the two `app-launcher-lite-*.json` files and no `fleet-config-lite-*.json`; `~/.copilot/skills/` junctions point into this checkout's `copilot/skills/`.
 - **Settings → Folders** shows this checkout's `copilot/` as the Copilot folder.
-- `~/.copilot/hooks/state/sessions-state.json` keeps updating as sessions start and stop, and the Board shows them.
+- `~/.copilot/app-launcher-lite-state/sessions-state.json` keeps updating as sessions start and stop, and the Board shows them.
 - Running the command again reports nothing left to remove: it is idempotent.
 
 ## Install, uninstall, migrate
@@ -49,7 +49,7 @@ Run the commands from this checkout's root. The installer is plain Python, so it
 .\.venv\Scripts\python.exe copilot\install.py --migrate    # leave fleet-config-lite, then install
 ```
 
-Install is idempotent: re-run it after moving the checkout or changing a hook template. `--uninstall` removes only Lite's own hook configs and skill links, never `hooks/state/`, and restores nothing, so to go back to fleet-config-lite run `--uninstall` here and then that repo's own `install.ps1`; never leave both installed.
+Install is idempotent: re-run it after moving the checkout or changing a hook template. `--uninstall` removes only Lite's own hook configs and skill links, never the state folder, and restores nothing, so to go back to fleet-config-lite run `--uninstall` here and then that repo's own `install.ps1`; never leave both installed.
 
 **A shared machine** is one where `~/.copilot/skills` or `~/.agents/skills` is a link into another tree, so the full fleet runs there too. The installer then writes no skill, and renders the session-state hook with `--lite-sessions-only`, so it records only sessions Lite launched. A hook config, hooks folder or skills folder that is itself a link into another tree is never written through.
 

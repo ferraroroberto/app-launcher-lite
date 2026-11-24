@@ -38,6 +38,7 @@ from src.app_config import resolve_session_host_port, resolve_webapp_port
 # Grid layout: one name per line would push this module past the structure ratchet's file-size cap.
 from src.launching.presets import load_launch_presets
 from src import request_timing, runtime_files
+from src.chief import copilot_state
 from src.webapp_settings import performance
 from src.webapp_settings.values import (  # noqa: F401 — re-exported for webapp_config.<name> callers
     CREDENTIAL_KEYS,
@@ -75,22 +76,22 @@ def _default_fleet_config_dir() -> str:
 
 def _default_sessions_state_file() -> str:
     """Where ``copilot/hooks/session_state.py`` writes the board rows."""
-    return str(Path.home() / ".copilot" / "hooks" / "state" / "sessions-state.json")
+    return str(copilot_state.state_dir() / "sessions-state.json")
 
 
 def _default_chief_plan_file() -> str:
     """Where ``copilot/skills/_lib/chief_ops.py plan`` writes the chief's plan."""
-    return str(Path.home() / ".copilot" / "hooks" / "state" / "chief-plan.json")
+    return str(copilot_state.state_dir() / "chief-plan.json")
 
 
 def _default_chief_managed_file() -> str:
     """Where ``copilot/skills/_lib/chief_managed.py`` records chief-dispatched sessions."""
-    return str(Path.home() / ".copilot" / "hooks" / "state" / "chief-managed.json")
+    return str(copilot_state.state_dir() / "chief-managed.json")
 
 
 def _default_chief_inbox_dir() -> str:
     """The chief's mailbox directory, written by ``copilot/hooks/chief_inbox.py``."""
-    return str(Path.home() / ".copilot" / "hooks" / "state" / "chief-inbox")
+    return str(copilot_state.state_dir() / "chief-inbox")
 
 
 def _default_team_os_dir() -> str:
@@ -596,16 +597,30 @@ def _resolve_config_path(path: Optional[Path]) -> Path:
 # ``claude_config_dir`` held the fleet-config checkout root all along, not
 # Claude's own config dir.
 _LEGACY_KEYS = {"claude_config_dir": "fleet_config_dir"}
+# The state paths whose stored value is dropped when it is the old hooks/state default.
+_STATE_PATH_KEYS = {
+    "sessions_state_file": "sessions-state.json",
+    "chief_plan_file": "chief-plan.json",
+    "chief_managed_file": "chief-managed.json",
+    "chief_inbox_dir": "chief-inbox",
+}
 
 
 def _migrate_legacy_keys(raw: Dict[str, Any], source: Path) -> Dict[str, Any]:
-    """``raw`` with each renamed key carried over to its new name.
+    """``raw`` with each renamed key carried over to its new name, and each
+    state path that holds the old ``hooks/state`` default dropped so the
+    default (``src/chief/copilot_state.py``) applies.
 
     In memory only: the next save writes the new name and drops the old one, so
     the live file migrates itself the first time a setting changes. A new key
     already present wins over the old one.
     """
     migrated = dict(raw)
+    for key, name in _STATE_PATH_KEYS.items():
+        value = migrated.get(key)
+        if isinstance(value, str) and copilot_state.is_legacy_default(value, name):
+            # A Settings save pins every default; read through, so a migrated machine follows its state.
+            del migrated[key]
     for old, new in _LEGACY_KEYS.items():
         if old not in migrated:
             continue
