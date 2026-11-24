@@ -122,39 +122,79 @@ def test_desktop_project_filter_is_as_wide_as_the_backlog_column(
         assert r["x"] >= f["x"] + f["w"], f"{width}px: ↻ not beside the filter: {boxes}"
 
 
-@pytest.mark.iphone
-def test_refresh_in_flight_spins_at_full_strength(
-    authed_page: Page, base_url: str
-) -> None:
-    """#1502 (COLOR-02): while a GitHub refresh runs, ↻ keeps its glyph and
-    colour and says it is busy (aria-busy), instead of a disabled "…" whose
-    line colour measured 1.55:1 on dark; at least 3:1 in both themes. A
-    second tap meanwhile sends nothing."""
-    _mock_board(authed_page)
-    held: list = []
-    authed_page.route(re.compile(r".*/api/board/github/refresh$"), lambda route: held.append(route))
-    _open_board(authed_page, base_url)
+def _refresh_pair(page: Page, base_url: str, held: list):
+    """A never-fetched board (so Backlog's empty state offers Refresh) whose
+    refresh POST waits in ``held``; returns the toolbar and the lane Refresh."""
+    payload = _board_payload()
+    payload["github"] = {"available": False, "fetched_at": None, "error": None}
+    payload["columns"]["backlog"] = []
+    _mock_board(page, payload)
+    page.route(re.compile(r".*/api/board/github/refresh$"), lambda route: held.append(route))
+    _open_board(page, base_url)
+    lane = page.locator('.board-empty[data-col="backlog"] .empty-state-action')
+    expect(lane).to_have_text("Refresh")
+    return page.locator("#boardRefresh"), lane
 
-    refresh = authed_page.locator("#boardRefresh")
-    refresh.click()
+
+@pytest.mark.iphone
+@pytest.mark.parametrize("tapped", ["toolbar", "lane"])
+def test_refresh_in_flight_shows_busy_on_both_buttons_and_toasts(
+    authed_page: Page, base_url: str, tapped: str
+) -> None:
+    """Either Refresh starts one refresh: both buttons show the busy spinner
+    (aria-busy, never disabled, label kept and readable in both themes) and
+    ignore a second tap, a start toast says it is working and an end toast
+    says it is done."""
+    held: list = []
+    toolbar, lane = _refresh_pair(authed_page, base_url, held)
+    first, other = (toolbar, lane) if tapped == "toolbar" else (lane, toolbar)
+
+    first.click()
     wait_until(authed_page, lambda: len(held) >= 1, "the refresh POST")
-    expect(refresh).to_have_attribute("aria-busy", "true")
-    expect(refresh.locator("svg.icon")).to_have_count(1)
-    expect(refresh).not_to_have_attribute("disabled", "")
+    toast = authed_page.locator("#toast")
+    expect(toast).to_have_text("Refreshing GitLab…")
+    for btn in (toolbar, lane):
+        expect(btn).to_have_attribute("aria-busy", "true")
+        expect(btn).not_to_have_attribute("disabled", "")
+        expect(btn).to_contain_text("Refresh")
     for theme in ("light", "dark"):
         authed_page.evaluate(f"document.documentElement.dataset.theme = '{theme}'")
-        ratio = contrast_ratio(refresh)
-        assert ratio >= 3, f"{theme}: refresh in flight at {ratio:.2f}:1, under 3:1"
+        for btn in (toolbar, lane):
+            ratio = contrast_ratio(btn)
+            assert ratio >= 4.5, f"{theme}: busy Refresh at {ratio:.2f}:1, under 4.5:1"
     authed_page.evaluate("delete document.documentElement.dataset.theme")
 
-    # aria-disabled keeps it reachable; Playwright treats it as not enabled.
-    refresh.click(force=True)
+    # Not `disabled`, so a keyboard tap still reaches the click handler: it
+    # must send nothing.
+    other.dispatch_event("click")
+    first.dispatch_event("click")
     flush_requests(authed_page)
     assert len(held) == 1, "a tap during the refresh sent a second one"
 
     held[0].fulfill(status=200, content_type="application/json", body=_json.dumps(
         {"fetched_at": _iso_utc(datetime.now(timezone.utc)), "error": None}))
-    expect(refresh).to_have_attribute("aria-busy", "false")
+    for btn in (toolbar, lane):
+        expect(btn).not_to_have_attribute("aria-busy", "true")
+    expect(toast).to_have_text("Up to date")
+
+
+@pytest.mark.iphone
+def test_refresh_failure_toasts_the_error_and_frees_both_buttons(
+    authed_page: Page, base_url: str
+) -> None:
+    """A refresh GitLab reports as failed ends with an error toast carrying
+    the reason, and neither button stays busy."""
+    held: list = []
+    toolbar, lane = _refresh_pair(authed_page, base_url, held)
+    toolbar.click()
+    wait_until(authed_page, lambda: len(held) >= 1, "the refresh POST")
+    held[0].fulfill(status=200, content_type="application/json", body=_json.dumps(
+        {"fetched_at": None, "error": "glab not signed in"}))
+    toast = authed_page.locator("#toast")
+    expect(toast).to_have_text("GitLab refresh failed: glab not signed in")
+    expect(toast).to_have_class(re.compile(r"\berror\b"))
+    for btn in (toolbar, lane):
+        expect(btn).not_to_have_attribute("aria-busy", "true")
 
 
 def _local_stamp(dt: datetime, today: bool) -> str:

@@ -7,7 +7,8 @@
  * the passkey terminal token: the file holds terminal-grade content.
  */
 import { els } from '../state.js';
-import { apiFailToast, apiRaw, toast } from '../api.js';
+import { apiFailToast, apiRaw } from '../api.js';
+import { runBusy } from '../_vendored/button/busy.js';
 import { ensureTerminalToken, terminalJsonApi } from '../webauthn.js';
 import { saveAs } from '../shared/save-as.js';
 
@@ -24,22 +25,15 @@ function kilobytes(bytes) {
 }
 
 async function save() {
-  const btn = els.diagnosticsSave;
   const minutes = Number(els.diagnosticsWindow ? els.diagnosticsWindow.value : 60);
-  btn.disabled = true;
-  showResult('Saving…');
-  try {
+  const out = await runBusy(els.diagnosticsSave, async function () {
+    showResult('Saving…');
     const body = await terminalJsonApi('/api/diagnostics', { method: 'POST', body: { minutes: minutes } });
     savedName = body.name;
     showResult('Saved ' + body.records + ' log records (' + kilobytes(body.bytes) + ') to ' + body.path);
     els.diagnosticsDownload.hidden = false;
-    toast('Diagnostics saved.', 'good');
-  } catch (exc) {
-    showResult('');
-    apiFailToast('Save diagnostics failed', exc);
-  } finally {
-    btn.disabled = false;
-  }
+  }, { done: 'Diagnostics saved.', fail: 'Save diagnostics failed' });
+  if (!out.ok && !out.ignored) showResult('');
 }
 
 async function download() {

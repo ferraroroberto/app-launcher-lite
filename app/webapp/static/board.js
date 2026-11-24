@@ -57,6 +57,7 @@ import { SensitiveOutcome, runSensitiveAction } from './shared/sensitive-action.
 import { boardDrawerLoaded, openTerminal, pollJournal } from './lazy-views.js';
 import { drawerId, loadingDrawer } from './board/drawer-loading.js';
 import { emptyStateEl } from './_vendored/empty-state/empty-state.js';
+import { runBusy } from './_vendored/button/busy.js';
 import { icon } from './_vendored/icons/icons.js';
 import { terminalJsonApi } from './webauthn.js';
 import { brandIconEl } from './dom-utils.js';
@@ -559,9 +560,8 @@ function emptyAction(col, liveRead) {
   if (col.live) return { actionLabel: 'Start work', onAction: function () { setTab('claude'); } };
   return {
     actionLabel: 'Refresh',
-    onAction: function () {
-      refreshGithub().catch(function (exc) { apiFailToast('GitLab refresh failed', exc); });
-    },
+    refresh: true,
+    onAction: function (event) { refreshGithub(event.currentTarget); },
   };
 }
 
@@ -771,6 +771,7 @@ function renderLane(col, allCards, openItem, body, ghLoaded, liveRead, extra) {
   if (empty.dataset.sig !== sig) {
     empty.dataset.sig = sig;
     empty.replaceChildren(emptyStateEl(col.glyph, text, action));
+    if (action.refresh) markRefreshAction(empty);
   }
   empty.hidden = total > 0 || finished.length > 0;
 }
@@ -926,29 +927,46 @@ export async function openBoardCard(sid) {
   });
 }
 
-// While a refresh runs the ↻ spins (COLOR-02): aria-busy, never the
-// disabled look, whose line colour measured 1.55:1 on dark. A second tap is
-// a no-op (refreshInFlight).
-function setRefreshBusy(busy) {
-  els.boardRefresh.setAttribute('aria-busy', busy ? 'true' : 'false');
-  if (busy) els.boardRefresh.setAttribute('aria-disabled', 'true');
-  else els.boardRefresh.removeAttribute('aria-disabled');
+// The empty-state Refresh is a surface button like the toolbar's, so the
+// vendored busy look applies to it; it is built by the vendored empty-state,
+// so the tier class and the usage id are set here.
+function markRefreshAction(empty) {
+  const btn = empty.querySelector('.empty-state-action');
+  if (!btn) return;
+  btn.classList.add('button-surface');
+  btn.dataset.track = 'board.refresh-empty';
+  btn.dataset.refresh = '';
+  syncRefreshBusy();
 }
 
-async function refreshGithub() {
-  if (refreshInFlight) return;
-  refreshInFlight = true;
-  setRefreshBusy(true);
-  try {
-    const github = await jsonApi('/api/board/github/refresh', { method: 'POST' });
-    if (github && github.error) {
-      toast('GitLab refresh failed: ' + github.error, 'error');
+// Every Refresh on the Board (the toolbar's and each lane's empty-state one)
+// shares one in-flight state: while it runs they all show busy, so a tap on
+// either is ignored (runBusy skips a button that is already busy).
+function refreshButtons() {
+  const lanes = els.boardColumns ? els.boardColumns.querySelectorAll('[data-refresh]') : [];
+  return [els.boardRefresh].concat(Array.from(lanes));
+}
+
+function syncRefreshBusy() {
+  refreshButtons().forEach(function (btn) {
+    if (refreshInFlight) btn.setAttribute('aria-busy', 'true');
+    else btn.removeAttribute('aria-busy');
+  });
+}
+
+function refreshGithub(button) {
+  return runBusy(button || els.boardRefresh, async function () {
+    refreshInFlight = true;
+    syncRefreshBusy();
+    try {
+      const github = await jsonApi('/api/board/github/refresh', { method: 'POST' });
+      await fetchBoard.fresh();
+      if (github && github.error) throw new Error(github.error);
+    } finally {
+      refreshInFlight = false;
+      syncRefreshBusy();
     }
-    await fetchBoard.fresh();
-  } finally {
-    refreshInFlight = false;
-    setRefreshBusy(false);
-  }
+  }, { start: 'Refreshing GitLab…', done: 'Up to date', fail: 'GitLab refresh failed' });
 }
 
 // ------------------------------------------------------------------ wire
@@ -966,9 +984,5 @@ export function wireBoard() {
   els.tabBoard.addEventListener('click', openBoardTab);
   wireDispatch();
   wireFoldAll(els.boardFoldAll, els.boardColumns);
-  els.boardRefresh.addEventListener('click', function () {
-    refreshGithub().catch(function (exc) {
-      apiFailToast('GitLab refresh failed', exc);
-    });
-  });
+  els.boardRefresh.addEventListener('click', function () { refreshGithub(els.boardRefresh); });
 }

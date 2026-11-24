@@ -8,7 +8,8 @@
  */
 
 import { els } from '../state.js';
-import { apiFailToast, jsonApi, toast } from '../api.js';
+import { jsonApi, toast } from '../api.js';
+import { runBusy } from '../_vendored/button/busy.js';
 import { fetchConfig, patchConfig } from './claude-options.js';
 
 const MODE_WORD = { auto: 'Automatic', https: 'HTTPS', http: 'HTTP', both: 'Both' };
@@ -62,18 +63,14 @@ export function renderServing(cfg) {
   if (els.servingCreateCert) els.servingCreateCert.hidden = !!(s.cert && s.cert.present);
 }
 
-async function createCertificate() {
-  const btn = els.servingCreateCert;
-  btn.disabled = true;
-  try {
+function createCertificate() {
+  return runBusy(els.servingCreateCert, async function () {
     await jsonApi('/api/settings/certificate', { method: 'POST' });
     await fetchConfig();
-    toast('Certificate created. It applies when the app restarts.', 'good');
-  } catch (exc) {
-    apiFailToast('Certificate not created', exc);
-  } finally {
-    btn.disabled = false;
-  }
+  }, {
+    done: 'Certificate created. It applies when the app restarts.',
+    fail: 'Certificate not created',
+  });
 }
 
 export function wireServing() {

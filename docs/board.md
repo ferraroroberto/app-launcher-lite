@@ -209,7 +209,7 @@ An empty `gitlab_group` keeps the panel dormant with a Settings hint; `glab` mis
 
 The cache is refreshed by exactly two things:
 
-- the manual **Refresh** button (`POST /api/board/github/refresh`, always runs), or
+- the manual **Refresh** button (`POST /api/board/github/refresh`, always runs; the toolbar's button and the Refresh in a not-loaded lane's empty state share one in-flight state, so both show the vendored busy spinner and ignore a tap while it runs, with a "Refreshing GitLab…" toast at the start and "Up to date" or the error at the end), or
 - the **server**, while a Board is being viewed: the Board's 5 s poll from a visible, foreground page sends `X-Board-View: 1` on `GET /api/board`, and on such a poll `src/board/view_refresh.py` starts one background refresh (the `glab` reads, pipelines included, and the owner checks) when the cache was never filled or its `fetched_at` is older than 5 minutes (`REFRESH_TTL_SECONDS`). The decision is server-wide and single-flight, so five open tabs cost the same one refresh per 5 minutes as one, and a hidden or backgrounded page, which sends no header, starts nothing. At most one attempt per TTL, so a failing `glab` cannot loop: the cache keeps its older stamp, the status line shows the error, and the next try waits out the TTL. Opening the tab polls at once, so a stale cache starts refreshing then; a Board-first boot's early read carries the header too.
 
 A poll of a fresh cache never runs `glab` (it only reads the snapshot). The pipeline read names each project's default branch from the project list it already fetched, so a refresh spawns no `git` and makes no separate default-branch call. This mirrors the Coding tab's git-status on-demand contract.

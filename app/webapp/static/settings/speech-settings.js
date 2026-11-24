@@ -16,6 +16,7 @@
 
 import { els } from '../state.js';
 import { apiFailToast, apiRaw, apiRawJson, copyText, jsonApi, toast } from '../api.js';
+import { runBusy } from '../_vendored/button/busy.js';
 import { ensureTerminalToken, terminalJsonApi } from '../webauthn.js';
 import { patchConfig, wireConfigSwitch } from './claude-options.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
@@ -74,19 +75,20 @@ function showResult(state, detail) {
 }
 
 async function testConnection() {
-  const btn = els.speechTest;
-  btn.disabled = true;
-  els.speechTestResult.hidden = true;
-  try {
+  const out = await runBusy(els.speechTest, async function () {
+    els.speechTestResult.hidden = true;
     await pending;
     const body = await jsonApi('/api/speech/test', { method: 'POST' });
-    showResult(_STATE_WORD[body.state] ? body.state : 'unknown', body.detail || '');
-  } catch (exc) {
+    const state = _STATE_WORD[body.state] ? body.state : 'unknown';
+    showResult(state, body.detail || '');
+    return state;
+  }, {
+    done: function (state) { return 'Speech test: ' + _STATE_WORD[state]; },
     // A refusal to even run the probe (no base URL) is the server's own text.
-    apiFailToast('Test failed', exc);
-    showResult('unknown', (exc && exc.message) || 'The test could not run.');
-  } finally {
-    btn.disabled = false;
+    fail: 'Test failed',
+  });
+  if (!out.ok && !out.ignored) {
+    showResult('unknown', (out.error && out.error.message) || 'The test could not run.');
   }
 }
 
@@ -192,9 +194,7 @@ async function takeAsWav(take) {
 }
 
 async function transcribe(take, row, btn) {
-  btn.disabled = true;
-  btn.textContent = 'Transcribing';
-  try {
+  const out = await runBusy(btn, async function () {
     const wav = await takeAsWav(take);
     const url = _RECORDINGS + '/' + take.id + '/transcribe';
     let body;
@@ -207,12 +207,9 @@ async function transcribe(take, row, btn) {
     }
     setStatus(row, 'transcribed', '');
     showTranscript(row, (body && body.transcript) || '');
-  } catch (exc) {
-    setStatus(row, 'failed', (exc && exc.message) || '');
-    apiFailToast('Transcription failed', exc);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Transcribe';
+  }, { start: 'Transcribing…', done: 'Transcribed', fail: 'Transcription failed' });
+  if (!out.ok && !out.ignored) {
+    setStatus(row, 'failed', (out.error && out.error.message) || '');
   }
 }
 
