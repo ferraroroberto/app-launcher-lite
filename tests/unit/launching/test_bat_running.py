@@ -7,9 +7,11 @@ proved against the process table, not a stub.
 
 from __future__ import annotations
 
+import posixpath
 import subprocess
 import sys
-from pathlib import Path
+import types
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -52,6 +54,26 @@ def test_target_paths_resolve_dp0_relative_and_skip_interpreters(tmp_path: Path)
     assert bat_running._norm(str(tmp_path / "sub" / "other.py")) in targets
     # An interpreter or system program says nothing about this bat.
     assert not any(t.endswith("timeout.exe") or t.endswith("pythonw.exe") for t in targets)
+
+
+@pytest.fixture
+def posix_paths(monkeypatch):
+    """Run the module's path logic as POSIX does, where a backslash is a file-name character."""
+    monkeypatch.setattr(bat_running, "os", types.SimpleNamespace(path=posixpath, sep="/"))
+    monkeypatch.setattr(bat_running, "Path", PurePosixPath)
+
+
+def test_a_backslash_target_resolves_under_the_bats_folder(tmp_path: Path, posix_paths):
+    bat = _bat(tmp_path, "python sub\\other.py\r\n")
+    expected = posixpath.normpath(posixpath.join(str(tmp_path), "sub/other.py"))
+    assert expected in bat_running.target_paths(bat)
+
+
+def test_a_backslash_interpreter_path_is_still_filtered_as_generic(tmp_path: Path, posix_paths):
+    bat = _bat(tmp_path, "tools\\timeout.exe 5\r\ntools\\real.py\r\n")
+    targets = bat_running.target_paths(bat)
+    assert posixpath.normpath(posixpath.join(str(tmp_path), "tools/real.py")) in targets
+    assert not any(t.endswith("timeout.exe") for t in targets)
 
 
 def test_target_with_an_unresolvable_variable_is_left_out(tmp_path: Path):

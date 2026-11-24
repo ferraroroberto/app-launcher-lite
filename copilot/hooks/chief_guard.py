@@ -361,6 +361,7 @@ def lite_skill_swap(prompt: str) -> Optional[str]:
     name = match.group("name")
     skill_dir = skill_dir_for(name)
     skill_md = skill_dir / "SKILL.md"
+    # path-sep-exempt: the base directory is the host's own path from the agent's prompt, already in this OS's separators
     if not skill_md.is_file() or _same_dir(Path(match.group("base").strip()), skill_dir):
         return None
     try:
