@@ -1,6 +1,6 @@
 # GitLab
 
-GitLab is the only forge the launcher knows. The Board reads it through the `glab` CLI, and the companion repo's `/issue-start` and `/issue-yolo` skills use `glab` for their own issue work.
+GitLab is the only forge the launcher knows. The Board reads it through the `glab` CLI, and the `/issue-start` and `/issue-yolo` skills in [`copilot/skills/`](../copilot/skills) use `glab` for their own issue work.
 
 ## Verified live and not
 
@@ -30,7 +30,7 @@ The client in `src/clients/gitlab.py` ran against gitlab.com with `glab` 1.131 (
 | A red pipeline of the group itself | verified (2026-11-22): a pipeline committed to a test project's default branch read as `red` and drew one `CI failed` card; see [Pipelines on gitlab.com's free runners](#pipelines-on-gitlabcoms-free-runners) |
 | A green pipeline of the group itself | blocked (2026-11-22): gitlab.com's shared runners refuse an unverified account, so no job ran and no pipeline can succeed until the owner verifies the account or registers a project runner |
 | `cancelled`/`skipped` rows, a project with CI switched off, a self-hosted host | `unknown` |
-| `glab mr merge --auto-merge` through the chief's merge verb | verified on a GitLab test project through the companion repo's copy of the verb: one request merged and read back clean, two conflicting requests refused with GitLab's reason; this tree's copy is unit-tested and not re-run live from here |
+| `glab mr merge --auto-merge` through the chief's merge verb | verified on a GitLab test project through an earlier copy of the verb: one request merged and read back clean, two conflicting requests refused with GitLab's reason; this tree's copy is unit-tested and not re-run live from here |
 | Owner-check labels, plain (`needs-owner`, `needs-validation`) | verified (2026-11-22) on a test project: created, applied, listed, then cleared through the Board's answer path; see [Owner checks](#owner-checks) |
 | Owner-check labels, scoped (`label_scope = "owner"`) | written and read back (2026-11-22), but on the free tier both scoped labels sat on one issue together, so GitLab's one-of-a-kind rule (a paid feature) is not enforced; plain labels stay the default |
 | The two-remote mirror and `scripts/sync_gitlab_mirror.py` | verified (push, level re-run); see below |
@@ -84,7 +84,7 @@ A new gitlab.com account must verify its identity before shared runners take its
 
 ## Merging
 
-The Board merges nothing. The chief's merge verb in `copilot/` runs `glab mr merge --auto-merge`. On a GitLab test project the companion repo's copy of the verb merged one request and read it back clean, and refused two conflicting requests with GitLab's own reason; this tree's copy carries the same reason handling and is unit-tested, but has not been re-run live from here. A self-hosted host is `unknown` (see [Status](../README.md#status)).
+The Board merges nothing. The chief's merge verb in `copilot/` runs `glab mr merge --auto-merge`. On a GitLab test project an earlier copy of the verb merged one request and read it back clean, and refused two conflicting requests with GitLab's own reason; this tree's copy carries the same reason handling and is unit-tested, but has not been re-run live from here. A self-hosted host is `unknown` (see [Status](../README.md#status)).
 
 ## Two remotes for this repo
 
