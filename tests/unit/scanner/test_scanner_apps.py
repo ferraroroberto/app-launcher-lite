@@ -105,6 +105,40 @@ class TestClassifyBatWrapperScript:
         bat = _write_bat(tmp_path / "launch_app.bat", r"python scripts\serve.py")
         assert classify_bat(bat) == KIND_WEBAPP
 
+    def test_backslash_path_is_joined_with_forward_slashes(self):
+        """On POSIX a backslash is an ordinary file-name character, so the bat's
+        ``scripts\\run.py`` must reach the path join already split. Recording the
+        join argument pins that on any OS, not only on the Mac nightly."""
+        from src.scanner import _wrapper_scripts
+
+        joined: list[str] = []
+
+        class _Target:
+            def resolve(self) -> "_Target":
+                return self
+
+            def is_relative_to(self, _other: object) -> bool:
+                return True
+
+            def is_file(self) -> bool:
+                return True
+
+        class _Root:
+            def resolve(self) -> "_Root":
+                return self
+
+            def __truediv__(self, rel: str) -> _Target:
+                joined.append(rel)
+                return _Target()
+
+        class _Bat:
+            parent = _Root()
+
+        found = _wrapper_scripts(_Bat(), r"python scripts\run.py")  # type: ignore[arg-type]
+
+        assert joined == ["scripts/run.py"]
+        assert len(found) == 1
+
     def test_script_without_signature_is_none(self, tmp_path: Path):
         _write_bat(tmp_path / "tool.py", "print('hello')\n")
         bat = _write_bat(tmp_path / "launch_app.bat", "python tool.py")
