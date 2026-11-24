@@ -75,11 +75,17 @@ import shutil
 import stat
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 import install_state
+
+# The webapp's scheme resolver is the same module the chief uses, so the installer follows
+# Settings > Serve over exactly as it does.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills", "_lib"))
+import lite_webapp  # noqa: E402
 
 COPILOT_REPO = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(COPILOT_REPO)
@@ -650,8 +656,16 @@ class Installer:
         # An explicit path, not an empty value: the running webapp keeps whatever it is sent until
         # its next start, and an empty folder there would read as the current directory.
         try:
-            post_json(f"{url}/api/config", {"fleet_config_dir": COPILOT_REPO})
-            after = str(get_json(f"{url}/api/config").get("fleet_config_dir") or "")
+            lite_webapp.request(url, "/api/config", "POST", {"fleet_config_dir": COPILOT_REPO}, timeout=HTTP_TIMEOUT_S)
+            after = str(lite_webapp.request(url, "/api/config", timeout=HTTP_TIMEOUT_S).get("fleet_config_dir") or "")
+        except lite_webapp.WrongSchemeError as exc:
+            self.say(f"[unknown] Lite's Settings call hit the wrong scheme ({exc.reason}): it was not resent; "
+                     "re-run copilot\\install.py --migrate, or set the Copilot folder in Settings -> Folders")
+            return
+        except urllib.error.HTTPError as exc:
+            self.say(f"[unknown] Lite refused the Settings change (HTTP {exc.code}, {url}): "
+                     "set the Copilot folder in Settings -> Folders")
+            return
         except (OSError, ValueError, AttributeError):
             self.say(f"[unknown] Lite did not take the change ({url}): start it (tray.bat), then re-run "
                      "copilot\\install.py --migrate, or set the Copilot folder in Settings -> Folders")
@@ -847,18 +861,6 @@ def run_ok(argv: List[str]) -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
     return proc.returncode == 0
-
-
-def post_json(url: str, body: dict) -> None:
-    request = urllib.request.Request(  # noqa: S310 -- Lite's loopback URL, checked by the caller
-        url, data=json.dumps(body).encode(), method="POST", headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S):  # noqa: S310 -- Lite's loopback URL, checked by the caller
-        pass
-
-
-def get_json(url: str) -> dict:
-    with urllib.request.urlopen(url, timeout=HTTP_TIMEOUT_S) as resp:  # noqa: S310 -- Lite's loopback URL, checked by the caller
-        return json.loads(resp.read().decode("utf-8"))
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
