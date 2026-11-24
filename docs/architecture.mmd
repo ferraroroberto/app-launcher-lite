@@ -124,14 +124,13 @@ publishes a managed lane's missed turn end or exit"]
     COPILOT["copilot CLI\n(the coding agent, spawned in a PTY)"]
     GLAB["glab CLI / GitLab REST v4"]
     SCHTASKS["Windows Task Scheduler"]
-    FCL["fleet-config-lite (sibling)\nCopilot hooks: ~/.copilot/hooks/state/\nsessions-state.json, active-issues.json;\n/issue-start, /issue-yolo skills"]
     TEAMOSREPO["team-os repo (sibling)\n.claude/skills"]
   end
-  COPILOTSIDE["copilot/ — the Copilot side\nhooks, chief helpers, lane skills\ncopied from fleet-config-lite (provenance.json);\nthe chief's working folder, read by the Board"]
-  COPILOTSIDE -.->|copy of| FCL
+  COPILOTSIDE["copilot/ — the Copilot side, Lite-owned\nhooks, chief helpers, /issue-start and /issue-yolo skills,\ninstalled into ~/.copilot by copilot/install.py;\nthe chief's working folder, read by the Board"]
+  COPILOT -.->|runs hooks and skills from| COPILOTSIDE
   SESSHOST --> COPILOT
   FORGE --> GLAB
   JOBS --> SCHTASKS
   BOARD -->|reads| COPILOTSIDE
-  FCL -.->|hooks write state| BOARD
+  COPILOTSIDE -.->|hooks write ~/.copilot/app-launcher-lite-state/| BOARD
   SCANNER --> TEAMOSREPO

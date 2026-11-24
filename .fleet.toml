@@ -17,9 +17,9 @@ interfaces = [
   { name = "board", kind = "http", doc = "docs/board.md" },
   { name = "sessions", kind = "http", doc = "docs/session-view.md" },
 ]
-owns       = ["launcher webapp", "Copilot sessions", "job scheduling", "Board"]
-not_owns   = ["agent config and skills", "app code it launches", "the forge"]
-depends_on = ["app-launcher", "fleet-config-lite"]
+owns       = ["launcher webapp", "Copilot sessions", "job scheduling", "Board", "Copilot hooks, chief and lane skills"]
+not_owns   = ["app code it launches", "the forge"]
+depends_on = ["app-launcher"]
 
 # ---------------------------------------------------------------------------
 # [worktree] -- gitignored paths fleet-config junctions from this primary
