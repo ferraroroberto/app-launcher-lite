@@ -20,7 +20,7 @@
  */
 
 import { els, state } from '../state.js';
-import { apiFailToast, toast } from '../api.js';
+import { apiFailToast, toast, writeClipboard } from '../api.js';
 import {
   detachedSendRefused, openSessionRename, sendOutcome, sendSessionMessage,
   sessionTitle, stopSession,
@@ -251,9 +251,9 @@ function compactCurrentSession() {
 function copyCurrentSessionLink() {
   const s = currentSession();
   if (!s) return;
-  // iOS only allows a clipboard write inside the tap gesture:
-  // writeText is called synchronously from the click handler.
-  navigator.clipboard.writeText(sessionShareUrl(s.session_id)).then(
+  // iOS only allows a clipboard write inside the tap gesture: the helper is
+  // called synchronously from the click handler.
+  writeClipboard(sessionShareUrl(s.session_id)).then(
     function () { toast('Launcher link copied (tailnet only)', 'good', { icon: 'link' }); },
     function (exc) { apiFailToast('Copy link failed', exc); }
   );

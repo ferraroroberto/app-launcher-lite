@@ -271,13 +271,15 @@ export async function copyText(text, what, opts) {
   }
 }
 
+// The one clipboard write: every copy button goes through it, never straight to
+// `navigator.clipboard` (`tests/unit/repo/test_clipboard_helper_gate.py`).
 // `writeText` needs a secure context and a focused document, and rejects
 // (or is missing) where the page is served over plain http. The fallback is a
 // selected hidden textarea copied with `execCommand`, still inside the tap's
 // user activation. It lives inside the toast host's modal <dialog> when there
 // is one: the rest of the page is inert while a modal is open, so a textarea
 // outside it can never take focus.
-async function writeClipboard(text, opts) {
+export async function writeClipboard(text, opts) {
   let failure = null;
   if (navigator.clipboard && navigator.clipboard.writeText) {
     try {

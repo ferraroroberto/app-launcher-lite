@@ -49,7 +49,7 @@
  */
 
 import { els, state } from './state.js';
-import { apiFailToast, bootPrefetchPending, escapeHtml, jsonApi, opensInPcWindow, toast } from './api.js';
+import { apiFailToast, bootPrefetchPending, escapeHtml, jsonApi, opensInPcWindow, toast, writeClipboard } from './api.js';
 import { setTab } from './tabs.js';
 import { sessionTitle } from './sessions.js';
 import { applyLaunchSizePayload } from './shared/launch-size.js';
@@ -306,7 +306,7 @@ const issueMenu = createRowMenu({ className: 'project-menu', placement: ACTION_R
 
 async function copyLink(url) {
   try {
-    await navigator.clipboard.writeText(url);
+    await writeClipboard(url);
     toast('Link copied', 'good', { icon: 'copy' });
   } catch (exc) {
     apiFailToast('Could not copy the link', exc);
