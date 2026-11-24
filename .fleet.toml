@@ -119,6 +119,7 @@ build-watch = { src = "app/webapp/static/_vendored/build-watch", sha = "48602060
 request_budget_ratchet = { src = "scripts/request_budget_ratchet.py", sha = "78df565389899bdb33b7f676b7e216fda39acb42", dest = "scripts/request_budget_ratchet.py" }
 request_budget_scan = { src = "scripts/request_budget_scan.py", sha = "5ba99b0a04b1b5d7b3689f8f7a59bd3fe625a9bc", dest = "scripts/request_budget_scan.py" }
 poll = { src = "app/webapp/static/_vendored/poll", sha = "78df565389899bdb33b7f676b7e216fda39acb42", dest = "app/webapp/static/_vendored/poll" }
+request_budget_probe = { src = "tests/e2e/budget/_request_budget.py", sha = "be7de0edb225505f0b4773736b4eaf6b34a49363", dest = "tests/e2e/budget/_request_budget.py" }
 
 # ---------------------------------------------------------------------------
 # [verify] -- the launch recipe the generated verify-app-launcher skill reads
@@ -386,6 +387,13 @@ enabled      = true
 handler_dirs = ["app/webapp/routers"]
 stat_cache   = ["src.life_os.stat_cache"]
 
+# Read by tests/e2e/budget/test_main_page_request_budget.py: what the main page may send in
+# a visible minute on a frozen clock, hidden being zero. A measured minute is 55 to 56
+# (system load every 2.5 s, apps, sessions and usage reads on their own ticks); 60 leaves
+# room for one extra tick and no more, so a new poll shows up as a failure.
+[request_budget]
+visible_requests_per_minute = 60
+
 # Server loops that wake faster than the ratchet's 5 s floor, or on an interval the
 # source does not fix. Each runs only while something waits on it (a request, a launch
 # or restart, a send, a live session, a running Job, a poll within the demand window)
@@ -645,8 +653,11 @@ time_budget_s         = 1200
 # 303: the build readout's restart sheet route-mocks /api/restart before boot
 # and changes the live session count between load and tap; no existing node
 # opens that sheet, and the refresh, the no-post first tap, the confirmed post
-# and the failed-run report all ride that one node.
-test_budget = 302
+# and the failed-run report all ride that one node. The count today is 303 with
+# the request-budget probe, whose page installs a clock and a writable
+# visibility state before boot and runs two fake minutes, so no other node
+# could share it.
+test_budget = 303
 
 # --- static assets under the webapp's static dir -> Chromium smoke ----------
 [[e2e.rule]]
