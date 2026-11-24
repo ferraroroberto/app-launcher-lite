@@ -102,6 +102,7 @@ def test_a_run_written_here_is_visible_on_the_next_read(webapp_client, real_ages
     local_now = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0)
     _seed_job(overrides, "pipeline", _failed_today(local_now))
     assert client.get("/api/jobs").json()["jobs"][0]["running"] is False
+    assert client.get("/api/board").json()["running_jobs"] == []
 
     run_dir = jobs_history.new_run_dir("pipeline", "20260702T100000")
     jobs_history.write_run_json(
@@ -112,6 +113,19 @@ def test_a_run_written_here_is_visible_on_the_next_read(webapp_client, real_ages
     job = client.get("/api/jobs").json()["jobs"][0]
     assert job["running"] is True
     assert job["last_run"]["run_id"] == "20260702T100000"
+    # The chief's board digest reads this instead of /api/jobs.
+    assert client.get("/api/board").json()["running_jobs"] == ["pipeline"]
+
+
+def test_running_ids_are_unknown_before_a_snapshot_or_over_an_unreadable_job(monkeypatch):
+    monkeypatch.setattr(jobs_snapshot, "_snapshot", None)
+    assert jobs_snapshot.latest_running_ids() is None
+    snap = jobs_snapshot.Snapshot(built_monotonic=0.0, built_at="", jobs={
+        "ok": jobs_snapshot.JobRuntime(),
+        "broken": jobs_snapshot.JobRuntime(error=OSError("unreadable")),
+    })
+    monkeypatch.setattr(jobs_snapshot, "_snapshot", snap)
+    assert jobs_snapshot.latest_running_ids() is None
 
 
 def test_a_stale_snapshot_is_rebuilt_before_it_answers(

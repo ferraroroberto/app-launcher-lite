@@ -140,3 +140,27 @@ def test_the_roster_route_is_503_when_the_host_does_not_answer(webapp_client):
     host.list_sessions_bounded = AsyncMock(side_effect=host.SessionHostError("timed out", status=503))
     resp = client.get("/api/claude-code/roster")
     assert resp.status_code == 503 and "not confirmed" in resp.json()["detail"]
+
+
+def test_the_roster_probe_builds_no_ca_bundle_on_the_event_loop(monkeypatch):
+    """A default httpx client loads the CA bundle (~0.3 s of CPU on the loop) per
+    call; the plain-http loopback probe passes a context that loads none."""
+    import ssl
+
+    from src.clients import session as session_client
+
+    seen: dict = {}
+
+    class _Stop(Exception):
+        pass
+
+    def fake_client(**kwargs):
+        seen.update(kwargs)
+        raise _Stop
+
+    monkeypatch.setattr(session_client.httpx, "AsyncClient", fake_client)
+    with pytest.raises(_Stop):
+        asyncio.run(session_client.list_sessions_bounded(1))
+    ctx = seen["verify"]
+    assert ctx is session_client._LOOPBACK_TLS
+    assert ctx.cert_store_stats()["x509_ca"] == 0 and ctx.verify_mode == ssl.CERT_REQUIRED

@@ -47,8 +47,9 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
+from src.jobs.run_status import RunStatus, run_status
 from src.request_timing import TimedExecutor
 
 logger = logging.getLogger(__name__)
@@ -277,6 +278,23 @@ def latest_description() -> Optional[Dict[str, Any]]:
     with _lock:
         snap = _snapshot
     return describe(snap) if snap is not None else None
+
+
+def latest_running_ids() -> Optional[List[str]]:
+    """Ids of the jobs whose latest run is still running, from the snapshot last built.
+
+    ``/api/jobs``'s ``running`` flag without that route's per-job schtasks
+    reads, so the chief's Board read never pays for them. ``None`` (unknown,
+    never "none running") before any snapshot or while a job's history is
+    unreadable."""
+    with _lock:
+        snap = _snapshot
+    if snap is None or any(rt.error is not None for rt in snap.jobs.values()):
+        return None
+    return sorted(
+        job_id for job_id, rt in snap.jobs.items()
+        if run_status(rt.latest) is RunStatus.RUNNING
+    )
 
 
 def reset() -> None:

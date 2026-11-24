@@ -10,6 +10,7 @@ is handled separately in ``app/webapp/server.py``.
 from __future__ import annotations
 
 import logging
+import ssl
 import time
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -68,6 +69,13 @@ _READY_POLL_S = 0.2
 # it, so it has no overall deadline: each connect, write and read waits at
 # most this long, and the read covers the host's final flush to disk.
 _LARGE_UPLOAD_TIMEOUT = httpx.Timeout(120.0, connect=5.0)
+
+# The TLS context for the short-lived httpx clients below. Their URLs are plain
+# http on loopback, so TLS never runs, but httpx's default builds a context
+# that loads the whole CA bundle on every client: ~0.3 s of CPU on the event
+# loop per call, which stalls every other route. This one loads no CAs and
+# still requires verification, so it could never accept a certificate.
+_LOOPBACK_TLS = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 
 
 def base_url(port: int) -> str:
@@ -200,7 +208,7 @@ async def list_sessions_bounded(port: int, timeout: float = ROSTER_TIMEOUT) -> L
     error status."""
     url = base_url(port) + "/sessions"
     try:
-        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=timeout, trust_env=False, verify=_LOOPBACK_TLS) as client:
             resp = await client.get(url)
     except httpx.TransportError as exc:
         raise SessionHostError(f"session-host did not list its sessions at {url} ({exc!r})", status=503) from exc
@@ -437,7 +445,7 @@ async def upload_large_file(
     """
     url = base_url(port) + f"/sessions/{session_id}/large-file"
     try:
-        async with httpx.AsyncClient(timeout=_LARGE_UPLOAD_TIMEOUT, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=_LARGE_UPLOAD_TIMEOUT, trust_env=False, verify=_LOOPBACK_TLS) as client:
             resp = await client.post(
                 url,
                 params={"name": name, "max_bytes": max_bytes},

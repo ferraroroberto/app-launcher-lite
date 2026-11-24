@@ -225,6 +225,20 @@ class DispatchTests(StubbedLauncherCase):
         self.assertEqual(code, 2)
 
 
+class BoardTests(StubbedLauncherCase):
+    def test_board_reads_running_jobs_from_the_board_not_api_jobs(self) -> None:
+        self.stub.routes["/api/board"] = (200, {"columns": {}, "running_jobs": ["cleanup-fleet-x"]})
+        code, out = _ops("board", "--base-url", self.stub.url)
+        self.assertEqual(code, 0)
+        self.assertIn("fleet jobs running: cleanup-fleet-x", out)
+        self.assertNotIn("/api/jobs", self.stub.paths)
+
+    def test_board_without_running_jobs_says_unknown(self) -> None:
+        self.stub.routes["/api/board"] = (200, {"columns": {}, "running_jobs": None})
+        _code, out = _ops("board", "--base-url", self.stub.url)
+        self.assertIn("fleet jobs running: ? (board carries no running_jobs)", out)
+
+
 class OpenTests(StubbedLauncherCase):
     """`open` against the loopback stub: the rails, the single POST and the delivery verdict."""
 
