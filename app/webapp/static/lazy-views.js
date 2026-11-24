@@ -19,6 +19,7 @@ import { state } from './state.js';
 import { opensInPcWindow, toast } from './api.js';
 import { fetchSessions } from './sessions.js';
 import { readApps } from './apps/apps-reads.js';
+import { wireUsageMenu } from './progress/usage-menu.js';
 import { resolveSessionMode, terminalAvailable } from './session-modes.js';
 
 // A group loads once; a failed load (a dropped connection) is retried by
@@ -518,8 +519,8 @@ function holdPaneTaps(selector, get) {
   }, true);
 }
 
-// The openers that sit outside their own view: Progress's History button,
-// the PC load sheet's Screen row, and a first visit to the Jobs, Board, Code
+// The openers that sit outside their own view: the Usage card's menu (Usage
+// details and History), the PC load sheet's Screen row, and a first visit to the Jobs, Board, Code
 // or Apps tab.
 export function wireViewOpeners() {
   document.addEventListener('launcher:tab', function (ev) {
@@ -555,9 +556,8 @@ export function wireViewOpeners() {
   // The Code tab's session list draws without that code; its projects card
   // does not.
   holdPaneTaps('#paneClaude .projects-card', appsView);
-  const history = document.getElementById('historyOpen');
-  if (history && document.getElementById('progressSheet')) {
-    history.addEventListener('click', function () {
+  if (document.getElementById('progressSheet')) {
+    wireUsageMenu(function () {
       use(progressSheet, function (m) { return m.openProgressSheet(); });
     });
   }

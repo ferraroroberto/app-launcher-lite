@@ -28,12 +28,17 @@
            the card is its final height before copilot-usage.js runs; that
            module loads after the session list has drawn and fills it in place. -->
       <section id="codingUsageCard" class="card usage-card" data-surface="code.usage" aria-labelledby="codingUsageTitle">
-        <div class="card-head">
+        <div class="card-head usage-card-head">
           <h3 id="codingUsageTitle" class="card-title">
             <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-gauge"></use></svg>
             Usage
           </h3>
           <span id="codingUsageMeta" class="card-head-meta usage-card-meta"></span>
+          <!-- The card's menu, which a tap anywhere on the card opens too:
+               Usage details and History (what the projects shipped). -->
+          <button data-track="coding.usage-menu" type="button" id="codingUsageKebab" class="icon-button usage-card-kebab" title="Usage menu" aria-label="Usage menu">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-ellipsis-vertical"></use></svg>
+          </button>
         </div>
         <div id="codingUsage" class="usage-meter" data-pending="true">
           <span class="um-row" data-tone="none">
@@ -87,9 +92,6 @@
             <button id="gitSyncAllBtn" data-track="git-sync-all" type="button" class="icon-button git-refresh-btn"
                     title="Sync all: fast-forward every clean project that is only behind its remote"
                     aria-label="Download updates for all projects"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-download"></use></svg></button>
-            <button id="historyOpen" data-track="coding.history" type="button" class="icon-button git-refresh-btn"
-                    title="History: what the projects shipped, from local git and GitLab"
-                    aria-label="Open the History sheet"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-clock"></use></svg></button>
             <button id="gitRefreshBtn" data-track="git-refresh" type="button" class="button-surface git-refresh-btn"
                     title="Fetch each project's remote, then check its branch, changes and ahead/behind"
                     aria-label="Refresh git status"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-refresh-cw"></use></svg> Refresh</button>

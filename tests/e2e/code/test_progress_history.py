@@ -1,4 +1,4 @@
-"""The History button in the Projects card and the sheet it opens.
+"""History, reached from the Usage card's menu, and the sheet it opens.
 
 The sheet answers from ``/api/progress``'s cache at once, however old, says how
 old each source is and when it was last refreshed, and asks for nothing: only
@@ -113,14 +113,37 @@ def _boot(page: Page, base_url: str, progress: _Progress) -> None:
             status=200, content_type="application/json", body=_json.dumps(body)))
     json_route(r".*/api/claude-code/sessions$", {"sessions": []})
     json_route(r".*/api/claude-code/git-status$", {"projects": []})
+    json_route(r".*/api/copilot-usage$", {
+        "state": "ok", "used_credits": 180.0, "allowance": 300, "used_pct": 60.0, "pace_pct": 40.0,
+        "today_credits": 4.0, "reset_at": "2026-12-01T00:00:00+00:00", "source": "a fictional log",
+        "scope": "this machine", "reason": ""})
     page.route(re.compile(r".*/api/progress(\?.*)?$"), progress)
     page.goto(f"{base_url}/", wait_until="domcontentloaded")
 
 
 def _open_history(page: Page) -> None:
-    page.locator("details.projects-card").evaluate("el => { el.open = true; }")
-    page.locator("#historyOpen").click()
+    """History is reached from the Usage card's menu, not from a button of its own."""
+    page.locator("#codingUsageKebab").click()
+    page.locator('.row-menu [data-item="usage-history-btn"]').click()
     expect(page.locator("#progressSheet")).to_be_visible()
+
+
+def _usage_card_menu_offers_details_and_history(page: Page) -> None:
+    """A tap on the Usage card body (not only its kebab) opens a menu of two
+    choices; the Projects toolbar has no History button of its own."""
+    expect(page.locator("#codingUsage .um-pct")).to_have_text("60%")
+    expect(page.locator("#historyOpen")).to_have_count(0)
+    page.locator("details.projects-card").evaluate("el => { el.open = true; }")
+    expect(page.locator("#gitToolbarActions button[aria-label*='History']")).to_have_count(0)
+    page.locator("#codingUsageFooter").click()
+    expect(page.locator(".row-menu.usage-menu [role='menuitem']")).to_have_text(["Usage details", "History"])
+    # Usage details writes the card's figures out and closes with Done.
+    page.locator('.row-menu [data-item="usage-details-btn"]').click()
+    sheet = page.locator("#usageSheet")
+    expect(sheet).to_be_visible()
+    expect(sheet.locator(".context-sheet-row").first).to_contain_text("180 of 300 AI credits")
+    page.locator("#usageSheetDone").click()
+    expect(sheet).to_be_hidden()
 
 
 def _tile(page: Page, key: str):
@@ -214,6 +237,7 @@ def test_history_sheet_answers_from_the_cache_refreshes_on_request_and_never_rea
         _payload(added=250, age=5.0, refresh=_run(3, {"atlas-web": _OK, "beacon-api": _OK, "scratch-pad": _SKIP})),
     )
     _boot(page, base_url, progress)
+    _usage_card_menu_offers_details_and_history(page)
     _open_history(page)
 
     # The cached figures, however old, with each source's age, and no recalculation asked.

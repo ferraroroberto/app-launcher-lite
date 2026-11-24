@@ -59,6 +59,11 @@
    Colour follows pace: accent on or under it, attention ahead of it, danger
    at 90%+; with nothing measured the percent reads as a word in muted text. */
 .usage-card-meta { font-size: var(--font-body-sm); margin-left: auto; }
+/* A tap anywhere on the card opens its menu, so the card reads as tappable. */
+.usage-card { cursor: pointer; }
+/* The card's ⋮: a glyph-sized box on the card's content edge (so the head
+   never spills past it), its 44px target the icon-button's invisible one. */
+.usage-card-kebab { --icon-btn-box: var(--icon-inline); margin-left: 8px; }
 .usage-card-meta[data-tone="accent"] { color: var(--accent-text); }
 .usage-card-meta[data-tone="attention"] { color: var(--attention-text); }
 .usage-card-meta[data-tone="danger"] { color: var(--danger-text); }
