@@ -1,15 +1,20 @@
 """Dictation reaches a speech backend that decodes only 16 kHz mono WAV.
 
-Chromium's fake microphone feeds the real MediaRecorder and Web Audio path of
-`voice.js`; the take goes through the disposable webapp's `/api/transcribe` to
-`tests/fake_speech_backend.py`, which answers an opaque HTTP 500 to anything
-but that WAV. With Web Audio removed the page uploads the recorder's own
-container: the server then converts it (ffmpeg on PATH) or says the format is
-unsupported, never a bare HTTP 500. On a page that is not a secure origin a tap
-says HTTPS is needed instead of recording.
+Chromium's fake microphone (`--use-fake-device-for-media-stream`) feeds the real
+MediaRecorder and Web Audio path of `voice.js`; the take goes through the
+disposable webapp's `/api/transcribe` to `tests/fake_speech_backend.py`, which
+answers an opaque HTTP 500 to anything but that WAV. The WAV is recorded as PCM
+from the microphone stream, so no recorder container is decoded; with PCM
+capture removed the page converts the recorder's blob, and with Web Audio
+removed too it uploads the recorder's own container: the server then converts
+it (ffmpeg on PATH) or says the format is unsupported, never a bare HTTP 500,
+and the toast names the browser step that failed. On a page that is not a
+secure origin a tap says HTTPS is needed instead of recording.
 """
 
 from __future__ import annotations
+
+import struct
 
 import pytest
 from playwright.sync_api import Page, expect
@@ -56,6 +61,12 @@ _KEPT_NOTE = """async () => {
 }"""
 
 
+def _wav_seconds_and_peak(wav: bytes) -> tuple[float, int]:
+    """Length in seconds and loudest 16-bit sample of a 44-byte-header WAV."""
+    samples = struct.unpack(f"<{(len(wav) - 44) // 2}h", wav[44:])
+    return len(samples) / 16000, max((abs(s) for s in samples), default=0)
+
+
 def _take(page: Page) -> bytes:
     """Record one take and return the body the page uploaded."""
     page.evaluate("() => window.__dictation.toggle()")
@@ -75,6 +86,8 @@ def test_dictation_uploads_wav_a_strict_backend_transcribes(
     set_speech(base_url, auth_token, speech_enabled=True, speech_base_url=fake_url)
     try:
         page = authed_page
+        console: list[str] = []
+        page.on("console", lambda msg: console.append(msg.text))
         page.goto(base_url, wait_until="domcontentloaded")
         page.evaluate(_MOUNT)
 
@@ -82,8 +95,24 @@ def test_dictation_uploads_wav_a_strict_backend_transcribes(
         assert b'filename="recording.wav"' in sent, "the browser did not convert the take to WAV"
         expect(page.locator(FIELD)).to_have_value(fake_speech_backend.TRANSCRIPT)
         assert fake_speech_backend.is_strict_wav(uploads[-1]), "the backend did not get the portable WAV"
+        # The WAV came from PCM captured off the microphone stream, not a decode,
+        # and holds the fake microphone's tone for about the length of the take.
+        assert any("as WAV via pcm" in line for line in console), "the take was not captured as PCM"
+        seconds, peak = _wav_seconds_and_peak(uploads[-1])
+        assert 0.5 < seconds < 3.0 and peak > 500, f"the PCM WAV is not the take: {seconds:.2f}s, peak {peak}"
         # The same take was kept on disk beside the upload and marked transcribed.
         page.wait_for_function(_KEPT_TRANSCRIBED)
+
+        # Without PCM capture the recorder's blob is decoded to the same WAV.
+        page.evaluate("""() => {
+          window.AudioWorkletNode = undefined;
+          AudioContext.prototype.createScriptProcessor = undefined;
+          document.getElementById('e2eDictationText').value = '';
+        }""")
+        console.clear()
+        assert b'filename="recording.wav"' in _take(page)
+        expect(page.locator(FIELD)).to_have_value(fake_speech_backend.TRANSCRIPT)
+        assert any("as WAV via decoded" in line for line in console), "the decode path did not run"
 
         page.evaluate("""() => {
           window.OfflineAudioContext = undefined;
@@ -96,9 +125,23 @@ def test_dictation_uploads_wav_a_strict_backend_transcribes(
             assert fake_speech_backend.is_strict_wav(uploads[-1]), "the server did not convert the upload"
         else:
             expect(page.locator("#toast")).to_contain_text("Unsupported audio format")
+            expect(page.locator("#toast")).to_contain_text("browser step that failed: Web Audio is missing")
         expect(page.locator("#toast")).not_to_contain_text("HTTP 500")
+        assert any("(raw)" in line for line in console), "the raw fallback was not logged"
         # The kept copy of that take says why the browser did not convert it.
         wait_until(page, lambda: "no Web Audio" in page.evaluate(_KEPT_NOTE), "the kept take's conversion note")
+
+        # A refused raw upload names the browser step, whether or not this PC has ffmpeg.
+        page.route(
+            "**/api/transcribe",
+            lambda route: route.fulfill(status=500, content_type="application/json", body='{"detail": "refused"}'),
+        )
+        page.evaluate("() => window.__dictation.toggle()")
+        page.wait_for_function("() => window.__dictation.isRecording()")
+        page.wait_for_timeout(500)
+        page.evaluate("() => window.__dictation.toggle()")
+        expect(page.locator("#toast")).to_contain_text("browser step that failed: Web Audio is missing")
+        page.unroute("**/api/transcribe")
 
         # Loopback is a secure origin, so the page is told it is not one, as
         # when a phone opens Lite over plain HTTP: a tap says HTTPS is needed.

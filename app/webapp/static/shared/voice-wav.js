@@ -2,12 +2,14 @@
  * OpenAI-shaped speech backend decodes. A browser records MP4 or WebM, which
  * stricter backends refuse, so the finished take is decoded with Web Audio,
  * resampled and downmixed by an OfflineAudioContext, and written as WAV here.
+ * voice-pcm.js records the same WAV straight from the microphone, which is the
+ * path for a browser that cannot decode its own recording.
  */
 
 const WAV_RATE = 16000;
 
 // The WAV encoder: a 44-byte RIFF header, then little-endian 16-bit samples.
-function encodeWav(samples, rate) {
+export function encodeWav(samples, rate) {
   const view = new DataView(new ArrayBuffer(44 + samples.length * 2));
   const text = function (at, s) {
     for (let i = 0; i < s.length; i++) view.setUint8(at + i, s.charCodeAt(i));
@@ -36,17 +38,19 @@ function encodeWav(samples, rate) {
 // Audio or cannot decode its own recording; the caller then uploads the
 // original and the server converts it if it can. `onFail(reason)`, when
 // given, receives a plain sentence saying why it returned null, for the kept
-// take to carry.
+// take to carry, and a short clause naming the failed browser step.
 export async function takeToWav(blob, onFail) {
-  const fail = function (reason) {
-    if (onFail) onFail(reason);
+  const fail = function (reason, step) {
+    if (onFail) onFail(reason, step);
     return null;
   };
   const Ctx = window.AudioContext || window.webkitAudioContext;
   const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-  if (!Ctx || !Offline) return fail('this browser has no Web Audio to convert with');
+  if (!Ctx || !Offline) return fail('this browser has no Web Audio to convert with', 'Web Audio is missing');
+  let step = 'reading the recording';
   try {
     const bytes = await blob.arrayBuffer();
+    step = 'decodeAudioData';
     const ctx = new Ctx();
     let decoded;
     try {
@@ -54,6 +58,7 @@ export async function takeToWav(blob, onFail) {
     } finally {
       ctx.close();
     }
+    step = 'resampling';
     const frames = Math.max(1, Math.ceil(decoded.duration * WAV_RATE));
     // A one-channel destination downmixes the source; its rate resamples it.
     const offline = new Offline(1, frames, WAV_RATE);
@@ -65,7 +70,8 @@ export async function takeToWav(blob, onFail) {
     return encodeWav(rendered.getChannelData(0), WAV_RATE);
   } catch (exc) {
     console.warn('[dictation] Web Audio could not convert the take to WAV', exc);
+    const name = (exc && exc.name) || 'error';
     return fail('this browser could not decode its own ' + (blob.type || 'unknown') +
-      ' recording (' + ((exc && exc.name) || 'error') + ')');
+      ' recording (' + name + ')', step + ' ' + name);
   }
 }
