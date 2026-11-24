@@ -20,12 +20,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
+from src.chief.copilot_state import copilot_home
 from src.env_path import effective_path
 from src.subprocess_flags import NO_WINDOW
 
@@ -42,8 +42,7 @@ _CONFIG_TIMEOUT_SECONDS = 20.0
 
 def settings_path() -> Path:
     """The Copilot user settings file: ``$COPILOT_HOME`` or ``~/.copilot``."""
-    home = os.environ.get("COPILOT_HOME") or str(Path.home() / ".copilot")
-    return Path(home) / "settings.json"
+    return copilot_home() / "settings.json"
 
 
 def _read_keys(path: Optional[Path]) -> Optional[tuple[bool, bool]]:

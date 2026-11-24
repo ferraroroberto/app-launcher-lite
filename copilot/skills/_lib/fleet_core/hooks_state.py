@@ -46,12 +46,17 @@ STATE_DIRNAME = "app-launcher-lite-state"
 ATOMIC_TMP_SWEEP_AFTER_SECONDS = 3600.0
 
 
+def copilot_home() -> Path:
+    """`COPILOT_HOME` when set, else `~/.copilot`: the rule `install.py` uses, and the one place this tier spells it."""
+    return Path(os.environ.get("COPILOT_HOME") or Path.home() / ".copilot")
+
+
 def state_dir() -> Path:
     """The state folder, under COPILOT_HOME (else ~/.copilot) as install.py has it: the override, else the old hooks/state until install.py --migrate moves it, else the new one."""
     root = os.environ.get(STATE_DIR_ENV_VAR)
     if root:
         return Path(root)
-    home = Path(os.environ.get("COPILOT_HOME") or Path.home() / ".copilot")
+    home = copilot_home()
     current, legacy = home / STATE_DIRNAME, home / "hooks" / "state"
     return legacy if legacy.is_dir() and not current.is_dir() else current
 

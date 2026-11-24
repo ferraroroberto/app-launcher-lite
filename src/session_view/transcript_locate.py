@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.board.transcript import _read_tail_bytes
+from src.chief.copilot_state import copilot_home
 
 logger = logging.getLogger(__name__)
 # The request-timing log (webapp/slow-requests.log): a scan slow enough to
@@ -45,7 +46,7 @@ _SLOW_SCAN_S = 0.5
 # would have missed the record in 6 of those 8 files.
 _TITLE_TAIL_BYTES = 256 * 1024
 
-_COPILOT_STATE_DIR = Path.home() / ".copilot" / "session-state"
+_COPILOT_STATE_DIR = copilot_home() / "session-state"
 # Copilot's own session folder is created at launch, a little *after* the
 # launcher spawned it: measured at 3.71 s and 3.72 s on two launches here.
 # The window is wide enough to absorb a loaded box (16x the measured delay)
