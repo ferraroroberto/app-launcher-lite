@@ -61,7 +61,12 @@ def _probe_no_follow_switch_remains(page: Page) -> None:
 # ----------------------------------------------------------------- #1434
 
 def _serve_git_status(page: Page) -> list[str]:
-    """Fulfil /api/claude-code/git-status with an empty body, recording each URL."""
+    """Fulfil /api/claude-code/git-status with an empty body, recording each URL.
+
+    The refresh's ``git-fetch`` is fulfilled too, recorded as ``"git-fetch"``:
+    run for real it fetches every repo under the webapp's projects folder over
+    the network, which outlasts the probe's wait wherever that folder is large.
+    """
     calls: list[str] = []
 
     def _fulfill(route):
@@ -69,7 +74,13 @@ def _serve_git_status(page: Page) -> list[str]:
         route.fulfill(status=200, content_type="application/json",
                       body=json.dumps({"projects": []}))
 
+    def _fulfill_fetch(route):
+        calls.append("git-fetch")
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"fetched": 0, "failed": 0}))
+
     page.route("**/api/claude-code/git-status*", _fulfill)
+    page.route("**/api/claude-code/git-fetch", _fulfill_fetch)
     return calls
 
 
@@ -96,7 +107,8 @@ def _probe_git_refresh_button_rechecks_without_a_popover(page: Page, calls: list
 
     before = len(calls)
     refresh.click()
-    wait_until(page, lambda: len(calls) > before, "the refresh's git-status fetch")
+    wait_until(page, lambda: len(calls) > before + 1, "the refresh's git-fetch and git-status fetch")
+    assert calls[before] == "git-fetch", "the refresh fetches the remotes first, served by the mock"
     assert calls[-1].endswith("?fresh=true"), "the refresh button must ask for a scan that starts now"
     expect(page.locator("#gitCheckedFooter")).to_have_text("Git checked just now")
     expect(refresh).to_be_enabled()
