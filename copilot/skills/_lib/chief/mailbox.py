@@ -438,17 +438,6 @@ def format_mailbox_batch(events: List[Dict[str, Any]], reoffered: List[str], dro
 
 # ---- which reader wakes the chief ---------------------------------------------
 
-def resolve_fallback_wake(config: Optional[Dict[str, Any]]) -> str:
-    """`FALLBACK_WAKE=` from the launcher's `chief_fallback_minutes`: the
-    launcher rings the idle chief once after that many minutes of an unread
-    event or idle worker slots. `off` for 0; `unknown` when unread or not a
-    whole number, never a guess."""
-    value = None if config is None else config.get("chief_fallback_minutes")
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        return "FALLBACK_WAKE=unknown"
-    return "FALLBACK_WAKE=off" if value == 0 else f"FALLBACK_WAKE=on minutes={value}"
-
-
 def resolve_wake_mode(
     config: Optional[Dict[str, Any]], unread_reason: str = "launcher unreachable",
 ) -> Tuple[str, bool]:
