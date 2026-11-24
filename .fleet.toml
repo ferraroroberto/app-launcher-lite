@@ -43,9 +43,9 @@ depends_on = ["app-launcher"]
 extra_junctions = ["webapp/certificates"]
 
 [vendored]
-windows_only_ratchet = { src = "scripts/windows_only_ratchet.py", sha = "5ba99b0a04b1b5d7b3689f8f7a59bd3fe625a9bc", dest = "scripts/windows_only_ratchet.py" }
-port_host_ratchet = { src = "scripts/port_host_ratchet.py", sha = "b7959a6bf1a80ae18e1960679500c0c0f9120238", dest = "scripts/port_host_ratchet.py" }
-clean_tree_ratchet = { src = "scripts/clean_tree_ratchet.py", sha = "b7959a6bf1a80ae18e1960679500c0c0f9120238", dest = "scripts/clean_tree_ratchet.py" }
+windows_only_ratchet = { src = "scripts/windows_only_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/windows_only_ratchet.py" }
+port_host_ratchet = { src = "scripts/port_host_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/port_host_ratchet.py" }
+clean_tree_ratchet = { src = "scripts/clean_tree_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/clean_tree_ratchet.py" }
 icons = { src = "app/webapp/static/_vendored/icons", sha = "e14844faa70acbd89dc43011c5bc98025052c2c3", dest = "app/webapp/static/_vendored/icons" }
 fullscreen = { src = "app/webapp/static/_vendored/fullscreen", sha = "e14844faa70acbd89dc43011c5bc98025052c2c3", dest = "app/webapp/static/_vendored/fullscreen" }
 switch = { src = "app/webapp/static/_vendored/switch", sha = "8f15c49560adbc076d24a8a63dd671868ffa7a4e", dest = "app/webapp/static/_vendored/switch" }
@@ -79,26 +79,26 @@ notify = { src = "src/notify", sha = "a37f157cda14dda408c36df50335125bed8ce465",
 usage-log = { src = "app/webapp/static/_vendored/usage-log", sha = "78635aa74a92b9622326cb53992e0634fbaf6246", dest = "app/webapp/static/_vendored/usage-log" }
 usage_log = { src = "src/usage_log.py", sha = "78635aa74a92b9622326cb53992e0634fbaf6246", dest = "src/usage_log.py" }
 surface_capture = { src = "tests/e2e/_surface.py", sha = "5c4d3a7947dae8b3b4a028bf636c0f052ea3b1f7", dest = "tests/e2e/_surface.py" }
-comment_ratchet = { src = "scripts/comment_ratchet.py", sha = "1ed07ddb5002d4513adf0ce45f1bfaf68f3acc32", dest = "scripts/comment_ratchet.py" }
-static_ratchet = { src = "scripts/static_ratchet.py", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "scripts/static_ratchet.py" }
-docs_ratchet = { src = "scripts/docs_ratchet.py", sha = "78635aa74a92b9622326cb53992e0634fbaf6246", dest = "scripts/docs_ratchet.py" }
+comment_ratchet = { src = "scripts/comment_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/comment_ratchet.py" }
+static_ratchet = { src = "scripts/static_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/static_ratchet.py" }
+docs_ratchet = { src = "scripts/docs_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/docs_ratchet.py" }
 build_info = { src = "src/build_info.py", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "src/build_info.py" }
-structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/structure_ratchet.py" }
+structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/structure_ratchet.py" }
 structure_layout = { src = "scripts/structure_layout.py", sha = "adf0375e08a186330196b8d6be7b8b51078a73ae", dest = "scripts/structure_layout.py" }
 structure_band = { src = "scripts/structure_band.py", sha = "3b708fd3c54ab7b93b08d489406c405762c83c41", dest = "scripts/structure_band.py" }
 box_lock_gate = { src = "scripts/box_lock_gate.ps1", sha = "de5b351ecbc58f0908bc1cbdcdf76fd41f36005d", dest = "scripts/box_lock_gate.ps1" }
-instruction_ratchet = { src = "scripts/instruction_ratchet.py", sha = "a04abc7b3af872cbac974401dd0945587eac6cef", dest = "scripts/instruction_ratchet.py" }
-doc_refs_ratchet = { src = "scripts/doc_refs_ratchet.py", sha = "a68f6e49393f0ef0b94ab3c79f4338a50d89fa49", dest = "scripts/doc_refs_ratchet.py" }
-dead_code_ratchet = { src = "scripts/dead_code_ratchet.py", sha = "4d0b0ff30e23eb95c73c4b0b1517ec6a43d3a836", dest = "scripts/dead_code_ratchet.py" }
-conventions_ratchet = { src = "scripts/conventions_ratchet.py", sha = "3292ebd1981706edcf29a32bd0854a04a6eefe1e", dest = "scripts/conventions_ratchet.py" }
+instruction_ratchet = { src = "scripts/instruction_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/instruction_ratchet.py" }
+doc_refs_ratchet = { src = "scripts/doc_refs_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/doc_refs_ratchet.py" }
+dead_code_ratchet = { src = "scripts/dead_code_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/dead_code_ratchet.py" }
+conventions_ratchet = { src = "scripts/conventions_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/conventions_ratchet.py" }
 conventions_readers = { src = "scripts/conventions_readers.py", sha = "3292ebd1981706edcf29a32bd0854a04a6eefe1e", dest = "scripts/conventions_readers.py" }
 conventions_state = { src = "scripts/conventions_state.py", sha = "4d0b0ff30e23eb95c73c4b0b1517ec6a43d3a836", dest = "scripts/conventions_state.py" }
 synthetic_host = { src = "tests/host/_synthetic_host.py", sha = "160b54e2e0bcf76541d0a5f9bb4d6265dd493c31", dest = "tests/host/_synthetic_host.py" }
 paced_browser = { src = "tests/e2e/_paced_browser.py", sha = "ce64203b017ba636c82737ee7f768c9ef6f422cd", dest = "tests/e2e/_paced_browser.py" }
-runtime_write_ratchet = { src = "scripts/runtime_write_ratchet.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/runtime_write_ratchet.py" }
-usage_track_ratchet = { src = "scripts/usage_track_ratchet.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/usage_track_ratchet.py" }
+runtime_write_ratchet = { src = "scripts/runtime_write_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/runtime_write_ratchet.py" }
+usage_track_ratchet = { src = "scripts/usage_track_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/usage_track_ratchet.py" }
 usage_track_scan = { src = "scripts/usage_track_scan.py", sha = "c4a7afcb413fe88de11e66f24269c8729ecd85d9", dest = "scripts/usage_track_scan.py" }
-ux_surface_ratchet = { src = "scripts/ux_surface_ratchet.py", sha = "adf0375e08a186330196b8d6be7b8b51078a73ae", dest = "scripts/ux_surface_ratchet.py" }
+ux_surface_ratchet = { src = "scripts/ux_surface_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/ux_surface_ratchet.py" }
 ux_surface_map = { src = "scripts/ux_surface_map.py", sha = "adf0375e08a186330196b8d6be7b8b51078a73ae", dest = "scripts/ux_surface_map.py" }
 runtime_write_resolve = { src = "scripts/runtime_write_resolve.py", sha = "ce64203b017ba636c82737ee7f768c9ef6f422cd", dest = "scripts/runtime_write_resolve.py" }
 rec-wave = { src = "app/webapp/static/_vendored/rec-wave", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "app/webapp/static/_vendored/rec-wave" }
@@ -118,7 +118,7 @@ instruction_repeats = { src = "scripts/instruction_repeats.py", sha = "c5535ac32
 tray_watchdog = { src = "app/tray/watchdog.py", sha = "072d7355da45001255c3d53db00f80c3a3393900", dest = "app/tray/watchdog.py" }
 toast = { src = "app/webapp/static/_vendored/toast", sha = "e56c8330f8500b83635773033a09de6fc3cba342", dest = "app/webapp/static/_vendored/toast" }
 build-watch = { src = "app/webapp/static/_vendored/build-watch", sha = "48602060fffdacbcdcdde66b9886c6471d835ff3", dest = "app/webapp/static/_vendored/build-watch" }
-request_budget_ratchet = { src = "scripts/request_budget_ratchet.py", sha = "78df565389899bdb33b7f676b7e216fda39acb42", dest = "scripts/request_budget_ratchet.py" }
+request_budget_ratchet = { src = "scripts/request_budget_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/request_budget_ratchet.py" }
 request_budget_scan = { src = "scripts/request_budget_scan.py", sha = "5ba99b0a04b1b5d7b3689f8f7a59bd3fe625a9bc", dest = "scripts/request_budget_scan.py" }
 poll = { src = "app/webapp/static/_vendored/poll", sha = "78df565389899bdb33b7f676b7e216fda39acb42", dest = "app/webapp/static/_vendored/poll" }
 request_budget_probe = { src = "tests/e2e/budget/_request_budget.py", sha = "be7de0edb225505f0b4773736b4eaf6b34a49363", dest = "tests/e2e/budget/_request_budget.py" }
@@ -128,6 +128,8 @@ request_budget_probe = { src = "tests/e2e/budget/_request_budget.py", sha = "be7
 # (project-scaffolding docs/verify-skill.md). `boot` is the session fixture the
 # e2e suite boots a disposable webapp + session-host from; ready_path and
 # data_dir_env are the generator defaults (/healthz, APP_LAUNCHER_DATA_DIR).
+ratchet_baseline = { src = "scripts/ratchet_baseline.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/ratchet_baseline.py" }
+
 [verify]
 boot           = "tests/e2e/conftest.py::_autoboot_server"
 live_optin_env = "LAUNCHER_E2E_LIVE"
@@ -165,7 +167,7 @@ e2e          = ["tests/e2e", "--e2e-autoboot"]
 # destinations above are excluded by the script itself; tests are built in.
 [comment_ratchet]
 enabled  = true
-baseline = ".comment-ratchet-baseline.json"
+baseline = ".ratchets/comment.json"
 docstrings = true
 history_phrases = true
 
@@ -181,7 +183,7 @@ history_phrases = true
 # project-scaffolding docs/static-ratchet.md.
 [static_ratchet]
 enabled  = true
-baseline = ".static-ratchet-baseline.json"
+baseline = ".ratchets/static.json"
 exclude  = ["**/_vendored/**"]
 
 # ---------------------------------------------------------------------------
@@ -194,7 +196,7 @@ exclude  = ["**/_vendored/**"]
 # Procedure + limits: project-scaffolding docs/docs-ratchet.md.
 [docs_ratchet]
 enabled  = true
-baseline = ".docs-ratchet-baseline.json"
+baseline = ".ratchets/docs.json"
 
 # ---------------------------------------------------------------------------
 # [structure_ratchet] -- the scaffold's baseline-and-ratchet layout stage.
@@ -209,7 +211,7 @@ baseline = ".docs-ratchet-baseline.json"
 # project-scaffolding docs/structure-ratchet.md.
 [structure_ratchet]
 enabled  = true
-baseline = ".structure-ratchet-baseline.json"
+baseline = ".ratchets/structure.json"
 # The pinned third-party Mermaid build is not this repo's code to split; the
 # glob matches any pinned version of it.
 exclude  = ["app/webapp/static/vendor/mermaid-*.min.js"]
@@ -227,7 +229,7 @@ exclude  = ["app/webapp/static/vendor/mermaid-*.min.js"]
 # docs/instruction-ratchet.md.
 [instruction_ratchet]
 enabled  = true
-baseline = ".instruction-ratchet-baseline.json"
+baseline = ".ratchets/instruction.json"
 ci_expectations     = true
 agents_pointer      = true
 claude_md_max_lines = 120
@@ -245,7 +247,7 @@ repeated_text_words = 12
 # docs/doc-refs-ratchet.md.
 [doc_refs_ratchet]
 enabled    = true
-baseline   = ".doc-refs-ratchet-baseline.json"
+baseline   = ".ratchets/doc-refs.json"
 trees      = true
 allow_refs = [
   # Other services' loopback ports the docs name on purpose: the hub, the
@@ -270,7 +272,7 @@ allow_refs = [
 # Procedure and limits: project-scaffolding docs/dead-code-ratchet.md.
 [dead_code_ratchet]
 enabled          = true
-baseline         = ".dead-code-ratchet-baseline.json"
+baseline         = ".ratchets/dead-code.json"
 entry_decorators = []
 # pytest calls `toterminal` on a report's longrepr by duck typing, never by name.
 allow            = ["tests/_credential_hygiene.py:_RedactedRepr.toterminal"]
@@ -315,7 +317,7 @@ enabled = true
 # and limits: project-scaffolding docs/conventions-ratchet.md.
 [conventions_ratchet]
 enabled      = true
-baseline     = ".conventions-ratchet-baseline.json"
+baseline     = ".ratchets/conventions.json"
 rules        = ["no-window", "logging-not-print", "no-drive-path", "git-wrapper", "password-input-vendored", "nav-standalone-head", "login-lockout", "no-pwsh-stub", "subprocess-timeout", "browser-per-iteration", "state-literal", "state-set-repeat", "state-write", "host-identity", "path-sep"]
 # copilot/skills/_lib/git_run.py is the Copilot side's own run_git; it sets GIT_OPTIONAL_LOCKS=0 too.
 git_wrappers = ["src/git_utils.py", "copilot/skills/_lib/git_run.py"]
@@ -351,7 +353,7 @@ why    = "atomic writes go through src/_json_io.py, or src/runtime_files.py repl
 # run left under a code folder. Mechanism: project-scaffolding docs/runtime-write-ratchet.md.
 [runtime_write_ratchet]
 enabled  = true
-baseline = ".runtime-write-ratchet-baseline.json"
+baseline = ".ratchets/runtime-write.json"
 
 # [usage_track_ratchet] -- scripts/usage_track_ratchet.py (with its reader
 # scripts/usage_track_scan.py) fails when the web app's HTML or JS gains a control with no
@@ -361,7 +363,7 @@ baseline = ".runtime-write-ratchet-baseline.json"
 # confirmed", never clean. Mechanism: project-scaffolding docs/usage-track-ratchet.md.
 [usage_track_ratchet]
 enabled  = true
-baseline = ".usage-track-ratchet-baseline.json"
+baseline = ".ratchets/usage-track.json"
 rules    = ["untracked-control", "untracked-sheet", "dynamic-id", "usage-log-wired"]
 builders = [
   "app/webapp/static/apps.js:runningVerb",
@@ -915,35 +917,35 @@ prefix = ".github/"
 label  = "tooling/config"
 [[e2e.rule]]
 tier  = "none"
-path  = ".comment-ratchet-baseline.json"
+path  = ".ratchets/comment.json"
 label = "repo-meta"
 [[e2e.rule]]
 tier  = "none"
-path  = ".static-ratchet-baseline.json"
+path  = ".ratchets/static.json"
 label = "repo-meta"
 [[e2e.rule]]
 tier  = "none"
-path  = ".docs-ratchet-baseline.json"
+path  = ".ratchets/docs.json"
 label = "repo-meta"
 [[e2e.rule]]
 tier  = "none"
-path  = ".instruction-ratchet-baseline.json"
+path  = ".ratchets/instruction.json"
 label = "repo-meta"
 [[e2e.rule]]
 tier  = "none"
-path  = ".doc-refs-ratchet-baseline.json"
+path  = ".ratchets/doc-refs.json"
 label = "repo-meta"
 [[e2e.rule]]
 tier  = "none"
-path  = ".dead-code-ratchet-baseline.json"
+path  = ".ratchets/dead-code.json"
 label = "repo-meta"
 [[e2e.rule]]
 tier  = "none"
-path  = ".conventions-ratchet-baseline.json"
+path  = ".ratchets/conventions.json"
 label = "repo-meta"
 [[e2e.rule]]
 tier  = "none"
-path  = ".runtime-write-ratchet-baseline.json"
+path  = ".ratchets/runtime-write.json"
 label = "repo-meta"
 [[e2e.rule]]
 tier  = "none"

@@ -35,7 +35,7 @@ Opt-in, per adopter, in its own `.fleet.toml`:
 
     [port_host_ratchet]
     enabled       = true
-    baseline      = ".port-host-ratchet-baseline.json"  # default
+    baseline      = ".ratchets/port-host.json"  # default
     rules         = [...]                              # default: all
     resolvers     = ["src/app_config.py"]              # globs; own the defaults
     include_tests = false                              # default
@@ -54,6 +54,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+import importlib
+import importlib.util
 import json
 import os
 import re
@@ -63,12 +65,32 @@ import tomllib
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from types import ModuleType
+
+
+def _load_sibling(name: str) -> ModuleType:
+    """A sibling module, loaded by path so `python -P` (scripts/ off `sys.path`) finds it."""
+    try:
+        if __package__:  # imported as a package member (the tests)
+            return importlib.import_module(f"{__package__}.{name}")
+        spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(f"{name}.py"))
+        assert spec is not None and spec.loader is not None
+        module = sys.modules[spec.name] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except (ImportError, OSError, SyntaxError):
+        print(f"port host ratchet: NOT CONFIRMED: {name}.py is missing beside this script -- vendor both "
+              "(manifest keys port_host_ratchet and ratchet_baseline)")
+        sys.exit(3)
+
+
+_baseline = _load_sibling("ratchet_baseline")  # where the baseline lives, and its move into .ratchets/
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 RULES: tuple[str, ...] = ("port-literal", "host-literal", "bare-exempt")
 BASELINE_VERSION = 1
-DEFAULT_BASELINE = ".port-host-ratchet-baseline.json"
+DEFAULT_BASELINE = ".ratchets/port-host.json"
 BUILTIN_EXCLUDES = ("**/node_modules/**", "**/.venv/**", "**/venv/**")
 GIT_TIMEOUT_S = 120
 EXIT_PASS, EXIT_RISE, EXIT_CONFIG, EXIT_NOT_CONFIRMED = 0, 1, 2, 3
@@ -163,7 +185,7 @@ def parse_config(toml_text: str) -> Config | None:
         raise ConfigError("[port_host_ratchet] enabled must be true or false")
     if not enabled:
         return None
-    baseline = table.get("baseline", DEFAULT_BASELINE)
+    baseline = _baseline.configured(table.get("baseline", DEFAULT_BASELINE), DEFAULT_BASELINE)
     if not isinstance(baseline, str) or not baseline:
         raise ConfigError("[port_host_ratchet] baseline must be a non-empty string")
     include_tests = table.get("include_tests", False)
@@ -556,7 +578,9 @@ def run(root: Path, *, init: bool, update: bool, allow_additions: bool) -> int:
             return EXIT_CONFIG
         print("port host ratchet: not enabled (no [port_host_ratchet] enabled = true in .fleet.toml)")
         return EXIT_PASS
-    baseline_path = root / cfg.baseline
+    baseline_path = _baseline.resolve(root, cfg.baseline, DEFAULT_BASELINE, "port host ratchet")
+    if baseline_path is None:
+        return EXIT_CONFIG
     baseline = _load_baseline(baseline_path, cfg, init)
     if isinstance(baseline, int):
         return baseline

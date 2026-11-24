@@ -92,6 +92,8 @@ def _stage(name: str) -> str:
 def test_stage_verdict(tmp_path, name: str, files: dict[str, str], code: int, expected: list[str]) -> None:
     (tmp_path / "scripts").mkdir()
     shutil.copy2(REPO_ROOT / "scripts" / f"{name}_ratchet.py", tmp_path / "scripts")
+    # Every ratchet loads this sibling to find its baseline in .ratchets/.
+    shutil.copy2(REPO_ROOT / "scripts" / "ratchet_baseline.py", tmp_path / "scripts")
     if name == "structure":
         for sibling in ("structure_layout.py", "structure_band.py"):
             shutil.copy2(REPO_ROOT / "scripts" / sibling, tmp_path / "scripts")
