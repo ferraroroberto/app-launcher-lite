@@ -516,8 +516,7 @@ class Installer:
                     self.say(f"[ok] kept (not Lite's: it does not run this checkout's hooks) -> {target}")
                     continue
                 text = read_text(os.path.join(COPILOT_REPO, "hooks", template))
-                rendered = (text.replace("{{PYTHON}}", (self.python or "").replace("\\", "/"))
-                            .replace("{{REPO}}", COPILOT_REPO.replace("\\", "/")).replace("{{SCOPE}}", scope))
+                rendered = render_hook_config(text, self.python or "", COPILOT_REPO, scope)
                 if os.path.isfile(target) and read_text(target) == rendered:
                     self.say(f"[ok] unchanged -> {target}")
                     continue
@@ -541,8 +540,7 @@ class Installer:
             self.say(f"[ok] kept (not Lite's chief launcher) -> {target}")
             return
         text = read_text(os.path.join(COPILOT_REPO, "hooks", template))
-        rendered = (text.replace("{{PYTHON}}", self.python or "").replace("{{COPILOT}}", COPILOT_REPO)
-                    .replace("\r\n", "\n").replace("\n", "\r\n"))
+        rendered = render_chief_launcher(text, self.python or "", COPILOT_REPO)
         if os.path.isfile(target) and read_text(target) == rendered:
             self.say(f"[ok] unchanged -> {target}")
             return
@@ -780,6 +778,20 @@ class Installer:
         self.say("Done. Restart any running Copilot CLI session to pick up the hooks.")
         self.say(f"State file will appear at: {self.state_now()}\\sessions-state.json")
         return 0
+
+
+# --- rendering: what install writes, and what `chief_ops.py doctor` compares against -------------
+
+def render_hook_config(template: str, python: str, copilot_repo: str, scope: str) -> str:
+    """A hook config with absolute paths filled in (forward slashes keep the JSON free of escaping)."""
+    return (template.replace("{{PYTHON}}", python.replace("\\", "/"))
+            .replace("{{REPO}}", copilot_repo.replace("\\", "/")).replace("{{SCOPE}}", scope))
+
+
+def render_chief_launcher(template: str, python: str, copilot_repo: str) -> str:
+    """The chief's cmd launcher with this checkout's paths, CRLF as cmd expects."""
+    return (template.replace("{{PYTHON}}", python).replace("{{COPILOT}}", copilot_repo)
+            .replace("\r\n", "\n").replace("\n", "\r\n"))
 
 
 # --- small I/O helpers ----------------------------------------------------------------------------

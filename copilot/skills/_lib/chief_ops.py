@@ -77,6 +77,12 @@ Subcommands
       Retires handled events. `ACKED=<n>`, plus `ACK_MISSING=<id>` and exit 1
       for an id with no file.
 
+  doctor [--checkout PATH] [--issue-ref <repo>#<N>]
+      Read-only check of this machine's chief setup (`chief/doctor.py`): the
+      install, every read verb, the mailbox and doorbell, and 24 h of logs.
+      One `CHECK <area>.<name>=pass|fail|unknown ...` line per fact, redacted,
+      then `DOCTOR=pass|fail|unknown fails=<n> unknowns=<n>` (exit 0 on pass).
+
 stdout carries the `KEY=value` result lines the chief acts on; breadcrumbs go to
 stderr. Exit 2 with `ERROR: ...` on stderr for a refused write.
 """
@@ -92,6 +98,7 @@ from typing import List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from chief import (  # noqa: E402
+    doctor,
     drain,
     journal,
     launcher,
@@ -124,6 +131,7 @@ def build_parser() -> argparse.ArgumentParser:
     lite_sweep.add_parser(sub)
     drain.add_parsers(sub)
     lite_compact.add_compact_parsers(sub)
+    doctor.add_parser(sub)
     return parser
 
 

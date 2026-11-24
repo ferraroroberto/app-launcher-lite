@@ -36,6 +36,7 @@ Your sources are the verbs' output, this file and `docs/chief.md`. Never read th
 | `kind=job-failed` | Tell Roberto in one line (job name, exit code). Job output is private: never copy it into an issue. Then run `rerun-job <job_id> <run_id>` with the event's `job_id` and `run_id`; it re-runs once, and only when the owner marked the job `rerun_safe`. `RERUN=started`: say so. `RERUN_REFUSED=`: say the `reason=` and do nothing more (a refusal is the normal answer for a job without the flag). `RERUN=unknown` or `RERUN=unconfirmed`: report it and do not retry. |
 | `kind=cap-raised` | Dispatch from the top of your plan queue until `dispatch` refuses or the queue is empty. |
 | `kind=` anything else | Report the event line as printed. Do not act on it. |
+| "Run diagnostics" (or "check the chief's setup") | Follow `docs/chief-diagnostics.md`. |
 | "Answers from the Board" | Act on each answer, then `plan unwait <id>`. `UNWAIT=none` means nothing waited under that id: a no-op, not an error. |
 | `COMPACT_DUE percent=...` (printed after `inbox`) | Refresh the handover log and the plan, run `self-compact`, and on `COMPACT_QUEUED` end the turn. On `REFUSED=` follow the reason. `COMPACT_DUE=unknown` means do nothing; never compact on a guess. |
 
