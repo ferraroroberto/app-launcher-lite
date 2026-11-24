@@ -27,7 +27,7 @@ The order matters because the chief's folder is a setting. Lite defaults it to i
    .\.venv\Scripts\python.exe copilot\install.py --migrate
    ```
 
-   It lists the old hook configs and skill links it would remove and asks before touching anything; `-Yes` answers for it. Then it installs this checkout's hooks and skills. It also reads Lite's **Copilot folder** setting: when that holds a path other than this checkout's `copilot/`, it offers to point it there through Lite's own Settings API, changing that one field and reading it back. If Lite is not running, or does not answer, the line reads `[unknown]` and nothing is changed: start the tray and run the command again, or set the folder in **Settings → Folders** yourself.
+   It lists the old hook configs and skill links it would remove and asks before touching anything; `-Yes` answers for it. Then it installs this checkout's hooks and skills. It also reads Lite's **Copilot folder** setting: when that holds a path other than this checkout's `copilot/`, it offers to point it there through Lite's own Settings API, over whichever scheme Lite serves (HTTP or HTTPS), changing that one field and reading it back. If Lite is not running, does not answer, refuses the change or answers in the other scheme after a `serve_over` change, the line reads `[unknown]` and says which, and nothing is changed: start the tray and run the command again, or set the folder in **Settings → Folders** yourself.
 4. **Restart Lite:** `tray.bat --restart`. The session-host on `:8466` is not part of it and keeps your live sessions.
 5. **Start the chief from the Board.** It now runs in `copilot/` and picks up the plan where it stopped.
 6. **Restart any open Copilot session.** Hook configs load at CLI startup only.

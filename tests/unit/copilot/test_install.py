@@ -26,12 +26,16 @@ if sys.platform == "win32":
 
 from src.subprocess_flags import NO_WINDOW
 
+_COPILOT = Path(__file__).resolve().parents[3] / "copilot"
+sys.path.insert(0, str(_COPILOT / "tests"))  # the Copilot suite's shared fake-TLS server
+
+from tls_fake import TlsServer, self_signed  # noqa: E402
+
 pytestmark = [
     pytest.mark.windows_only,
     pytest.mark.skipif(sys.platform != "win32", reason="the installer writes NTFS junctions"),
 ]
 
-_COPILOT = Path(__file__).resolve().parents[3] / "copilot"
 _POWERSHELL = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 _STATE_FILE = "sessions-state.json"
 _STATE_BODY = '{"rows": [{"sid": "keep-me"}]}'
@@ -97,8 +101,8 @@ class Lite:
             (_COPILOT / "hooks" / "chief-ops.template.cmd").read_bytes())
         (self.copilot / "skills" / "_lib" / "chief_ops.py").write_text(
             "import os, sys\nprint('ARGS=' + ' '.join(sys.argv[1:]))\nprint('CWD=' + os.getcwd())\n", encoding="utf-8")
-        ports = _COPILOT / "skills" / "_lib" / "lite_ports.py"
-        (self.copilot / "skills" / "_lib" / "lite_ports.py").write_bytes(ports.read_bytes())
+        for helper in ("lite_ports.py", "lite_webapp.py"):
+            (self.copilot / "skills" / "_lib" / helper).write_bytes((_COPILOT / "skills" / "_lib" / helper).read_bytes())
         (self.copilot / "skills" / "demo").mkdir()
         (self.copilot / "skills" / "demo" / "SKILL.md").write_text("demo", encoding="utf-8")
         self.profile = root / "profile"
@@ -163,8 +167,10 @@ class Lite:
         self.junction(self.skills / "demo", old_repo / "skills" / "demo")
         return old_hooks
 
-    def serve_settings(self, fleet_config_dir: str) -> ThreadingHTTPServer:
-        server = ThreadingHTTPServer(("127.0.0.1", 0), _Settings)
+    def serve_settings(self, fleet_config_dir: str, tls: bool = False) -> ThreadingHTTPServer:
+        server = TlsServer(("127.0.0.1", 0), _Settings) if tls else ThreadingHTTPServer(("127.0.0.1", 0), _Settings)
+        if tls:
+            server.tls = self_signed(self.root)  # type: ignore[attr-defined]
         server.fleet_config_dir = fleet_config_dir  # type: ignore[attr-defined]
         server.posted = []  # type: ignore[attr-defined]
         threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -300,6 +306,38 @@ def test_migrate_repoints_an_explicit_copilot_folder_through_the_settings_api_an
         server.shutdown()
     assert server.posted == [{"fleet_config_dir": str(lite.copilot)}], "exactly one field is sent"  # type: ignore[attr-defined]
     assert "[ok] Copilot folder setting ->" in out and "read back from Lite" in out
+
+
+@pytest.mark.parametrize("tls", [False, True], ids=["http-only", "https-only"])
+def test_migrate_reaches_settings_over_whichever_scheme_the_webapp_serves(lite: Lite, tls: bool) -> None:
+    server = lite.serve_settings(r"C:\oldleet-config-lite", tls=tls)
+    lite.set_config(r"C:\oldleet-config-lite")
+    try:
+        out = lite.ok("--migrate", "--yes")
+    finally:
+        server.shutdown()
+    assert server.posted == [{"fleet_config_dir": str(lite.copilot)}]  # type: ignore[attr-defined]
+    assert "[ok] Copilot folder setting ->" in out and "read back from Lite" in out
+
+
+def test_migrate_reports_a_settings_refusal_as_refused_not_unreachable(lite: Lite) -> None:
+    class _Refuse(_Settings):
+        def do_POST(self) -> None:  # noqa: N802 -- http.server's name
+            self.send_response(403)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Refuse)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    (lite.repo / "config" / "config.json").write_text(
+        json.dumps({"webapp": {"port": server.server_address[1]}}), encoding="utf-8")
+    lite.set_config(r"C:\oldleet-config-lite")
+    try:
+        out = lite.ok("--migrate", "--yes")
+    finally:
+        server.shutdown()
+    assert "[unknown] Lite refused the Settings change (HTTP 403" in out
+    assert "did not take the change" not in out
 
 
 @pytest.mark.parametrize("current", [None, "", "{copilot}"])
