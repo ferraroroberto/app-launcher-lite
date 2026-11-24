@@ -9,7 +9,8 @@ override `COPILOT_HOOKS_STATE_DIR`).
 
 Every launcher call goes to app-launcher-lite on the webapp port its own
 `config/config.json` sets (`lite_ports.py`; 8465 when unset; `--base-url`
-overrides, loopback only); every forge read goes through `glab`.
+overrides, loopback only), over HTTP or HTTPS, whichever that port serves
+(`lite_webapp.py`); every forge read goes through `glab`.
 
 Subcommands
 -----------
@@ -90,6 +91,7 @@ stderr. Exit 2 with `ERROR: ...` on stderr for a refused write.
 from __future__ import annotations
 
 import argparse
+import http.client
 import logging
 import sys
 import urllib.error
@@ -141,7 +143,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
         return args.func(args)
-    except (ValueError, urllib.error.URLError, TimeoutError) as exc:
+    except (ValueError, urllib.error.URLError, TimeoutError, ConnectionResetError,
+            ConnectionAbortedError, http.client.HTTPException) as exc:
         failure = launcher.transport_failure(exc)
         if failure is not None:
             print(failure[0])

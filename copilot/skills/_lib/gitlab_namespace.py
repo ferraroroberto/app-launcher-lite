@@ -14,20 +14,21 @@ stays in glab's own config: nothing here reads, stores or logs one.
 
 from __future__ import annotations
 
-import json
+import http.client
 import os
 import subprocess
 import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import issue_host
 import lite_ports
+import lite_webapp
 from git_run import run_git
 
-# app-launcher-lite's webapp, on the port its own config.json sets.
+# app-launcher-lite's webapp, on the port its own config.json sets; `lite_webapp`
+# swaps in the scheme that port serves.
 DEFAULT_BASE_URL = lite_ports.webapp_url()
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 CONFIG_TIMEOUT = 5.0
@@ -42,12 +43,11 @@ def _launcher_config(base_url: Optional[str] = None) -> Tuple[Optional[Dict[str,
     if host is None or host.lower() not in _LOOPBACK_HOSTS:
         return None, f"refusing a non-loopback launcher host {host!r}"
     try:
-        with urllib.request.urlopen(f"{base_url.rstrip('/')}/api/config", timeout=CONFIG_TIMEOUT) as resp:
-            config = json.loads(resp.read().decode("utf-8") or "null")
+        config = lite_webapp.request(base_url, "/api/config", timeout=CONFIG_TIMEOUT)
     except urllib.error.HTTPError as exc:
         exc.close()
         return None, f"launcher config unreadable (HTTP {exc.code})"
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, http.client.HTTPException) as exc:
         return None, f"launcher config unreachable ({type(exc).__name__})"
     return (config, "") if isinstance(config, dict) else (None, "launcher config was not an object")
 
