@@ -20,10 +20,14 @@ VALID_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 # Port the webapp binds when ``config.json`` carries no ``webapp.port``. It
 # differs from the full app-launcher's so both can run on one machine.
 DEFAULT_WEBAPP_PORT = 8465
-# Loopback port the PTY session-host binds. Declared here, not imported from
+# Loopback port the PTY session-host binds. Declared here, not in
 # ``webapp_settings.values``, so the session-host's import closure stays small;
-# a test pins the two equal.
+# the settings catalog and the session-host server both read it from here.
 DEFAULT_SESSION_HOST_PORT = 8466
+# The plain-HTTP port in "both" serve mode: HTTP and HTTPS cannot share one port,
+# and 8475 is a port no fleet app declares in its .fleet.toml (8443-8467 are
+# in use). A start still copes with any other holder of the port.
+DEFAULT_SERVE_HTTP_PORT = 8475
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "config.json"
 

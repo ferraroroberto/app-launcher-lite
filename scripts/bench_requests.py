@@ -33,6 +33,7 @@ import httpx
 
 from scripts.probe_endpoint_timing import _percentile
 from src import runtime_files
+from src.app_config import resolve_webapp_port
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ def render(report: Dict[str, Any]) -> List[str]:
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--base", default="http://127.0.0.1:8465")
+    parser.add_argument("--base", default=f"http://127.0.0.1:{resolve_webapp_port()}")
     parser.add_argument("-n", "--samples", type=int, default=20)
     parser.add_argument("--interval", type=float, default=0.5,
                         help="seconds between requests (default 0.5)")

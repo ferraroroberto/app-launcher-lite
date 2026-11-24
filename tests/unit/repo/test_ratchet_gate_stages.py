@@ -1,4 +1,4 @@
-"""The gate's docs-, structure-, instruction-, doc-refs-, dead-code-, conventions-, runtime-write-, request-budget- and windows-only-ratchet stages fail on exit 3 and on a new finding, by name.
+"""The gate's docs-, structure-, instruction-, doc-refs-, dead-code-, conventions-, runtime-write-, request-budget-, windows-only-, port-host- and clean-tree-ratchet stages fail on exit 3 and on a new finding, by name.
 
 The real stage text runs against a throwaway repo with `Fail` stubbed to exit 1; a bare
 `& $python scripts/<ratchet>.py` would let exit 3 ("not confirmed") pass."""
@@ -28,7 +28,10 @@ _EXTRA_KEYS = {
     "conventions": 'rules = ["logging-not-print"]\n',
     "runtime_write": 'exclude = ["scripts/**"]\n',
     "request_budget": 'browser_paths = ["static/**"]\n',
+    "clean_tree": 'smoke = ["{python}", "smoke.py"]\n',
 }
+# Clean tree's baseline lists paths, not per-file counts.
+_BASELINES = {"clean_tree": '{"version": 1, "paths": []}\n'}
 
 
 def _stage(name: str) -> str:
@@ -78,6 +81,13 @@ def _stage(name: str) -> str:
     ("windows_only", {"tests/test_a.py": "import winreg\n\n\ndef test_a():\n    pass\n"}, 1,
      ["windows only ratchet failed", "tests/test_a.py", "win-module"]),
     ("windows_only", {"tests/test_a.py": "def test_a():\n    pass\n"}, 0, ["STAGE-PASSED"]),
+    ("port_host", {"src/a.py": "def broken(:\n"}, 1, ["port host ratchet NOT CONFIRMED ("]),
+    ("port_host", {"src/a.py": "PORT = 8501\n"}, 1, ["port host ratchet failed", "src/a.py", "port-literal"]),
+    ("port_host", {"src/a.py": "x = 1\n"}, 0, ["STAGE-PASSED"]),
+    ("clean_tree", {"smoke.py": "raise SystemExit(1)\n"}, 1, ["clean tree ratchet NOT CONFIRMED ("]),
+    ("clean_tree", {"smoke.py": "open('new.txt', 'w').write('x')\n"}, 1,
+     ["clean tree ratchet failed", "new.txt", "tree-write"]),
+    ("clean_tree", {"smoke.py": "pass\n"}, 0, ["STAGE-PASSED"]),
 ])
 def test_stage_verdict(tmp_path, name: str, files: dict[str, str], code: int, expected: list[str]) -> None:
     (tmp_path / "scripts").mkdir()
@@ -95,7 +105,8 @@ def test_stage_verdict(tmp_path, name: str, files: dict[str, str], code: int, ex
         shutil.copy2(REPO_ROOT / "scripts" / "runtime_write_resolve.py", tmp_path / "scripts")
     if name == "request_budget":
         shutil.copy2(REPO_ROOT / "scripts" / "request_budget_scan.py", tmp_path / "scripts")
-    files = {f".{name.replace('_', '-')}-ratchet-baseline.json": '{"version": 1, "entries": []}\n', **files}
+    baseline = _BASELINES.get(name, '{"version": 1, "entries": []}\n')
+    files = {f".{name.replace('_', '-')}-ratchet-baseline.json": baseline, **files}
     files[".fleet.toml"] = files.get(".fleet.toml", "") + f"[{name}_ratchet]\nenabled = true\n{_EXTRA_KEYS.get(name, '')}"
     for path, text in files.items():
         (tmp_path / path).parent.mkdir(exist_ok=True)

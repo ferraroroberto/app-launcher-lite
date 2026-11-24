@@ -47,6 +47,7 @@ PUSHOVER_URL = "https://api.pushover.net/1/messages.json"
 # The model id lives once on :mod:`src.clients.llm`
 # (:data:`llm_client.DEFAULT_MODEL`) — both hub callers route through the
 # same client.
+# port-host-exempt: the documented default of the local LLM hub, a service this repo does not own
 LOCAL_LLM_BASE_URL = "http://127.0.0.1:8000"
 LOCAL_LLM_TIMEOUT_SECONDS = 8.0
 SUMMARY_TAIL_CHARS = 500

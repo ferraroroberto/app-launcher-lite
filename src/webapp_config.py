@@ -786,6 +786,7 @@ def _validate(cfg: WebappConfig) -> None:
         if parsed.scheme not in ("http", "https") or not parsed.hostname:
             raise ValueError(
                 "speech_base_url must be an http(s) URL with a host, "
+                # port-host-exempt: an example in an error message, the documented default of a service this repo does not own
                 f"e.g. http://127.0.0.1:8000/v1; got {cfg.speech_base_url!r}"
             )
     for problem in performance.problems(performance.values_of(cfg)):

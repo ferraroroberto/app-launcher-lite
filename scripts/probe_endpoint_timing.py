@@ -27,6 +27,8 @@ from typing import Dict, List, Optional
 
 import httpx
 
+from src.app_config import resolve_webapp_port
+
 logger = logging.getLogger(__name__)
 
 ENDPOINTS = ("/api/jobs", "/api/board", "/")
@@ -82,7 +84,7 @@ def probe(base: str, samples: int, interval_s: float) -> Dict[str, Dict[str, obj
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--base", default="https://127.0.0.1:8465")
+    parser.add_argument("--base", default=f"https://127.0.0.1:{resolve_webapp_port()}")
     parser.add_argument("-n", "--samples", type=int, default=30)
     parser.add_argument("--interval", type=float, default=0.5,
                         help="seconds between requests (default 0.5)")

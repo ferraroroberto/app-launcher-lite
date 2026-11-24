@@ -24,7 +24,9 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
 
 CONFIG_ENV = "FLEET_LITE_CONFIG"
+# port-host-exempt: this stdlib-only helper runs from the installed copilot folder and cannot import src.app_config; a test pins both defaults
 DEFAULT_WEBAPP_PORT = 8465
+# port-host-exempt: same reason as the webapp port above
 DEFAULT_SESSION_HOST_PORT = 8466
 # copilot/skills/_lib/ -> the app-launcher-lite checkout root, three levels up.
 LITE_CONFIG = Path(__file__).resolve().parents[3] / "config" / "config.json"

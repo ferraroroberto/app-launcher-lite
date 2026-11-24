@@ -190,6 +190,14 @@ $ratchetStages = @(
     @{ Name = "windows only"; Argv = @("scripts/windows_only_ratchet.py")
        NotConfirmed = "git was unusable, or a test module cannot be read, is not UTF-8 or does not parse"
        Failed = "a test that needs Windows has no windows_only marker beyond .windows-only-ratchet-baseline.json; see the named test above and mark it @pytest.mark.windows_only." }
+    # A port or host belongs in ignored config read through src/app_config.py, so a clean `git pull --ff-only` plus the restart recipe is the whole update.
+    @{ Name = "port host"; Argv = @("scripts/port_host_ratchet.py")
+       NotConfirmed = "git was unusable, or a script or code file cannot be read, is not UTF-8 or does not parse"
+       Failed = "a file gained a port or machine-local host literal beyond .port-host-ratchet-baseline.json; read it through src/app_config.py or add a reasoned port-host-exempt marker (see the named line above)." }
+    # Boots a disposable plain-HTTP server on a free port with scratch runtime data; it never touches the tray or its ports.
+    @{ Name = "clean tree"; Argv = @("scripts/clean_tree_ratchet.py")
+       NotConfirmed = "the smoke server could not start, died, was not ready on /healthz in time, or did not stop, or git was unusable (see the smoke output above)"
+       Failed = "starting the app wrote into the work tree beyond .clean-tree-ratchet-baseline.json; send the output to an ignored state dir or the runtime data root (see the named path above)." }
 )
 # ratchet-stages:end
 

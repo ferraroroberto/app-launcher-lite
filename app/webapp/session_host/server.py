@@ -55,6 +55,7 @@ from starlette.websockets import WebSocketDisconnect
 from app.webapp.session_host import pools
 from src import runtime_files
 from src.agents import DEFAULT_AGENT, SESSION_HOST_AGENTS, is_fullscreen
+from src.app_config import DEFAULT_SESSION_HOST_PORT
 from src.build_info import build_identity
 from src.chief_session_end import publish_session_ends, resolve_paths
 from src.session_host import _EOF, PTY_MIN_COLS, SessionManager
@@ -70,7 +71,7 @@ from src.session_hosting.channel_claims import DuplicateChannelSession
 logger = logging.getLogger(__name__)
 
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8466
+DEFAULT_PORT = DEFAULT_SESSION_HOST_PORT
 
 # Background repaint-nudge tasks, kept referenced so the event loop doesn't
 # GC them before they run.

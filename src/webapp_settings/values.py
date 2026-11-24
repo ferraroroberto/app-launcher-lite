@@ -10,10 +10,13 @@ from __future__ import annotations
 
 from typing import Tuple
 
+from src import app_config
+
 DEFAULT_HOST = "0.0.0.0"
-DEFAULT_PORT = 8465
+# The port defaults are owned by ``src.app_config``; the settings catalog only names them.
+DEFAULT_PORT = app_config.DEFAULT_WEBAPP_PORT
 # Loopback port the PTY session-host binds. Never network-reachable.
-DEFAULT_SESSION_HOST_PORT = 8466
+DEFAULT_SESSION_HOST_PORT = app_config.DEFAULT_SESSION_HOST_PORT
 # The browser a session's PC window opens in. "chrome" and "edge" open an app window in that
 # browser, falling back to the other and then to the Windows default when it is not installed;
 # "system" hands the page to the Windows default browser as an ordinary tab.
@@ -97,10 +100,7 @@ MAX_SPEECH_KEEP_RECORDINGS_HOURS = 720
 # which is how Lite served before the setting existed.
 VALID_SERVE_OVER = ("auto", "https", "http", "both")
 DEFAULT_SERVE_OVER = "auto"
-# The plain-HTTP port in "both" mode: HTTP and HTTPS cannot share one port,
-# and 8475 is a port no fleet app declares in its .fleet.toml (8443-8467 are
-# in use). A start still copes with any other holder of the port.
-DEFAULT_SERVE_HTTP_PORT = 8475
+DEFAULT_SERVE_HTTP_PORT = app_config.DEFAULT_SERVE_HTTP_PORT
 
 # The Usage card's monthly Copilot allowance, in AI credits. The account's
 # plan cannot be read from this machine, so the size is a setting; 300 is the
