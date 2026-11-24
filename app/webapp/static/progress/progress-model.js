@@ -228,6 +228,47 @@ export function cellWord(row, metric) {
   return row[SOURCE_OF[metric] + '_state'] === 'skipped' ? 'skipped' : 'unknown';
 }
 
+// ------------------------------------------------------------- refresh
+
+// The toast text while a refresh runs: the project being checked, counted from
+// 1. Before the server has listed the projects there is no total to count to.
+export function refreshProgressText(refresh) {
+  const total = refresh && typeof refresh.total === 'number' ? refresh.total : null;
+  if (!total) return 'Checking projects…';
+  const done = typeof refresh.done === 'number' ? refresh.done : 0;
+  return 'Checking ' + Math.min(done + 1, total) + ' of ' + total;
+}
+
+// How a finished refresh ends: the toast's `text` and `kind` ('error' only when
+// a read really failed, or the refresh itself stopped). A project with no
+// remote is a skip: it is counted in the summary and never turns it red.
+export function refreshSummary(refresh) {
+  const r = refresh || {};
+  const results = r.results && typeof r.results === 'object' ? r.results : {};
+  const names = Object.keys(results).sort();
+  // A failed read carries its `error`, a skip its `reason`; a project that was read carries neither.
+  const failed = names.filter(function (n) { return !!results[n].error; });
+  const skipped = names.filter(function (n) { return !results[n].error && !!results[n].reason; });
+  const readOk = names.length - failed.length - skipped.length;
+  if (r.error) return { text: 'Could not refresh: ' + r.error, kind: 'error', failed: failed, skipped: skipped };
+  if (!names.length) return { text: 'No projects to refresh.', kind: '', failed: failed, skipped: skipped };
+  let text = 'Refreshed ' + readOk + ' of ' + names.length;
+  if (skipped.length) text += ' · ' + skipped.length + ' skipped (' + (results[skipped[0]].reason || 'no GitLab remote') + ')';
+  if (failed.length) text += ' · could not read ' + failed.join(', ');
+  return { text: text, kind: failed.length ? 'error' : '', failed: failed, skipped: skipped };
+}
+
+// The line under the range: when the saved figures were last read, from the
+// younger of the two sources, or the nudge to read them once.
+export function lastRefreshedText(data) {
+  const d = data || {};
+  const ages = [d.git, d.gitlab]
+    .map(function (s) { return s && typeof s.age_seconds === 'number' ? s.age_seconds : null; })
+    .filter(function (a) { return a != null; });
+  if (!ages.length) return 'Not refreshed yet. Tap Refresh to read the history.';
+  return 'Last refreshed ' + agoFromSeconds(Math.min.apply(null, ages)) + '. Tap Refresh to update.';
+}
+
 // "3 projects" over the rows the range has, with how many were not read.
 export function reposCaption(data) {
   const rows = data && Array.isArray(data.repos) ? data.repos : [];

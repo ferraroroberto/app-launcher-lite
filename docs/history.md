@@ -13,7 +13,9 @@ The projects are the child directories of `projects_dir` (minus `projects_ignore
 
 ## Cache first, refresh on request
 
-`GET /api/progress` (`app/webapp/routers/progress.py`) answers from `webapp/progress-totals.json` and runs no `git` or `glab`, however old that file is. Opening the sheet, changing the grouping and changing the range are all cache reads. **Refresh** in the Data sources card is the only thing that re-reads: it starts one background run, a toast rides the sheet's footer, and the sheet polls the cache and updates in place when it ends. A second tap while one runs starts nothing.
+`GET /api/progress` (`app/webapp/routers/progress.py`) answers from `webapp/progress-totals.json` and runs no `git` or `glab`, however old that file is. Opening the sheet, changing the grouping and changing the range are all cache reads. **Refresh** in the Data sources card is the only thing that re-reads, because a run makes one read per project: it starts one background run, and the sheet polls the cache and updates in place when it ends. A line under the range says when the saved figures were last refreshed. A second tap while one runs starts nothing.
+
+The answer's `refresh` block is the run's progress (`done` of `total` projects, the `current` one) and, per project, a result: `ok`, `skipped` (no remote on the GitLab host, with the reason) or `failed` (with the source and error). It is held in memory, so a restart forgets it. A neutral toast on the sheet's footer counts the projects ("Checking 3 of 26") and ends on a summary such as "Refreshed 25 of 26 · 1 skipped (no GitLab remote)". A skip is expected and never turns the summary into an error; only a read that failed does, and the toast names those projects.
 
 A first run backfills 400 days, the longest range the sheet accepts. Every later run re-reads from 7 days before that source's stored cursor and replaces those days, so a commit pushed late is still counted and a repeat refresh never counts anything twice. The file is written after every project, so an interrupted backfill resumes where it stopped. It is gitignored runtime data.
 

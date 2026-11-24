@@ -4,9 +4,12 @@
  * /api/progress, which answers from its cache and runs no git or GitLab call,
  * so the sheet draws the cached figures the moment it opens, however old, and
  * says how old each source is. Only the Refresh button asks the server to
- * re-read (?refresh=true); while it runs a toast rides the sheet's footer and
- * the sheet polls the cache, then updates in place. Changing the bucket or the
- * range re-reads the cache only.
+ * re-read (?refresh=true), and opening the sheet never does: a refresh makes one
+ * read per project. While it runs a neutral toast on the sheet's footer counts
+ * the projects ("Checking 3 of 26") and the sheet polls the cache, then updates
+ * in place and ends on a summary. A project with no remote is a skip in that
+ * summary; only a read that failed turns it into an error. Changing the bucket
+ * or the range re-reads the cache only.
  *
  * A figure that was not measured shows its word (unknown, unavailable, stale,
  * skipped), never zero. The maths is progress-model.js; the drawing of a chart
@@ -20,16 +23,19 @@ import { icon } from '../_vendored/icons/icons.js';
 import { chip } from '../glance.js';
 import { drawChart } from './progress-charts.js';
 import {
-  DEFAULT_RANGE, cellWord, fmtN, progressUrl, rangeDays, rangeText, repoRows, reposCaption,
-  series, summary, tiles,
+  DEFAULT_RANGE, cellWord, fmtN, lastRefreshedText, progressUrl, rangeDays, rangeText,
+  refreshProgressText, refreshSummary, repoRows, reposCaption, series, summary, tiles,
 } from './progress-model.js';
 
 // How often the cache is re-read while a refresh runs, and how many times
 // before the sheet stops waiting (a first backfill can take minutes).
 const POLL_MS = 4000;
 const MAX_POLLS = 150;
-// The refresh toast stays until the sheet hides it.
+// The progress toast stays until the sheet replaces or hides it; the summary
+// that ends a refresh stays long enough to read the names in it.
 const TOAST_HOLD_MS = 10 * 60 * 1000;
+const SUMMARY_MS = 8000;
+const SUMMARY_ERROR_MS = 15000;
 
 const view = {
   bucket: 'day',
@@ -72,10 +78,15 @@ function hideToast() {
   if (host) host.hidden = true;
 }
 
-function showToast(message, kind) {
+function showToast(message, kind, ms) {
   const host = node('progressToast');
   if (!host) return;
-  toast(message, kind || '', { host: host, icon: kind === 'error' ? 'triangle-alert' : 'refresh-cw', ms: TOAST_HOLD_MS });
+  toast(message, kind || '', { host: host, icon: kind === 'error' ? 'triangle-alert' : 'refresh-cw', ms: ms || TOAST_HOLD_MS });
+}
+
+// The count in the toast follows the server's progress, not a guess.
+function showProgress() {
+  showToast(refreshProgressText(view.data && view.data.refresh));
 }
 
 // One read of the cache, drawn. A failed read leaves the last good figures up
@@ -116,12 +127,13 @@ async function refresh() {
   if (view.refreshing) return;
   view.refreshing = true;
   syncRefreshButton();
-  showToast('Refreshing git and GitLab totals…');
+  showToast(refreshProgressText(null));
   stopPolling();
   await load(true);
   // A read the user's own change superseded still updates view.data, so the
   // loop follows the sheet's latest answer, not one call's return value.
   for (let n = 0; view.data && view.data.refreshing && !view.failed && n < MAX_POLLS && isOpen(); n += 1) {
+    showProgress();
     await new Promise(function (resolve) { view.timer = setTimeout(resolve, POLL_MS); });
     if (!isOpen()) break;
     await load(false);
@@ -129,9 +141,17 @@ async function refresh() {
   view.refreshing = false;
   syncRefreshButton();
   if (!isOpen()) return;
-  if (view.failed || !view.data) showToast('Could not refresh. Showing the last figures.', 'error');
+  if (view.failed || !view.data) showToast('Could not reach the server. Showing the last figures.', 'error', SUMMARY_ERROR_MS);
   else if (view.data.refreshing) showToast('Still refreshing. The figures update when it finishes.');
-  else hideToast();
+  else endRefresh(view.data.refresh);
+}
+
+// The summary of a finished refresh. No finished run to report (the server
+// forgot it, as after a restart) just clears the toast.
+function endRefresh(refresh) {
+  if (!refresh || !refresh.finished_at) { hideToast(); return; }
+  const done = refreshSummary(refresh);
+  showToast(done.text, done.kind, done.kind === 'error' ? SUMMARY_ERROR_MS : SUMMARY_MS);
 }
 
 function syncRefreshButton() {
@@ -369,6 +389,7 @@ function render() {
   const range = currentRange();
   node('progressSheetSub').textContent = rangeText(data.from || range.from, data.to || range.to) +
     (sum.stale ? ' · some figures are stale' : '');
+  node('progressRefreshed').textContent = lastRefreshedText(data);
   renderTiles(data);
   renderCharts(data, sum);
   renderRepos(data);

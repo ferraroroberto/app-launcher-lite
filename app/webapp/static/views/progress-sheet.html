@@ -2,8 +2,9 @@
          projects shipped (lines from local git, merge requests and issues from
          GitLab), by day, week or month. progress/progress-sheet.js opens it on
          the cached GET /api/progress at once and draws it with each source's
-         age; only the Refresh button asks for a re-read, and the toast rides
-         the footer while that runs. -->
+         age and when it was last refreshed; only the Refresh button asks for a
+         re-read, and the toast rides the footer, counting projects, while that
+         runs. -->
     <dialog id="progressSheet" class="detail-dialog progress-dialog" data-surface="code.history-sheet" data-track-view="sheet.progress" aria-labelledby="progressSheetTitle">
       <div class="detail-card">
         <div class="detail-header">
@@ -13,6 +14,7 @@
           </button>
         </div>
         <p id="progressSheetSub" class="progress-sub"></p>
+        <p id="progressRefreshed" class="progress-sub progress-refreshed"></p>
         <div class="progress-body">
           <div class="progress-controls">
             <div class="segmented" role="group" aria-label="Group by">
@@ -67,7 +69,7 @@
             </div>
 
             <section class="card progress-table-card" aria-labelledby="progressReposTitle">
-              <div class="card-head"><h3 id="progressReposTitle" class="card-title"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-folder"></use></svg> By project</h3><span id="progressReposMeta" class="card-head-meta"></span></div>
+              <div class="card-head progress-table-head"><h3 id="progressReposTitle" class="card-title"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-folder"></use></svg> By project</h3><span id="progressReposMeta" class="card-head-meta"></span></div>
               <div class="progress-table-wrap">
                 <table id="progressRepos" class="progress-table">
                   <thead>
