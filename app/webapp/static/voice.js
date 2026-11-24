@@ -32,6 +32,8 @@ import { attachMicNotice } from './_vendored/mic-notice/mic-notice.js';
 import { REMOTE_MIC_HINT, inRemoteDesktopSession } from './voice-remote.js';
 import { watchForPause } from './voice-autostop.js';
 import { keepTake } from './shared/voice-keep.js';
+import { abandonPcm, closeQuietly, openPcmContext, startPcmCapture } from './shared/voice-pcm.js';
+import { uploadForm } from './shared/voice-upload.js';
 
 const _CHUNK_MS = 1000;
 // A chunk upload that fails (network error or non-2xx) is retried this many
@@ -107,6 +109,8 @@ function newDictationState(opts) {
     api: null,
     recorder: null,
     recordChunks: [],
+    // The take's PCM capture: the audio context opened in the tap, then its capture promise.
+    pcm: { ctx: null, start: null },
     // The take's copy on disk (voice-keep.js), from start until its stop.
     keep: null,
     // The live getUserMedia stream, held from the moment it's granted until
@@ -513,9 +517,14 @@ function watchTakePause(d, stream) {
   if (!d.pauseWatch) console.info('[dictation] auto-stop off for this take: the input level cannot be measured');
 }
 
+// Releases the take's audio context when no capture will use it.
+function dropPcm(d) { closeQuietly(d.pcm.ctx); d.pcm.ctx = null; }
+
 function handleRecorderStop(d, stream, mime) {
   const keep = d.keep;
   d.keep = null;
+  const pcm = d.pcm.start;
+  d.pcm.start = null;
   if (keep) keep.stop();
   clearInputNotice(d);
   stream.getTracks().forEach(function (tr) { tr.stop(); });
@@ -531,6 +540,7 @@ function handleRecorderStop(d, stream, mime) {
     closeVoiceEvents(d);
     d.voiceSession = null;
     d.streaming = false;
+    abandonPcm(pcm);
     if (keep) keep.end('stopped');
     return;
   }
@@ -541,8 +551,11 @@ function handleRecorderStop(d, stream, mime) {
     const blob = new Blob(d.recordChunks, { type: type });
     d.recordChunks = [];
     d.recorder = null;
-    if (blob.size) sendBufferedRecording(d, blob, keep);
-    else if (keep) keep.end('stopped');
+    if (blob.size) sendBufferedRecording(d, blob, keep, pcm);
+    else {
+      abandonPcm(pcm);
+      if (keep) keep.end('stopped');
+    }
   }
 }
 
@@ -575,10 +588,11 @@ async function startRecording(d) {
   d.takeCtrl = new AbortController();
   setArmingUI(d);
   d.onStart();
+  d.pcm.ctx = openPcmContext();
   const stream = await acquireStream(d);
-  if (!stream) return;
+  if (!stream) { dropPcm(d); return; }
   const mime = pickAudioMime();
-  if (!createRecorder(d, stream, mime)) return;
+  if (!createRecorder(d, stream, mime)) { dropPcm(d); return; }
   d.recordChunks = [];
   d.chunkQueue = [];
   d.drain = null;
@@ -591,6 +605,7 @@ async function startRecording(d) {
     // was constructed but never started, so no 'stop' event will ever
     // fire to release it; release here instead.
     stream.getTracks().forEach(function (tr) { tr.stop(); });
+    dropPcm(d);
     _activeInstance = null;
     d.stream = null;
     d.recorder = null;
@@ -617,6 +632,9 @@ async function startRecording(d) {
   // dataavailable so chunks flow during the take.
   d.recorder.start(d.streaming ? _CHUNK_MS : undefined);
   if (!d.streaming) d.keep = keepTake(stream, d.recorder.mimeType || mime);
+  if (d.streaming) dropPcm(d);
+  else d.pcm.start = startPcmCapture(d.pcm.ctx, stream);
+  d.pcm.ctx = null;
   setRecordingUI(d, true);
   watchTakePause(d, stream);
   watchTakeLevel(d, stream);
@@ -726,47 +744,24 @@ async function finishStreaming(d) {
   }
 }
 
-// The take as the upload's form body: a 16 kHz mono WAV every backend reads,
-// or, where Web Audio cannot convert it, the browser's own recording, which
-// the server converts when it has ffmpeg. The converter loads on the first
-// take, so it adds nothing to page boot. A take it cannot convert tells the
-// kept copy why.
-async function uploadForm(blob, keep) {
-  const fd = new FormData();
-  let wav = null;
-  try {
-    const { takeToWav } = await import('./shared/voice-wav.js');
-    wav = await takeToWav(blob, keep && keep.note);
-  } catch (exc) {
-    console.warn('[dictation] the WAV converter did not load', exc);
-    if (keep) keep.note('the WAV converter did not load');
-  }
-  if (wav) {
-    fd.append('file', wav, 'recording.wav');
-    return fd;
-  }
-  const ext = (blob.type && blob.type.indexOf('mp4') >= 0) ? 'mp4' : 'webm';
-  console.info('[dictation] uploading the browser recording as ' + ext + ': it could not be converted to WAV here');
-  fd.append('file', blob, 'recording.' + ext);
-  return fd;
-}
-
 // Single-shot: the whole take in one POST to /api/transcribe. `keep`, the
 // take's copy on disk, learns the outcome only after the transcript landed.
-async function sendBufferedRecording(d, blob, keep) {
+async function sendBufferedRecording(d, blob, keep, pcm) {
   const signal = d.takeCtrl.signal;
   const op = beginFinishing(d);
   let outcome = 'stopped';
   let failure = '';
+  let step = '';
   // A dispose() or a cancel that lands mid-request must not
   // write a late transcript into whatever textarea getTextarea() now
   // resolves to.
   const gone = function () { return d.aborted || d.finishOp !== op; };
   try {
-    const fd = await uploadForm(blob, keep);
+    const upload = await uploadForm(blob, keep, pcm);
+    step = upload.step;
     if (gone()) return;
     const body = await apiRawJson('/api/transcribe', {
-      method: 'POST', terminalToken: readTerminalToken(), body: fd, signal: signal,
+      method: 'POST', terminalToken: readTerminalToken(), body: upload.fd, signal: signal,
     });
     if (gone()) return;
     outcome = 'transcribed';
@@ -793,6 +788,9 @@ async function sendBufferedRecording(d, blob, keep) {
     if (!gone()) {
       outcome = 'failed';
       failure = (exc && exc.message) || String(exc);
+      // The raw upload is the last resort, so a failure after it also names the
+      // browser step that kept it from sending WAV.
+      if (step && exc && exc.message) exc.message += ' (browser step that failed: ' + step + ')';
       apiFailToast('Transcription failed', exc);
     }
   } finally {

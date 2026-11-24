@@ -16,12 +16,14 @@ STATIC = Path(__file__).resolve().parents[3] / "app" / "webapp" / "static"
 
 def test_takes_upload_as_wav_and_the_recorder_container_is_the_fallback() -> None:
     voice = (STATIC / "voice.js").read_text(encoding="utf-8")
-    upload = re.search(r"async function uploadForm\(blob, keep\) \{(.*?)\n\}", voice, re.S)
-    assert upload, "voice.js no longer builds its upload in uploadForm"
+    source = (STATIC / "shared" / "voice-upload.js").read_text(encoding="utf-8")
+    upload = re.search(r"async function uploadForm\(blob, keep, pcmStart\) \{(.*?)\n\}", source, re.S)
+    assert upload, "voice-upload.js no longer builds the upload in uploadForm"
     body = upload.group(1)
-    assert body.index("takeToWav(blob") < body.index("'recording.wav'") < body.index("'recording.' + ext")
+    assert body.index("pcmWav(pcmStart)") < body.index("takeToWav(blob") < body.index("'recording.wav'")
+    assert body.index("'recording.wav'") < body.index("'recording.' + ext")
     assert "console.info" in body, "the fallback upload must say it is one"
-    assert "uploadForm(blob, keep)" in voice
+    assert "uploadForm(blob, keep, pcm)" in voice
 
 
 def test_the_wav_is_mono_16_bit_at_16_khz() -> None:
