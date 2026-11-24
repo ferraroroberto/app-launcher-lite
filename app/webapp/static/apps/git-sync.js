@@ -13,6 +13,8 @@ import { chip } from '../glance.js';
 import { confirmDialog } from '../confirm-dialog.js';
 import { setAsyncState } from '../async-state.js';
 import { plural } from '../shared/format.js';
+import { hideToast } from '../_vendored/toast/toast.js';
+import { startPoll } from '../_vendored/poll/poll.js';
 
 
 // A repo the server would fast-forward: clean, on its default branch, behind
@@ -86,10 +88,15 @@ export async function behindGate(a) {
   return anyway ? { ignore_behind: true } : null;
 }
 
+// The server's reasons, in the words the report uses; any other reason shows as sent.
+function reasonWord(reason) {
+  return reason === 'dirty' ? 'uncommitted changes' : (reason || 'skipped');
+}
+
 const OUTCOME_CHIP = {
   pulled: function (r) { return chip('pulled ' + r.commits, 'accent'); },
   'up-to-date': function () { return chip('up to date', 'neutral'); },
-  skipped: function (r) { return chip(r.reason, 'attention'); },
+  skipped: function (r) { return chip(reasonWord(r.reason), 'attention'); },
   failed: function (r) { return chip('failed: ' + r.reason, 'danger'); },
 };
 
@@ -107,33 +114,126 @@ function renderResults(host, results) {
   });
 }
 
-let syncing = false;
+// How many repos ended each way, with the skip reasons counted ("uncommitted changes (2)").
+function tally(results) {
+  const t = { pulled: 0, current: 0, skipped: 0, failed: 0, reasons: [] };
+  const byReason = {};
+  results.forEach(function (r) {
+    if (r.outcome === 'pulled') t.pulled += 1;
+    else if (r.outcome === 'up-to-date') t.current += 1;
+    else if (r.outcome === 'failed') t.failed += 1;
+    else {
+      t.skipped += 1;
+      const word = reasonWord(r.reason);
+      byReason[word] = (byReason[word] || 0) + 1;
+    }
+  });
+  t.reasons = Object.keys(byReason).sort().map(function (w) { return w + ' (' + byReason[w] + ')'; });
+  return t;
+}
 
-// Sync all: fetch every repo and fast-forward the safe ones, then the sheet
-// lists every repo with its outcome. `onDone` re-reads git status.
+// The report's head: one line per way a repo can end. Skipped and failed show
+// only when there are some; the skip reasons ride under Skipped.
+function renderSummary(host, t) {
+  host.replaceChildren();
+  const rows = [
+    ['pulled', 'Fast-forwarded', t.pulled, 'accent', ''],
+    ['current', 'Already current', t.current, 'neutral', ''],
+  ];
+  if (t.skipped) rows.push(['skipped', 'Skipped', t.skipped, 'attention', t.reasons.join(', ')]);
+  if (t.failed) rows.push(['failed', 'Failed', t.failed, 'danger', '']);
+  rows.forEach(function (row) {
+    const li = document.createElement('li');
+    li.dataset.summary = row[0];
+    const label = document.createElement('span');
+    label.className = 'git-sync-name';
+    label.textContent = row[1];
+    li.appendChild(label);
+    li.appendChild(chip(String(row[2]), row[3]));
+    if (row[4]) {
+      const why = document.createElement('span');
+      why.className = 'git-sync-reasons';
+      why.textContent = row[4];
+      li.appendChild(why);
+    }
+    host.appendChild(li);
+  });
+  host.hidden = false;
+}
+
+// "Syncing 3 of 26 · name": the project being synced, counted from 1. Before
+// the server has listed the repos there is no total to count to.
+function progressText(p) {
+  if (!p || typeof p.total !== 'number' || !p.total) return 'Syncing projects…';
+  const text = 'Syncing ' + Math.min(p.done + 1, p.total) + ' of ' + p.total;
+  return p.current ? text + ' · ' + p.current : text;
+}
+
+// The toast that outlives the sheet: the same count while it runs, the totals
+// when it ends.
+function summaryText(t, total) {
+  let text = 'Synced ' + total + ': ' + t.pulled + ' fast-forwarded · ' + t.current + ' current';
+  if (t.skipped) text += ' · ' + t.skipped + ' skipped';
+  if (t.failed) text += ' · ' + t.failed + ' failed';
+  return text;
+}
+
+let syncing = false;
+const POLL_MS = 1000;
+
+// Sync all: fetch every repo and fast-forward the safe ones. The sheet counts
+// the projects while it runs (the server answers the POST when the run ends,
+// so a GET beside it reports how far it is), then keeps the report until Done.
+// `onDone` re-reads git status.
 export async function syncAll(onDone) {
   const sheet = document.getElementById('gitSyncSheet');
   if (!sheet || syncing) return;
   const status = document.getElementById('gitSyncState');
+  const summary = document.getElementById('gitSyncSummary');
   const body = document.getElementById('gitSyncBody');
   syncing = true;
   body.replaceChildren();
-  setAsyncState(status, 'loading', { message: 'Fetching and fast-forwarding…' });
+  summary.replaceChildren();
+  summary.hidden = true;
+  setAsyncState(status, 'loading', { message: progressText(null) });
+  toast(progressText(null), '', { icon: 'refresh-cw', ms: 0 });
   if (!sheet.open) sheet.showModal();
+  const poll = startPoll(async function () {
+    const p = await jsonApi('/api/claude-code/sync-all');
+    // Only a run that has started and not ended is this one: the last one, finished, or none yet, says nothing about it.
+    if (!syncing || !p.started_at || p.finished_at) return;
+    setAsyncState(status, 'loading', { message: progressText(p) });
+    toast(progressText(p), '', { icon: 'refresh-cw', ms: 0 });
+  }, POLL_MS, { activeWhile: function () { return syncing; } });
   try {
     const reply = await jsonApi('/api/claude-code/sync-all', { method: 'POST' });
     const results = reply.results || [];
+    syncing = false;
+    poll.stop();
+    const t = tally(results);
     if (!results.length) {
       setAsyncState(status, 'empty', { message: 'No git repos found.' });
+      hideToast();
     } else {
-      // The sheet's lines are the report; a page toast would sit under it.
       setAsyncState(status, 'ready');
+      renderSummary(summary, t);
       renderResults(body, results);
+      // Open, the sheet is the report and a toast would sit under it; closed, the
+      // toast carries the totals and opens the report.
+      if (sheet.open) hideToast();
+      else {
+        toast(summaryText(t, results.length), t.failed ? 'error' : '', {
+          icon: 'refresh-cw',
+          action: { label: 'Report', onClick: function () { if (!sheet.open) sheet.showModal(); } },
+        });
+      }
     }
   } catch (exc) {
     setAsyncState(status, 'error', { message: 'Sync all failed: ' + exc.message });
+    hideToast();
   } finally {
     syncing = false;
+    poll.stop();
     if (onDone) onDone();
   }
 }

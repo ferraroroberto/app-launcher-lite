@@ -253,6 +253,37 @@ def test_sync_all_route_reports_every_repo(webapp_client, repos, tmp_path):
     rows = {p["id"]: p for p in client.get("/api/claude-code/git-status").json()["projects"]}
     assert rows["mine"]["upstream"]["state"] == "up-to-date"
 
+    # The run's progress keeps the History refresh's shape, and a finished run says so.
+    progress = client.get("/api/claude-code/sync-all").json()
+    assert (progress["state"], progress["done"], progress["total"], progress["current"]) == ("done", 2, 2, None)
+    assert {r["name"] for r in progress["results"]} == {"mine", "theirs"}
+
+
+def test_sync_all_counts_a_crashing_repo_as_failed(webapp_client, repos, tmp_path, monkeypatch):
+    from app.webapp.routers import claude_code
+
+    client, app, _ = webapp_client
+    _, mine, theirs = repos
+    projects = tmp_path / "projects"
+    projects.mkdir()
+    shutil.move(str(mine), str(projects / "mine"))
+    shutil.move(str(theirs), str(projects / "theirs"))
+    _point_projects_at(app, projects)
+    real = claude_code._sync_one
+
+    def crash_on_mine(project):
+        if project.name == "mine":
+            raise OSError("disk went away")
+        return real(project)
+
+    monkeypatch.setattr(claude_code, "_sync_one", crash_on_mine)
+    res = client.post("/api/claude-code/sync-all")
+    assert res.status_code == 200
+    by_name = {r["name"]: r for r in res.json()["results"]}
+    assert by_name["mine"]["outcome"] == "failed" and "disk went away" in by_name["mine"]["reason"]
+    assert by_name["theirs"]["outcome"] == "up-to-date"
+    assert client.get("/api/claude-code/sync-all").json()["done"] == 2
+
 
 def test_git_status_poll_does_no_network_io(webapp_client, repos, tmp_path, monkeypatch):
     client, app, _ = webapp_client
