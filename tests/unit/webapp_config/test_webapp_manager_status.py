@@ -251,3 +251,41 @@ class TestTrayStatusItem:
         )
         tray_mod.TrayApp.show_status(self._stub(status), None, None)
         assert seen[0][0] == "Launcher Lite status"
+
+
+class TestFailedStartNamesThePortHolder:
+    """The spawned webapp's stderr is discarded, so a bind failure must leave its own breadcrumb."""
+
+    def test_an_early_exit_logs_the_exit_code_and_the_listener(self, monkeypatch, caplog):
+        manager = _manager(8465)
+
+        class _Dead(_FakeProc):
+            def poll(self):
+                return 1
+
+        manager._proc = _Dead()
+        monkeypatch.setattr("app.webapp.manager.listener_pids", lambda port: [777])
+        with caplog.at_level("ERROR"), pytest.raises(RuntimeError, match="exited before becoming ready"):
+            manager.wait_until_ready()
+        assert "port 8465" in caplog.text
+        assert "listening pid(s) 777" in caplog.text
+        assert "exited 1" in caplog.text
+
+    def test_a_timeout_says_nothing_listens_when_that_is_true(self, monkeypatch, caplog):
+        manager = _manager(8465, startup_timeout_seconds=0.2)
+        manager._proc = _FakeProc()
+        monkeypatch.setattr("app.webapp.manager.listener_pids", lambda port: [])
+        monkeypatch.setattr(manager, "is_reachable", lambda: False)
+        with caplog.at_level("ERROR"), pytest.raises(RuntimeError, match="did not become ready"):
+            manager.wait_until_ready()
+        assert "nothing is listening" in caplog.text
+        assert "still running" in caplog.text
+
+    def test_an_unreadable_socket_table_is_reported_as_unknown(self, monkeypatch, caplog):
+        manager = _manager(8465, startup_timeout_seconds=0.2)
+        manager._proc = _FakeProc()
+        monkeypatch.setattr("app.webapp.manager.listener_pids", lambda port: None)
+        monkeypatch.setattr(manager, "is_reachable", lambda: False)
+        with caplog.at_level("ERROR"), pytest.raises(RuntimeError):
+            manager.wait_until_ready()
+        assert "could not be read" in caplog.text

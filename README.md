@@ -4,7 +4,7 @@ An experiment: the full [app-launcher](https://github.com/ferraroroberto/app-lau
 
 The Copilot side lives in this repo's [`copilot/`](copilot) folder: the hooks (session state for the Board), the chief's helpers and the `glab`-based issue skills (`/issue-start`, `/issue-yolo`), installed by `copilot/install.py`. A machine that still runs the old companion repo [fleet-config-lite](https://github.com/ferraroroberto/fleet-config-lite) moves over with [docs/migrating-from-fleet-config-lite.md](docs/migrating-from-fleet-config-lite.md).
 
-Stack: FastAPI + vanilla-JS PWA, Windows-only (ConPTY via pywinpty), Python 3.12+; Node.js optional (with it the server bundles the page's JavaScript at start, so a phone loads it faster: [docs/cache-hygiene-asset-hashing.md](docs/cache-hygiene-asset-hashing.md)). Two processes behind a tray icon: the webapp on `:8465` and a detached PTY session-host on `:8466` that survives webapp restarts.
+Stack: FastAPI + vanilla-JS PWA, Windows-only (ConPTY via pywinpty), Python 3.12+; Node.js optional (with it the server bundles the page's JavaScript in the background after start, so a phone loads it faster: [docs/cache-hygiene-asset-hashing.md](docs/cache-hygiene-asset-hashing.md)). Two processes behind a tray icon: the webapp on `:8465` and a detached PTY session-host on `:8466` that survives webapp restarts.
 
 ## Status
 

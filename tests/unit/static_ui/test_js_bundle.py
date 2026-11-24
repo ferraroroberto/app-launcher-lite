@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import shutil
+import threading
+import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Dict, Optional, Tuple
 
 import pytest
 from fastapi import FastAPI
@@ -25,6 +27,8 @@ from src.static_bundles.js_bundle import (
 from src.static_versioning import compute_asset_hashes, fleet_hash_of
 
 _FLEET = "0123abcd"
+# The conftest stub replaces the loader for every test; the healthz test needs the real one.
+_REAL_LOAD_JS_BUNDLE = server_mod._load_js_bundle
 
 
 def _tree(tmp_path: Path) -> Path:
@@ -116,8 +120,7 @@ def test_a_restart_on_the_same_sources_reads_the_cache(tmp_path: Path) -> None:
     assert sorted(p.name for p in (tmp_path / "cache").iterdir()) == [bundle_key("feedf00d")]
 
 
-def test_a_failed_build_leaves_no_cache_and_serves_the_separate_modules(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_failed_build_leaves_no_cache(tmp_path: Path) -> None:
     def broken(static_dir: Path, out_dir: Path) -> None:
         out_dir.mkdir(parents=True)
         raise BundleError("esbuild exited 1")
@@ -127,30 +130,122 @@ def test_a_failed_build_leaves_no_cache_and_serves_the_separate_modules(
     assert list((tmp_path / "cache").iterdir()) == []
     assert build_js_bundle(tmp_path, tmp_path / "none", _FLEET, run=broken) is None  # no entry
 
+
+def _app_with_loader(monkeypatch: pytest.MonkeyPatch, build: Callable[..., Optional[JsBundle]]
+                     ) -> Tuple[FastAPI, Dict[str, str], threading.Thread]:
+    """A bare app whose bundle loader runs ``build`` in place of esbuild; returns its build thread."""
+    monkeypatch.setattr(server_mod, "build_js_bundle", build)
+    app = FastAPI()
+    app.state.asset_fleet_hash = _FLEET
+    app.state.js_bundle = None
+    hashes = {"main.js": _FLEET}
+    thread = server_mod._load_js_bundle(app, hashes)
+    assert thread is not None
+    return app, hashes, thread
+
+
+def test_a_failed_bundle_leaves_the_separate_modules_usable(monkeypatch: pytest.MonkeyPatch) -> None:
     def no_node(*args: object) -> None:
         raise BundleError("npx not found on PATH")
 
-    monkeypatch.setattr(server_mod, "build_js_bundle", no_node)
-    app = FastAPI()
-    app.state.asset_fleet_hash = _FLEET
-    hashes = {"main.js": _FLEET}
-    assert server_mod._load_js_bundle(app, hashes) is None
+    app, hashes, thread = _app_with_loader(monkeypatch, no_node)
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert app.state.js_bundle is None
     assert list(hashes) == ["main.js"]
+    assert TestClient(app).get(f"/static/{BUNDLE_DIR}/main.js").status_code == 404
 
 
-def test_the_server_serves_the_bundle_and_404s_the_rest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_crashing_bundle_build_does_not_escape_its_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    def crash(*args: object) -> None:
+        raise RuntimeError("boom")
+
+    app, _, thread = _app_with_loader(monkeypatch, crash)
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert app.state.js_bundle is None
+
+
+def test_the_server_serves_the_bundle_once_the_warm_up_finishes(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bundle = _build(tmp_path)
-    monkeypatch.setattr(server_mod, "build_js_bundle", lambda *args: bundle)
-    app = FastAPI()
-    app.state.asset_fleet_hash = _FLEET
-    hashes = {"main.js": _FLEET}
-    assert server_mod._load_js_bundle(app, hashes) is bundle
+    app, hashes, thread = _app_with_loader(monkeypatch, lambda *args: bundle)
+    thread.join(timeout=5)
+    assert app.state.js_bundle is bundle
     assert hashes[f"{BUNDLE_DIR}/chunk-AAAA.js"] == _FLEET
     client = TestClient(app)
     resp = client.get(f"/static/{BUNDLE_DIR}/main.js")
     assert resp.status_code == 200 and resp.headers["content-type"].startswith("text/javascript")
     assert "immutable" in resp.headers["cache-control"]
     assert client.get(f"/static/{BUNDLE_DIR}/nope.js").status_code == 404
+
+
+def test_a_request_before_the_build_lands_gets_404_then_the_bundle(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The route exists from the start and reads the bundle live, so a request that arrives first is safe."""
+    bundle = _build(tmp_path)
+    release = threading.Event()
+
+    def slow(*args: object) -> JsBundle:
+        release.wait(timeout=10)
+        return bundle
+
+    app, _, thread = _app_with_loader(monkeypatch, slow)
+    client = TestClient(app)
+    try:
+        assert client.get(f"/static/{BUNDLE_DIR}/main.js").status_code == 404
+        assert app.state.js_bundle is None
+    finally:
+        release.set()
+    thread.join(timeout=5)
+    assert client.get(f"/static/{BUNDLE_DIR}/main.js").status_code == 200
+
+
+def test_healthz_answers_before_a_slow_bundle_build_finishes(
+        webapp_client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``create_app()`` returns without waiting on the build; the page is the separate-module one until it lands."""
+    bundle = _build(tmp_path)
+    release = threading.Event()
+
+    def slow(*args: object) -> JsBundle:
+        release.wait(timeout=10)
+        return bundle
+
+    monkeypatch.setattr(server_mod, "_load_js_bundle", _REAL_LOAD_JS_BUNDLE)
+    monkeypatch.setattr(server_mod, "build_js_bundle", slow)
+    started = time.perf_counter()
+    app = server_mod.create_app()
+    client = TestClient(app)
+    try:
+        assert time.perf_counter() - started < 5
+        assert client.get("/healthz").status_code == 200
+        assert app.state.js_bundle is None
+        page = client.get("/")
+        assert page.status_code == 200 and f"/static/{BUNDLE_DIR}/main.js" not in page.text
+    finally:
+        release.set()
+    app.state.js_bundle_thread.join(timeout=5)
+    assert app.state.js_bundle is bundle
+    assert f"/static/{BUNDLE_DIR}/main.js" in client.get("/").text
+
+
+def test_a_bundle_cache_hit_adds_no_startup_latency(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Even a warm cache is read off the start path: the loader returns before the build function does."""
+    release = threading.Event()
+    bundle = _build(tmp_path)
+
+    def cached(*args: object) -> JsBundle:
+        release.wait(timeout=10)
+        return bundle
+
+    started = time.perf_counter()
+    _, _, thread = _app_with_loader(monkeypatch, cached)
+    try:
+        assert time.perf_counter() - started < 1
+        assert thread.is_alive()
+    finally:
+        release.set()
+    thread.join(timeout=5)
 
 
 @pytest.mark.skipif(shutil.which("npx") is None, reason="Node.js is not installed")
