@@ -1327,11 +1327,30 @@ surfaces:
     reach:
       - the lane under Chief's plan
     holds:
-      - live sessions that are working, one row each
+      - live sessions that are working or about to be, one row each, counted in the lane's summary
     does:
       - a row opens the drawer
     states:
       - empty line
+    links:
+      - to: board.drawer
+        via: row tap
+      - to: board.finished-group
+        via: Finished fold
+
+  - id: board.finished-group
+    area: board
+    title: Finished sessions
+    root: data-surface
+    reach:
+      - the Finished fold at the bottom of Bot's turn, shown only while a session is finished
+    holds:
+      - sessions that finished or sat idle for two hours, one row each, outside the lane's count
+    does:
+      - the fold opens and shuts, shut by default
+      - a row opens the drawer
+    states:
+      - hidden while no session is finished
     links:
       - to: board.drawer
         via: row tap

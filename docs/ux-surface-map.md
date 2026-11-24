@@ -20,7 +20,7 @@ Walked 2026-11-18 against build `52a7d40`, at widths 390, 1280, themes light, da
 | [Apps](#apps) | 12 |
 | [Jobs](#jobs) | 10 |
 | [Team OS](#team-os) | 7 |
-| [Board](#board) | 15 |
+| [Board](#board) | 16 |
 | [Settings](#settings) | 17 |
 | [Keys and gestures](#keys-and-gestures) | 4 |
 
@@ -45,7 +45,7 @@ flowchart LR
   s63(["Team OS tab · Team OS"])
   s41(["Apps tab · Apps"])
   s53(["Jobs tab · Jobs"])
-  s85(["Settings · Settings"])
+  s86(["Settings · Settings"])
   s37(["Screen view · Screen"])
   s13(["Session menu · Code"])
   s24(["Overlay session menu · Terminal"])
@@ -53,14 +53,14 @@ flowchart LR
   s46(["Listener menu · Apps"])
   s59(["Job menu · Jobs"])
   s68(["Skill file · Team OS"])
-  s81(["Drawer menu · Board"])
+  s82(["Drawer menu · Board"])
   s0 -->|"Board"| s70
   s0 -->|"Code"| s10
   s0 -->|"Team"| s63
   s0 -->|"Apps"| s41
   s0 -->|"Jobs"| s53
   s1 -->|"CPU reading"| s2
-  s1 -->|"gear"| s85
+  s1 -->|"gear"| s86
   s2 -->|"Screen View live"| s37
   s10 -->|"header"| s1
   s13 -->|"Stop"| s6
@@ -69,7 +69,7 @@ flowchart LR
   s46 -->|"Stop process"| s6
   s59 -->|"Remove"| s6
   s68 -->|"Delete log"| s6
-  s81 -->|"Stop"| s6
+  s82 -->|"Stop"| s6
 ```
 
 ### `chrome.nav` Primary navigation
@@ -222,8 +222,8 @@ flowchart LR
   s28(["Links sheet · Terminal"])
   s27(["Rename session · Terminal"])
   s6(["Confirm dialog · Chrome"])
-  s89(["Chief sheet · Settings"])
-  s96(["Folders sheet · Settings"])
+  s90(["Chief sheet · Settings"])
+  s97(["Folders sheet · Settings"])
   s24(["Overlay session menu · Terminal"])
   s33(["Turn cards and step lines · Chat"])
   s0 -->|"Code"| s10
@@ -237,13 +237,13 @@ flowchart LR
   s13 -->|"Links"| s28
   s13 -->|"Rename"| s27
   s13 -->|"Stop"| s6
-  s13 -->|"Chief settings"| s89
-  s14 -->|"Chief settings"| s89
+  s13 -->|"Chief settings"| s90
+  s14 -->|"Chief settings"| s90
   s15 -->|"row kebab"| s17
   s15 -->|"preset dropdown"| s16
   s15 -->|"Sync all"| s18
   s15 -->|"History"| s19
-  s15 -->|"Open Settings"| s96
+  s15 -->|"Open Settings"| s97
   s15 -->|"row tap"| s22
   s17 -->|"Show changes"| s20
   s20 -->|"file kebab"| s21
@@ -455,8 +455,8 @@ flowchart LR
   s31(["Chat pane · Chat"])
   s20(["Changes overlay · Code"])
   s6(["Confirm dialog · Chrome"])
-  s80(["Session drawer · Board"])
-  s105(["Composer keys · Keys and gestures"])
+  s81(["Session drawer · Board"])
+  s106(["Composer keys · Keys and gestures"])
   s12 -->|"row tap"| s22
   s13 -->|"Links"| s28
   s13 -->|"Rename"| s27
@@ -472,8 +472,8 @@ flowchart LR
   s24 -->|"Links"| s28
   s24 -->|"Changed files"| s20
   s24 -->|"Stop and kill"| s6
-  s80 -->|"Terminal"| s22
-  s105 -->|"keys button"| s29
+  s81 -->|"Terminal"| s22
+  s106 -->|"keys button"| s29
 ```
 
 ### `terminal.overlay` Session overlay
@@ -611,7 +611,7 @@ flowchart LR
   s36["HTML viewer"]
   s22(["Session overlay · Terminal"])
   s20(["Changes overlay · Code"])
-  s80(["Session drawer · Board"])
+  s81(["Session drawer · Board"])
   s22 -->|"Chat mode"| s31
   s31 -->|"queued chip"| s34
   s31 -->|"image thumbnail"| s35
@@ -619,7 +619,7 @@ flowchart LR
   s31 -->|"the agent asks"| s32
   s31 -->|"a finished turn"| s33
   s33 -->|"file row"| s20
-  s80 -->|"Chat"| s31
+  s81 -->|"Chat"| s31
 ```
 
 ### `chat.overlay` Chat pane
@@ -702,12 +702,12 @@ flowchart LR
   s39["Quality sheet"]
   s40["Readout"]
   s2(["PC load sheet · Chrome"])
-  s104(["Screen view keys · Keys and gestures"])
+  s105(["Screen view keys · Keys and gestures"])
   s2 -->|"Screen View live"| s37
   s37 -->|"Quality"| s39
   s37 -->|"Paste to PC"| s38
   s37 -->|"readout switch"| s40
-  s104 -->|"Screen view"| s37
+  s105 -->|"Screen view"| s37
 ```
 
 ### `screen.view` Screen view
@@ -1057,14 +1057,14 @@ flowchart LR
   s68["Skill file"]
   s69["Weekly recap"]
   s0(["Primary navigation · Chrome"])
-  s96(["Folders sheet · Settings"])
+  s97(["Folders sheet · Settings"])
   s6(["Confirm dialog · Chrome"])
   s0 -->|"Team"| s63
   s63 -->|"Skills"| s64
   s63 -->|"Weekly recap"| s69
   s64 -->|"model picker"| s65
   s64 -->|"row kebab"| s66
-  s64 -->|"Open Settings"| s96
+  s64 -->|"Open Settings"| s97
   s66 -->|"Read"| s67
   s67 -->|"a file"| s68
   s68 -->|"Delete log"| s6
@@ -1152,12 +1152,13 @@ flowchart LR
   s76["Chief's plan"]
   s77["Plan note"]
   s78["Bot's turn"]
-  s79["Your turn"]
-  s80["Session drawer"]
-  s81["Drawer menu"]
-  s82["Answer the chief"]
-  s83["MRs and jobs"]
-  s84["Done today"]
+  s79["Finished sessions"]
+  s80["Your turn"]
+  s81["Session drawer"]
+  s82["Drawer menu"]
+  s83["Answer the chief"]
+  s84["MRs and jobs"]
+  s85["Done today"]
   s0(["Primary navigation · Chrome"])
   s22(["Session overlay · Terminal"])
   s31(["Chat pane · Chat"])
@@ -1168,20 +1169,22 @@ flowchart LR
   s70 -->|"Since you last looked"| s75
   s70 -->|"Chief's plan"| s76
   s70 -->|"Bot's turn"| s78
-  s70 -->|"Your turn"| s79
-  s70 -->|"MRs and jobs"| s83
-  s70 -->|"Done today"| s84
+  s70 -->|"Your turn"| s80
+  s70 -->|"MRs and jobs"| s84
+  s70 -->|"Done today"| s85
   s72 -->|"Start with"| s73
   s72 -->|"row kebab"| s74
   s76 -->|"a row's note"| s77
-  s76 -->|"questions"| s82
-  s78 -->|"row tap"| s80
-  s79 -->|"session row"| s80
-  s79 -->|"Answer"| s82
-  s80 -->|"kebab"| s81
-  s80 -->|"Terminal"| s22
-  s80 -->|"Chat"| s31
-  s81 -->|"Stop"| s6
+  s76 -->|"questions"| s83
+  s78 -->|"row tap"| s81
+  s78 -->|"Finished fold"| s79
+  s79 -->|"row tap"| s81
+  s80 -->|"session row"| s81
+  s80 -->|"Answer"| s83
+  s81 -->|"kebab"| s82
+  s81 -->|"Terminal"| s22
+  s81 -->|"Chat"| s31
+  s82 -->|"Stop"| s6
 ```
 
 ### `board.tab` Board tab
@@ -1280,9 +1283,22 @@ flowchart LR
 
 - **Root:** `data-surface`
 - **Reach:** the lane under Chief's plan
-- **Holds:** live sessions that are working, one row each
+- **Holds:** live sessions that are working or about to be, one row each, counted in the lane's summary
 - **Does:** a row opens the drawer
 - **States:** empty line
+- **Leads to:**
+  - [Session drawer](#boarddrawer-session-drawer) (row tap)
+  - [Finished sessions](#boardfinished-group-finished-sessions) (Finished fold)
+
+### `board.finished-group` Finished sessions
+
+- **Root:** `data-surface`
+- **Reach:** the Finished fold at the bottom of Bot's turn, shown only while a session is finished
+- **Holds:** sessions that finished or sat idle for two hours, one row each, outside the lane's count
+- **Does:**
+  - the fold opens and shuts, shut by default
+  - a row opens the drawer
+- **States:** hidden while no session is finished
 - **Leads to:** [Session drawer](#boarddrawer-session-drawer) (row tap)
 
 ### `board.your-turn` Your turn
@@ -1364,49 +1380,49 @@ A group list in a pane; every row that holds more than a switch opens a sheet wi
 
 ```mermaid
 flowchart LR
-  s85["Settings"]
-  s86["Settings rows"]
-  s87["Document sheet"]
-  s88["GitHub Copilot sheet"]
-  s89["Chief sheet"]
-  s90["Chief model menu"]
-  s91["GitLab sheet"]
-  s92["Speech to text sheet"]
-  s93["Serve over sheet"]
-  s94["Launch preset menu"]
-  s95["API tokens sheet"]
-  s96["Folders sheet"]
-  s97["Chat folder menu"]
-  s98["Passkeys sheet"]
-  s99["Terminal sheet"]
-  s100["Performance sheet"]
-  s101["Diagnostics sheet"]
+  s86["Settings"]
+  s87["Settings rows"]
+  s88["Document sheet"]
+  s89["GitHub Copilot sheet"]
+  s90["Chief sheet"]
+  s91["Chief model menu"]
+  s92["GitLab sheet"]
+  s93["Speech to text sheet"]
+  s94["Serve over sheet"]
+  s95["Launch preset menu"]
+  s96["API tokens sheet"]
+  s97["Folders sheet"]
+  s98["Chat folder menu"]
+  s99["Passkeys sheet"]
+  s100["Terminal sheet"]
+  s101["Performance sheet"]
+  s102["Diagnostics sheet"]
   s1(["Tab header · Chrome"])
   s13(["Session menu · Code"])
   s14(["Stopped chief menu · Code"])
   s15(["Projects · Code"])
   s64(["Skills · Team OS"])
-  s1 -->|"gear"| s85
-  s13 -->|"Chief settings"| s89
-  s14 -->|"Chief settings"| s89
-  s15 -->|"Open Settings"| s96
-  s64 -->|"Open Settings"| s96
-  s85 -->|"the groups"| s86
-  s85 -->|"a document row"| s87
-  s85 -->|"Coding agent"| s88
-  s85 -->|"Chief"| s89
-  s85 -->|"GitLab"| s91
-  s85 -->|"Speed limits"| s100
-  s85 -->|"Serve over"| s93
-  s85 -->|"Speech to text"| s92
-  s85 -->|"API tokens"| s95
-  s85 -->|"Folders"| s96
-  s85 -->|"Passkeys"| s98
-  s85 -->|"Terminal"| s99
-  s85 -->|"Diagnostics"| s101
-  s88 -->|"preset kebab"| s94
-  s89 -->|"model"| s90
-  s96 -->|"a folder's kebab"| s97
+  s1 -->|"gear"| s86
+  s13 -->|"Chief settings"| s90
+  s14 -->|"Chief settings"| s90
+  s15 -->|"Open Settings"| s97
+  s64 -->|"Open Settings"| s97
+  s86 -->|"the groups"| s87
+  s86 -->|"a document row"| s88
+  s86 -->|"Coding agent"| s89
+  s86 -->|"Chief"| s90
+  s86 -->|"GitLab"| s92
+  s86 -->|"Speed limits"| s101
+  s86 -->|"Serve over"| s94
+  s86 -->|"Speech to text"| s93
+  s86 -->|"API tokens"| s96
+  s86 -->|"Folders"| s97
+  s86 -->|"Passkeys"| s99
+  s86 -->|"Terminal"| s100
+  s86 -->|"Diagnostics"| s102
+  s89 -->|"preset kebab"| s95
+  s90 -->|"model"| s91
+  s97 -->|"a folder's kebab"| s98
 ```
 
 ### `settings.pane` Settings
@@ -1647,14 +1663,14 @@ Inputs that are not elements.
 
 ```mermaid
 flowchart LR
-  s102["Swipe a row"]
-  s103["Long-press hint"]
-  s104["Screen view keys"]
-  s105["Composer keys"]
+  s103["Swipe a row"]
+  s104["Long-press hint"]
+  s105["Screen view keys"]
+  s106["Composer keys"]
   s37(["Screen view · Screen"])
   s29(["On-screen keys · Terminal"])
-  s104 -->|"Screen view"| s37
-  s105 -->|"keys button"| s29
+  s105 -->|"Screen view"| s37
+  s106 -->|"keys button"| s29
 ```
 
 ### `keys.swipe-row` Swipe a row
@@ -1793,6 +1809,8 @@ flowchart LR
 | [Chief's plan](#boardchief-plan-chiefs-plan) | a row's note | [Plan note](#boardplan-note-sheet-plan-note) |
 | [Chief's plan](#boardchief-plan-chiefs-plan) | questions | [Answer the chief](#boardanswer-sheet-answer-the-chief) |
 | [Bot's turn](#boardbots-turn-bots-turn) | row tap | [Session drawer](#boarddrawer-session-drawer) |
+| [Bot's turn](#boardbots-turn-bots-turn) | Finished fold | [Finished sessions](#boardfinished-group-finished-sessions) |
+| [Finished sessions](#boardfinished-group-finished-sessions) | row tap | [Session drawer](#boarddrawer-session-drawer) |
 | [Your turn](#boardyour-turn-your-turn) | session row | [Session drawer](#boarddrawer-session-drawer) |
 | [Your turn](#boardyour-turn-your-turn) | Answer | [Answer the chief](#boardanswer-sheet-answer-the-chief) |
 | [Session drawer](#boarddrawer-session-drawer) | kebab | [Drawer menu](#boarddrawer-menu-drawer-menu) |
