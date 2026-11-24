@@ -1545,10 +1545,10 @@ flowchart LR
   - every field saves as it changes
   - Test connection sends a short test recording with the saved settings and reports Transcribes, Refuses audio, Reachable (transcription not confirmed), Refused or Unknown, with a reason
   - with Dictation off no record button shows in any message box
-  - the recordings list loads each time the sheet opens; Play fetches the kept audio, Transcribe sends it to the saved endpoint again
+  - the recordings list loads each time the sheet opens; Play fetches the kept audio, Transcribe converts it to 16 kHz mono WAV in the browser and sends that to the saved endpoint (the stored recording goes as it is only where the browser cannot convert, and the server then needs ffmpeg)
 - **States:**
   - the Settings row reads Off, On or No URL
-  - a take reads Recording, Transcribed, Failed (with the reason), Not transcribed or Incomplete (its page closed mid-take)
+  - a take reads Recording, Transcribed, Failed (with the reason, and why its browser could not convert it when that was recorded), Not transcribed or Incomplete (its page closed mid-take)
   - with nothing kept the list reads No recordings kept; a list that could not be read says so
 
 ### `settings.serving` Serve over sheet

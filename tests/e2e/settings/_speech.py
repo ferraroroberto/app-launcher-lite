@@ -1,16 +1,19 @@
 """Settings > Speech to text, walked inside the Settings sheets test: the sheet
 saves each field, the row value follows the switch, and the connection test
 shows each of its three states; Recent recordings plays, transcribes and copies a
-kept take."""
+kept take, converting it to WAV in the browser first."""
 
 from __future__ import annotations
 
+import io
 import json
 import re
+import wave
 
 from playwright.sync_api import Page, expect
 
 from src.clients.speech_audio import silent_wav
+from tests import fake_speech_backend
 from tests.e2e.fixtures.pages import loopback
 from tests.e2e.fixtures.sessions import auth_headers
 from tests.e2e.fixtures.ui import open_settings, open_settings_sheet
@@ -62,6 +65,41 @@ def walk_recent_recordings(page: Page, base_url: str, auth_token: str) -> None:
     page.unroute(f"**/api/transcribe/recordings/{take_id}/transcribe")
 
 
+def _stereo_wav() -> bytes:
+    """A take in a shape no strict backend reads and the server cannot convert without ffmpeg."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as out:
+        out.setnchannels(2)
+        out.setsampwidth(2)
+        out.setframerate(44100)
+        out.writeframes(b"\x00\x10" * 2 * 4410)
+    return buf.getvalue()
+
+
+def walk_kept_take_converts_in_the_browser(page: Page, base_url: str, auth_token: str) -> None:
+    """Transcribe on a kept take that is not the portable WAV reaches a strict
+    backend as the browser's own WAV, so it needs no ffmpeg on this PC."""
+    serve = fake_speech_backend.serve()
+    fake_url, uploads = next(serve)
+    set_speech(base_url, auth_token, speech_base_url=fake_url)
+    try:
+        base = base_url + "/api/transcribe/recordings"
+        take_id = loopback("POST", base, headers=auth_headers(auth_token), json={"mime": "audio/wav"}).json()["id"]
+        loopback("POST", f"{base}/{take_id}/chunk?ms=500", data=_stereo_wav(),
+                 headers={**auth_headers(auth_token), "Content-Type": "application/octet-stream"}
+                 ).raise_for_status()
+        page.locator("#speechRecordingsRefresh").click()
+        row = page.locator(f'#speechRecordings [data-recording-id="{take_id}"]')
+        with page.expect_request(lambda r: r.url.endswith(f"/{take_id}/transcribe")) as sent:
+            row.get_by_role("button", name="Transcribe").click()
+        assert b'filename="recording.wav"' in (sent.value.post_data_buffer or b""), "the page sent no converted WAV"
+        expect(row.locator(".speech-recording-text")).to_have_text(fake_speech_backend.TRANSCRIPT)
+        assert fake_speech_backend.is_strict_wav(uploads[-1])
+    finally:
+        set_speech(base_url, auth_token, speech_base_url="http://127.0.0.1:9/v1")
+        serve.close()
+
+
 def walk_speech_sheet(page: Page, base_url: str, auth_token: str) -> None:
     reset = dict(speech_enabled=False, speech_base_url="", speech_model="", speech_api_key="")
     set_speech(base_url, auth_token, **reset)
@@ -92,6 +130,7 @@ def walk_speech_sheet(page: Page, base_url: str, auth_token: str) -> None:
             page.unroute("**/api/speech/test")
 
         walk_recent_recordings(page, base_url, auth_token)
+        walk_kept_take_converts_in_the_browser(page, base_url, auth_token)
 
         page.locator("#speechApiKeyClear").click()
         expect(page.locator("#speechApiKeyState")).to_have_text("No key set.")

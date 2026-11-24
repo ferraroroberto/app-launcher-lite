@@ -33,7 +33,7 @@ function quiet(what) {
 }
 
 // Start keeping a take recorded from `stream` in `mime`. Returns
-// `{ stop, end(status, error) }`, or null when this browser cannot run a
+// `{ stop, note(reason), end(status, error) }`, or null when this browser cannot run a
 // second recorder; `end` stops the copy and records how the take ended
 // (stopped, transcribed or failed) once every chunk has landed.
 export function keepTake(stream, mime) {
@@ -48,6 +48,7 @@ export function keepTake(stream, mime) {
   const t0 = Date.now();
   const stopped = new Promise(function (resolve) { recorder.addEventListener('stop', resolve); });
   let lost = false;
+  let note = '';
   // Every request rides one chain, so chunks land in order and the outcome last.
   let chain = post(_BASE, { mime: recorder.mimeType || mime || 'audio/webm' })
     .then(function (body) { return (body && body.id) || null; }, quiet('opening the recording'));
@@ -73,13 +74,15 @@ export function keepTake(stream, mime) {
   }
   return {
     stop: stop,
+    // Why the browser could not convert this take to WAV; sent with its outcome.
+    note: function (reason) { note = reason || ''; },
     end: function (status, error) {
       stop();
       // The recorder's last chunk is queued before 'stop' fires, so the chain
       // read after it holds every chunk.
       stopped.then(function () { return chain; }).then(function (id) {
         if (!id) return null;
-        return post(_BASE + '/' + id + '/finish', { status: status, error: error || '' });
+        return post(_BASE + '/' + id + '/finish', { status: status, error: error || '', note: note });
       }).catch(quiet('recording the outcome'));
     },
   };

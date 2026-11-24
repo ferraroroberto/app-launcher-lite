@@ -180,16 +180,24 @@ def append(take_id: str, data: bytes, elapsed_ms: int) -> int:
     return size + len(data)
 
 
-def set_status(take_id: str, status: str, error: str = "") -> None:
-    """Record how a take ended: stopped, transcribed or failed (with the error)."""
+def set_status(take_id: str, status: str, error: str = "", note: Optional[str] = None) -> None:
+    """Record how a take ended: stopped, transcribed or failed (with the error).
+
+    ``note`` is why the browser could not convert the take to WAV before
+    uploading it. The browser reports it with every outcome it sends, ``""``
+    when it converted; a server-side retry passes none and leaves the reason
+    the live take recorded.
+    """
     if status not in FINAL_STATUSES:
         raise RecordingError(f"status must be one of {FINAL_STATUSES}")
     with _lock:
         meta = _read_meta(take_id)
         meta["status"] = status
         meta["error"] = (error or "")[:_MAX_ERROR_CHARS] if status == STATUS_FAILED else ""
+        if note is not None:
+            meta["note"] = note[:_MAX_ERROR_CHARS]
         _write_meta(meta)
-    logger.info("ℹ️ dictation recording marked %s", status)
+    logger.info("ℹ️ dictation recording marked %s%s", status, f" (browser conversion: {note})" if note else "")
 
 
 def _row(meta: Dict[str, Any], audio: Path, now: float) -> Dict[str, Any]:
@@ -209,6 +217,7 @@ def _row(meta: Dict[str, Any], audio: Path, now: float) -> Dict[str, Any]:
         "mime": meta.get("mime", ""),
         "status": status,
         "error": meta.get("error", ""),
+        "note": meta.get("note", ""),
     }
 
 

@@ -16,6 +16,7 @@ from playwright.sync_api import Page, expect
 
 from src.clients.speech_audio import find_ffmpeg
 from tests import fake_speech_backend
+from tests.e2e.fixtures.waits import wait_until
 from tests.e2e.settings._speech import set_speech
 
 # Chromium only: WebKit has no fake microphone.
@@ -42,6 +43,16 @@ _KEPT_TRANSCRIBED = """async () => {
   const api = await import(hit ? hit.name : '/static/api.js');
   const body = await api.jsonApi('/api/transcribe/recordings');
   return body.recordings.some(r => r.status === 'transcribed' && r.bytes > 0);
+}"""
+
+
+# The reason the browser could not convert the newest take that carries one.
+_KEPT_NOTE = """async () => {
+  const hit = performance.getEntriesByType('resource').find(e => /\\/api\\.js/.test(e.name));
+  const api = await import(hit ? hit.name : '/static/api.js');
+  const body = await api.jsonApi('/api/transcribe/recordings');
+  const take = body.recordings.find(r => r.note);
+  return take ? take.note : '';
 }"""
 
 
@@ -86,6 +97,8 @@ def test_dictation_uploads_wav_a_strict_backend_transcribes(
         else:
             expect(page.locator("#toast")).to_contain_text("Unsupported audio format")
         expect(page.locator("#toast")).not_to_contain_text("HTTP 500")
+        # The kept copy of that take says why the browser did not convert it.
+        wait_until(page, lambda: "no Web Audio" in page.evaluate(_KEPT_NOTE), "the kept take's conversion note")
 
         # Loopback is a secure origin, so the page is told it is not one, as
         # when a phone opens Lite over plain HTTP: a tap says HTTPS is needed.

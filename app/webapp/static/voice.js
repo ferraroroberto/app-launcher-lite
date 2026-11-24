@@ -729,15 +729,17 @@ async function finishStreaming(d) {
 // The take as the upload's form body: a 16 kHz mono WAV every backend reads,
 // or, where Web Audio cannot convert it, the browser's own recording, which
 // the server converts when it has ffmpeg. The converter loads on the first
-// take, so it adds nothing to page boot.
-async function uploadForm(blob) {
+// take, so it adds nothing to page boot. A take it cannot convert tells the
+// kept copy why.
+async function uploadForm(blob, keep) {
   const fd = new FormData();
   let wav = null;
   try {
     const { takeToWav } = await import('./shared/voice-wav.js');
-    wav = await takeToWav(blob);
+    wav = await takeToWav(blob, keep && keep.note);
   } catch (exc) {
     console.warn('[dictation] the WAV converter did not load', exc);
+    if (keep) keep.note('the WAV converter did not load');
   }
   if (wav) {
     fd.append('file', wav, 'recording.wav');
@@ -761,7 +763,7 @@ async function sendBufferedRecording(d, blob, keep) {
   // resolves to.
   const gone = function () { return d.aborted || d.finishOp !== op; };
   try {
-    const fd = await uploadForm(blob);
+    const fd = await uploadForm(blob, keep);
     if (gone()) return;
     const body = await apiRawJson('/api/transcribe', {
       method: 'POST', terminalToken: readTerminalToken(), body: fd, signal: signal,

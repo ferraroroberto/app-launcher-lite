@@ -7,14 +7,15 @@
  * change replaces the key, while "Remove key" clears it.
  *
  * Recent recordings lists the dictation takes kept on this PC
- * (src/recordings.py), newest first, each with Play and Transcribe; a
+ * (src/recordings.py), newest first, each with Play and Transcribe (the take is
+ * converted to WAV in the browser first, so no ffmpeg is needed); a
  * transcript shows under its take with Copy. The list loads when the sheet
  * opens and on Refresh. Its routes sit behind the same passkey gate as a
  * dictation upload.
  */
 
 import { els } from '../state.js';
-import { apiFailToast, apiRaw, copyText, jsonApi, toast } from '../api.js';
+import { apiFailToast, apiRaw, apiRawJson, copyText, jsonApi, toast } from '../api.js';
 import { ensureTerminalToken, terminalJsonApi } from '../webauthn.js';
 import { patchConfig, wireConfigSwitch } from './claude-options.js';
 import { setSwitch } from '../_vendored/switch/switch.js';
@@ -119,13 +120,15 @@ function el(tag, cls, text) {
   return node;
 }
 
-function setStatus(row, status, error) {
+function setStatus(row, status, error, note) {
   const word = row.querySelector('.speech-recording-status');
   word.dataset.status = status;
   word.textContent = _STATUS_WORD[status] || status;
   const err = row.querySelector('.speech-recording-error');
-  // The server keeps an error only on a failed take (src/recordings.py).
-  err.textContent = error || '';
+  // The server keeps an error only on a failed take (src/recordings.py), so the
+  // note, why the browser could not convert it, shows beside that error only.
+  const why = error ? [error, note && 'Browser conversion: ' + note + '.'] : [];
+  err.textContent = why.filter(Boolean).join(' ');
   err.hidden = !err.textContent;
 }
 
@@ -170,11 +173,38 @@ function showTranscript(row, text) {
   box.querySelector('.speech-recording-text').textContent = text || '(nothing heard)';
 }
 
+// The kept take as the 16 kHz mono WAV, converted here with Web Audio (the
+// path live dictation takes), so no ffmpeg is needed on the PC. Null when the
+// audio cannot be fetched or this browser cannot decode it: the server then
+// gets the stored recording and converts it if it can.
+async function takeAsWav(take) {
+  try {
+    const res = await apiRaw(_RECORDINGS + '/' + take.id + '/audio', {
+      terminalToken: await ensureTerminalToken(),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const { takeToWav } = await import('../shared/voice-wav.js');
+    return await takeToWav(await res.blob());
+  } catch (exc) {
+    console.info('[dictation] kept take not converted in the browser: ' + ((exc && exc.message) || exc));
+    return null;
+  }
+}
+
 async function transcribe(take, row, btn) {
   btn.disabled = true;
   btn.textContent = 'Transcribing';
   try {
-    const body = await terminalJsonApi(_RECORDINGS + '/' + take.id + '/transcribe', { method: 'POST' });
+    const wav = await takeAsWav(take);
+    const url = _RECORDINGS + '/' + take.id + '/transcribe';
+    let body;
+    if (wav) {
+      const fd = new FormData();
+      fd.append('file', wav, 'recording.wav');
+      body = await apiRawJson(url, { method: 'POST', terminalToken: await ensureTerminalToken(), body: fd });
+    } else {
+      body = await terminalJsonApi(url, { method: 'POST' });
+    }
     setStatus(row, 'transcribed', '');
     showTranscript(row, (body && body.transcript) || '');
   } catch (exc) {
@@ -209,7 +239,7 @@ function rowFor(take) {
   playBtn.disabled = txBtn.disabled = !take.bytes;
   actions.append(playBtn, txBtn);
   row.append(head, error, actions);
-  setStatus(row, take.status, take.error);
+  setStatus(row, take.status, take.error, take.note);
   return row;
 }
 

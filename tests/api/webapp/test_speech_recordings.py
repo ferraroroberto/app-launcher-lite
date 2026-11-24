@@ -107,3 +107,71 @@ def test_retention_prunes_old_takes_and_zero_keeps_none(webapp_client):
     assert client.get(BASE).json()["recordings"] == []
     assert client.post("/api/config", json={"speech_keep_recordings_hours": 721}).status_code == 400
     assert client.post("/api/config", json={"speech_keep_recordings_hours": 1.5}).status_code == 400
+
+
+def _mp4_take(client):
+    """A kept MP4 take: a container no strict backend decodes, and one the server cannot convert."""
+    take_id = _start(client, "audio/mp4")
+    mp4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64
+    assert _chunk(client, take_id, mp4, 500).status_code == 200
+    return take_id
+
+
+@pytest.fixture
+def strict_backend_no_ffmpeg(monkeypatch):
+    """A strict speech backend on a PC with no ffmpeg."""
+    monkeypatch.setattr(speech_audio, "find_ffmpeg", lambda *a, **k: None)
+    gen = fake_speech_backend.serve()
+    yield next(gen)
+    gen.close()
+
+
+def test_a_kept_mp4_take_transcribes_from_the_browsers_wav_with_no_ffmpeg(
+    webapp_client, strict_backend_no_ffmpeg,
+):
+    client, _, _ = webapp_client
+    base, uploads = strict_backend_no_ffmpeg
+    client.post("/api/config", json={"speech_enabled": True, "speech_base_url": base})
+    take_id = _mp4_take(client)
+    resp = client.post(f"{BASE}/{take_id}/transcribe",
+                       files={"file": ("recording.wav", speech_audio.silent_wav(), "audio/wav")})
+    assert resp.status_code == 200 and resp.json()["transcript"] == fake_speech_backend.TRANSCRIPT
+    assert fake_speech_backend.is_strict_wav(uploads[-1])
+    (row,) = client.get(BASE).json()["recordings"]
+    assert row["status"] == "transcribed"
+
+
+def test_without_the_browsers_wav_the_server_path_is_unchanged_and_fails_plainly(
+    webapp_client, strict_backend_no_ffmpeg,
+):
+    client, _, _ = webapp_client
+    base, uploads = strict_backend_no_ffmpeg
+    client.post("/api/config", json={"speech_enabled": True, "speech_base_url": base})
+    take_id = _mp4_take(client)
+    resp = client.post(f"{BASE}/{take_id}/transcribe")
+    assert resp.status_code == 415
+    detail = resp.json()["detail"]
+    assert "Unsupported audio format" in detail and "mp4" in detail
+    assert "browser could not convert" in detail and "Installing ffmpeg on this PC" in detail
+    assert uploads[-1].startswith(b"\x00\x00\x00\x18ftyp"), "the stored recording goes as it was kept"
+    (row,) = client.get(BASE).json()["recordings"]
+    assert row["status"] == "failed" and "Installing ffmpeg" in row["error"]
+
+
+def test_a_take_the_browser_could_not_convert_keeps_the_reason(webapp_client, strict_backend_no_ffmpeg):
+    client, _, _ = webapp_client
+    base, _ = strict_backend_no_ffmpeg
+    client.post("/api/config", json={"speech_enabled": True, "speech_base_url": base})
+    take_id = _mp4_take(client)
+    reason = "this browser could not decode its own audio/mp4 recording (EncodingError)"
+    client.post(f"{BASE}/{take_id}/finish", json={"status": "failed", "error": "refused", "note": reason})
+    (row,) = client.get(BASE).json()["recordings"]
+    assert row["note"] == reason
+    # A retry from Settings leaves the live take's reason in place.
+    assert client.post(f"{BASE}/{take_id}/transcribe").status_code == 415
+    (row,) = client.get(BASE).json()["recordings"]
+    assert row["note"] == reason
+    # A take the browser did convert reports an empty note, which replaces it.
+    client.post(f"{BASE}/{take_id}/finish", json={"status": "transcribed", "note": ""})
+    (row,) = client.get(BASE).json()["recordings"]
+    assert row["note"] == ""
