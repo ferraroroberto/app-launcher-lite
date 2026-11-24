@@ -729,24 +729,27 @@ async function finishStreaming(d) {
 // The take as the upload's form body: a 16 kHz mono WAV every backend reads,
 // or, where Web Audio cannot convert it, the browser's own recording, which
 // the server converts when it has ffmpeg. The converter loads on the first
-// take, so it adds nothing to page boot.
+// take, so it adds nothing to page boot. `note` is why the browser could not
+// convert ('' when it did), which the kept take records.
 async function uploadForm(blob) {
   const fd = new FormData();
   let wav = null;
+  let note = '';
   try {
     const { takeToWav } = await import('./shared/voice-wav.js');
-    wav = await takeToWav(blob);
+    wav = await takeToWav(blob, function (reason) { note = reason; });
   } catch (exc) {
     console.warn('[dictation] the WAV converter did not load', exc);
+    note = 'the browser\'s WAV converter did not load';
   }
   if (wav) {
     fd.append('file', wav, 'recording.wav');
-    return fd;
+    return { fd: fd, note: '' };
   }
   const ext = (blob.type && blob.type.indexOf('mp4') >= 0) ? 'mp4' : 'webm';
   console.info('[dictation] uploading the browser recording as ' + ext + ': it could not be converted to WAV here');
   fd.append('file', blob, 'recording.' + ext);
-  return fd;
+  return { fd: fd, note: note };
 }
 
 // Single-shot: the whole take in one POST to /api/transcribe. `keep`, the
@@ -756,15 +759,17 @@ async function sendBufferedRecording(d, blob, keep) {
   const op = beginFinishing(d);
   let outcome = 'stopped';
   let failure = '';
+  let note = '';
   // A dispose() or a cancel that lands mid-request must not
   // write a late transcript into whatever textarea getTextarea() now
   // resolves to.
   const gone = function () { return d.aborted || d.finishOp !== op; };
   try {
-    const fd = await uploadForm(blob);
+    const upload = await uploadForm(blob);
+    note = upload.note;
     if (gone()) return;
     const body = await apiRawJson('/api/transcribe', {
-      method: 'POST', terminalToken: readTerminalToken(), body: fd, signal: signal,
+      method: 'POST', terminalToken: readTerminalToken(), body: upload.fd, signal: signal,
     });
     if (gone()) return;
     outcome = 'transcribed';
@@ -795,7 +800,7 @@ async function sendBufferedRecording(d, blob, keep) {
     }
   } finally {
     endFinishing(d, op);
-    if (keep) keep.end(outcome, failure);
+    if (keep) keep.end(outcome, failure, note);
   }
 }
 

@@ -14,7 +14,7 @@ again. Those routes sit under ``/api/transcribe/`` to share its passkey gate.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -118,9 +118,13 @@ def recording_chunk(
 
 @router.post("/api/transcribe/recordings/{take_id}/finish")
 def recording_finish(take_id: str, body: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
-    """Record how the take ended: ``{"status": stopped|transcribed|failed, "error"}``."""
+    """Record how the take ended: ``{"status": stopped|transcribed|failed, "error",
+    "note"}``, the note being why the browser could not convert it to WAV (``""`` if it did)."""
     try:
-        recordings.set_status(take_id, str(body.get("status", "")), str(body.get("error") or ""))
+        recordings.set_status(
+            take_id, str(body.get("status", "")), str(body.get("error") or ""),
+            str(body.get("note") or ""),
+        )
     except recordings.RecordingError as exc:
         raise _http(exc)
     return {"ok": True}
@@ -145,20 +149,30 @@ def recording_audio(take_id: str) -> FileResponse:
     return FileResponse(path, media_type=mime, headers={"Cache-Control": "no-store"})
 
 
-def _transcribe_kept(cfg: WebappConfig, take_id: str) -> Tuple[Dict[str, Any], int]:
-    """Send a kept take to the speech endpoint and record the outcome on it."""
+def _transcribe_kept(
+    cfg: WebappConfig, take_id: str, converted: Optional[bytes] = None,
+) -> Tuple[Dict[str, Any], int]:
+    """Send a kept take to the speech endpoint and record the outcome on it.
+
+    ``converted`` is the take as the browser's own 16 kHz mono WAV, which needs
+    no ffmpeg here; without it the stored recording goes as it was kept and the
+    server converts it if it can.
+    """
     try:
         path = recordings.audio_path(take_id)
         mime = recordings.mime_of(take_id)
     except recordings.RecordingError as exc:
         raise _http(exc)
-    content = path.read_bytes() if path.is_file() else b""
+    if converted:
+        name, mime, content = "recording.wav", "audio/wav", converted
+    else:
+        name, content = path.name, path.read_bytes() if path.is_file() else b""
     if not content:
         raise HTTPException(status_code=400, detail="empty recording")
     try:
         result = speech_client.transcribe_upload(
             cfg.speech_base_url, cfg.speech_model, cfg.speech_api_key,
-            path.name, content, mime,
+            name, content, mime,
         )
     except speech_client.SpeechError as exc:
         logger.warning("⚠️ kept recording transcription failed (HTTP %s)", exc.status)
@@ -169,10 +183,17 @@ def _transcribe_kept(cfg: WebappConfig, take_id: str) -> Tuple[Dict[str, Any], i
 
 
 @router.post("/api/transcribe/recordings/{take_id}/transcribe")
-async def recording_transcribe(request: Request, take_id: str) -> Dict[str, Any]:
-    """Transcribe a kept take again, on the worker pool the sync routes share."""
+async def recording_transcribe(
+    request: Request, take_id: str, file: Optional[UploadFile] = File(default=None),
+) -> Dict[str, Any]:
+    """Transcribe a kept take again, on the worker pool the sync routes share.
+
+    Settings converts the take to WAV in the browser and uploads it as ``file``;
+    a body-less call sends the stored recording, which the server converts.
+    """
     cfg = _endpoint(request)
-    result, size = await run_in_threadpool(_transcribe_kept, cfg, take_id)
+    converted = await file.read() if file else None
+    result, size = await run_in_threadpool(_transcribe_kept, cfg, take_id, converted)
     await audit_off_loop(
         audit.audit_event, "transcribe", bytes=size, silent=bool(result.get("silent")),
         client=client_ip(request), kept=True,

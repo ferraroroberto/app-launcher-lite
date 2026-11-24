@@ -33,9 +33,10 @@ function quiet(what) {
 }
 
 // Start keeping a take recorded from `stream` in `mime`. Returns
-// `{ stop, end(status, error) }`, or null when this browser cannot run a
+// `{ stop, end(status, error, note) }`, or null when this browser cannot run a
 // second recorder; `end` stops the copy and records how the take ended
-// (stopped, transcribed or failed) once every chunk has landed.
+// (stopped, transcribed or failed) once every chunk has landed. `note` is why
+// the browser could not convert the take to WAV, when it could not.
 export function keepTake(stream, mime) {
   let recorder;
   try {
@@ -73,13 +74,13 @@ export function keepTake(stream, mime) {
   }
   return {
     stop: stop,
-    end: function (status, error) {
+    end: function (status, error, note) {
       stop();
       // The recorder's last chunk is queued before 'stop' fires, so the chain
       // read after it holds every chunk.
       stopped.then(function () { return chain; }).then(function (id) {
         if (!id) return null;
-        return post(_BASE + '/' + id + '/finish', { status: status, error: error || '' });
+        return post(_BASE + '/' + id + '/finish', { status: status, error: error || '', note: note || '' });
       }).catch(quiet('recording the outcome'));
     },
   };

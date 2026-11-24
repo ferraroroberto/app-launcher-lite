@@ -19,7 +19,7 @@ def test_takes_upload_as_wav_and_the_recorder_container_is_the_fallback() -> Non
     upload = re.search(r"async function uploadForm\(blob\) \{(.*?)\n\}", voice, re.S)
     assert upload, "voice.js no longer builds its upload in uploadForm"
     body = upload.group(1)
-    assert body.index("takeToWav(blob)") < body.index("'recording.wav'") < body.index("'recording.' + ext")
+    assert body.index("takeToWav(blob") < body.index("'recording.wav'") < body.index("'recording.' + ext")
     assert "console.info" in body, "the fallback upload must say it is one"
     assert "uploadForm(blob)" in voice
 

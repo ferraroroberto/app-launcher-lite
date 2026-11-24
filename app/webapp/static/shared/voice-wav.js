@@ -34,11 +34,17 @@ function encodeWav(samples, rate) {
 
 // The recorded blob as a portable WAV, or null when this browser has no Web
 // Audio or cannot decode its own recording; the caller then uploads the
-// original and the server converts it if it can.
-export async function takeToWav(blob) {
+// original and the server converts it if it can. `onFail(reason)`, when
+// given, receives a plain sentence saying why it returned null, for the kept
+// take to carry.
+export async function takeToWav(blob, onFail) {
+  const fail = function (reason) {
+    if (onFail) onFail(reason);
+    return null;
+  };
   const Ctx = window.AudioContext || window.webkitAudioContext;
   const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-  if (!Ctx || !Offline) return null;
+  if (!Ctx || !Offline) return fail('this browser has no Web Audio to convert with');
   try {
     const bytes = await blob.arrayBuffer();
     const ctx = new Ctx();
@@ -59,6 +65,7 @@ export async function takeToWav(blob) {
     return encodeWav(rendered.getChannelData(0), WAV_RATE);
   } catch (exc) {
     console.warn('[dictation] Web Audio could not convert the take to WAV', exc);
-    return null;
+    return fail('this browser could not decode its own ' + (blob.type || 'unknown') +
+      ' recording (' + ((exc && exc.name) || 'error') + ')');
   }
 }

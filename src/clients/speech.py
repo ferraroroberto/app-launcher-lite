@@ -139,8 +139,10 @@ def transcribe_upload(
         if portable:
             raise
         raise SpeechError(f"Unsupported audio format: {exc} The recording was "
-                          f"{info['container']}, and ffmpeg is not on this PC's PATH to "
-                          "convert it to 16 kHz mono WAV.", status=415) from exc
+                          f"{info['container']}. This browser could not convert it to 16 kHz mono "
+                          "WAV, and ffmpeg is not on this PC's PATH, so the server could not "
+                          "either. Installing ffmpeg on this PC lets the server do it.",
+                          status=415) from exc
 
 
 def _was_refused(exc: BaseException) -> bool:
