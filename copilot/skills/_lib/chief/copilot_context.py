@@ -21,11 +21,11 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from fleet_core.hooks_state import state_dir
+from fleet_core.hooks_state import copilot_home, state_dir
 
 SESSIONS_STATE_FILENAME = "sessions-state.json"
 # Copilot keeps one folder per session here (copilot help config, "Files and directories").
-COPILOT_SESSION_STATE = Path.home() / ".copilot" / "session-state"
+COPILOT_SESSION_STATE = copilot_home() / "session-state"
 # A long session's log is large; the newest usage record sits near its end.
 TAIL_BYTES = 512 * 1024
 

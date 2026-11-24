@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "_lib"))
-from fleet_core.hooks_state import state_dir  # noqa: E402
+from fleet_core.hooks_state import copilot_home, state_dir  # noqa: E402
 
 import runtime_files  # noqa: E402
 
@@ -53,7 +53,7 @@ NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 REPORT_VERSION = 1
 STATUSES = ("verified", "unsupported", "unknown")
 REPORT_FILENAME = "copilot-probe.json"
-SESSION_STATE_DIR = Path.home() / ".copilot" / "session-state"
+SESSION_STATE_DIR = copilot_home() / "session-state"
 HOOK_EVENTS = ("sessionStart", "userPromptSubmitted", "agentStop", "sessionEnd")
 # The second live run also installs preToolUse, which denies every tool call.
 DENY_EVENTS = HOOK_EVENTS + ("preToolUse",)

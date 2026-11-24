@@ -51,6 +51,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.chief.copilot_state import copilot_home
+
 logger = logging.getLogger(__name__)
 
 TABLE = "assistant_usage_events"
@@ -67,12 +69,12 @@ PLAN_QUOTA = "premium_interactions"
 
 
 def default_db_path() -> Path:
-    return Path.home() / ".copilot" / "session-store.db"
+    return copilot_home() / "session-store.db"
 
 
 def default_config_path() -> Path:
     """The Copilot CLI's own settings file, which names the signed-in account."""
-    return Path.home() / ".copilot" / "config.json"
+    return copilot_home() / "config.json"
 
 
 def default_plan_cache_path() -> Path:
