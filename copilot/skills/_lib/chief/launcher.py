@@ -165,6 +165,16 @@ def fetch_running_fleet_jobs(base_url: str) -> Tuple[Optional[List[str]], Option
         return None, f"{type(exc).__name__}: {exc}"
 
 
+def board_running_fleet_jobs(board: Dict[str, Any]) -> Tuple[Optional[List[str]], Optional[str]]:
+    """`fetch_running_fleet_jobs`'s answer read from an `/api/board` payload's
+    `running_jobs`, so a Board read costs no `/api/jobs` call. A `null` or
+    missing list is its own `unknown` state, never "none running"."""
+    ids = board.get("running_jobs")
+    if not isinstance(ids, list):
+        return None, "board carries no running_jobs"
+    return rails.running_fleet_jobs({"jobs": [{"id": i, "running": True} for i in ids]}), None
+
+
 def fetch_chief_settings(base_url: str) -> Tuple[Optional[Dict[str, Any]], str]:
     """The launcher's `{"auto_compact_threshold": int}` -> `(settings, "")`,
     or `(None, why)` -- a launcher without the endpoint (404) is not the same

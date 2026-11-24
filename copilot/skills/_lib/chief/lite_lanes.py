@@ -113,7 +113,7 @@ def cmd_board(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(board, indent=2))
     else:
-        print(digest.format_board_digest(board, launcher.fetch_running_fleet_jobs(args.base_url)))
+        print(digest.format_board_digest(board, launcher.board_running_fleet_jobs(board)))
     return 0
 
 

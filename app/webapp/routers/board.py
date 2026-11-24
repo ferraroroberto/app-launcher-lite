@@ -317,9 +317,7 @@ async def _build_board_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[str
             "updated_at": active_issues["updated_at"],
             "count": len(active_issues["rows"]),
         },
-        # Age of the jobs runtime snapshot the job cards came from,
-        # so a stale one can never pass for current.
-        "jobs_snapshot": jobs_snapshot.latest_description(),
+        **_jobs_snapshot_fields(),
         # Where each backlog issue stands: the per-bucket counts every card
         # reads, and the sources the buckets could not read, so the client
         # says "unknown" instead of "Not planned".
@@ -328,6 +326,20 @@ async def _build_board_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[str
         # cache: ``available: false`` until a list has landed, never "none".
         # Each item carries its backlog ``bucket`` and whether it is ``counted``.
         "owner_checks": owner_section,
+    }
+
+
+def _jobs_snapshot_fields() -> Dict[str, Any]:
+    """The Board's reads of the jobs runtime snapshot the job cards came from.
+
+    ``jobs_snapshot`` is its age, so a stale one can never pass for current.
+    ``running_jobs`` is the running job ids from that same snapshot, ``null``
+    when unknown: the chief's ``board`` digest reads them here instead of
+    ``/api/jobs``, whose per-job schtasks reads cost seconds on a slow machine.
+    """
+    return {
+        "jobs_snapshot": jobs_snapshot.latest_description(),
+        "running_jobs": jobs_snapshot.latest_running_ids(),
     }
 
 
