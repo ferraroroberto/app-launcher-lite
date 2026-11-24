@@ -1,4 +1,4 @@
-"""Where Lite's Copilot-side state lives: ``~/.copilot/app-launcher-lite-state/``.
+"""Where Lite's Copilot-side state lives: ``app-launcher-lite-state/`` in the Copilot home (``COPILOT_HOME``, else ``~/.copilot``).
 
 The session-state file, the chief's plan, journal, mailbox and managed registry
 sit in one folder of the Copilot home. It is not under ``hooks/``: Copilot CLI
@@ -25,7 +25,8 @@ STATE_DIR_ENV_VAR = "COPILOT_HOOKS_STATE_DIR"
 
 
 def copilot_home() -> Path:
-    return Path.home() / ".copilot"
+    """``COPILOT_HOME`` when set, else ``~/.copilot``: the rule ``copilot/install.py`` uses."""
+    return Path(os.environ.get("COPILOT_HOME") or Path.home() / ".copilot")
 
 
 def legacy_state_dir() -> Path:

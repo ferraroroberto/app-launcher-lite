@@ -32,6 +32,7 @@ def _load(name: str, path: Path) -> ModuleType:
 def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     monkeypatch.delenv(copilot_state.STATE_DIR_ENV_VAR, raising=False)
+    monkeypatch.delenv("COPILOT_HOME", raising=False)
     return tmp_path
 
 
@@ -56,6 +57,23 @@ def test_every_tier_resolves_the_same_folder_before_and_after_a_migration(home: 
     assert {name: f() for name, f in resolvers.items()} == dict.fromkeys(resolvers, legacy)
     current.mkdir()
     assert {name: f() for name, f in resolvers.items()} == dict.fromkeys(resolvers, current)
+
+
+def test_copilot_home_moves_every_tier_and_the_installer_to_the_same_folder(
+        home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    elsewhere = tmp_path / "elsewhere"
+    monkeypatch.setenv("COPILOT_HOME", str(elsewhere))
+    monkeypatch.syspath_prepend(str(_COPILOT))
+    install = _load("lite_install", _COPILOT / "install.py")
+    expected = elsewhere / copilot_state.STATE_DIRNAME
+    assert Path(install.Paths().state) == expected
+    resolvers = _resolvers()
+    assert {name: f() for name, f in resolvers.items()} == dict.fromkeys(resolvers, expected)
+    legacy = elsewhere / "hooks" / "state"
+    legacy.mkdir(parents=True)
+    assert {name: f() for name, f in resolvers.items()} == dict.fromkeys(resolvers, legacy)
+    monkeypatch.setenv(copilot_state.STATE_DIR_ENV_VAR, str(tmp_path / "override"))
+    assert {name: f() for name, f in resolvers.items()} == dict.fromkeys(resolvers, tmp_path / "override")
 
 
 def test_a_setting_pinned_at_the_old_default_reads_through_to_the_state_folder(home: Path, tmp_path: Path) -> None:
