@@ -129,6 +129,58 @@ def test_offset_pins_query_is_cached_and_reports_failure_as_none():
     jobs_schtasks.invalidate_next_run_cache()
 
 
+_MISSING_FOLDER_STDERR = "ERROR: The system cannot find the file specified."
+_LISTING = (
+    "HostName:      HOST\n"
+    "TaskName:      \\Microsoft\\Other\n"
+    "Next Run Time: N/A\n"
+)
+
+
+def _schtasks_runner(*, folder_exists: bool, stderr: str, extra_listing: str = ""):
+    """Fake ``schtasks``: the folder-scoped queries fail like the real tool
+    when the folder is absent (or the XML dump fails for another reason);
+    the unscoped bulk listing always works."""
+
+    def run(argv):
+        if "/XML" in argv or ("/TN" in argv and not folder_exists):
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr=stderr)
+        return subprocess.CompletedProcess(
+            argv, 0, stdout=_LISTING + extra_listing, stderr=""
+        )
+
+    return run
+
+
+def test_missing_task_folder_is_no_tasks_and_logs_nothing(caplog):
+    jobs_schtasks.invalidate_next_run_cache()
+    schtasks_offsets._warned.clear()
+    with caplog.at_level("WARNING"):
+        pins = schtasks_offsets.registered_task_offset_pins(
+            _schtasks_runner(folder_exists=False, stderr=_MISSING_FOLDER_STDERR)
+        )
+    assert pins == {}
+    assert not [r for r in caplog.records if r.levelname == "WARNING"]
+    jobs_schtasks.invalidate_next_run_cache()
+
+
+def test_other_xml_failure_stays_unknown_and_logs_once(caplog):
+    schtasks_offsets._warned.clear()
+    runner = _schtasks_runner(
+        folder_exists=True,
+        stderr="ERROR: Access is denied.",
+        extra_listing="\nTaskName:      \\AppLauncherLite\\backup\n",
+    )
+    with caplog.at_level("WARNING"):
+        for _ in range(3):
+            jobs_schtasks.invalidate_next_run_cache()
+            assert schtasks_offsets.registered_task_offset_pins(runner) is None
+    warnings = [r for r in caplog.records if "pinned-offset check" in r.getMessage()]
+    assert len(warnings) == 1
+    assert "Access is denied" in warnings[0].getMessage()
+    jobs_schtasks.invalidate_next_run_cache()
+
+
 class TestCoverageOffsetPin:
     @pytest.fixture(autouse=True)
     def _no_history(self, monkeypatch):
