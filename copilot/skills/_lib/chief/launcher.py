@@ -2,7 +2,8 @@
 plus the one `glab issue view` per issue ref.
 
 Lite: a copy of fleet-config's `chief/launcher.py` with three seams changed --
-`DEFAULT_BASE_URL` is lite's webapp (plain HTTP on the port in its config.json), `fetch_issue_state`
+`DEFAULT_BASE_URL` is lite's webapp (the port in its config.json, reached over
+whichever scheme that port serves, `lite_webapp.py`), `fetch_issue_state`
 reads GitLab through `glab` and normalises to the `gh` shape the ported `rails`
 and `issues` read, and the Codex model catalog read is gone (Copilot is the only
 agent). Every endpoint path is the same on lite.
@@ -15,8 +16,8 @@ is reported as its own state by each wrapper, never folded into a verdict.
 
 from __future__ import annotations
 
+import http.client
 import json
-import ssl
 import subprocess
 import time
 import urllib.error
@@ -26,6 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import gitlab_namespace
 import lite_repos
+import lite_webapp
 from no_window import NO_WINDOW
 
 from . import rails
@@ -70,12 +72,20 @@ def transport_failure(exc: BaseException) -> Optional[Tuple[str, int]]:
     None for anything else (an HTTP status, a bad body) so it keeps its own
     handling.
 
-    Two distinct states, never folded together: `UNCONFIRMED` -- the launcher
-    stayed silent past the budget, so a write may still have landed -- and
-    `UNREACHABLE` -- the connection itself failed, so nothing was sent.
+    Distinct states, never folded together: `UNCONFIRMED` -- the launcher
+    stayed silent past the budget or dropped the connection, so a write may
+    still have landed -- `UNREACHABLE` -- the connection itself failed, so
+    nothing was sent -- and `WRONG_SCHEME` -- the port answered in the other
+    protocol, so the request was never handled and the next call uses the
+    scheme it serves. An HTTP status is the launcher refusing, handled by
+    each wrapper.
     """
     if is_timeout(exc):
         return f"UNCONFIRMED=timeout after {REQUEST_TIMEOUT:g}s", 1
+    if isinstance(exc, lite_webapp.WrongSchemeError):
+        return f"WRONG_SCHEME={exc.reason}", 2
+    if isinstance(exc, (ConnectionResetError, ConnectionAbortedError, http.client.HTTPException)):
+        return f"UNCONFIRMED=connection dropped with no answer ({type(exc).__name__})", 1
     if isinstance(exc, urllib.error.URLError) and not isinstance(exc, urllib.error.HTTPError):
         return f"UNREACHABLE={exc.reason}", 2
     return None
@@ -190,13 +200,6 @@ def fetch_chief_settings(base_url: str) -> Tuple[Optional[Dict[str, Any]], str]:
 
 # ---- the transport and the session-input wrappers ---------------------------
 
-def _ssl_context() -> ssl.SSLContext:
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
-
-
 def _request(
     base_url: str,
     path: str,
@@ -204,15 +207,9 @@ def _request(
     body: Optional[dict] = None,
     timeout: float = REQUEST_TIMEOUT,
 ) -> Dict[str, Any]:
-    url = base_url.rstrip("/") + path
-    assert_loopback(url)
-    data = json.dumps(body).encode("utf-8") if body is not None else None
-    headers = {"Content-Type": "application/json"} if data is not None else {}
-    req = urllib.request.Request(url, data=data, method=method, headers=headers)
-    context = _ssl_context() if url.startswith("https://") else None
-    with urllib.request.urlopen(req, timeout=timeout, context=context) as resp:
-        raw = resp.read().decode("utf-8")
-    return json.loads(raw) if raw else {}
+    """One JSON call to the webapp, over the scheme its port serves (`lite_webapp.request`)."""
+    assert_loopback(base_url.rstrip("/") + path)
+    return lite_webapp.request(base_url, path, method=method, body=body, timeout=timeout)
 
 
 # glab spawns its own API calls; one issue view is well under this on a working network.
