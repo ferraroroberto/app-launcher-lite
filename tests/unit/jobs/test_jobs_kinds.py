@@ -9,6 +9,7 @@ output.log) live in ``tests/unit/jobs/test_run_job_kinds.py``.
 from __future__ import annotations
 
 import shutil
+from pathlib import PurePosixPath
 
 import pytest
 
@@ -125,6 +126,25 @@ class TestBatchKind:
         )
         problems = BatchKind().validate(_job(script_path=str(bat)))
         assert len(problems) == 1 and problems[0].level == "warning"
+
+    def test_validate_checks_the_venv_reference_with_forward_slashes(self, tmp_path, monkeypatch):
+        text = "@echo off\r\nC:\\proj\\.venv\\Scripts\\python.exe app.py\r\n"
+        seen: list[str] = []
+
+        class _PosixPath(PurePosixPath):
+            """POSIX path rules, where a backslash is a file-name character."""
+
+            def is_file(self) -> bool:
+                seen.append(str(self))
+                return True
+
+            def read_text(self, **_kw) -> str:
+                return text
+
+        monkeypatch.setattr("src.jobs_kinds.batch.Path", _PosixPath)
+        BatchKind().validate(_job(script_path="/jobs/run.bat"))
+        # The bat itself is looked up first, then the venv reference.
+        assert seen[-1] == "C:/proj/.venv/Scripts/python.exe"
 
     @pytest.mark.parametrize(
         "bad_value",
