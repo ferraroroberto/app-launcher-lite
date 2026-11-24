@@ -40,7 +40,7 @@ flowchart TB
     MGR["manager.py\nWebappManager (start/stop/status)"]
     SHELLHTML["shell_html.py\nsplices static/views/*.html into index.html"]
     PRELOAD["module_preload.py\nmodulepreload links for the first-load module graph"]
-    JSBUNDLE["src/static_bundles/js_bundle.py\nES modules bundled at start\n(pinned esbuild via npx)"]
+    JSBUNDLE["src/static_bundles/js_bundle.py\nES modules bundled in the background after start\n(pinned esbuild via npx)"]
     DOORBELL["chief_doorbell.py\nrings an idle chief with pending mail"]
     subgraph routers["routers/"]
       R_MISC["misc.py — /, /healthz, /api/version, /api/system/load"]
@@ -69,7 +69,7 @@ flowchart TB
   WEBAPPCMD --> MGR
   WEBAPPPROC --> WSERVER
   WSERVER --> routers
-  WSERVER -->|"bundles the ES modules at start"| JSBUNDLE
+  WSERVER -->|"bundles the ES modules in the background"| JSBUNDLE
   MGR --> WSERVER
   WSERVER -->|"lifespan doorbell tick, canonical only"| DOORBELL
   RECONCILE["src/chief/reconcile.py

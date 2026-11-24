@@ -12,6 +12,7 @@ import logging
 import mimetypes
 import os
 import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -83,7 +84,7 @@ from src.launching import launcher
 from src.middleware import BearerTokenMiddleware
 from src.runtime_data import runtime_db_path
 from src.static_bundles.js_bundle import BUNDLE_DIR as JS_BUNDLE_DIR
-from src.static_bundles.js_bundle import BundleError, JsBundle, build_js_bundle
+from src.static_bundles.js_bundle import BundleError, build_js_bundle
 from src.static_versioning import (
     compute_asset_hashes,
     fleet_hash_of,
@@ -206,45 +207,63 @@ def _load_stylesheet_bundle(app: FastAPI, asset_hashes: Dict[str, str]) -> Optio
     return bundle
 
 
-def _load_js_bundle(app: FastAPI, asset_hashes: Dict[str, str]) -> Optional[JsBundle]:
-    """Bundle the ES modules and register the route that serves them, or ``None``.
+def _load_js_bundle(app: FastAPI, asset_hashes: Dict[str, str]) -> Optional[threading.Thread]:
+    """Start bundling the ES modules in the background and register the route that serves them.
 
-    Built (or read from its cache) under ``webapp/js-bundle/``. Every bundle
-    file takes the fleet hash, so the index's entry script and chunk preloads
-    are stamped like the chunk imports. On ``None`` the index keeps loading
-    ``main.js`` and its graph module by module.
+    A cold build can take minutes (esbuild is downloaded on first use), far
+    past the tray's readiness deadline, so ``create_app()`` returns at once and
+    ``app.state.js_bundle`` stays ``None`` until the build lands. Until then the
+    index keeps loading ``main.js`` and its graph module by module, and the
+    bundle route answers 404. Returns the build thread, or ``None`` when there
+    is nothing to bundle.
     """
     if not asset_hashes:
         return None
     fleet = app.state.asset_fleet_hash
-    try:
-        bundle = build_js_bundle(STATIC_DIR, PROJECT_ROOT / "webapp" / JS_BUNDLE_DIR, fleet)
-    except (BundleError, OSError, ValueError) as exc:
-        _log.warning("⚠️ could not bundle the ES modules; serving them separately: %s", exc)
-        return None
-    if bundle is None:
-        return None
-    for name in bundle.files:
-        if name.endswith(".js"):
-            asset_hashes[f"{JS_BUNDLE_DIR}/{name}"] = fleet
 
     def _serve_js_bundle(name: str) -> Response:
-        if name not in bundle.files:
+        bundle = getattr(app.state, "js_bundle", None)
+        if bundle is None or name not in bundle.files:
             return Response(status_code=404)
         body, media_type = bundle.files[name]
         return Response(body, media_type=media_type, headers={"Cache-Control": _LONG_CACHE})
 
     app.add_api_route(f"/static/{JS_BUNDLE_DIR}/{{name}}", _serve_js_bundle, include_in_schema=False)
-    size = sum(len(body) for name, (body, _) in bundle.files.items() if name.endswith(".js"))
-    _log.info("ℹ️ ES modules bundled into /static/%s/ (%d files, %d bytes of JS)",
-              JS_BUNDLE_DIR, len(bundle.files), size)
-    return bundle
+
+    def _build() -> None:
+        started = time.perf_counter()
+        try:
+            bundle = build_js_bundle(STATIC_DIR, PROJECT_ROOT / "webapp" / JS_BUNDLE_DIR, fleet)
+        except (BundleError, OSError, ValueError) as exc:
+            _log.warning("⚠️ could not bundle the ES modules; serving them separately: %s", exc)
+            return
+        except Exception:
+            _log.exception("❌ the ES-module bundle build crashed; serving the modules separately")
+            return
+        if bundle is None:
+            return
+        # The stamps go in before the bundle is published: a page rendered
+        # from the bundle must find every chunk's hash.
+        asset_hashes.update(
+            {f"{JS_BUNDLE_DIR}/{name}": fleet for name in bundle.files if name.endswith(".js")})
+        app.state.js_bundle = bundle
+        size = sum(len(body) for name, (body, _) in bundle.files.items() if name.endswith(".js"))
+        _log.info("ℹ️ ES modules bundled into /static/%s/ (%d files, %d bytes of JS) in %.1fs",
+                  JS_BUNDLE_DIR, len(bundle.files), size, time.perf_counter() - started)
+
+    thread = threading.Thread(target=_build, name="js-bundle-build", daemon=True)
+    thread.start()
+    return thread
 
 
 def _load_bundles(app: FastAPI, asset_hashes: Dict[str, str]) -> None:
-    """Build the stylesheet and ES-module bundles onto ``app.state``; either may be ``None``."""
+    """Build the stylesheet bundle now and start the ES-module bundle in the background.
+
+    ``app.state.js_bundle`` is ``None`` until that build lands, and stays so if it fails.
+    """
     app.state.stylesheet_bundle = _load_stylesheet_bundle(app, asset_hashes)
-    app.state.js_bundle = _load_js_bundle(app, asset_hashes)
+    app.state.js_bundle = None
+    app.state.js_bundle_thread = _load_js_bundle(app, asset_hashes)
 
 
 async def _reconcile_orphan_mirror_windows(app: FastAPI) -> None:

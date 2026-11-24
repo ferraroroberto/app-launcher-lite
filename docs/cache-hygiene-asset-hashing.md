@@ -97,14 +97,18 @@ iPhone PWA never serves a stale asset against fresh HTML, or vice versa.
 - The served page loads the modules as one bundle. Even preloaded, each module
   is its own response, and on the phone profile responses finish about 15 ms
   apart whatever their size, so about 60 modules, not their bytes, set when the
-  Board's lanes draw. At start the server bundles `main.js`'s graph with a
+  Board's lanes draw. After start, in a background thread, the server bundles `main.js`'s graph with a
   pinned esbuild (`src/static_bundles/js_bundle.py`, run through `npx`) into an
   entry, shared chunks and one chunk per module some code loads with
   `import()`, so every lazy view above still loads on first open. The chunks
   are minified for whitespace and syntax but keep their names, and source maps
   are served beside them. The build is cached under `webapp/js-bundle/` per
   fleet hash: any module edit rebuilds it on the next start, and a restart with
-  no edit reads the cache. Every bundle file takes the fleet hash, and each
+  no edit reads the cache. The build never holds up startup: a cold run can
+  take minutes while `npx` fetches esbuild, so `/healthz` answers at once and
+  a page loaded before the build lands gets the separate modules; the bundle
+  routes answer 404 until then and serve the bundle after, and the next page
+  load switches over. Every bundle file takes the fleet hash, and each
   chunk import carries it, because a chunk loaded under two URLs would be two
   module instances. esbuild's metafile records which chunk each source module
   became, so the same `@modulepreload` markers name the chunks a boot needs: a
@@ -187,5 +191,5 @@ manual step this mechanism exists to kill.
 ## Out of scope (deliberately)
 
 - Service-worker offline cache — separate, much larger change.
-- A build-time bundler. The server bundles the ES modules itself at start (`src/static_bundles/js_bundle.py`), so contributors still run no build step.
+- A build-time bundler. The server bundles the ES modules itself in the background after start (`src/static_bundles/js_bundle.py`), so contributors still run no build step.
 - CI hooks for a validation pipeline on this mechanism.

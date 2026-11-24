@@ -40,6 +40,7 @@ from app.webapp.event_loop import LOOP_FACTORY
 from app.webapp.serve import HYPERCORN, SERVERS
 from app.webapp.serve_modes import SERVE_MODES_MODULE, ServePlan, serve_plan
 from src.app_config import DEFAULT_WEBAPP_PORT, webapp_port
+from src.diagnostics import listener_pids
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
 
 logger = logging.getLogger(__name__)
@@ -461,15 +462,39 @@ class WebappManager:
                 return status
         return self.status()
 
+    def _port_holder_detail(self) -> str:
+        """Who holds the port, as a clause for a failed start's log line.
+
+        The spawned webapp's stderr goes nowhere, so a bind failure (Windows
+        ``WinError 10013``: the port is held exclusively or sits in an excluded
+        range) leaves no trace beyond "did not become ready". The child's exit
+        code plus the listener pids make the next occurrence diagnosable.
+        """
+        pids = listener_pids(self.config.port)
+        if pids is None:
+            holder = "port holder could not be read"
+        elif pids:
+            holder = f"listening pid(s) {', '.join(str(pid) for pid in pids)}"
+        else:
+            holder = "nothing is listening"
+        code = self.child_exit_code()
+        child = "spawned webapp still running" if code is None else f"spawned webapp exited {code}"
+        return f"port {self.config.port}: {holder}; {child}"
+
     def wait_until_ready(self) -> None:
         deadline = time.time() + self.config.startup_timeout_seconds
         while time.time() < deadline:
             if self._proc is None or self._proc.poll() is not None:
+                logger.error(f"❌ webapp exited before becoming ready ({self._port_holder_detail()})")
                 raise RuntimeError("❌ webapp uvicorn exited before becoming ready")
             if self.is_reachable():
                 logger.info(f"✅ Webapp ready at {self.base_url}")
                 return
             time.sleep(self.config.poll_interval_seconds)
+        logger.error(
+            f"❌ webapp not ready within {self.config.startup_timeout_seconds}s "
+            f"({self._port_holder_detail()})"
+        )
         raise RuntimeError(
             f"❌ webapp did not become ready within "
             f"{self.config.startup_timeout_seconds}s"
