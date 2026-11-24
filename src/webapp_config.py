@@ -830,6 +830,11 @@ def _validate(cfg: WebappConfig) -> None:
             cfg.copilot_model,
         )
         cfg.copilot_model = ""
+    _validate_chief_timers(cfg)
+
+
+def _validate_chief_timers(cfg: WebappConfig) -> None:
+    """The chief's two 0-is-off numbers: the fallback wake and auto-compact."""
     if not (0 <= cfg.chief_fallback_minutes <= MAX_CHIEF_FALLBACK_MINUTES):
         raise ValueError(
             "chief_fallback_minutes must be 0 (off) or up to "
