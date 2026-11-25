@@ -42,13 +42,47 @@ function retryListeners() {
   fetchListeners().catch(function () {});
 }
 
+// The server scans in the background and answers from its cache, so the first
+// read after an idle spell can precede the first scan ("warming"): look again
+// shortly instead of waiting out the 5 s poll.
+const WARMING_RETRY_MS = 1500;
+let warmingTimer = null;
+
+// The probe has no trustworthy list right now (warming, a scan over its budget,
+// a failed or unreadable scan): never an empty list. The last good list stays
+// on screen, marked stale; with none, it is "Checking…" or an error with Retry.
+function showListenersUnknown(body) {
+  const warming = body.reason === 'warming';
+  listenersFailed = !warming;
+  if (state.listeners != null) {
+    setAsyncState(els.listenersState, 'stale', { message: staleMessage(listenersReadAt) });
+  } else if (warming) {
+    setAsyncState(els.listenersState, 'loading', { message: 'Checking the ports…' });
+  } else {
+    setAsyncState(els.listenersState, 'error', {
+      message: 'Could not check the ports.', retry: retryListeners,
+    });
+  }
+  renderOtherPortsRow();
+  if (warming && warmingTimer == null) {
+    warmingTimer = setTimeout(function () {
+      warmingTimer = null;
+      retryListeners();
+    }, WARMING_RETRY_MS);
+  }
+}
+
 export async function fetchListeners() {
   // Apps-tab-only, like fetchRunningApps: nothing else reads
   // state.listeners, so a probe for another tab or a hidden page is waste.
   if (state.tab !== 'apps' || document.hidden) return;
   try {
     const body = await jsonApi('/api/ports/probe');
-    state.listeners = body.listeners || [];
+    if (body.listeners == null) {
+      showListenersUnknown(body);
+      return;
+    }
+    state.listeners = body.listeners;
     listenersReadAt = Date.now();
     listenersFailed = false;
     setAsyncState(els.listenersState, 'ready');

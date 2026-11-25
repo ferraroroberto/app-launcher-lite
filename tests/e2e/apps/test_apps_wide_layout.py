@@ -81,6 +81,17 @@ def _wide(page: Page, width: int) -> None:
     page.set_viewport_size({"width": width, "height": 900})
 
 
+def _assert_unknown_probe_keeps_the_list(page: Page) -> None:
+    """The server answers from a background sampler; while it has no trustworthy
+    snapshot (a scan over its budget) it says ``listeners: null`` with a reason.
+    The last good list stays, marked stale, never read as "nothing listening"."""
+    _json(page, _PROBE_RE.pattern, {
+        "listeners": None, "reason": "overrun", "detail": "the scan has run 12.0s", "age_seconds": 20.0})
+    page.locator("#tabApps").click()
+    expect(page.locator("#listenersState")).to_have_attribute("data-state", "stale")
+    expect(page.locator("#otherPortsCard #listenersList .listener-row")).to_have_count(2)
+
+
 @pytest.mark.parametrize("width", _WIDTHS)
 def test_wide_apps_is_two_columns_list_then_pane(
     authed_page: Page, base_url: str, browser_name: str, width: int
@@ -166,6 +177,8 @@ def test_wide_apps_is_two_columns_list_then_pane(
     confirm.locator("#confirmDialogOk").click()
     wait_until(page, lambda: len(stops) == 1, "the confirmed Stop")
     assert stops[0].endswith("/api/apps/beta-web/instances/4242/stop"), stops
+
+    _assert_unknown_probe_keeps_the_list(page)
 
 
 def test_wide_idle_column_says_nothing_runs_with_the_app_count(

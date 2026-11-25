@@ -49,6 +49,7 @@ app-launcher-lite/
 │   ├── request_timing.py       # per-request queue/worker time, the budget table, in-flight peaks
 │   ├── health_snapshot.py      # the read-only `launcher.py health` report
 │   ├── performance_health.py   # the read-only health line under Settings > Performance
+│   ├── monitoring/             # background samplers behind the read-only readings: the Apps tab port listeners (listeners_sampler.py)
 │   ├── static_versioning.py    # content-hash query strings for asset cache-busting
 │   ├── stylesheet_bundle.py    # the linked stylesheets concatenated into the one /static/bundle.css
 │   ├── static_bundles/         # js_bundle.py: main.js's module graph bundled at start by a pinned esbuild into /static/js-bundle/

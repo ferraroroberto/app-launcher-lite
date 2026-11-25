@@ -31,13 +31,14 @@ from src.desktop import session_kind
 from src.desktop.browser import is_web_url, open_url
 from src.diagnostics import (
     detect_local_scheme,
-    find_pids_on_port,
     kill_pids,
     list_app_listeners,
+    listener_pids,
 )
 from src.git_utils import resolve_deployed_sha
 from src.launching.vscode_workspace import is_vscode_installed
 from src.middleware import is_pc_itself, via_cloudflare
+from src.monitoring.listeners_sampler import ListenersSampler
 from src.registry import load_registry
 from src.scanner import pretty_folder_name
 from src.session_host_paths import declared_session_host_paths, paths_touched_between
@@ -385,22 +386,22 @@ async def desktop_session(request: Request) -> Dict[str, Any]:
     return {"state": state, "this_pc": _is_this_pc(request)}
 
 
-# Each listener's scheme, keyed by (pid, port). The TLS probe can
-# take up to a second a port and the Apps tab polls this route, so a live
-# listener is probed once; entries for listeners that are gone are dropped
-# on every call.
+# Each listener's scheme, keyed by (pid, port). The TLS probe can take up to a
+# second a port, so a live listener is probed once, by the background scan;
+# entries for listeners that are gone are dropped on every scan.
 _LISTENER_SCHEMES: Dict[Tuple[int, int], str] = {}
 
 
-async def _listener_url(tailnet_host: str, pid: int, port: int) -> Optional[str]:
+def _listener_url(tailnet_host: str, pid: int, port: int) -> Optional[str]:
     """The phone-openable URL for a listener, or ``None`` without a
-    ``tailnet_host`` — the same shape as a running app's Open (apps.py)."""
+    ``tailnet_host`` — the same shape as a running app's Open (apps.py).
+    Blocking (the first sight of a listener probes its scheme): scan thread only."""
     if not tailnet_host:
         return None
     key = (pid, port)
     scheme = _LISTENER_SCHEMES.get(key)
     if scheme is None:
-        scheme = await run_on(APP_PROBES, detect_local_scheme, port)
+        scheme = detect_local_scheme(port)
         _LISTENER_SCHEMES[key] = scheme
     return f"{scheme}://{tailnet_host}:{port}/"
 
@@ -432,30 +433,21 @@ async def open_link_on_pc(request: Request) -> Dict[str, Any]:
     return {"opened": True, "browser": browser}
 
 
-@router.get("/api/ports/probe")
-async def probe_ports(request: Request) -> Dict[str, Any]:
-    """Discover every LISTEN socket owned by a python/streamlit process.
+def _listener_rows(app: Any) -> List[Dict[str, Any]]:
+    """One scan: every app-server listener as a response row.
 
-    Streamlit auto-increments its port past 8501, so a fixed port
-    list misses apps — this enumerates listeners dynamically. Each
-    listener is labelled with the app it belongs to (matched on the
-    process's working directory) so you know what you're killing, and
-    carries the ``url`` its row's Open uses.
+    Blocking (psutil, the registry file, a TLS probe per new listener), so it
+    runs only on the sampler's own thread, never per request. Raises
+    ``ListenerScanUnavailable`` when the socket table cannot be read.
     """
     dir_names = _registered_dir_names()
-    # psutil's socket + process scan takes ~1 s. On the event loop it stalled
-    # every other request the webapp was serving, and the Apps tab polls
-    # this route every 5 s.
-    owners = await run_on(APP_PROBES, list_app_listeners)
+    owners = list_app_listeners()
     pid_to_port = {o.pid: o.port for o in owners}
-    tailnet_host = (request.app.state.app_config.tailnet_host or "").strip()
+    tailnet_host = (app.state.app_config.tailnet_host or "").strip()
     live = {(o.pid, o.port) for o in owners}
     for key in [k for k in _LISTENER_SCHEMES if k not in live]:
         del _LISTENER_SCHEMES[key]
-    urls = await asyncio.gather(
-        *(_listener_url(tailnet_host, o.pid, o.port) for o in owners)
-    )
-    out = [
+    return [
         {
             "port": owner.port,
             "pid": owner.pid,
@@ -467,19 +459,53 @@ async def probe_ports(request: Request) -> Dict[str, Any]:
             # the parent app's row instead of duplicating the app name.
             "parent_port": pid_to_port.get(owner.parent_pid) if owner.parent_pid else None,
             "service": _service_label(owner.cmdline),
-            "url": url,
+            "url": _listener_url(tailnet_host, owner.pid, owner.port),
         }
-        for owner, url in zip(owners, urls)
+        for owner in owners
     ]
-    return {"listeners": out}
+
+
+def listeners_sampler(app: Any) -> ListenersSampler[List[Dict[str, Any]]]:
+    """The app's port-listeners sampler (its lifespan ticks it while polled)."""
+    sampler = getattr(app.state, "listeners_sampler", None)
+    if sampler is None:
+        sampler = app.state.listeners_sampler = ListenersSampler(lambda: _listener_rows(app))
+    return sampler
+
+
+@router.get("/api/ports/probe")
+async def probe_ports(request: Request) -> Dict[str, Any]:
+    """Every LISTEN socket owned by a python/streamlit process, from the cache.
+
+    Streamlit auto-increments its port past 8501, so a fixed port list misses
+    apps — the sampler enumerates listeners dynamically. Each is labelled with
+    the app it belongs to (matched on the process's working directory) so you
+    know what you're killing, and carries the ``url`` its row's Open uses.
+
+    A read never scans: a background sampler keeps the snapshot (the scan costs
+    seconds on a slow box). ``listeners`` is ``null`` with a ``reason``
+    (``warming``, ``overrun``, ``error``, ``unavailable``, ``stale``) when no
+    trustworthy snapshot exists, never an empty list; ``age_seconds`` is the
+    snapshot's age.
+    """
+    reading = listeners_sampler(request.app).read()
+    return {
+        "listeners": reading.value,
+        "reason": reading.reason,
+        "detail": reading.detail,
+        "age_seconds": reading.age_seconds,
+    }
 
 
 @router.post("/api/ports/{port}/kill")
 async def kill_port(port: int) -> Dict[str, Any]:
     if port < 1 or port > 65535:
         raise HTTPException(status_code=400, detail="port out of range")
-    # The same psutil scan as the probe, plus the kills: off the loop.
-    pids = await run_on(APP_PROBES, find_pids_on_port, port)
+    # One socket-table read, off the loop; this process is never a target.
+    found = await run_on(APP_PROBES, listener_pids, port)
+    if found is None:
+        raise HTTPException(status_code=503, detail="could not read the socket table, so nothing was stopped")
+    pids = [pid for pid in found if pid != os.getpid()]
     if not pids:
         return {"port": port, "killed": [], "detail": "nothing was listening"}
     killed, errors = await run_on(OUTBOUND, kill_pids, pids)

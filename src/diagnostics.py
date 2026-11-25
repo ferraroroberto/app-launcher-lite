@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------- port introspection
 
 
+class ListenerScanUnavailable(Exception):
+    """The listener scan could not be measured (psutil missing, socket table
+    refused). Distinct from an empty list, which means nobody is listening."""
+
+
 @dataclass
 class PortOwner:
     pid: int
@@ -40,32 +45,6 @@ class PortOwner:
 
     def cmdline_str(self) -> str:
         return " ".join(self.cmdline) if self.cmdline else ""
-
-
-def find_pids_on_port(port: int) -> List[int]:
-    """Return all PIDs LISTENing on ``port`` (smart-kill helper)."""
-    if psutil is None:
-        return []
-    own_pid = os.getpid()
-    pids: set[int] = set()
-    try:
-        for proc in psutil.process_iter(["pid", "name"]):
-            try:
-                for conn in proc.net_connections(kind="inet"):
-                    if (
-                        conn.status == psutil.CONN_LISTEN
-                        and conn.laddr
-                        and conn.laddr.port == port
-                    ):
-                        pid = proc.info["pid"]
-                        if pid and pid != own_pid:
-                            pids.add(pid)
-            except (psutil.AccessDenied, psutil.NoSuchProcess):
-                continue
-    except (psutil.AccessDenied, PermissionError, OSError) as exc:
-        logger.debug(f"find_pids_on_port denied ({exc})")
-        return []
-    return sorted(pids)
 
 
 def listener_pids(port: int) -> Optional[List[int]]:
@@ -192,17 +171,18 @@ def list_app_listeners() -> List[PortOwner]:
 
     Walks all listeners and keeps the ones whose owning process looks like
     a Streamlit / FastAPI app, so the smart-kill panel finds apps wherever
-    they bound.
+    they bound. Raises :class:`ListenerScanUnavailable` when the socket table
+    cannot be read: that is unknown, not "nothing is listening".
     """
     if psutil is None:
-        return []
+        raise ListenerScanUnavailable("psutil is not installed")
     own_pid = os.getpid()
     found: dict[int, PortOwner] = {}
     try:
         connections = psutil.net_connections(kind="inet")
     except (psutil.AccessDenied, PermissionError, OSError) as exc:
         logger.debug(f"list_app_listeners: net_connections denied ({exc})")
-        return []
+        raise ListenerScanUnavailable(f"the socket table could not be read ({type(exc).__name__})") from exc
 
     for conn in connections:
         try:
