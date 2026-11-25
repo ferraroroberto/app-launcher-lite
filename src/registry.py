@@ -67,6 +67,32 @@ class RegistryReadError(Exception):
     """
 
 
+class AmbiguousAppId(Exception):
+    """Raised by a by-id helper when more than one row carries the id.
+
+    Acting on the first match could change the wrong app, so the caller must
+    refuse and say why. ``load_registry`` migrates duplicates away, so this
+    only fires for a registry built or edited outside that path.
+    """
+
+    def __init__(self, app_id: str, count: int) -> None:
+        self.app_id = app_id
+        super().__init__(
+            f"app id {app_id!r} is shared by {count} rows (more than one app "
+            "has this id); it cannot be used until the ids are unique"
+        )
+
+
+def unique_id(base: str, taken: set[str]) -> str:
+    """``base``, or ``base-2``, ``base-3``... the first one not in ``taken``."""
+    if base not in taken:
+        return base
+    n = 2
+    while f"{base}-{n}" in taken:
+        n += 1
+    return f"{base}-{n}"
+
+
 @dataclass
 class AppEntry:
     id: str
@@ -156,7 +182,40 @@ def load_registry(path: Optional[Path] = None, *, strict: bool = False) -> Regis
                 autostart=bool(row.get("autostart")),
             )
         )
-    return Registry(scan_root=str(raw.get("scan_root") or ""), apps=apps)
+    reg = Registry(scan_root=str(raw.get("scan_root") or ""), apps=apps)
+    if _dedupe_ids(reg, target):
+        try:
+            save_registry(reg, target)
+        except OSError as exc:
+            logger.warning(f"⚠️  Could not save migrated app ids to {target}: {exc}")
+    return reg
+
+
+def _dedupe_ids(reg: Registry, target: Path) -> bool:
+    """Give every later row that repeats an id a stable unique one, in place.
+
+    The first row keeps its id, so whatever references it stays valid; each
+    later one becomes ``<id>-2``, ``<id>-3``... skipping ids already used.
+    Returns whether any row changed. Empty ids are left alone: they carry no
+    identity to collide on.
+    """
+    taken = {a.id for a in reg.apps}
+    seen: set[str] = set()
+    changed = False
+    for entry in reg.apps:
+        if not entry.id:
+            continue
+        if entry.id in seen:
+            new_id = unique_id(entry.id, taken)
+            logger.warning(
+                f"⚠️  Duplicate app id {entry.id!r} in {target} "
+                f"({entry.bat_path or entry.name}); renamed to {new_id!r}"
+            )
+            entry.id = new_id
+            taken.add(new_id)
+            changed = True
+        seen.add(entry.id)
+    return changed
 
 
 def save_registry(reg: Registry, path: Optional[Path] = None) -> Path:
@@ -235,14 +294,17 @@ def discover_new(
     have_paths: set[str] = {a.bat_path for a in existing.apps if a.bat_path}
 
     new: List[AppEntry] = []
+    taken_ids: set[str] = {a.id for a in existing.apps}
     for bat, kind in scan_app_bats(scan_root):
         if str(bat) in have_paths:
             continue
         if mini_root is not None and _same_folder(bat.parent, mini_root):
             continue
+        new_id = unique_id(app_id_from_path(bat, scan_root), taken_ids)
+        taken_ids.add(new_id)
         new.append(
             AppEntry(
-                id=app_id_from_path(bat, scan_root),
+                id=new_id,
                 name=pretty_folder_name(bat.parent),
                 kind=kind,
                 bat_path=str(bat),
@@ -250,13 +312,11 @@ def discover_new(
         )
 
     if mini_root is not None:
-        taken_ids = {a.id for a in existing.apps} | {a.id for a in new}
         for bat in scan_mini_bats(mini_root):
             if str(bat) in have_paths:
                 continue
-            mini_id = f"{KIND_MINI}-{slugify(bat.stem)}"
-            if mini_id in taken_ids:
-                continue
+            mini_id = unique_id(f"{KIND_MINI}-{slugify(bat.stem)}", taken_ids)
+            taken_ids.add(mini_id)
             new.append(
                 AppEntry(
                     id=mini_id,
@@ -274,11 +334,16 @@ def persist_additions(
 ) -> List[AppEntry]:
     """Merge ``additions`` into ``reg`` and write to disk. Returns added rows."""
     have_ids: set[str] = {a.id for a in reg.apps}
+    have_paths: set[str] = {a.bat_path for a in reg.apps if a.bat_path}
     added: List[AppEntry] = []
     stamp = datetime.now().isoformat(timespec="seconds")
     for entry in additions:
-        if entry.id in have_ids:
+        if entry.bat_path and entry.bat_path in have_paths:
             continue
+        entry.id = unique_id(entry.id, have_ids)
+        have_ids.add(entry.id)
+        if entry.bat_path:
+            have_paths.add(entry.bat_path)
         entry.added_at = entry.added_at or stamp
         reg.apps.append(entry)
         added.append(entry)
@@ -288,24 +353,36 @@ def persist_additions(
     return added
 
 
+def get_by_id(reg: Registry, app_id: str) -> Optional[AppEntry]:
+    """The one row with ``id == app_id``, or ``None``.
+
+    Raises :class:`AmbiguousAppId` when several rows share the id: every
+    by-id helper resolves through here so none acts on the first match.
+    """
+    matches = [a for a in reg.apps if a.id == app_id]
+    if len(matches) > 1:
+        raise AmbiguousAppId(app_id, len(matches))
+    return matches[0] if matches else None
+
+
 def remove_by_id(reg: Registry, app_id: str) -> Optional[AppEntry]:
     """Drop the entry with ``id == app_id``. Returns the removed entry."""
-    for i, entry in enumerate(reg.apps):
-        if entry.id == app_id:
-            removed = reg.apps.pop(i)
-            save_registry(reg)
-            return removed
-    return None
+    entry = get_by_id(reg, app_id)
+    if entry is None:
+        return None
+    reg.apps.remove(entry)
+    save_registry(reg)
+    return entry
 
 
 def rename_by_id(reg: Registry, app_id: str, new_name: str) -> Optional[AppEntry]:
-    for entry in reg.apps:
-        if entry.id == app_id:
-            entry.name = new_name
-            reg.apps.sort(key=lambda a: a.name.lower())
-            save_registry(reg)
-            return entry
-    return None
+    entry = get_by_id(reg, app_id)
+    if entry is None:
+        return None
+    entry.name = new_name
+    reg.apps.sort(key=lambda a: a.name.lower())
+    save_registry(reg)
+    return entry
 
 
 def set_autostart_by_id(
@@ -314,13 +391,9 @@ def set_autostart_by_id(
     """Flip the autostart flag for ``app_id``. Meaningless on an entry that is
     neither a ``tray`` nor a ``mini`` one, but not rejected — the API layer
     scopes which rows offer the toggle."""
-    for entry in reg.apps:
-        if entry.id == app_id:
-            entry.autostart = autostart
-            save_registry(reg)
-            return entry
-    return None
-
-
-def get_by_id(reg: Registry, app_id: str) -> Optional[AppEntry]:
-    return next((a for a in reg.apps if a.id == app_id), None)
+    entry = get_by_id(reg, app_id)
+    if entry is None:
+        return None
+    entry.autostart = autostart
+    save_registry(reg)
+    return entry
