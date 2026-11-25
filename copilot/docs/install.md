@@ -128,4 +128,4 @@ The chief and its lanes can stay up. The move copies the old folder, then switch
 ## Config files
 
 - `config/webapp_config.json`: the installer adds `skills_dir` (empty) only when the key is missing. It writes a timestamped backup next to the file first (`webapp_config.json.bak-<date>-<time>`) and prints the key it added. It never changes an existing value. A file that does not parse is reported as `[unknown]` and left untouched.
-- `config/config.json` is committed with the repo and is never edited by the installer.
+- `config/config.json` is this PC's own (gitignored; `setup.bat` creates it from its sample) and the Copilot installer never edits it.

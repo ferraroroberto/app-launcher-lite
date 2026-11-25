@@ -22,6 +22,41 @@ not_owns   = ["app code it launches", "the forge"]
 depends_on = ["app-launcher"]
 
 # ---------------------------------------------------------------------------
+# [install] -- what `setup.bat` does on a PC (the vendored src/installer.py;
+# schema: project-scaffolding docs/installer.md). A `settings` file that exists
+# gains only the keys its sample has and it lacks, after a backup. Every other
+# config under `samples` is the owner's own registry (apps, jobs): created when
+# missing, never rewritten. A check exits 0 ok, 1 missing, anything else unknown.
+[install]
+requirements = "requirements.txt"
+samples      = ["config"]
+settings     = ["config/config.json", "config/webapp_config.json"]
+
+[install.startup]
+check    = ["{python}", "-B", "-m", "src.launching.install_checks", "startup-status"]
+register = ["{python}", "-B", "-m", "src.launching.install_checks", "startup-enable"]
+
+[[install.check]]
+name    = "Sign-in password"
+command = ["{python}", "-B", "-m", "src.launching.install_checks", "signin"]
+hint    = "set one with: .venv\\Scripts\\python.exe -m src.password set"
+
+[[install.check]]
+name  = "HTTPS certificate"
+paths = ["webapp/certificates/cert.pem", "webapp/certificates/key.pem"]
+hint  = "run: .venv\\Scripts\\python.exe scripts\\gen_tailscale_cert.py"
+
+[[install.check]]
+name  = "Copilot CLI"
+which = "copilot"
+hint  = "see docs/installing-agent-clis.md"
+
+[[install.check]]
+name  = "GitLab CLI (glab)"
+which = "glab"
+hint  = "see docs/installing-agent-clis.md"
+
+# ---------------------------------------------------------------------------
 # [worktree] -- gitignored paths fleet-config junctions from this primary
 # checkout into every fresh worktree it cuts (skills/_lib/worktree_claim.py's
 # `worktree_junction_targets`). `.venv` is always included; the declaration
@@ -43,6 +78,7 @@ depends_on = ["app-launcher"]
 extra_junctions = ["webapp/certificates"]
 
 [vendored]
+installer = { src = "src/installer.py", sha = "bafa9446b907dcb7fc6d833c1edfb1a069b7ca38", dest = "src/installer.py" }
 windows_only_ratchet = { src = "scripts/windows_only_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/windows_only_ratchet.py" }
 port_host_ratchet = { src = "scripts/port_host_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/port_host_ratchet.py" }
 clean_tree_ratchet = { src = "scripts/clean_tree_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/clean_tree_ratchet.py" }

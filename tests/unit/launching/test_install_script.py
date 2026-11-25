@@ -1,7 +1,9 @@
-"""``setup.bat`` / ``src/launching/installer.py`` keeps what a PC has configured.
+"""``setup.bat``'s install keeps what a PC has configured, with this app's ``[install]`` table.
 
-Every run here targets a temp folder holding copies of the tracked samples; the
-live ``config/`` and the real Startup folder are never touched.
+The installer itself is vendored (``src/installer.py``); these runs prove this
+repo's declaration of it. Every run targets a temp checkout holding copies of the
+tracked files, so the live ``config/`` and the real Startup folder are never
+touched. venv, pip and the probes are faked; ``git check-ignore`` is real.
 """
 
 from __future__ import annotations
@@ -9,155 +11,123 @@ from __future__ import annotations
 import datetime
 import json
 import shutil
+import subprocess
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict, List
 
 import pytest
 
-from src.launching import installer as install
+from src import boot_autostart, installer
+from src.git_utils import run_git
+from src.launching import install_checks
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXED_NOW = datetime.datetime(2026, 1, 2, 3, 4, 5)
 BACKUP_SUFFIX = ".bak-20260102-030405"
+TRACKED = (".fleet.toml", ".gitignore", "requirements.txt")
 
 
-def _snapshot(root: Path) -> Dict[str, bytes]:
-    return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+def _runner(root: Path) -> installer.Runner:
+    def run(command: List[str], **kwargs: Any) -> "subprocess.CompletedProcess[Any]":
+        if command[0] == "git":
+            return subprocess.run(command, **kwargs)  # no-window-exempt: the installer passes creationflags
+        if command[1:3] == ["-m", "venv"]:
+            python = installer.venv_python(root)
+            python.parent.mkdir(parents=True)
+            python.write_bytes(b"")
+        # A probe answers "missing": its own module is tested below.
+        return subprocess.CompletedProcess(command, 1 if "src.launching.install_checks" in command else 0)
+
+    return run
 
 
 @pytest.fixture
 def root(tmp_path: Path) -> Path:
-    """A checkout with only the tracked config samples in it."""
+    """A git checkout holding only what the install reads."""
     checkout = tmp_path / "checkout"
     (checkout / "config").mkdir(parents=True)
+    for name in TRACKED:
+        shutil.copy(REPO_ROOT / name, checkout / name)
     for sample in (REPO_ROOT / "config").glob("*.sample.json"):
         shutil.copy(sample, checkout / "config" / sample.name)
+    assert run_git(checkout, ["init", "-q"]) is not None
     return checkout
 
 
-@pytest.fixture
-def startup_dir(tmp_path: Path) -> Path:
-    folder = tmp_path / "startup"
-    folder.mkdir()
-    return folder
+def _run(root: Path, *, what_if: bool = False) -> installer.Report:
+    return installer.run(root, what_if=what_if, runner=_runner(root), now=lambda: FIXED_NOW)
 
 
-def _run(root: Path, startup_dir: Path, **kwargs: object) -> install.Report:
-    return install.run(root, deps=False, startup_dir=startup_dir, now=lambda: FIXED_NOW, **kwargs)  # type: ignore[arg-type]
+def _snapshot(root: Path) -> Dict[str, bytes]:
+    return {p.relative_to(root).as_posix(): p.read_bytes() for p in sorted(root.rglob("*"))
+            if p.is_file() and ".git" not in p.relative_to(root).parts}
 
 
-def test_a_fresh_checkout_gets_every_config_from_its_sample(root: Path, startup_dir: Path) -> None:
-    report = _run(root, startup_dir, what_if=False)
-    for sample in (root / "config").glob("*.sample.json"):
-        target = sample.with_name(sample.name.replace(".sample.json", ".json"))
-        assert target.read_bytes() == sample.read_bytes()
-    assert {item for status, item, _ in report.lines if status == "created"} == {
-        "config/apps.json", "config/config.json", "config/jobs.json", "config/webapp_config.json",
-    }
+def _statuses(report: installer.Report) -> Dict[str, str]:
+    return {item: status for status, item, _ in report.lines}
+
+
+def test_what_if_writes_nothing_then_a_fresh_checkout_installs_once(root: Path) -> None:
+    before = _snapshot(root)
+    preview = _run(root, what_if=True)
+    assert _snapshot(root) == before
+    assert _statuses(preview)[".venv"] == "would create"
+
+    report = _run(root)
     assert not report.failed
+    for name in ("apps", "config", "jobs", "webapp_config"):
+        target = root / "config" / f"{name}.json"
+        assert target.read_bytes() == (root / "config" / f"{name}.sample.json").read_bytes()
+    states = {item: state for state, item, _ in report.checklist}
+    assert states["Sign-in password"] == states["HTTPS certificate"] == states["Start at log on"] == "missing"
+    assert {"Copilot CLI", "GitLab CLI (glab)"} <= set(states)
+
+    installed = _snapshot(root)
+    again = _run(root)
+    assert _snapshot(root) == installed
+    assert again.changes == []
+    assert "unchanged: nothing to do" in installer.render(again)
 
 
-def test_an_existing_config_keeps_every_value_and_gains_only_missing_keys(root: Path, startup_dir: Path) -> None:
-    live = {"port": 9999, "auth_password": "keep-me", "copilot_model": "auto", "unknown_local_key": [1, 2]}
-    target = root / "config" / "webapp_config.json"
-    target.write_text(json.dumps(live), encoding="utf-8")
+def test_an_existing_config_keeps_every_value_and_gains_only_missing_keys(root: Path) -> None:
+    live = {"port": 9999, "auth_password": "keep-me", "unknown_local_key": [1, 2]}
+    settings = root / "config" / "webapp_config.json"
+    settings.write_text(json.dumps(live), encoding="utf-8")
     nested = root / "config" / "config.json"
-    nested.write_text(json.dumps({"tailnet_host": "", "webapp": {"port": 9001}}), encoding="utf-8")
-    before = {target.name: target.read_bytes(), nested.name: nested.read_bytes()}
+    nested.write_text(json.dumps({"webapp": {"port": 9001}}), encoding="utf-8")
+    registry = root / "config" / "jobs.json"
+    registry.write_bytes(b'{"jobs":[{"id":"mine"}]}')
+    before = {settings.name: settings.read_bytes(), nested.name: nested.read_bytes()}
 
-    report = _run(root, startup_dir, what_if=False)
+    report = _run(root)
 
-    merged = json.loads(target.read_text(encoding="utf-8"))
-    for key, value in live.items():
-        assert merged[key] == value
+    assert not report.failed
+    merged = json.loads(settings.read_text(encoding="utf-8"))
+    assert {key: merged[key] for key in live} == live
     sample = json.loads((root / "config" / "webapp_config.sample.json").read_text(encoding="utf-8"))
-    assert set(install.missing_keys(merged, sample)) == set()
-    assert not [k for k in merged if k.startswith("_")]  # comments are not merged in
-    assert json.loads(nested.read_text(encoding="utf-8"))["webapp"] == {"port": 9001, "enabled": True, "host": "0.0.0.0", "session_host_port": 8466}
+    assert installer.missing_keys(merged, sample) == []
+    assert json.loads(nested.read_text(encoding="utf-8"))["webapp"]["port"] == 9001
     for name, raw in before.items():
         assert (root / "config" / f"{name}{BACKUP_SUFFIX}").read_bytes() == raw
-    added = {item: detail for status, item, detail in report.lines if status == "added"}
-    assert "webapp.enabled" in added["config/config.json"] and "keep-me" not in added["config/webapp_config.json"]
+    assert "keep-me" not in installer.render(report)
+    assert registry.read_bytes() == b'{"jobs":[{"id":"mine"}]}'
 
 
-def test_a_registry_is_never_rewritten(root: Path, startup_dir: Path) -> None:
-    jobs = root / "config" / "jobs.json"
-    jobs.write_bytes(b'{"jobs":[{"id":"mine"}]}')  # no indent, no newline: must survive byte for byte
-    _run(root, startup_dir, what_if=False)
-    assert jobs.read_bytes() == b'{"jobs":[{"id":"mine"}]}'
-    assert not list((root / "config").glob("jobs.json.bak-*"))
+def test_the_signin_probe_reads_the_hash_or_the_older_config_value(tmp_path: Path) -> None:
+    config, hash_file = tmp_path / "webapp_config.json", tmp_path / "app_password.json"
+    assert install_checks.signin_state(config, hash_file) == install_checks.UNKNOWN
+    config.write_text("{}", encoding="utf-8")
+    assert install_checks.signin_state(config, hash_file) == install_checks.MISSING
+    config.write_text('{"auth_password": "old"}', encoding="utf-8")
+    assert install_checks.signin_state(config, hash_file) == install_checks.OK
 
 
-def test_a_config_that_does_not_parse_is_left_alone_and_reported(root: Path, startup_dir: Path) -> None:
-    target = root / "config" / "webapp_config.json"
-    target.write_text('{"port": 8445,', encoding="utf-8")
-    report = _run(root, startup_dir, what_if=False)
-    assert target.read_text(encoding="utf-8") == '{"port": 8445,'
-    assert ("left alone", "config/webapp_config.json") in [(s, i) for s, i, _ in report.lines]
-    assert report.failed
-    assert ("missing", "config/webapp_config.json") in [(s, i) for s, i, _ in report.checklist]
-
-
-def test_a_second_run_reports_unchanged_and_writes_nothing(root: Path, startup_dir: Path) -> None:
-    (root / "config" / "config.json").write_text('{"log_level": "DEBUG"}', encoding="utf-8")
-    _run(root, startup_dir, what_if=False)
-    before = _snapshot(root)
-    report = _run(root, startup_dir, what_if=False)
-    assert _snapshot(root) == before
-    assert report.changes == []
-    assert "unchanged: nothing to do" in install.render(report)
-
-
-def test_what_if_lists_every_change_and_makes_none(root: Path, startup_dir: Path) -> None:
-    (root / "config" / "webapp_config.json").write_text('{"port": 9999}', encoding="utf-8")
-    before = _snapshot(root)
-    report = _run(root, startup_dir, what_if=True, startup=True)
-    assert _snapshot(root) == before
-    assert list(startup_dir.iterdir()) == []
-    statuses = {item: status for status, item, _ in report.lines}
-    assert statuses["config/config.json"] == "would create"
-    assert statuses["config/webapp_config.json"] == "would add"
-    assert statuses["start at log on"] == "would register"
-
-
-def test_the_startup_entry_is_registered_only_when_asked_and_absent(root: Path, startup_dir: Path) -> None:
-    report = _run(root, startup_dir, what_if=False)
-    assert ("not registered", "start at log on") in [(s, i) for s, i, _ in report.lines]
-    assert list(startup_dir.iterdir()) == []
-    _run(root, startup_dir, what_if=False, startup=True)
-    entry = next(startup_dir.iterdir())
-    raw = entry.read_bytes()
-    report = _run(root, startup_dir, what_if=False, startup=True)
-    assert ("kept", "start at log on") in [(s, i) for s, i, _ in report.lines]
-    assert entry.read_bytes() == raw
-
-
-def test_the_checklist_marks_what_still_needs_the_owner(root: Path, startup_dir: Path) -> None:
-    report = _run(root, startup_dir, what_if=False)
-    states = {item: state for state, item, _ in report.checklist}
-    assert states["Python environment (.venv)"] == "missing"
-    assert states["Sign-in password"] == "missing"
-    assert states["HTTPS certificate"] == "missing"
-    assert states["config/webapp_config.json"] == "ok"
-    assert set(states.values()) <= {"ok", "missing", "unknown"}
-
-
-def test_requirements_install_only_when_requirements_changed(root: Path) -> None:
-    (root / "requirements.txt").write_text("fastapi\n", encoding="utf-8")
-    python = install._venv_python(root)
-    python.parent.mkdir(parents=True)
-    python.write_bytes(b"")
-    (root / ".venv" / install.REQUIREMENTS_STAMP).write_text(install._sha256(root / "requirements.txt"), encoding="ascii")
-    report = install.Report(what_if=False)
-    install.ensure_requirements(root, report)  # a matching stamp never reaches pip
-    assert report.lines == [("unchanged", "requirements", "")]
-    (root / "requirements.txt").write_text("fastapi\nhttpx\n", encoding="utf-8")
-    report = install.Report(what_if=True)
-    install.ensure_requirements(root, report)
-    assert report.lines[0][:2] == ("would install", "requirements")
-
-
-def test_every_tracked_sample_is_an_install_target() -> None:
-    """A new ``config/*.sample.json`` is picked up by the glob; a settings file must have a sample."""
-    samples = {p.name.replace(".sample.json", ".json") for p in (REPO_ROOT / "config").glob("*.sample.json")}
-    assert set(install.SETTINGS_FILES) <= samples
+def test_an_autostart_entry_for_another_copy_is_unknown_never_ok(tmp_path: Path) -> None:
+    here, old = tmp_path / "new" / "tray.bat", tmp_path / "old" / "tray.bat"
+    startup = tmp_path / "startup"
+    startup.mkdir()
+    assert install_checks.startup_state(startup, here) == install_checks.MISSING
+    boot_autostart.enable(tray_bat=old, startup_dir=startup)
+    assert install_checks.startup_state(startup, here) == install_checks.UNKNOWN
+    boot_autostart.enable(tray_bat=here, startup_dir=startup)
+    assert install_checks.startup_state(startup, here) == install_checks.OK

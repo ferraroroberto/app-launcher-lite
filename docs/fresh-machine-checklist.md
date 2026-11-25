@@ -47,19 +47,13 @@ cd app-launcher-lite
 .\setup.bat
 ```
 
-`setup.bat` creates `.venv`, installs `requirements.txt` and asks whether to run the Copilot install. Answer `n` here; step 6 runs it with its checklist.
+`setup.bat` creates `.venv`, installs `requirements.txt`, creates the configs and asks whether to run the Copilot install ([install.md](install.md) lists what it does). Answer `n` here; step 6 runs it with its checklist.
 
 **Proof:** `.\.venv\Scripts\python.exe -c "import fastapi, uvicorn, psutil, PIL; print('deps ok')"` prints `deps ok`.
 
-## 5. Config files from the samples
+## 5. Your values in the configs
 
-```powershell
-Copy-Item config\webapp_config.sample.json config\webapp_config.json
-Copy-Item config\apps.sample.json config\apps.json
-Copy-Item config\jobs.sample.json config\jobs.json
-```
-
-`config\config.json` is committed with the repo, so it needs no copy. The other real files are gitignored; never overwrite one that already exists. Then set, in `config\webapp_config.json` or under Settings once the tray is up:
+Step 4's `setup.bat` created each real config from its sample. All four are gitignored, and a rerun never overwrites a value. Set, in `config\webapp_config.json` or under Settings once the tray is up:
 
 - `projects_dir`: the folder whose child directories the Coding tab lists.
 - `gitlab_group`, and `gitlab_host` for a self-hosted instance.
@@ -108,6 +102,6 @@ Tap **▶ Start** on a small Backlog issue of a project under `projects_dir` (or
 | --- | --- |
 | The proof commands of steps 2, 4 (the venv's Python), 6 and 7, on the build machine, which already carries the setup | run and passed there, on Copilot CLI 1.0.114, `glab` 1.131 and Python 3.14: `copilot --version`, `glab auth status`, the probe's static run, the installer's `-WhatIf` and the git-access check (`ok`), and `/api/version` with the session-host reachable |
 | Steps 1, 5, 8 and 9 | `unknown`: not run here (the steps that install tools or start a lane on a machine that has none) |
-| Every step on a machine or user profile with none of the setup | `unknown`: no clean machine has been used yet. A first run there may break on anything above, in particular the `winget` ids of step 1, the config copies on a profile with no `config\` files and the git credential step |
+| Every step on a machine or user profile with none of the setup | `unknown`: no clean machine has been used yet. A first run there may break on anything above, in particular the `winget` ids of step 1, the config creation on a profile with no `config\` files and the git credential step |
 
 Record each break found on a clean machine by fixing the step above, so the list stays the one that works.
