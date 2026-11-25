@@ -11,8 +11,9 @@ import asyncio
 import logging
 import subprocess
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import requests
 from fastapi import APIRouter, HTTPException, Request
@@ -54,6 +55,7 @@ from src.launching.launcher import (
 )
 from src.launching.presets import OPEN_MODEL_AGENTS
 from src.registry import (
+    AmbiguousAppId,
     AppEntry,
     decorate_for_api,
     discover_new,
@@ -98,6 +100,15 @@ def _mini_root(cfg: WebappConfig) -> Optional[Path]:
     """The configured mini apps folder, or ``None`` when none is set."""
     raw = (cfg.mini_apps_root or "").strip()
     return Path(raw) if raw else None
+
+
+@contextmanager
+def _refuse_ambiguous_id() -> Iterator[None]:
+    """Turn a by-id lookup that matched several rows into a 409 with its reason."""
+    try:
+        yield
+    except AmbiguousAppId as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 def _claude_code_entries(cfg: WebappConfig) -> List[AppEntry]:
@@ -203,12 +214,14 @@ async def patch_app(app_id: str, request: Request) -> Dict[str, Any]:
         new_name = str(body.get("name") or "").strip()
         if not new_name:
             raise HTTPException(status_code=400, detail="name is required")
-        entry = rename_by_id(registry, app_id, new_name)
+        with _refuse_ambiguous_id():
+            entry = rename_by_id(registry, app_id, new_name)
         if entry is None:
             raise HTTPException(status_code=404, detail=f"unknown app {app_id}")
 
     if "autostart" in body:
-        entry = set_autostart_by_id(registry, app_id, bool(body.get("autostart")))
+        with _refuse_ambiguous_id():
+            entry = set_autostart_by_id(registry, app_id, bool(body.get("autostart")))
         if entry is None:
             raise HTTPException(status_code=404, detail=f"unknown app {app_id}")
 
@@ -222,7 +235,8 @@ async def patch_app(app_id: str, request: Request) -> Dict[str, Any]:
 @router.delete("/api/apps/{app_id}")
 async def delete_app(app_id: str) -> Dict[str, Any]:
     registry = load_registry()
-    removed = remove_by_id(registry, app_id)
+    with _refuse_ambiguous_id():
+        removed = remove_by_id(registry, app_id)
     if removed is None:
         raise HTTPException(status_code=404, detail=f"unknown app {app_id}")
     return {"removed": removed.id}
@@ -234,9 +248,10 @@ async def launch_app(app_id: str, request: Request) -> Dict[str, Any]:
     registry = load_registry()
     # claude-code rows aren't persisted — resolve them against the live
     # directory scan first; bat-based rows come from the registry.
-    entry = next(
-        (e for e in _claude_code_entries(cfg) if e.id == app_id), None
-    ) or get_by_id(registry, app_id)
+    entry = next((e for e in _claude_code_entries(cfg) if e.id == app_id), None)
+    if entry is None:
+        with _refuse_ambiguous_id():
+            entry = get_by_id(registry, app_id)
     if entry is None:
         raise HTTPException(status_code=404, detail=f"unknown app {app_id}")
 
@@ -625,7 +640,8 @@ async def refresh_app(app_id: str, request: Request) -> Dict[str, Any]:
     here and is restarted through its own ``tray.bat --restart`` instead.
     """
     cfg: WebappConfig = request.app.state.webapp_config
-    entry = get_by_id(load_registry(), app_id)
+    with _refuse_ambiguous_id():
+        entry = get_by_id(load_registry(), app_id)
     if entry is None:
         raise HTTPException(status_code=404, detail=f"unknown app {app_id}")
     app_runtime.prune_dead()

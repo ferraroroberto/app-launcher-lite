@@ -738,3 +738,43 @@ class TestDeleteApp:
         # And it's gone from /api/apps.
         listing = client.get("/api/apps").json()
         assert all(a["id"] != "alpha" for a in listing["apps"])
+
+
+class TestAmbiguousAppId:
+    """A by-id route given an id two rows share refuses with its reason
+    instead of acting on the first match."""
+
+    @pytest.fixture
+    def ambiguous(self, webapp_client, monkeypatch):
+        from app.webapp.routers import apps as apps_router
+        from src.registry import Registry
+
+        client, _, _ = webapp_client
+        reg = Registry(
+            scan_root="",
+            apps=[
+                AppEntry(id="tray", name="Hub", kind="tray", bat_path="C:/hub/tray.bat"),
+                AppEntry(id="tray", name="Stale", kind="tray", bat_path="C:/old/tray.bat"),
+            ],
+        )
+        monkeypatch.setattr(apps_router, "load_registry", lambda *a, **k: reg)
+        return client, reg
+
+    @pytest.mark.parametrize(
+        "method,url,body",
+        [
+            ("delete", "/api/apps/tray", None),
+            ("patch", "/api/apps/tray", {"name": "New"}),
+            ("patch", "/api/apps/tray", {"autostart": True}),
+            ("post", "/api/apps/tray/launch", {}),
+            ("post", "/api/apps/tray/refresh", {}),
+        ],
+    )
+    def test_refuses_with_409_and_names_the_reason(self, ambiguous, method, url, body):
+        client, reg = ambiguous
+        kwargs = {} if body is None else {"json": body}
+        resp = getattr(client, method)(url, **kwargs)
+        assert resp.status_code == 409
+        assert "tray" in resp.json()["detail"]
+        assert "more than one" in resp.json()["detail"]
+        assert [a.name for a in reg.apps] == ["Hub", "Stale"]
