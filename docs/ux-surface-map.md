@@ -21,7 +21,7 @@ Walked 2026-11-18 against build `52a7d40`, at widths 390, 1280, themes light, da
 | [Jobs](#jobs) | 10 |
 | [Team OS](#team-os) | 7 |
 | [Board](#board) | 16 |
-| [Settings](#settings) | 17 |
+| [Settings](#settings) | 18 |
 | [Keys and gestures](#keys-and-gestures) | 4 |
 
 ## Chrome
@@ -230,7 +230,7 @@ flowchart LR
   s29(["Rename session · Terminal"])
   s6(["Confirm dialog · Chrome"])
   s92(["Chief sheet · Settings"])
-  s99(["Folders sheet · Settings"])
+  s100(["Folders sheet · Settings"])
   s26(["Overlay session menu · Terminal"])
   s35(["Turn cards and step lines · Chat"])
   s0 -->|"Code"| s10
@@ -252,7 +252,7 @@ flowchart LR
   s17 -->|"row kebab"| s19
   s17 -->|"preset dropdown"| s18
   s17 -->|"Sync all"| s20
-  s17 -->|"Open Settings"| s99
+  s17 -->|"Open Settings"| s100
   s17 -->|"row tap"| s24
   s19 -->|"Show changes"| s22
   s22 -->|"file kebab"| s23
@@ -491,7 +491,7 @@ flowchart LR
   s22(["Changes overlay · Code"])
   s6(["Confirm dialog · Chrome"])
   s83(["Session drawer · Board"])
-  s108(["Composer keys · Keys and gestures"])
+  s109(["Composer keys · Keys and gestures"])
   s14 -->|"row tap"| s24
   s15 -->|"Links"| s30
   s15 -->|"Rename"| s29
@@ -508,7 +508,7 @@ flowchart LR
   s26 -->|"Changed files"| s22
   s26 -->|"Stop and kill"| s6
   s83 -->|"Terminal"| s24
-  s108 -->|"keys button"| s31
+  s109 -->|"keys button"| s31
 ```
 
 ### `terminal.overlay` Session overlay
@@ -737,12 +737,12 @@ flowchart LR
   s41["Quality sheet"]
   s42["Readout"]
   s2(["PC load sheet · Chrome"])
-  s107(["Screen view keys · Keys and gestures"])
+  s108(["Screen view keys · Keys and gestures"])
   s2 -->|"Screen View live"| s39
   s39 -->|"Quality"| s41
   s39 -->|"Paste to PC"| s40
   s39 -->|"readout switch"| s42
-  s107 -->|"Screen view"| s39
+  s108 -->|"Screen view"| s39
 ```
 
 ### `screen.view` Screen view
@@ -1092,14 +1092,14 @@ flowchart LR
   s70["Skill file"]
   s71["Weekly recap"]
   s0(["Primary navigation · Chrome"])
-  s99(["Folders sheet · Settings"])
+  s100(["Folders sheet · Settings"])
   s6(["Confirm dialog · Chrome"])
   s0 -->|"Team"| s65
   s65 -->|"Skills"| s66
   s65 -->|"Weekly recap"| s71
   s66 -->|"model picker"| s67
   s66 -->|"row kebab"| s68
-  s66 -->|"Open Settings"| s99
+  s66 -->|"Open Settings"| s100
   s68 -->|"Read"| s69
   s69 -->|"a file"| s70
   s70 -->|"Delete log"| s6
@@ -1422,16 +1422,17 @@ flowchart LR
   s92["Chief sheet"]
   s93["Chief model menu"]
   s94["GitLab sheet"]
-  s95["Speech to text sheet"]
-  s96["Serve over sheet"]
-  s97["Launch preset menu"]
-  s98["API tokens sheet"]
-  s99["Folders sheet"]
-  s100["Chat folder menu"]
-  s101["Passkeys sheet"]
-  s102["Terminal sheet"]
-  s103["Performance sheet"]
-  s104["Diagnostics sheet"]
+  s95["Local hub sheet"]
+  s96["Speech to text sheet"]
+  s97["Serve over sheet"]
+  s98["Launch preset menu"]
+  s99["API tokens sheet"]
+  s100["Folders sheet"]
+  s101["Chat folder menu"]
+  s102["Passkeys sheet"]
+  s103["Terminal sheet"]
+  s104["Performance sheet"]
+  s105["Diagnostics sheet"]
   s1(["Tab header · Chrome"])
   s15(["Session menu · Code"])
   s16(["Stopped chief menu · Code"])
@@ -1440,24 +1441,25 @@ flowchart LR
   s1 -->|"gear"| s88
   s15 -->|"Chief settings"| s92
   s16 -->|"Chief settings"| s92
-  s17 -->|"Open Settings"| s99
-  s66 -->|"Open Settings"| s99
+  s17 -->|"Open Settings"| s100
+  s66 -->|"Open Settings"| s100
   s88 -->|"the groups"| s89
   s88 -->|"a document row"| s90
   s88 -->|"Coding agent"| s91
   s88 -->|"Chief"| s92
   s88 -->|"GitLab"| s94
-  s88 -->|"Speed limits"| s103
-  s88 -->|"Serve over"| s96
-  s88 -->|"Speech to text"| s95
-  s88 -->|"API tokens"| s98
-  s88 -->|"Folders"| s99
-  s88 -->|"Passkeys"| s101
-  s88 -->|"Terminal"| s102
-  s88 -->|"Diagnostics"| s104
-  s91 -->|"preset kebab"| s97
+  s88 -->|"Speed limits"| s104
+  s88 -->|"Serve over"| s97
+  s88 -->|"Speech to text"| s96
+  s88 -->|"Local hub"| s95
+  s88 -->|"API tokens"| s99
+  s88 -->|"Folders"| s100
+  s88 -->|"Passkeys"| s102
+  s88 -->|"Terminal"| s103
+  s88 -->|"Diagnostics"| s105
+  s91 -->|"preset kebab"| s98
   s92 -->|"model"| s93
-  s99 -->|"a folder's kebab"| s100
+  s100 -->|"a folder's kebab"| s101
 ```
 
 ### `settings.pane` Settings
@@ -1476,6 +1478,7 @@ flowchart LR
   - [Performance sheet](#settingsperformance-performance-sheet) (Speed limits)
   - [Serve over sheet](#settingsserving-serve-over-sheet) (Serve over)
   - [Speech to text sheet](#settingsspeech-speech-to-text-sheet) (Speech to text)
+  - [Local hub sheet](#settingshub-local-hub-sheet) (Local hub)
   - [API tokens sheet](#settingstokens-api-tokens-sheet) (API tokens)
   - [Folders sheet](#settingsfolders-folders-sheet) (Folders)
   - [Passkeys sheet](#settingspasskeys-passkeys-sheet) (Passkeys)
@@ -1569,6 +1572,21 @@ flowchart LR
   - the GitLab group and the GitLab host, blank meaning gitlab.com
   - Done
 - **Does:** glab must be signed in to the host on this PC
+
+### `settings.hub` Local hub sheet
+
+- **Root:** `data-surface`
+- **Reach:** Local hub in Connections
+- **Holds:**
+  - the hub address, blank meaning no hub
+  - Use the local hub, which fills the hub-lite address and saves it
+  - Done, and a result line
+- **Does:**
+  - the address saves as it changes (on leaving the field or Enter)
+  - a non-blank address is saved only when the hub answers /healthz now; a bad address or a hub that does not answer is refused with the reason and the saved value stays
+  - saving a blank address turns the hub off; either change takes effect without a restart
+  - the PC load sheet's Health row reads Not confirmed, with the reason, while no hub is set or the hub does not answer
+- **States:** the Settings row reads Off, or the saved host and port
 
 ### `settings.speech` Speech to text sheet
 
@@ -1703,14 +1721,14 @@ Inputs that are not elements.
 
 ```mermaid
 flowchart LR
-  s105["Swipe a row"]
-  s106["Long-press hint"]
-  s107["Screen view keys"]
-  s108["Composer keys"]
+  s106["Swipe a row"]
+  s107["Long-press hint"]
+  s108["Screen view keys"]
+  s109["Composer keys"]
   s39(["Screen view · Screen"])
   s31(["On-screen keys · Terminal"])
-  s107 -->|"Screen view"| s39
-  s108 -->|"keys button"| s31
+  s108 -->|"Screen view"| s39
+  s109 -->|"keys button"| s31
 ```
 
 ### `keys.swipe-row` Swipe a row
@@ -1867,6 +1885,7 @@ flowchart LR
 | [Settings](#settingspane-settings) | Speed limits | [Performance sheet](#settingsperformance-performance-sheet) |
 | [Settings](#settingspane-settings) | Serve over | [Serve over sheet](#settingsserving-serve-over-sheet) |
 | [Settings](#settingspane-settings) | Speech to text | [Speech to text sheet](#settingsspeech-speech-to-text-sheet) |
+| [Settings](#settingspane-settings) | Local hub | [Local hub sheet](#settingshub-local-hub-sheet) |
 | [Settings](#settingspane-settings) | API tokens | [API tokens sheet](#settingstokens-api-tokens-sheet) |
 | [Settings](#settingspane-settings) | Folders | [Folders sheet](#settingsfolders-folders-sheet) |
 | [Settings](#settingspane-settings) | Passkeys | [Passkeys sheet](#settingspasskeys-passkeys-sheet) |

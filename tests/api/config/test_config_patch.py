@@ -511,3 +511,54 @@ class TestPreventLockSwitch:
         resp = client.post("/api/config", json={"prevent_lock": "false"})
         assert resp.status_code == 400
         assert app.state.webapp_config.prevent_lock is False
+
+
+class TestLocalHubUrl:
+    """Settings > Local hub: the address is checked against the hub before it is saved."""
+
+    @staticmethod
+    def _hub(monkeypatch, *, down: str = ""):
+        from src.clients import hub_health
+
+        probed = []
+
+        def check(url):
+            probed.append(url)
+            if down:
+                raise hub_health.HubHealthError(down, status=400)
+
+        monkeypatch.setattr(hub_health, "check_answers", check)
+        return probed
+
+    def test_it_is_set_and_cleared_without_a_restart(self, webapp_client, monkeypatch):
+        client, app, _ = webapp_client
+        probed = self._hub(monkeypatch)
+        assert client.get("/api/system/health").json()["why"] == "disabled"
+        assert client.get("/api/config").json()["llm_hub_local_url"] == "http://127.0.0.1:8020"
+
+        assert client.post("/api/config", json={"llm_hub_url": " http://127.0.0.1:8020/ "}).status_code == 200
+        assert probed == ["http://127.0.0.1:8020"]
+        assert app.state.webapp_config.llm_hub_url == "http://127.0.0.1:8020"
+        assert client.get("/api/config").json()["llm_hub_url"] == "http://127.0.0.1:8020"
+        assert client.get("/api/system/health").json()["why"] != "disabled"
+
+        assert client.post("/api/config", json={"llm_hub_url": ""}).status_code == 200
+        assert probed == ["http://127.0.0.1:8020"]  # clearing asks nothing
+        assert app.state.webapp_config.llm_hub_url == ""
+        assert client.get("/api/system/health").json()["why"] == "disabled"
+
+    def test_an_unreachable_hub_is_refused_with_its_reason_and_nothing_is_saved(self, webapp_client, monkeypatch):
+        client, app, _ = webapp_client
+        self._hub(monkeypatch, down="Nothing is listening at http://127.0.0.1:8020")
+        resp = client.post("/api/config", json={"llm_hub_url": "http://127.0.0.1:8020"})
+        assert resp.status_code == 400
+        assert "Nothing is listening" in resp.json()["detail"]
+        assert app.state.webapp_config.llm_hub_url == ""
+
+    def test_a_bad_address_is_refused_before_the_hub_is_asked(self, webapp_client, monkeypatch):
+        client, app, _ = webapp_client
+        probed = self._hub(monkeypatch)
+        resp = client.post("/api/config", json={"llm_hub_url": "http://example.com"})
+        assert resp.status_code == 400
+        assert "private network" in resp.json()["detail"]
+        assert probed == [] and app.state.webapp_config.llm_hub_url == ""

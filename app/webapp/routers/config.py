@@ -28,6 +28,7 @@ from src.auth import tls_certificate
 from src.chief import skills_preflight
 from src.chief import timings as chief_timings
 from src.chief.launch_settings import chief_model_problem
+from src.clients import hub_health
 from src.desktop import lid_keep_awake, prevent_lock
 from src.launching import copilot_remote
 from src.launching.flags import build_copilot_flags, missing_default_copilot_models
@@ -156,6 +157,10 @@ async def get_config(request: Request) -> Dict[str, Any]:
         # instance, its host.
         "gitlab_group": cfg.gitlab_group,
         "gitlab_host": cfg.gitlab_host,
+        # Settings > Local hub: the saved address (empty = no hub) and the one
+        # the "Use the local hub" button fills.
+        "llm_hub_url": cfg.llm_hub_url,
+        "llm_hub_local_url": hub_health.LOCAL_HUB_URL,
         # Speech to text. The key is write-only: only whether one is set goes out.
         "speech": {
             "enabled": cfg.speech_enabled,
@@ -293,6 +298,7 @@ _PATCH_KEYS = frozenset({
     "skills_dir",
     "gitlab_group",
     "gitlab_host",
+    "llm_hub_url",
     "speech_enabled",
     "speech_base_url",
     "speech_model",
@@ -349,6 +355,34 @@ def _settle_private_network(patch: Dict[str, Any], cfg: WebappConfig) -> None:
     )
 
 
+async def _checked_hub_url(raw: Any) -> str:
+    """The hub URL to save: its shape checked, and (unless clearing it) the hub
+    shown to answer ``/healthz`` now. A refusal is a 400 carrying the reason and
+    nothing is saved."""
+    try:
+        url = hub_health.checked_url(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    if url:
+        try:
+            await run_on(OUTBOUND, hub_health.check_answers, url)
+        except hub_health.HubHealthError as exc:
+            logger.info("⚠️  hub URL refused: %s", exc)
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+    return url
+
+
+def _note_hub_url_change(app: Any, old: str, new: str) -> None:
+    """The sampler reads the URL per fetch; dropping its snapshot keeps the old
+    hub's verdict from showing under the new address."""
+    if new == old:
+        return
+    sampler = getattr(app.state, "hub_health_sampler", None)
+    if sampler is not None:
+        sampler.reset()
+    logger.info("ℹ️  hub URL %s", "set" if new else "cleared")
+
+
 @router.post("/api/config", response_model=None)
 async def patch_config(request: Request) -> Any:
     cfg: WebappConfig = request.app.state.webapp_config
@@ -390,6 +424,8 @@ async def patch_config(request: Request) -> Any:
     ):
         if key in patch:
             patch[key] = str(patch[key] or "").strip()
+    if "llm_hub_url" in patch:
+        patch["llm_hub_url"] = await _checked_hub_url(patch["llm_hub_url"])
     _checked_whole_number(patch, "chief_auto_compact_threshold", "an integer percent")
     _checked_whole_number(patch, "chief_fallback_minutes", "a whole number of minutes")
     for spec in chief_timings.TUNABLES:
@@ -425,6 +461,7 @@ async def patch_config(request: Request) -> Any:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     request.app.state.webapp_config = new_cfg
+    _note_hub_url_change(request.app, cfg.llm_hub_url, new_cfg.llm_hub_url)
     if "prevent_lock" in patch:
         # The loop applies the switch at once, so off releases the keep-awake request now.
         prevent_lock.poke()

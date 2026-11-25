@@ -95,6 +95,20 @@ class ListenersSampler(Generic[T]):
         self._snapshot_at: Optional[float] = None
         self._failure: Optional[tuple[str, str]] = None
         self._overrun_logged = False
+        # Bumped by reset(); a scan that started before it is dropped on arrival.
+        self._epoch = 0
+
+    def reset(self) -> None:
+        """Forget the snapshot and any failure, e.g. when what is scanned changed.
+
+        The next read says ``warming`` until a scan of the new target finishes,
+        and a scan already running for the old one is discarded when it lands.
+        """
+        with self._lock:
+            self._epoch += 1
+            self._snapshot = self._snapshot_at = self._failure = None
+            self._in_flight_since = self._last_finished = None
+            self._overrun_logged = False
 
     def read(self) -> Reading[T]:
         """The cached reading. Marks demand; never scans and never waits."""
@@ -137,8 +151,9 @@ class ListenersSampler(Generic[T]):
             if self._last_finished is not None and now - self._last_finished < self.tick_s:
                 return False
             self._in_flight_since = now
+            epoch = self._epoch
         try:
-            self.executor.submit(self._run, now)
+            self.executor.submit(self._run, now, epoch)
         except Exception:  # noqa: BLE001 — a pool that cannot take work must not wedge single-flight
             with self._lock:
                 self._in_flight_since = None
@@ -146,7 +161,7 @@ class ListenersSampler(Generic[T]):
             return False
         return True
 
-    def _run(self, started: float) -> None:
+    def _run(self, started: float, epoch: int = 0) -> None:
         reason: Optional[str] = None
         detail = ""
         value: Optional[T] = None
@@ -158,6 +173,8 @@ class ListenersSampler(Generic[T]):
             reason, detail = "error", f"{type(exc).__name__}: {exc}"
         finished = self.clock()
         with self._lock:
+            if epoch != self._epoch:
+                return
             was_failing = self._failure is not None
             if reason is None:
                 self._snapshot, self._snapshot_at, self._failure = value, started, None

@@ -38,6 +38,7 @@ from tests.e2e.fixtures.ui import (
     open_settings_sheet,
 )
 from tests.e2e.fixtures.waits import wait_until
+from tests.e2e.settings._hub import walk_hub_sheet
 from tests.e2e.settings._launch_presets import walk_launch_presets
 from tests.e2e.settings._performance import walk_performance_sheet
 from tests.e2e.settings._private_network import walk_private_network_switches
@@ -47,14 +48,14 @@ pytestmark = pytest.mark.smoke
 
 _GROUPS = ["Appearance", "Agents", "Sessions", "Board", "Performance", "Connections", "This PC"]
 _SHEETS = [
-    "copilotSheet", "chiefSheet", "gitlabSheet", "performanceSheet", "servingSheet", "speechSheet", "tokensSheet",
+    "copilotSheet", "chiefSheet", "gitlabSheet", "performanceSheet", "servingSheet", "speechSheet", "hubSheet", "tokensSheet",
     "foldersSheet",
     "passkeysSheet", "terminalSheet", "diagnosticsSheet",
 ]
 # The design inventory's name for each sheet (surface() wants lowercase).
 _SURFACE_NAMES = {
     "copilotSheet": "copilot", "chiefSheet": "chief", "gitlabSheet": "gitlab", "performanceSheet": "performance",
-    "servingSheet": "serving", "speechSheet": "speech", "tokensSheet": "tokens", "foldersSheet": "folders",
+    "servingSheet": "serving", "speechSheet": "speech", "hubSheet": "hub", "tokensSheet": "tokens", "foldersSheet": "folders",
     "passkeysSheet": "passkeys", "terminalSheet": "terminal", "diagnosticsSheet": "diagnostics",
 }
 # A sheet whose one primary action is its own job rather than Done.
@@ -146,6 +147,7 @@ def test_every_sheet_opens_and_closes(authed_page: Page, base_url: str, auth_tok
     expect(authed_page.locator("#paneSettings")).to_be_visible()
 
     walk_speech_sheet(authed_page, base_url, auth_token)
+    walk_hub_sheet(authed_page, base_url, auth_token)
     walk_performance_sheet(authed_page, base_url, auth_token)
 
 
