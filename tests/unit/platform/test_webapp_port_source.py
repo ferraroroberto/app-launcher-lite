@@ -78,7 +78,7 @@ class TestBatchLaunchersReadTheHelper:
         assert out.stdout.strip() == str(resolve_webapp_port(real_config))
 
     def test_webapp_bat_has_no_literal_port_in_its_server_commands(self):
-        text = (_REPO_ROOT / "webapp.bat").read_text(encoding="utf-8")
+        text = (_REPO_ROOT / "scripts" / "webapp.bat").read_text(encoding="utf-8")
         assert "scripts.webapp_port" in text
         assert not re.search(r"--port\s+8465", text)
 

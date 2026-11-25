@@ -77,15 +77,15 @@ REM  inherits it, and so does every session and app it spawns -- where APP_NAME
 REM  is another project's own config key (app-launcher#963).
 set "TRAY_APP_NAME=AppLauncherLite"
 REM === ADAPT (2/4): the args python is started with to launch the tray,
-REM     e.g. "launcher.py tray"  or  "-m tray" ===
-set "TRAY_LAUNCH=launcher.py tray"
+REM     e.g. "scripts\launcher.py tray"  or  "-m tray" ===
+set "TRAY_LAUNCH=scripts\launcher.py tray"
 
 set "WANT_RESTART="
 if /i "%~1"=="--restart" set "WANT_RESTART=1"
 if /i "%~1"=="-r"        set "WANT_RESTART=1"
 
 REM === ADAPT (3/4): in the -TrayMatch below, replace with a regex matching
-REM     THIS app's tray invocation, e.g. launcher\.py\s+tray  or  -m\s+tray
+REM     THIS app's tray invocation, e.g. (scripts[\\/]+)?launcher\.py\s+tray  or  -m\s+tray
 set "PS=C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 set "TRAY_VENV=%SCRIPT_DIR%.venv"
 REM  Repo-local vendored copy (lite fork) -- see its provenance header.
@@ -114,9 +114,9 @@ REM  AllSigned / Restricted, loads the script as a ScriptBlock instead of `-File
 REM  unsigned file), leaving the policy as the machine set it. Without the venv it is the plain -File.
 REM  No parenthesised if-block: a path holding ")" would end it early.
 if not exist "%TRAY_VENV%\Scripts\python.exe" goto :plain_start
-"%TRAY_VENV%\Scripts\python.exe" -m src.launching.ps_script "%TRAY_PS%" launch -AppName "%TRAY_APP_NAME%" -ScriptDir "%SCRIPT_DIR_ARG%" -VenvDir "%TRAY_VENV%" -TrayMatch "launcher\.py\s+tray" -Ports "%OWNED_PORTS%" -TrayLaunch "%TRAY_LAUNCH%" -VersionUrl "%VERSION_URL%" !RESTART_ARG!
+"%TRAY_VENV%\Scripts\python.exe" -m src.launching.ps_script "%TRAY_PS%" launch -AppName "%TRAY_APP_NAME%" -ScriptDir "%SCRIPT_DIR_ARG%" -VenvDir "%TRAY_VENV%" -TrayMatch "(scripts[\\/]+)?launcher\.py\s+tray" -Ports "%OWNED_PORTS%" -TrayLaunch "%TRAY_LAUNCH%" -VersionUrl "%VERSION_URL%" !RESTART_ARG!
 exit /b %ERRORLEVEL%
 
 :plain_start
-%PS% -NoProfile -NonInteractive -File "%TRAY_PS%" launch -AppName "%TRAY_APP_NAME%" -ScriptDir "%SCRIPT_DIR_ARG%" -VenvDir "%TRAY_VENV%" -TrayMatch "launcher\.py\s+tray" -Ports "%OWNED_PORTS%" -TrayLaunch "%TRAY_LAUNCH%" -VersionUrl "%VERSION_URL%" !RESTART_ARG!
+%PS% -NoProfile -NonInteractive -File "%TRAY_PS%" launch -AppName "%TRAY_APP_NAME%" -ScriptDir "%SCRIPT_DIR_ARG%" -VenvDir "%TRAY_VENV%" -TrayMatch "(scripts[\\/]+)?launcher\.py\s+tray" -Ports "%OWNED_PORTS%" -TrayLaunch "%TRAY_LAUNCH%" -VersionUrl "%VERSION_URL%" !RESTART_ARG!
 exit /b %ERRORLEVEL%

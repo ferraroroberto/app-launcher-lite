@@ -18,7 +18,7 @@ Usage:
     & .venv/Scripts/python.exe scripts/gen_tailscale_cert.py <host>.ts.net
 
     # Check and auto-renew if expiring within 30 days (called on startup by
-    # webapp.bat, the tray's webapp manager, and run_named_tunnel.py):
+    # scripts/webapp.bat, the tray's webapp manager, and run_named_tunnel.py):
     & .venv/Scripts/python.exe scripts/gen_tailscale_cert.py --check
 """
 from __future__ import annotations
@@ -195,7 +195,7 @@ def main() -> None:
     _provision(hostname)
     print()
     port = resolve_webapp_port()
-    print("Restart the webapp (tray.bat --restart or webapp.bat), then open:")
+    print("Restart the webapp (tray.bat --restart or scripts/webapp.bat), then open:")
     print(f"  https://{hostname}:{port}")
     print()
     print("Note: the cert is issued only for the Tailscale hostname, so")

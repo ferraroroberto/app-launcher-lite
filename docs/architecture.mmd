@@ -6,7 +6,7 @@
 %% are the one coding agent (Copilot CLI) and the one forge (GitLab via glab).
 
 flowchart TB
-  ENTRY["launcher.py (root)\nputs repo root on sys.path"] --> CLIMAIN["app/cli/main.py"]
+  ENTRY["scripts/launcher.py\nputs repo root on sys.path"] --> CLIMAIN["app/cli/main.py"]
 
   subgraph cli["app/cli/commands/"]
     TRAYCMD["tray_cmd.py"]

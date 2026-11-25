@@ -1,7 +1,7 @@
 """Reclaim ownership and loud failure in scripts/tray_lifecycle.ps1.
 
 A session-host re-execs from the base interpreter, so its command line is
-``<python> <repo>\\launcher.py session-host --port N`` with no ``.venv`` in it. Reclaim
+``<python> <repo>\\scripts\\launcher.py session-host --port N`` with no ``.venv`` in it. Reclaim
 used to match only the ``.venv`` path, skipped that host as not ours, and the "restart" left
 the old process serving an old build. The tests run the script's real functions (parsed out
 of the file, so nothing is copied) against synthetic command lines and throwaway listeners.
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -98,6 +99,18 @@ class TestOwnership:
             "C:\\automation\\app-launcher-lite\\.venv\\Scripts\\pythonw.exe -m something",
         ])
         assert owned == [True, True, True, True]
+
+    def test_session_host_started_from_scripts_is_owned_like_the_old_root_spelling(self, tmp_path: Path) -> None:
+        repo = "C:" + "\\automation\\app-launcher-lite"
+        owned = _owns(tmp_path, repo, [
+            '"C:\\Python314\\pythonw.exe" C:\\automation\\app-launcher-lite\\scripts\\launcher.py session-host --port 8466',
+            'python.exe "C:/automation/app-launcher-lite/scripts/launcher.py" session-host',
+            # the old root spelling is still found, so a restart replaces a host started before the move
+            '"C:\\Python314\\pythonw.exe" C:\\automation\\app-launcher-lite\\launcher.py session-host --port 8466',
+            # a sibling checkout's moved launcher is still another tree
+            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher-lite-wt-371\\scripts\\launcher.py session-host",
+        ])
+        assert owned == [True, True, True, False]
 
     def test_same_command_line_from_another_repo_is_not_owned(self, tmp_path: Path) -> None:
         repo = "C:" + "\\automation\\app-launcher-lite"
@@ -342,6 +355,40 @@ class TestWorktreeProcessesAreReclaimed:
         # set may hold more than one process per tray: assert on membership, not equality.
         assert {pids["primary"], pids["worktree"]} <= found
         assert pids["other"] not in found
+
+
+class TestTrayMatchSpellings:
+    """tray.bat's -TrayMatch finds a tray started from the root (before the move) and from scripts/."""
+
+    @staticmethod
+    def _tray_match() -> str:
+        text = (REPO_ROOT / "tray.bat").read_text(encoding="utf-8")
+        found = {m.group(1) for m in re.finditer(r'-TrayMatch "([^"]+)"', text)}
+        assert len(found) == 1, found
+        return found.pop()
+
+    def test_detect_finds_the_tray_under_either_spelling(self, tmp_path: Path) -> None:
+        repo = tmp_path / "app-launcher-lite"
+        spawned = []
+        try:
+            pids = {}
+            for name, folder in (("old", repo / ".venv"), ("new", repo / ".venv" / "scripts")):
+                proc, _port, pid = _spawn_listener(folder, role="tray")
+                spawned.append(proc)
+                pids[name] = pid
+            out = _run_ps(tmp_path, {
+                "TL_VENV": str(repo / ".venv"), "TL_SCRIPTDIR": str(repo), "TL_MODE": "detect",
+                "TL_TRAYMATCH": self._tray_match(), "TL_WORKTREES": json.dumps([]),
+            })
+        finally:
+            for proc in spawned:
+                proc.kill()
+        found = {int(p) for p in out.strip().split("PIDS=", 1)[1].split(",") if p}
+        assert {pids["old"], pids["new"]} <= found
+
+    def test_tray_launch_points_at_scripts(self) -> None:
+        text = (REPO_ROOT / "tray.bat").read_text(encoding="utf-8")
+        assert 'set "TRAY_LAUNCH=scripts\\launcher.py tray"' in text
 
 
 class TestRestartWithNothingToStop:

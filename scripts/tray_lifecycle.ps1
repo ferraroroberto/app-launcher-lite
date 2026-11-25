@@ -58,7 +58,7 @@ Git Bash/MSYS rewrites `cmd.exe /c` to `cmd.exe C:/`.
     Usage (from tray.bat):
       detect  -> emits the matching tray PIDs, one per line (empty if none):
         powershell.exe -NoProfile -NonInteractive -File tray_lifecycle.ps1 `
-          detect -VenvDir "<repo>\.venv" -TrayMatch "launcher\.py\s+tray"
+          detect -VenvDir "<repo>\.venv" -TrayMatch "(scripts[\\/]+)?launcher\.py\s+tray"
       reclaim -> kills the owning PID of each listed port whose CommandLine is
                  under this repo's .venv, or is this repo's
                  `launcher.py session-host` (orphan-proof), printing each reclaim
@@ -69,8 +69,8 @@ Git Bash/MSYS rewrites `cmd.exe /c` to `cmd.exe C:/`.
                  verification:
         powershell.exe -NoProfile -NonInteractive -File tray_lifecycle.ps1 `
           launch -AppName "my-app" -ScriptDir "<repo>" -VenvDir "<repo>\.venv" `
-          -TrayMatch "launcher\.py\s+tray" -Ports "8465" `
-          -TrayLaunch "launcher.py tray" -Restart
+          -TrayMatch "(scripts[\\/]+)?launcher\.py\s+tray" -Ports "8465" `
+          -TrayLaunch "scripts\launcher.py tray" -Restart
 #>
 [CmdletBinding()]
 param(
@@ -81,7 +81,7 @@ param(
     [Parameter(Mandatory)]
     [string] $VenvDir,
 
-    # detect: regex matching THIS app's tray invocation (e.g. 'launcher\.py\s+tray').
+    # detect: regex matching THIS app's tray invocation (e.g. '(scripts[\\/]+)?launcher\.py\s+tray').
     [string] $TrayMatch,
 
     # reclaim: comma-separated owned ports (e.g. '8465,8466'). Parsed here rather
@@ -148,7 +148,7 @@ function Get-RepoRoot {
 
 function Test-IsRepoSessionHost {
     param([string] $CommandLine, [string] $Root = (Get-RepoRoot))
-    return Test-CommandLineMatches $CommandLine (Get-PathPattern $Root '[\\/]+launcher\.py["'']?\s+session-host(\s|$)')
+    return Test-CommandLineMatches $CommandLine (Get-PathPattern $Root '([\\/]+scripts)?[\\/]+launcher\.py["'']?\s+session-host(\s|$)')
 }
 
 # This repo's own sibling worktrees (`<repo>-wt-<N>`), read from `git worktree list` so a directory
