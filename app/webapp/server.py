@@ -485,6 +485,9 @@ async def _lifespan(app: FastAPI):
     tasks.append(asyncio.create_task(system_load.tick_forever()))
     # The snapshot behind /api/version, rebuilt only while that route is polled.
     tasks.append(asyncio.create_task(misc.version_cache(app).tick_forever()))
+    # The Apps tab's port listeners: scanned on a one-thread pool of its own while
+    # /api/ports/probe is polled; the route only reads the snapshot.
+    tasks.append(asyncio.create_task(misc.listeners_sampler(app).tick_forever()))
     # Re-reads the terminal_timing_log switch each round, so a config save arms it live.
     tasks.append(asyncio.create_task(loop_lag.tick_forever(
         lambda: getattr(getattr(app.state, "webapp_config", None), "terminal_timing_log", False)
