@@ -769,7 +769,7 @@ class Installer:
                                         self.what_if, is_link, write_text)
         elif os.path.isdir(self.p.legacy_state):
             self.say("[warn] Lite's state is still in hooks\\state, where Copilot CLI reports each .json as an invalid")
-            self.say(f"       hook config in every session. Re-run with --migrate to move it -> {self.p.legacy_state}")
+            self.say(f"       hook config in every session. Re-run with --migrate to move it -> {self.p.state}")
         elif old_hooks:
             self.say("[warn] the old fleet-config-lite hook configs are still installed: two session-state hooks race on the same state file.")
             self.say("       Stop the chief at a turn end, then re-run with --migrate:")
@@ -790,7 +790,10 @@ class Installer:
         if self.what_if:
             self.say("WhatIf: nothing was changed. Run again without --what-if to make the changes listed above.")
         self.say("Done. Restart any running Copilot CLI session to pick up the hooks.")
-        self.say(f"State file will appear at: {self.state_now()}\\sessions-state.json")
+        where = self.state_now()
+        # The legacy folder is only where state lives until --migrate moves it.
+        temporary = " (until --migrate)" if not migrate and where == self.p.legacy_state else ""
+        self.say(f"State file will appear at: {where}\\sessions-state.json{temporary}")
         return 0
 
 
