@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -131,3 +132,17 @@ def test_an_autostart_entry_for_another_copy_is_unknown_never_ok(tmp_path: Path)
     assert install_checks.startup_state(startup, here) == install_checks.UNKNOWN
     boot_autostart.enable(tray_bat=here, startup_dir=startup)
     assert install_checks.startup_state(startup, here) == install_checks.OK
+
+
+def test_an_autostart_entry_written_through_a_folder_link_is_this_copy(tmp_path: Path) -> None:
+    here, link, startup = tmp_path / "real", tmp_path / "link", tmp_path / "startup"
+    here.mkdir()
+    startup.mkdir()
+    if os.name == "nt":
+        import _winapi
+
+        _winapi.CreateJunction(str(here), str(link))  # a symlink needs a privilege a junction does not
+    else:
+        link.symlink_to(here, target_is_directory=True)
+    boot_autostart.enable(tray_bat=link / "tray.bat", startup_dir=startup)
+    assert install_checks.startup_state(startup, here / "tray.bat") == install_checks.OK
