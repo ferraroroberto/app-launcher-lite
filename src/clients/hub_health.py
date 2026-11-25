@@ -234,7 +234,7 @@ def build_sampler(
     clock: Callable[[], float] = time.monotonic,
 ) -> ListenersSampler[Dict[str, Any]]:
     """The background sampler behind ``/api/system/health``. ``base_url`` is read
-    at each fetch, so a config save takes effect on the next one."""
+    at each fetch."""
     return ListenersSampler(
         _Reader(base_url).scan,
         executor=executor,

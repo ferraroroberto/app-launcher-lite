@@ -353,7 +353,7 @@ async def system_load_reading() -> Dict[str, Any]:
 
 def hub_health_sampler(app: Any) -> ListenersSampler[Dict[str, Any]]:
     """The app's hub machine-health sampler (its lifespan ticks it while polled).
-    The hub URL is read from the live config at each fetch."""
+    The hub URL is read from the app's config at each fetch."""
     sampler = getattr(app.state, "hub_health_sampler", None)
     if sampler is None:
         sampler = app.state.hub_health_sampler = hub_health.build_sampler(
