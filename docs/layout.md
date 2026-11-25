@@ -2,9 +2,7 @@
 
 ```
 app-launcher-lite/
-├── launcher.py                # thin entry point: sys.path shim -> app/cli/main
-├── webapp.bat / tray.bat      # the two day-to-day .bat entrypoints
-├── webapp_tunnel_named.bat    # uvicorn + cloudflared (named tunnel)
+├── tray.bat                   # the day-to-day entrypoint: starts or restarts the tray
 ├── setup.bat                  # one-shot fresh-clone installer
 │
 ├── app/
@@ -47,7 +45,7 @@ app-launcher-lite/
 │   ├── audit.py                # terminal audit + per-session logs; session_retention.py is its daily sweep
 │   ├── diagnostics.py          # log ring buffer + port-owner introspection
 │   ├── request_timing.py       # per-request queue/worker time, the budget table, in-flight peaks
-│   ├── health_snapshot.py      # the read-only `launcher.py health` report
+│   ├── health_snapshot.py      # the read-only `scripts/launcher.py health` report
 │   ├── performance_health.py   # the read-only health line under Settings > Performance
 │   ├── monitoring/             # background samplers behind the read-only readings: the Apps tab port listeners and the hub's machine health (listeners_sampler.py)
 │   ├── static_versioning.py    # content-hash query strings for asset cache-busting
@@ -71,7 +69,7 @@ app-launcher-lite/
 │   │                           #   secrets; per-kind executors (batch / http_check / inline_shell / powershell / python / shell_wsl)
 │   └── ...                     # small single-purpose modules (password, login lockout, build info, boot autostart, runtime files, ...)
 │
-├── scripts/                    # operator tools and the vendored ratchets
+├── scripts/                    # launcher.py (thin entry point: sys.path shim -> app/cli/main), webapp.bat (webapp without the tray), webapp_tunnel_named.bat (uvicorn + cloudflared), operator tools and the vendored ratchets
 │   ├── verify-before-ship.ps1  # the pre-ship gate: disposable webapp + session-host, no tray needed
 │   ├── run-e2e.ps1             # dev-loop e2e runner against the live tray
 │   ├── install.py              # setup.bat's work: venv, requirements, configs from samples (never overwriting), checklist
@@ -143,7 +141,7 @@ app-launcher-lite/
 `scripts/structure_ratchet.py` (vendored byte-for-byte from project-scaffolding, recorded in `.fleet.toml` `[vendored]`) runs in the pre-ship gate. It fails a new file over 1,000 lines, a new function over 100 lines, a directory past 40 modules, a `src` file that imports `app`, and a root folder the declared shape does not list. A finding already in `.structure-ratchet-baseline.json` may not grow past its recorded size. Shrinking one means lowering the baseline with `--update-baseline`; raising or adding an entry needs `--allow-additions`, which shows in review.
 
 - **Where new code goes:** a view's browser code in `app/webapp/static/`, its API in `app/webapp/routers/`, logic with no UI import in `src/`, tests under `tests/unit/<domain>/` (logic), `tests/api/<router>/` (routers) or `tests/e2e/<tab>/` (browser), never loose in `tests/` or `tests/e2e/`, which hold only shared helpers and the conftests. A new module in a full directory goes in a subpackage (`src/notify/`, `src/jobs_kinds/` and `src/transcript_flavors/` are the pattern), never loose in the directory.
-- **Second HTTP surface:** the session-host is `app/webapp/session_host/`, the shape's home for a separately bound listener: it has its own `server.py` and entry point (`launcher.py session-host`), and the webapp only reaches it over loopback HTTP through `src/clients/session.py`.
+- **Second HTTP surface:** the session-host is `app/webapp/session_host/`, the shape's home for a separately bound listener: it has its own `server.py` and entry point (`scripts/launcher.py session-host`), and the webapp only reaches it over loopback HTTP through `src/clients/session.py`.
 - **Declared shape:** `webapp-tray`, with `webapp/` and `copilot/` as extra roots. `webapp/` is the tray's runtime-state folder, and almost all of it is gitignored. The preset itself lists `assets/` and `config/`.
 - **`copilot/` is the agent side, not the app.** It holds what the Copilot CLI runs (hooks, skills, the chief's helpers), so one clone carries both the launcher and its chief. It is Lite's own code, edited here like the rest of the repo. It came from fleet-config-lite and keeps that repo's layout, so every relative path and `parents[N]` lookup in it works unchanged. `copilot/install.py` (with `install.ps1` a thin wrapper that forwards to it) installs and removes the hooks and skills under `~/.copilot` and migrates a machine off the old install. `tests/unit/copilot/test_copilot_tree.py` runs its suite in a child interpreter. The launcher reaches it only by path (`fleet_config_dir`, default `copilot/`): the chief runs there, and the Board loads its helpers from there. Nothing in `src/` or `app/` imports from it. The ratchets scan it like any other code, so its existing findings are baselined until a change fixes them.
 - **Flat directories:** `src/` is under the limit because its domains sit in subpackages; a new module goes in its domain's package, not loose in `src/`. `app/webapp/static/` is under the limit because its views' modules sit in the subfolders above; a new module goes in its view's folder, not loose beside `main.js`.

@@ -8,7 +8,7 @@ When App Launcher Lite misbehaves on a computer you cannot sit at, its logs are 
 - **From the command line**, on the PC itself, which also works when the webapp is down:
 
   ```
-  .\.venv\Scripts\python.exe launcher.py diagnostics --minutes 60
+  .\.venv\Scripts\python.exe scripts/launcher.py diagnostics --minutes 60
   ```
 
   `--minutes` takes any whole number from 1 to 1440.
@@ -98,4 +98,4 @@ One open page asks for each read once at a time. The polls in `app/webapp/static
 
 ## Health snapshot
 
-`.\.venv\Scripts\python.exe launcher.py health` writes `webapp/health/health-<date>-<time>.txt`: the webapp, session-host and tray processes, available memory, the top CPU processes over one second, the running agent processes, the lane marks and session rows, requests in flight and verdicts per class, the git-status cache age, each thread pool's limit and the calls running and waiting on it, and the last 20 lines of the slow-request log, redacted like the diagnostics file. It changes nothing: no process is signalled and no scan is started. A part it cannot establish (the webapp down, no psutil) reads `unknown (<why>)`, never an idle or zero figure.
+`.\.venv\Scripts\python.exe scripts/launcher.py health` writes `webapp/health/health-<date>-<time>.txt`: the webapp, session-host and tray processes, available memory, the top CPU processes over one second, the running agent processes, the lane marks and session rows, requests in flight and verdicts per class, the git-status cache age, each thread pool's limit and the calls running and waiting on it, and the last 20 lines of the slow-request log, redacted like the diagnostics file. It changes nothing: no process is signalled and no scan is started. A part it cannot establish (the webapp down, no psutil) reads `unknown (<why>)`, never an idle or zero figure.

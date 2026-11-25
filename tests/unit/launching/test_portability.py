@@ -87,10 +87,10 @@ class TestNoMachinePortInLaunchers:
     """Ports come from the ignored config through ``scripts.webapp_port``; a literal is only a fallback."""
 
     def test_the_bats_read_the_port_through_the_resolver(self) -> None:
-        for name in ("tray.bat", "webapp.bat"):
+        for name in ("tray.bat", "scripts/webapp.bat"):
             text = (REPO_ROOT / name).read_text(encoding="utf-8")
             assert "-m scripts.webapp_port" in text, name
-        webapp = (REPO_ROOT / "webapp.bat").read_text(encoding="utf-8")
+        webapp = (REPO_ROOT / "scripts" / "webapp.bat").read_text(encoding="utf-8")
         assert re.findall(r"--port (\S+)", webapp) == ["%WEBAPP_PORT%", "%WEBAPP_PORT%"]
 
     def test_the_session_host_restart_reads_both_ports(self) -> None:
@@ -114,7 +114,7 @@ def test_the_samples_carry_placeholder_paths_only() -> None:
 class TestAllSignedStartAndRestart:
     def test_no_launcher_overrides_the_policy_or_carries_a_signature(self) -> None:
         """A signature appended to a tracked script turns every ``git pull`` on an AllSigned PC into a conflict."""
-        scripts = [*REPO_ROOT.glob("*.bat"), *(REPO_ROOT / "scripts").glob("*.ps1"),
+        scripts = [*REPO_ROOT.glob("*.bat"), *(REPO_ROOT / "scripts").glob("*.bat"), *(REPO_ROOT / "scripts").glob("*.ps1"),
                    REPO_ROOT / "src" / "launching" / "ps_script.py", REPO_ROOT / "src" / "jobs_kinds" / "powershell.py"]
         texts = {p.name: p.read_text(encoding="utf-8") for p in scripts}
         assert [n for n, t in texts.items() if re.search(r"-ExecutionPolicy\s+Bypass|\"-ExecutionPolicy\"", t, re.I)] == []

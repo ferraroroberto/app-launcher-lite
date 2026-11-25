@@ -60,7 +60,7 @@ echo   .venv\Scripts\python.exe copilot\install.py
 echo.
 echo ============================================================================
 echo  Setup complete. Start the tray with:  tray.bat
-echo  Or run the webapp standalone:        webapp.bat
+echo  Or run the webapp standalone:        scripts\webapp.bat
 echo ============================================================================
 exit /b 0
 

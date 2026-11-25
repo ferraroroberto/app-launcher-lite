@@ -3,7 +3,7 @@
 The bug: Stop & Close from the phone couldn't dismiss the Edge ``--app``
 mirror window on the PC. The fix has two halves:
 
-  * Python (already covered): launcher.py polls EnumWindows for a top-
+  * Python (already covered): scripts/launcher.py polls EnumWindows for a top-
     level window whose title contains a unique marker, then PostMessage
     WM_CLOSE on Stop. Verified by ``tests/unit/launching/test_launcher_mirror_hwnd.py``
     (16 tests with mocked win32gui).

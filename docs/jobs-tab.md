@@ -9,7 +9,7 @@ The Apps tab launches long-running services and the Coding tab launches Copilot 
 ```
    phone tap  --+
  Stream Deck  --+--> POST /api/jobs/<id>/run --+
-   webhook    --+                              +--> launcher.py run-job <id>
+   webhook    --+                              +--> scripts/launcher.py run-job <id>
    schedule   --+ (Task Scheduler) -------------+         |
                                                           +-- resolve interpreter
                                                           +-- capture output + exit code
@@ -18,7 +18,7 @@ The Apps tab launches long-running services and the Coding tab launches Copilot 
                                               webapp/jobs/<id>/<run>/  <-- history
 ```
 
-The single executor is `app/cli/commands/run_job_cmd.py` (`launcher.py run-job <id>`). Task Scheduler calls it directly; the webapp's `POST /api/jobs/<id>/run` pre-creates the run directory, returns the `run_id` at once, then spawns the executor detached so the request never blocks.
+The single executor is `app/cli/commands/run_job_cmd.py` (`scripts/launcher.py run-job <id>`). Task Scheduler calls it directly; the webapp's `POST /api/jobs/<id>/run` pre-creates the run directory, returns the `run_id` at once, then spawns the executor detached so the request never blocks.
 
 ## Data model — `config/jobs.json`
 

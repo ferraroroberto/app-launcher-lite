@@ -6,7 +6,7 @@ REM ----------------------------------------------------------------------------
 REM  Starts the webapp on config.json's webapp.port and a named Cloudflare tunnel using
 REM  webapp/cloudflared.yml so the public URL stays the same every launch.
 REM
-REM  One-time setup (run from this directory):
+REM  One-time setup (run from the repo root):
 REM    cloudflared tunnel login
 REM    cloudflared tunnel create launcher
 REM    cloudflared tunnel route dns launcher launcher.your-domain.example
@@ -17,7 +17,7 @@ REM  Press Ctrl+C to stop both.
 REM ============================================================================
 
 setlocal
-set "SCRIPT_DIR=%~dp0"
+for %%I in ("%~dp0..") do set "SCRIPT_DIR=%%~fI\"
 set "VENV_PY=%SCRIPT_DIR%.venv\Scripts\python.exe"
 
 if not exist "%VENV_PY%" (
