@@ -210,5 +210,24 @@ class FallbackWakeLineTest(unittest.TestCase):
             self.assertEqual(lite_lanes.fallback_wake_line(config), line)
 
 
+class ReofferSettingTest(unittest.TestCase):
+    """`inbox` re-offers a stale claim after Lite's `chief_reoffer_minutes`, the window the
+    launcher's doorbell counts by, and after the mailbox default when that is unread."""
+
+    def test_reoffer_seconds_per_setting(self):
+        from chief import lite_commands, mailbox
+        with tempfile.TemporaryDirectory() as td:
+            config = Path(td) / "webapp_config.json"
+            self.assertEqual(lite_commands.reoffer_seconds(config), mailbox.CLAIM_STALE_SECONDS)
+            self.assertEqual(mailbox.CLAIM_STALE_SECONDS, 900.0)
+            config.write_text(json.dumps({"chief_reoffer_minutes": 30}), encoding="utf-8")
+            self.assertEqual(lite_commands.reoffer_seconds(config), 1800.0)
+            for junk in (0, -1, True, "30", None):
+                config.write_text(json.dumps({"chief_reoffer_minutes": junk}), encoding="utf-8")
+                self.assertEqual(lite_commands.reoffer_seconds(config), 900.0)
+            config.write_text("{not json", encoding="utf-8")
+            self.assertEqual(lite_commands.reoffer_seconds(config), 900.0)
+
+
 if __name__ == "__main__":
     unittest.main()

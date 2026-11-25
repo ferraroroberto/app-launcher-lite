@@ -312,6 +312,32 @@
             <button data-track="chief.weekly-proposals" type="button" id="chiefWeeklyProposalsToggle" class="toggle" role="switch" aria-checked="false" aria-label="Weekly proposals" aria-describedby="chiefWeeklyProposalsHelp" title="Let the chief draft its weekly proposals"><span class="knob"></span><span class="toggle-label">OFF</span></button>
           </div>
           <p id="chiefWeeklyProposalsHelp" class="field-help">Lets the chief draft its weekly proposals without being asked. Off, it proposes nothing until you ask.</p>
+          <h3 class="opt-group-title" id="chiefTimingsTitle">Timings</h3>
+          <p class="opt-hint">How long the chief and its doorbell wait. Each field saves when you leave it, and no restart is needed.</p>
+          <label class="row">
+            <span>Doorbell re-ring (seconds)</span>
+            <input data-track="chief.rering-seconds" id="chiefReringSeconds" data-chief-timing="chief_rering_seconds" data-timing-name="Doorbell re-ring" type="number" class="input-native" inputmode="numeric" min="30" max="600" step="1" aria-describedby="chiefReringHelp">
+          </label>
+          <p id="chiefReringHelp" class="field-help">After a ring, the doorbell waits this long. If the chief is still idle with mail waiting, the ring did not land, so it rings again.</p>
+          <label class="row">
+            <span>Unread mail alert (minutes)</span>
+            <input data-track="chief.unread-alert-minutes" id="chiefUnreadAlertMinutes" data-chief-timing="chief_unread_alert_minutes" data-timing-name="Unread mail alert" type="number" class="input-native" inputmode="numeric" min="5" max="240" step="1" aria-describedby="chiefUnreadAlertHelp">
+          </label>
+          <p id="chiefUnreadAlertHelp" class="field-help">When mail has waited this long, the chief missed its wake: the chief card moves to Your turn and the doorbell log gets a warning.</p>
+          <label class="row">
+            <span>Re-offer claimed mail (minutes)</span>
+            <input data-track="chief.reoffer-minutes" id="chiefReofferMinutes" data-chief-timing="chief_reoffer_minutes" data-timing-name="Re-offer claimed mail" type="number" class="input-native" inputmode="numeric" min="10" max="120" step="1" aria-describedby="chiefReofferHelp">
+          </label>
+          <p id="chiefReofferHelp" class="field-help">Mail the chief took but never marked done is offered to it again after this long, in case the turn that took it died.</p>
+          <label class="row">
+            <span>Turn-end hold (minutes)</span>
+            <input data-track="chief.hold-minutes" id="chiefHoldMinutes" data-chief-timing="chief_hold_minutes" data-timing-name="Turn-end hold" type="number" class="input-native" inputmode="numeric" min="5" max="60" step="1" aria-describedby="chiefHoldHelp">
+          </label>
+          <p id="chiefHoldHelp" class="field-help">When compaction is due or worker slots sit free, the chief is held back from ending its turn, at most once per this many minutes.</p>
+          <h3 class="opt-group-title" id="chiefFixedTitle">How the chief works</h3>
+          <p class="opt-hint">Fixed values and rules, shown so you can see how the chief behaves. These cannot be changed here.</p>
+          <dl id="chiefFixedList" class="context-sheet-list chief-fixed-list" aria-labelledby="chiefFixedTitle"></dl>
+          <ul id="chiefFixedRules" class="chief-fixed-rules"></ul>
         </div>
         <div class="detail-actions">
           <button data-track="chief.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>

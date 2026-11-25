@@ -87,6 +87,7 @@ from src.chief import identity as chief_identity
 from src.chief import journal as chief_journal
 from src.chief import pointer as chief_pointer
 from src.chief import skills_preflight
+from src.chief import timings as chief_timings
 from src.chief.cap_raised import publish_cap_raised
 from src.chief.launch_settings import chief_launch_model, chief_model_problem
 from src.clients import session as session_client
@@ -507,6 +508,7 @@ def _chief_settings_payload(cfg: WebappConfig) -> Dict[str, Any]:
         "chief_job_self_heal": cfg.chief_job_self_heal,
         "chief_weekly_proposals": cfg.chief_weekly_proposals,
         "chief_fallback_minutes": cfg.chief_fallback_minutes,
+        **chief_timings.values(cfg),
     }
 
 

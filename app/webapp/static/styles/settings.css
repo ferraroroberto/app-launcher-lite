@@ -305,3 +305,21 @@ button.settings-row:active { background: var(--card-2); }
 .speech-recording-actions > button { flex: 0 0 auto; width: auto; }
 .speech-recording audio { width: 100%; }
 .speech-recording-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Settings › Chief › How the chief works: each fixed value's reason sits on
+   its own line under the label and value. */
+.context-sheet-row.chief-fixed-row { flex-wrap: wrap; gap: 2px 12px; min-height: 0; padding: 10px 0; }
+.chief-fixed-row .chief-fixed-why {
+  flex-basis: 100%;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: var(--font-body-sm);
+  line-height: 1.45;
+}
+.chief-fixed-rules {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: var(--font-body-sm);
+  line-height: 1.45;
+}

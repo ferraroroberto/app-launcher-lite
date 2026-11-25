@@ -73,6 +73,10 @@ class TestChiefSettings:
             "chief_job_self_heal": False,
             "chief_weekly_proposals": False,
             "chief_fallback_minutes": 30,
+            "chief_rering_seconds": 60,
+            "chief_unread_alert_minutes": 15,
+            "chief_reoffer_minutes": 15,
+            "chief_hold_minutes": 10,
         }
 
     @pytest.mark.parametrize("key", ["chief_job_self_heal", "chief_weekly_proposals"])
@@ -86,6 +90,11 @@ class TestChiefSettings:
         assert client.get("/api/board/chief/settings").json()["settings"][key] is True
         resp = client.put("/api/board/chief/settings", json={"worker_cap": 4})
         assert resp.json()["settings"][key] is True
+
+    def test_a_saved_timing_reaches_the_chief(self, webapp_client, _bypass_gate):
+        client, _, _ = webapp_client
+        assert client.post("/api/config", json={"chief_reoffer_minutes": 30}).status_code == 200
+        assert client.get("/api/board/chief/settings").json()["settings"]["chief_reoffer_minutes"] == 30
 
     def test_put_persists_and_reloads(self, webapp_client, _bypass_gate):
         client, app, _ = webapp_client

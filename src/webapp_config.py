@@ -39,6 +39,7 @@ from src.app_config import resolve_session_host_port, resolve_webapp_port
 from src.launching.presets import load_launch_presets
 from src import request_timing, runtime_files
 from src.chief import copilot_state
+from src.chief import timings as chief_timings
 from src.webapp_settings import performance
 from src.webapp_settings.values import (  # noqa: F401 — re-exported for webapp_config.<name> callers
     CREDENTIAL_KEYS,
@@ -234,6 +235,14 @@ class WebappConfig:
     # doorbell switch, since it is the backup for a doorbell that is off or
     # missed.
     chief_fallback_minutes: int = DEFAULT_CHIEF_FALLBACK_MINUTES
+    # The chief's tunable timings; defaults and ranges in src/chief/timings.py.
+    # The doorbell reads the first three every tick; chief_ops.py inbox reads
+    # chief_reoffer_minutes and the turn-end hook chief_hold_minutes straight
+    # from this file.
+    chief_rering_seconds: int = chief_timings.default("chief_rering_seconds")
+    chief_unread_alert_minutes: int = chief_timings.default("chief_unread_alert_minutes")
+    chief_reoffer_minutes: int = chief_timings.default("chief_reoffer_minutes")
+    chief_hold_minutes: int = chief_timings.default("chief_hold_minutes")
     # Queue drain for unattended audit issues. On by default: the chief
     # adds them to its plan and dispatches into a free worker slot.
     # Settings > Chief turns it off; readers take auto_drain from the
@@ -834,7 +843,11 @@ def _validate(cfg: WebappConfig) -> None:
 
 
 def _validate_chief_timers(cfg: WebappConfig) -> None:
-    """The chief's two 0-is-off numbers: the fallback wake and auto-compact."""
+    """The chief's timers: the fallback wake, auto-compact and the tunable timings."""
+    for key in chief_timings.TUNABLE_KEYS:
+        problem = chief_timings.range_problem(key, getattr(cfg, key))
+        if problem:
+            raise ValueError(problem)
     if not (0 <= cfg.chief_fallback_minutes <= MAX_CHIEF_FALLBACK_MINUTES):
         raise ValueError(
             "chief_fallback_minutes must be 0 (off) or up to "
