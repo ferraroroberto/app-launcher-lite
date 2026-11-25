@@ -672,6 +672,14 @@ def test_a_plain_install_leaves_old_state_where_it_is_and_says_to_migrate(lite: 
     assert not lite.state.exists(), "an empty new folder would switch every writer away from the live state"
 
 
+def test_the_migrate_warning_names_the_new_state_folder_as_the_destination(lite: Lite) -> None:
+    lite.seed_state()
+    out = lite.ok()
+    assert f"Re-run with --migrate to move it -> {lite.state}\n" in out.replace("\r\n", "\n")
+    assert f"to move it -> {lite.hooks / 'state'}" not in out
+    assert f"State file will appear at: {lite.hooks / 'state'}\\sessions-state.json (until --migrate)" in out
+
+
 def _seed_full_state(lite: Lite) -> dict:
     """What a machine with a live chief holds: plan, journal, handover, registry, pending and claimed events."""
     legacy = lite.hooks / "state"
