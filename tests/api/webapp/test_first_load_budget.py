@@ -27,8 +27,9 @@ from typing import Dict, List
 MAX_RESPONSE_BYTES = 100 * 1024
 # The page and its one stylesheet block the first paint (55 KB together, gzipped).
 RENDER_BLOCKING_BYTES = 70 * 1024
-# Page, stylesheet, main.js's static graph and the Code tab's code (136 KB now).
-FIRST_LOAD_BYTES = 140 * 1024
+# Page, stylesheet, main.js's static graph and the Code tab's code (140 KB now: the
+# page carries every Settings sheet's markup, and each new sheet adds some).
+FIRST_LOAD_BYTES = 141 * 1024
 # Loaded on first open, never by the first load.
 LAZY_VIEWS = (
     "/static/terminal.js",

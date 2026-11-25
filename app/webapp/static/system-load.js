@@ -97,7 +97,7 @@ function healthView() {
 
 // Each condition its own message: the config, the hub, the read.
 function unknownHealthText(h) {
-  if (h.why === 'disabled') return 'No hub is set up: llm_hub_url is empty';
+  if (h.why === 'disabled') return 'No hub is set up: add its address in Settings > Local hub';
   if (h.why === 'unreachable') return "Couldn't reach the hub";
   if (h.why === 'unreadable') return "The hub's answer wasn't a verdict";
   if (h.why === 'hub') return h.reason || "The hub couldn't confirm the machine's health";

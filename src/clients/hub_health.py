@@ -26,9 +26,13 @@ live webapp's own stdout is discarded by the tray.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import time
 from typing import Any, Callable, Dict, Iterable, List, Optional
+from urllib.parse import urlparse
+
+import requests
 
 from src.clients import _loopback_http
 from src.monitoring.listeners_sampler import ListenersSampler
@@ -56,6 +60,10 @@ _MAX_DISKS = 8
 _MAX_DRIVES = 4
 # The hub's per-disk states; anything else reads unknown, never ok.
 _DISK_STATES = frozenset({"ok", "watch", "alert", "unknown"})
+
+# What the Settings button "Use the local hub" fills in: where hub-lite listens.
+# port-host-exempt: hub-lite's documented address, offered as a convenience; the saved value lives in the ignored config
+LOCAL_HUB_URL = "http://127.0.0.1:8020"
 
 # The sampler's own thread: a slow or hung hub stalls only this reading.
 POOL = TimedExecutor("hub-health-sample", max_workers=1)
@@ -183,6 +191,62 @@ def parse(body: Any) -> Dict[str, Any]:
     if verdict == VERDICT_UNKNOWN:
         return _unknown("hub", _text(body.get("reason")))
     return _unknown("unreadable")
+
+
+def checked_url(raw: Any) -> str:
+    """The hub base URL as saved, or ``ValueError`` saying what is wrong.
+
+    Empty means no hub. Otherwise: ``http`` or ``https``, a host that is this PC
+    (``localhost`` or a loopback address) or a private-network address, an optional
+    port and nothing after it. The hub is sent job output and read for machine
+    health, so a public name is refused rather than trusted. Checked on write
+    only: a file edited by hand keeps loading whatever it holds.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = urlparse(text)
+        parsed.port  # noqa: B018 — reading it is the check: a non-numeric port raises
+        host = parsed.hostname or ""
+    except ValueError:
+        raise ValueError(f"{text!r} is not a valid URL; use the form http://localhost:PORT") from None
+    if parsed.scheme not in ("http", "https") or not host:
+        raise ValueError("The hub URL must start with http:// or https:// and name a host and port, e.g. http://localhost:PORT")
+    if parsed.path not in ("", "/") or parsed.params or parsed.query or parsed.fragment or parsed.username is not None:
+        raise ValueError("The hub URL is the address only (scheme, host and port): drop the path, query and login")
+    if not _is_local_host(host):
+        raise ValueError(f"{host} is not on this PC or the private network; use localhost or a private-network IP address")
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _is_local_host(host: str) -> bool:
+    if host.lower() == "localhost":
+        return True
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return addr.is_loopback or addr.is_private
+
+
+def check_answers(base_url: str) -> None:
+    """Probe ``<base>/healthz`` once; raises :class:`HubHealthError` with the
+    reason in plain words when nothing there answers. Blocking: a route runs it
+    on the outbound pool."""
+    url = f"{base_url.rstrip('/')}/healthz"
+    try:
+        resp = _loopback_http.pooled_request("GET", url, timeout=_TIMEOUT, retry_dropped=False)
+    except requests.exceptions.SSLError:
+        raise HubHealthError(f"{base_url} answered but its certificate could not be verified", status=400) from None
+    except requests.exceptions.Timeout:
+        raise HubHealthError(f"{base_url} did not answer within {_TIMEOUT:.0f} s", status=400) from None
+    except requests.exceptions.ConnectionError:
+        raise HubHealthError(f"Nothing is listening at {base_url}: the connection was refused or the host is not there", status=400) from None
+    except requests.RequestException as exc:
+        raise HubHealthError(f"{base_url} could not be reached ({type(exc).__name__})", status=400) from None
+    if resp.status_code >= 400:
+        raise HubHealthError(f"{base_url} answered HTTP {resp.status_code} at /healthz, so it does not look like the hub", status=400)
 
 
 def health_url(base_url: str) -> str:

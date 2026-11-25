@@ -60,7 +60,7 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `llm_hub_url` | `""` | Base URL of the local hub on this computer. The PC load sheet's Health row and its ports, commit and disk rows come from `GET <base>/admin/api/machines/health`, read by a background sampler once per 30 s with a 3 s limit, only while a page is open and visible. Empty reads `Not confirmed` with the reason. Set in the file only (no Settings row), read when the webapp starts. Job failure summaries use the same hub when `notify_failure_summary` is on. |
+| `llm_hub_url` | `""` | Base URL of the local hub on this computer. The PC load sheet's Health row and its ports, commit and disk rows come from `GET <base>/admin/api/machines/health`, read by a background sampler once per 30 s with a 3 s limit, only while a page is open and visible. Empty reads `Not confirmed` with the reason. Set in Settings > Local hub (a blank address turns the hub off, **Use the local hub** fills the hub-lite address), or in the file. A saved address takes effect at once, with no restart. Settings accepts only `http` or `https` on this PC or a private-network address with no path, and saves it only when `<base>/healthz` answers; a refusal names the reason and keeps the saved value. Job failure summaries use the same hub when `notify_failure_summary` is on. |
 
 ### Copilot launch settings
 

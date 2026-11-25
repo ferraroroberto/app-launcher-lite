@@ -125,6 +125,35 @@
       </div>
     </dialog>
 
+    <!-- Local hub: the address the PC load sheet reads machine health from.
+         hub-settings.js saves it as it changes through POST /api/config,
+         which checks the hub answers before anything is stored. -->
+    <dialog id="hubSheet" data-surface="settings.hub" class="detail-dialog settings-sheet" data-track-view="sheet.hub" aria-labelledby="hubSheetTitle">
+      <div class="detail-card">
+        <div class="detail-header settings-sheet-head">
+          <button data-track="hub.back" type="button" class="icon-button settings-sheet-back" data-sheet-back aria-label="Back to Settings" title="Back to Settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chevron-left"></use></svg></button>
+          <h2 id="hubSheetTitle" tabindex="-1" autofocus>Local hub</h2>
+          <button data-track="hub.close" type="button" class="icon-button detail-close" data-sheet-close aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div class="settings-sheet-body">
+          <label class="stacked">
+            <span>Hub address (blank = no hub)</span>
+            <input id="hubUrl" type="text" class="input-native" placeholder="http://127.0.0.1:8020" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="hubUrlHelp">
+          </label>
+          <p id="hubUrlHelp" class="field-help">Feeds the PC load sheet its machine health. This PC or a private-network address; nothing is saved unless the hub answers.</p>
+          <div class="row">
+            <button data-track="hub.use-local" type="button" id="hubUseLocal" class="button-tint">Use the local hub</button>
+          </div>
+          <p id="hubResult" class="field-help" role="status" aria-live="polite" hidden></p>
+        </div>
+        <div class="detail-actions">
+          <button data-track="hub.done" type="button" class="button-primary detail-save-btn" data-sheet-close>Done</button>
+        </div>
+      </div>
+    </dialog>
+
     <!-- Speech to text: the record button's endpoint, any OpenAI-shaped server
          (POST <base>/audio/transcriptions). Each field saves as it changes. -->
     <dialog id="speechSheet" data-surface="settings.speech" class="detail-dialog settings-sheet" data-track-view="sheet.speech" aria-labelledby="speechSheetTitle">

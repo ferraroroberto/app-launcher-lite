@@ -352,3 +352,75 @@ def test_the_disk_block_is_bounded():
     disks = [{"disk": f"d{i}", "drives": [f"{i}:"] * 9, "state": "ok", "busy_percent": 1.0} for i in range(20)]
     got = hh.parse({"verdict": "ok", "disks": disks})["machine"]["disks"]
     assert len(got) == 8 and all(len(d["drives"]) == 4 for d in got)
+
+
+# ------------------------------------------------- the address Settings saves
+
+
+@pytest.mark.parametrize("raw,saved", [
+    ("", ""),
+    ("  ", ""),
+    ("http://127.0.0.1:8020", "http://127.0.0.1:8020"),
+    (" http://localhost:8000/ ", "http://localhost:8000"),
+    ("https://192.168.1.20:8443", "https://192.168.1.20:8443"),
+])
+def test_a_local_address_is_saved_trimmed_without_its_trailing_slash(raw, saved):
+    assert hh.checked_url(raw) == saved
+
+
+@pytest.mark.parametrize("raw", [
+    "127.0.0.1:8020",                 # no scheme
+    "ftp://127.0.0.1",                # not http(s)
+    "http://127.0.0.1:8020/admin",    # a path
+    "http://127.0.0.1:8020/?a=1",     # a query
+    "http://user:pw@127.0.0.1:8020",  # a login
+    "http://127.0.0.1:notaport",      # a bad port
+    "http://example.com",             # not this PC or the private network
+    "http://8.8.8.8:8000",            # a public address
+])
+def test_an_address_that_is_not_the_local_hub_is_refused_with_a_reason(raw):
+    with pytest.raises(ValueError, match="hub URL|valid URL|private network"):
+        hh.checked_url(raw)
+
+
+def _answer(monkeypatch, *, status=200, raises=None):
+    calls = []
+
+    def fake(method, url, **kwargs):
+        calls.append(url)
+        if raises is not None:
+            raise raises
+        return type("R", (), {"status_code": status})()
+
+    monkeypatch.setattr(hh._loopback_http, "pooled_request", fake)
+    return calls
+
+
+def test_a_hub_that_answers_healthz_passes_the_check(monkeypatch):
+    calls = _answer(monkeypatch)
+    hh.check_answers("http://127.0.0.1:8020")
+    assert calls == ["http://127.0.0.1:8020/healthz"]
+
+
+@pytest.mark.parametrize("fault,words", [
+    ({"raises": hh.requests.exceptions.ConnectionError("refused")}, "Nothing is listening"),
+    ({"raises": hh.requests.exceptions.ConnectTimeout("slow")}, "did not answer within 3 s"),
+    ({"raises": hh.requests.exceptions.SSLError("bad cert")}, "certificate"),
+    ({"status": 404}, "HTTP 404"),
+])
+def test_a_hub_that_does_not_answer_fails_the_check_with_the_reason(monkeypatch, fault, words):
+    _answer(monkeypatch, **fault)
+    with pytest.raises(hh.HubHealthError, match=words):
+        hh.check_answers("http://127.0.0.1:8020")
+
+
+def test_a_reset_drops_the_snapshot_and_a_scan_still_running_for_the_old_target(monkeypatch):
+    sampler, clock, calls = _sampler(monkeypatch, {"verdict": "ok"})
+    sampler.read()
+    sampler.maybe_scan()
+    assert sampler.read().value["verdict"] == "ok"
+    sampler.reset()
+    assert sampler.read().reason == "warming"
+    # A scan that began before the reset lands after it: its answer is the old hub's.
+    sampler._run(clock(), epoch=0)
+    assert sampler.read().reason == "warming"
