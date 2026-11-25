@@ -49,6 +49,12 @@ PICKER = [
     # The two-row footer: the figure stays on the bottom row.
     ([" Plan: 26.957/35.100 (76% used) · Session: 15.99 AIC used · YOLO", RULE, "> ", RULE,
       " GPT-6 Luna · Extra High · (9%)", ""], 9),
+    # The same footer wrapped over two rows: the percent is a row of its own.
+    ([" +0 Plan: 27.448/35.100 · Session: 39.74 · YOLO", " -0 (78% used) AIC used", RULE, "> ", RULE,
+      " GPT-6 Luna · Extra High", " (9%)", ""], 9),
+    # A figure alone on a row with no input box above it is conversation text.
+    ([" ● Done.", " (9%)"], None),
+    ([RULE, "> ", RULE, " Plan: 27.448/35.100", " (78% used)"], None),
 ])
 def test_context_percent_is_the_status_lines_own_figure(lines, expected):
     assert cs.context_percent(lines) == expected

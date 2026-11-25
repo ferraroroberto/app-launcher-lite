@@ -33,6 +33,10 @@ from typing import List, Optional
 # ``Session: 5.62 AIC used``; the unit is required: a figure in any other unit
 # is not credits. The number's separators are decided by ``_amount``.
 _CREDITS_RE = re.compile(r"\bSession:\s*([\d.,]*\d)\s*AIC\b")
+# ``Session: 39.74`` ending its row or followed by a cell separator: the unit
+# is on the next row. Any other word after the number is some other unit.
+_SESSION_FIGURE_RE = re.compile(r"\bSession:\s*([\d.,]*\d)\s*(?:[·|•].*)?$")
+_UNIT_RE = re.compile(r"\bAIC\b")
 _RULE_CHARS = set("─━")
 
 # Rows searched between the input box's borders, and above its top border, for
@@ -86,24 +90,41 @@ def _row_credits(row: Optional[str]) -> Optional[float]:
     return _amount(match.group(1)) if match else None
 
 
-def _status_row(rows: List[str], bottom: int) -> Optional[str]:
-    """The row directly above the input box that ends at ``rows[bottom]``'s
-    footer, or ``None`` when the screen shows no such box."""
+def _status_rows(rows: List[str], bottom: int) -> List[str]:
+    """The non-blank rows just above the input box that ends at ``rows[bottom]``'s
+    footer, top to bottom and at most two, or ``[]`` when the screen shows no
+    such box."""
     index, below = bottom, 0
     while index >= 0 and not _is_rule(rows[index]):
         below += rows[index].strip() != ""
         if below > _BELOW_BOX_MAX:
-            return None
+            return []
         index -= 1
     top = index - 1
     while top >= 0 and index - top <= _INPUT_ROWS_MAX and not _is_rule(rows[top]):
         top -= 1
     if top < 0 or not _is_rule(rows[top]):
-        return None
-    for row in reversed(rows[max(0, top - _STATUS_GAP_MAX):top]):
-        if row.strip():
-            return row
+        return []
+    above = [row for row in rows[max(0, top - _STATUS_GAP_MAX):top] if row.strip()]
+    return above[-2:]
+
+
+def _wrapped_credits(upper: str, lower: str) -> Optional[float]:
+    """The figure when ``Session: N`` ends ``upper`` and the unit starts ``lower``."""
+    match = _SESSION_FIGURE_RE.search(upper)
+    if match and _UNIT_RE.search(lower):
+        return _amount(match.group(1))
     return None
+
+
+def _status_credits(rows: List[str], bottom: int) -> Optional[float]:
+    status = _status_rows(rows, bottom)
+    if not status:
+        return None
+    found = _row_credits(status[-1])
+    if found is None and len(status) == 2:
+        found = _wrapped_credits(status[0], status[1])
+    return found
 
 
 def ai_credits_used(lines: List[str]) -> Optional[float]:
@@ -115,4 +136,4 @@ def ai_credits_used(lines: List[str]) -> Optional[float]:
         return None
     if _CREDITS_RE.search(rows[bottom]):
         return _row_credits(rows[bottom])
-    return _row_credits(_status_row(rows, bottom))
+    return _status_credits(rows, bottom)

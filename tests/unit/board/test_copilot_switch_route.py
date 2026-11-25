@@ -27,6 +27,7 @@ def copilot_client(picker_client, monkeypatch, tmp_path):
     from src.session_view import copilot_session
 
     client, session, _show, typed = picker_client
+    router._COPILOT_LAST.clear()
     session.list_sessions.return_value = [_live(agent="copilot")]
     monkeypatch.setattr(router, "_MODEL_CONFIRM_S", 0.4)
     monkeypatch.setattr(router, "_MODEL_POLL_S", 0.02)
@@ -114,6 +115,8 @@ def test_the_context_ring_reads_copilots_status_line(copilot_client, screen, bod
 
 
 def test_the_context_route_carries_the_footers_ai_credits(copilot_client):
+    from app.webapp.routers import session_screen as router
+    router._COPILOT_LAST.clear()
     client, _, state = copilot_client
     footer = IDLE[-3].replace("/ commands", "/ commands   Session: 5.62 AIC used")
     state["screen"] = IDLE[:-3] + [footer, "", ""]
@@ -121,8 +124,25 @@ def test_the_context_route_carries_the_footers_ai_credits(copilot_client):
     assert (got["percent"], got["ai_credits"]) == (3, 5.62)
     # The footer without the figure, and a narrow terminal, carry none.
     for screen in (IDLE, NARROW):
+        router._COPILOT_LAST.clear()
         state["screen"] = screen
         assert client.get("/api/claude-code/sessions/s1/context").json()["ai_credits"] is None
+
+
+def test_a_screen_without_the_figures_keeps_the_ring_the_session_had(copilot_client):
+    """A repaint caught mid-draw reads no footer: the ring and the credits it
+    showed a moment ago stay, and only a session that is gone clears them."""
+    from app.webapp.routers import session_screen as router
+    router._COPILOT_LAST.clear()
+    client, _, state = copilot_client
+    footer = IDLE[-3].replace("/ commands", "/ commands   Session: 5.62 AIC used")
+    state["screen"] = IDLE[:-3] + [footer, "", ""]
+    assert client.get("/api/claude-code/sessions/s1/context").json()["percent"] == 3
+    state["screen"] = NARROW
+    got = client.get("/api/claude-code/sessions/s1/context").json()
+    assert (got["available"], got["percent"], got["ai_credits"]) == (True, 3, 5.62)
+    router._COPILOT_LAST.clear()
+    assert client.get("/api/claude-code/sessions/s1/context").json()["percent"] is None
 
 
 def test_attached_sessions_name_copilots_logged_model(copilot_client):

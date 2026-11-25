@@ -25,8 +25,9 @@ logger = logging.getLogger(__name__)
 _TTL_S = 15.0
 
 # session id -> (monotonic time of the reading, credits or None). A screen that
-# could not be read leaves the previous reading in place, aged, rather than
-# blanking a figure that was true a moment ago.
+# could not be read, or whose footer shows no figure right now (a repaint caught
+# mid-draw), leaves the previous figure in place, aged, rather than blanking one
+# that was true a moment ago. It goes with the session.
 _cache: Dict[str, Tuple[float, Optional[float]]] = {}
 _inflight: Set[str] = set()
 _tasks: Set["asyncio.Task[None]"] = set()
@@ -48,11 +49,12 @@ async def _refresh(port: int, session: Dict[str, Any]) -> None:
             port, sid, int(session.get("rows") or 40), int(session.get("cols") or 120)
         )
         previous = _cache.get(sid)
-        if lines is None:
-            if previous is not None:
-                _cache[sid] = (time.monotonic(), previous[1])
+        credits = None if lines is None else ai_credits_used(lines)
+        if credits is None and previous is not None:
+            credits = previous[1]
+        if lines is None and previous is None:
             return
-        _cache[sid] = (time.monotonic(), ai_credits_used(lines))
+        _cache[sid] = (time.monotonic(), credits)
     except Exception as exc:  # a failed read must never reach the poll
         logger.info("ℹ️ ai credits %s unreadable: %s", sid[:8], exc.__class__.__name__)
     finally:

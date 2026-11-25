@@ -214,6 +214,10 @@ async def session_answer(sid: str, request: Request) -> Dict[str, Any]:
 # seconds leaves one line per change rather than one per tick.
 _PICKER_SEEN: Dict[str, str] = {}
 _CONTEXT_SEEN: Dict[str, str] = {}
+# A Copilot session's last readable ``(percent, ai_credits)``: a footer caught
+# mid-repaint or cut short reads neither, and the ring keeps what was true a
+# moment ago instead of blanking. It goes when the session does.
+_COPILOT_LAST: Dict[str, Tuple[Optional[int], Optional[float]]] = {}
 
 
 def _no_picker(reason: str, resume_showing: bool = False) -> Dict[str, Any]:
@@ -898,11 +902,17 @@ async def _build_context(cfg: WebappConfig, sid: str, steps: BuildSteps) -> Dict
     if reason is not None:
         if reason == "session_not_found":
             _CONTEXT_SEEN.pop(sid, None)
+            _COPILOT_LAST.pop(sid, None)
         else:
             _log_screen(_CONTEXT_SEEN, "context", sid, reason)
         return {"available": False, "percent": None, "ai_credits": None, "reason": reason}
     percent = copilot_session.context_percent(lines) if copilot else context_percent(lines)
     credits = ai_credits_used(lines) if copilot else None
+    if copilot:
+        last_percent, last_credits = _COPILOT_LAST.get(sid, (None, None))
+        percent = last_percent if percent is None else percent
+        credits = last_credits if credits is None else credits
+        _COPILOT_LAST[sid] = (percent, credits)
     if percent is None:
         _log_screen(_CONTEXT_SEEN, "context", sid, "not showing")
         return {"available": True, "percent": None, "ai_credits": credits, "reason": "not_showing"}
