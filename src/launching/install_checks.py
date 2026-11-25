@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -27,6 +28,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WEBAPP_CONFIG = REPO_ROOT / "config" / "webapp_config.json"
 
 OK, MISSING, UNKNOWN = 0, 1, 2
+# The entry's `call "<tray.bat>"` line, as src/boot_autostart.py writes it.
+_CALLED = re.compile(r'^call "([^"]+)"', re.MULTILINE)
+
+
+def _where(path: object) -> str:
+    """The file a path reaches, so a folder link and its target compare equal."""
+    return os.path.normcase(os.path.realpath(str(path)))
 
 
 def signin_state(config: Path = WEBAPP_CONFIG, hash_file: Optional[Path] = None) -> int:
@@ -52,7 +60,8 @@ def startup_state(startup_dir: Optional[Path] = None, tray_bat: Path = boot_auto
         entry = boot_autostart.wrapper_bat_path(startup_dir).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return UNKNOWN
-    return OK if os.path.normcase(f'call "{tray_bat}"') in os.path.normcase(entry) else UNKNOWN
+    called = _CALLED.search(entry)
+    return OK if called and _where(called.group(1)) == _where(tray_bat) else UNKNOWN
 
 
 def main(argv: Optional[List[str]] = None) -> int:
