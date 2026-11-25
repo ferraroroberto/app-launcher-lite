@@ -36,8 +36,8 @@ from src.diagnostics import (
     listener_pids,
 )
 from src.git_utils import resolve_deployed_sha
-from src.listeners_sampler import ListenersSampler
 from src.launching.vscode_workspace import is_vscode_installed
+from src.listeners_sampler import ListenersSampler
 from src.middleware import is_pc_itself, via_cloudflare
 from src.registry import load_registry
 from src.scanner import pretty_folder_name
