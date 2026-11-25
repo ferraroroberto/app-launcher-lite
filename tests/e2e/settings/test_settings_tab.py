@@ -384,6 +384,26 @@ def _state(on: bool) -> str:
     return "true" if on else "false"
 
 
+def _assert_chief_timing_saves_and_fixed_panel_shows(page: Page, posts: list, saving) -> None:
+    """A timing: today's value, its range from the server, an out-of-range
+    value refused in the page, and put back. The fixed panel is drawn."""
+    rering = page.locator("#chiefReringSeconds")
+    expect(rering).to_have_value("60")
+    expect(rering).to_have_attribute("max", "600")
+    rering.fill("5")
+    rering.press("Tab")
+    expect(rering).to_have_attribute("aria-invalid", "true")
+    rering.fill("90")
+    saving(lambda: rering.press("Tab"))
+    expect(page.locator("#toast")).to_contain_text("Doorbell re-ring set to 90")
+    assert posts[-1] == {"chief_rering_seconds": 90}, posts
+    rering.fill("60")
+    saving(lambda: rering.press("Tab"))
+    assert posts[-1] == {"chief_rering_seconds": 60}, posts
+    expect(page.locator("#chiefFixedList .chief-fixed-row").first).to_contain_text("Doorbell check")
+    expect(page.locator("#chiefFixedRules li").first).to_be_visible()
+
+
 def _assert_chief_switches_save_flip_and_reload(page: Page, base_url: str, posts: list, saving) -> None:
     """Each Chief switch sits at its default, saves at once through the
     ordinary /api/config POST, survives a reload and flips back to the
@@ -499,5 +519,7 @@ def test_chief_sheet_switches_and_auto_compact_threshold_save_and_reload(
     fallback.fill("30")
     saving(lambda: fallback.press("Tab"))
     assert posts[-1] == {"chief_fallback_minutes": 30}, posts
+
+    _assert_chief_timing_saves_and_fixed_panel_shows(page, posts, saving)
 
     _assert_chief_switches_save_flip_and_reload(page, base_url, posts, saving)

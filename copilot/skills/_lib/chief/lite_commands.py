@@ -9,15 +9,34 @@ Each handler prints the same `KEY=value` lines as its fleet-config counterpart.
 from __future__ import annotations
 
 import argparse
+import json
+from pathlib import Path
+from typing import Optional
 
+import lite_repos
 from fleet_core import hooks_state
 
 from . import launcher, mailbox, rails
 
 
+def reoffer_seconds(config: Optional[Path] = None) -> float:
+    """Lite's `chief_reoffer_minutes` in seconds, the value the launcher's doorbell also
+    counts stale claims by; `mailbox.CLAIM_STALE_SECONDS` when unset or unreadable."""
+    path = config or lite_repos.WEBAPP_CONFIG
+    try:
+        minutes = json.loads(path.read_text(encoding="utf-8")).get("chief_reoffer_minutes")
+    except (OSError, ValueError, AttributeError):
+        return mailbox.CLAIM_STALE_SECONDS
+    if isinstance(minutes, bool) or not isinstance(minutes, int) or minutes <= 0:
+        return mailbox.CLAIM_STALE_SECONDS
+    return float(minutes * 60)
+
+
 def cmd_inbox(args: argparse.Namespace) -> int:
     """Mailbox v2: claim the pending batch for handling, or just count it."""
     inbox = mailbox.chief_inbox_dir()
+    if args.stale_after is None:
+        args.stale_after = reoffer_seconds()
     if args.count:
         try:
             print(f"PENDING={mailbox.count_pending(inbox, stale_after=args.stale_after, older_than=args.older_than)}")
@@ -65,8 +84,8 @@ def add_mailbox_parsers(sub: argparse._SubParsersAction) -> None:
     """Mount `inbox` and `ack` with fleet-config's argv."""
     ib = sub.add_parser("inbox", help="mailbox v2: claim the pending batch, or --count it")
     ib.add_argument("--count", action="store_true", help="print PENDING=<n> and claim nothing")
-    ib.add_argument("--stale-after", type=float, default=mailbox.CLAIM_STALE_SECONDS,
-                    help="seconds before an unacked claim is re-offered")
+    ib.add_argument("--stale-after", type=float, default=None,
+                    help="seconds before an unacked claim is re-offered (default: Lite's chief_reoffer_minutes)")
     ib.add_argument("--older-than", type=float, default=0.0,
                     help="with --count: count only events that have waited at least this many seconds")
     ib.add_argument("--base-url", default=launcher.DEFAULT_BASE_URL)

@@ -23,7 +23,7 @@ its terminal (:data:`DOORBELL_LINE`):
 
 The ring is level-triggered. The condition must hold for :data:`DEBOUNCE_SECONDS`
 first, so lanes that finish together become one ring. After a ring the bell
-waits :data:`BACKOFF_SECONDS`; a chief still idle with pending events after
+waits ``chief_rering_seconds`` (default :data:`BACKOFF_SECONDS`); a chief still idle with pending events after
 that never got the ring, so it rings again. Seeing the chief busy, or the
 mailbox empty, means the ring landed, and the back-off ends early.
 
@@ -42,7 +42,7 @@ submit or Copilot leaving the line on its input, is logged as not delivered,
 never as rung, and the back-off re-ring covers it.
 
 A missed wake must surface on its own. When the oldest pending event has
-waited :data:`UNREAD_ALERT_SECONDS`, the tick logs one warning per backlog
+waited ``chief_unread_alert_minutes`` (default :data:`UNREAD_ALERT_SECONDS`), the tick logs one warning per backlog
 with its current skip reason, and :func:`unread_mailbox_age` lets
 ``GET /api/board`` move the chief's card to Your turn with the wait shown.
 
@@ -76,6 +76,7 @@ from src import board
 from src.board import card_status
 from src.chief import fallback_wake
 from src.chief import plan as chief_plan
+from src.chief import timings as chief_timings
 from src.chief_session_end import read_registry
 from src.clients import session as session_client
 from src.session_view.automatic_turns import (
@@ -88,7 +89,8 @@ logger = logging.getLogger(__name__)
 
 TICK_SECONDS = 3.0
 DEBOUNCE_SECONDS = 3.0
-BACKOFF_SECONDS = 60.0
+#: The re-ring back-off when the config has no usable ``chief_rering_seconds``.
+BACKOFF_SECONDS = float(chief_timings.default("chief_rering_seconds"))
 
 #: A ``working`` chief whose terminal has been silent this long is a stuck
 #: label, not a busy chief: a real turn repaints its spinner many times a
@@ -99,13 +101,14 @@ STALE_WORKING_SECONDS = 600.0
 #: in ``chief-doorbell.log`` instead of vanishing after its first line.
 SKIP_REPEAT_SECONDS = 600.0
 
-#: A ``.claimed/`` claim older than this counts as pending again
-#: (``chief_ops.CLAIM_STALE_SECONDS``).
-CLAIM_STALE_MS = 900_000
+#: A ``.claimed/`` claim older than this counts as pending again; the config's
+#: ``chief_reoffer_minutes`` wins, the same value ``chief_ops.py inbox`` reads.
+CLAIM_STALE_MS = chief_timings.default("chief_reoffer_minutes") * 60_000
 
 #: A pending event this old means the chief missed its wake: the back-off
 #: re-rings every minute, so fifteen minutes is many rings that did not land.
-UNREAD_ALERT_SECONDS = 900.0
+#: The config's ``chief_unread_alert_minutes`` wins.
+UNREAD_ALERT_SECONDS = chief_timings.default("chief_unread_alert_minutes") * 60.0
 
 #: Root events and claims alike are ``<epoch-ms>-<id>.json``.
 _STAMPED_NAME = re.compile(r"^(\d+)-(.+)\.json$")
@@ -115,6 +118,27 @@ _STAMPED_NAME = re.compile(r"^(\d+)-(.+)\.json$")
 #: background waiter armed: its turn is over and its composer is free, and a
 #: typed line starts a new turn while the waiter keeps running.
 IDLE_STATUSES = card_status.DOORBELL_IDLE
+
+
+def _timing(cfg: object, key: str) -> int:
+    """A tunable timing from the config, or its default when absent or not a
+    positive whole number (a stub config, or a hand edit gone wrong)."""
+    value = getattr(cfg, key, None)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return chief_timings.default(key)
+    return value
+
+
+def rering_seconds(cfg: object) -> float:
+    return float(_timing(cfg, "chief_rering_seconds"))
+
+
+def unread_alert_seconds(cfg: object) -> float:
+    return _timing(cfg, "chief_unread_alert_minutes") * 60.0
+
+
+def claim_stale_ms(cfg: object) -> int:
+    return _timing(cfg, "chief_reoffer_minutes") * 60_000
 
 
 def doorbell_on(cfg: object) -> bool:
@@ -155,7 +179,9 @@ def _oldest(stamps: List[Optional[int]]) -> Optional[int]:
     return min(known) if known else None
 
 
-def scan_pending(inbox_dir: Path, now_ms: int) -> Optional[PendingScan]:
+def scan_pending(
+    inbox_dir: Path, now_ms: int, stale_ms: int = CLAIM_STALE_MS
+) -> Optional[PendingScan]:
     """Pending events in ``inbox_dir`` by the mailbox contract's counting rule.
 
     ``R + S``: regular, non-dot ``*.json`` files in the root, plus those in
@@ -182,7 +208,7 @@ def scan_pending(inbox_dir: Path, now_ms: int) -> Optional[PendingScan]:
     stale = []
     for name in names:
         stamp = _stamp(name)
-        if stamp is None or now_ms - stamp >= CLAIM_STALE_MS:
+        if stamp is None or now_ms - stamp >= stale_ms:
             stale.append(stamp)
     return PendingScan(len(root) + len(stale), _oldest(root + stale))
 
@@ -194,17 +220,17 @@ def count_pending(inbox_dir: Path, now_ms: int) -> Optional[int]:
 
 
 def unread_mailbox_age(cfg: Any) -> Optional[float]:
-    """Seconds the oldest pending event has waited, once that passes
-    :data:`UNREAD_ALERT_SECONDS` with the doorbell on; else ``None``.
+    """Seconds the oldest pending event has waited, once that passes the
+    configured unread alert with the doorbell on; else ``None``.
 
     Read from the inbox alone, independent of the doorbell's tick, so the
     Board shows a missed wake whatever the bell decided."""
     if cfg is None or not doorbell_on(cfg):
         return None
     now_ms = int(time.time() * 1000)
-    scan = scan_pending(Path(cfg.chief_inbox_dir), now_ms)
+    scan = scan_pending(Path(cfg.chief_inbox_dir), now_ms, claim_stale_ms(cfg))
     age = None if scan is None else scan.oldest_age(now_ms)
-    if age is None or age < UNREAD_ALERT_SECONDS:
+    if age is None or age < unread_alert_seconds(cfg):
         return None
     return age
 
@@ -261,7 +287,9 @@ async def observe(cfg: Any) -> Observation:
     chief-pointer write with ``create_task``.
     """
     now_ms = int(time.time() * 1000)
-    scan = await run_on(BOARD_FILES, scan_pending, Path(cfg.chief_inbox_dir), now_ms)
+    scan = await run_on(
+        BOARD_FILES, scan_pending, Path(cfg.chief_inbox_dir), now_ms, claim_stale_ms(cfg)
+    )
     pending = None if scan is None else scan.count
     oldest_age = None if scan is None else scan.oldest_age(now_ms)
     if not pending:
@@ -321,21 +349,21 @@ class Doorbell:
         self._last_ring: Optional[float] = None
         self._alarmed = False
 
-    def unread_alarm(self, obs: Observation) -> bool:
+    def unread_alarm(self, obs: Observation, after: float = UNREAD_ALERT_SECONDS) -> bool:
         """``True`` once per backlog, on the first tick its oldest event has
-        waited :data:`UNREAD_ALERT_SECONDS`; an emptied mailbox re-arms it."""
+        waited ``after`` seconds; an emptied mailbox re-arms it."""
         if obs.pending is not None and obs.pending <= 0:
             self._alarmed = False
             return False
-        if obs.oldest_age is None or obs.oldest_age < UNREAD_ALERT_SECONDS:
+        if obs.oldest_age is None or obs.oldest_age < after:
             return False
         if self._alarmed:
             return False
         self._alarmed = True
         return True
 
-    def decide(self, obs: Observation, now: float) -> str:
-        """``"ring"``, or the reason not to."""
+    def decide(self, obs: Observation, now: float, backoff: float = BACKOFF_SECONDS) -> str:
+        """``"ring"``, or the reason not to; ``backoff`` is the re-ring wait."""
         if obs.blocked:
             self._eligible_since = None
             return obs.blocked
@@ -358,7 +386,7 @@ class Doorbell:
         if obs.dirty is not False:
             self._eligible_since = None
             return "composer dirty" if obs.dirty else "composer unknown"
-        if self._last_ring is not None and now - self._last_ring < BACKOFF_SECONDS:
+        if self._last_ring is not None and now - self._last_ring < backoff:
             return "backing off after ring"
         if self._eligible_since is None:
             self._eligible_since = now
@@ -410,8 +438,8 @@ async def tick_once(
         reason = f"observe failed: {exc}"
         skips.note(reason, None, tick_now)
         return reason
-    decision = bell.decide(obs, tick_now)
-    if bell.unread_alarm(obs):
+    decision = bell.decide(obs, tick_now, rering_seconds(cfg))
+    if bell.unread_alarm(obs, unread_alert_seconds(cfg)):
         logger.warning(
             "⚠️ chief has not read its mailbox for %d min, doorbell decision: %s (%s)",
             int((obs.oldest_age or 0) // 60), decision, obs.summary(),
@@ -513,7 +541,9 @@ def _slot_inputs(cfg: Any) -> Tuple[Optional[int], Optional[Set[str]]]:
 async def observe_fallback(cfg: Any) -> Tuple[Observation, fallback_wake.Facts]:
     """The fallback's facts: the mailbox, the chief and the worker slots."""
     now_ms = int(time.time() * 1000)
-    scan = await run_on(BOARD_FILES, scan_pending, Path(cfg.chief_inbox_dir), now_ms)
+    scan = await run_on(
+        BOARD_FILES, scan_pending, Path(cfg.chief_inbox_dir), now_ms, claim_stale_ms(cfg)
+    )
     pending = None if scan is None else scan.count
     oldest_age = None if scan is None else scan.oldest_age(now_ms)
     (obs, live), (queued, managed) = await asyncio.gather(

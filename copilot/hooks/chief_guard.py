@@ -96,7 +96,8 @@ ISSUE_SKILLS = ("issue-add", "issue-start", "issue-yolo", "issue-finish")
 HANDOVER_FILENAME = "chief-handover.md"
 # The handover is prose the chief wrote for itself; past this it is truncated, newest kept.
 HANDOVER_MAX_CHARS = 24000
-# Each hold fires at most once per window, so a hold can never loop the chief.
+# Each hold fires at most once per window, so a hold can never loop the chief. Lite's
+# `chief_hold_minutes` setting (Settings > Chief) wins; this is its default.
 HOLD_WINDOW_S = 600
 CHIEF_OPS_TIMEOUT_S = 20
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
@@ -119,16 +120,29 @@ def chief_ops(*args: str) -> Optional[str]:
     return res.stdout
 
 
-def _folder_setting(key: str, default: Path) -> Path:
-    """A folder path Lite keeps in `webapp_config.json`, or `default` when it is empty or unreadable."""
+def _setting(key: str, default: Any) -> Any:
+    """A value Lite keeps in `webapp_config.json`, or `default` when the file or key is missing or unreadable."""
     try:
-        raw = json.loads(WEBAPP_CONFIG.read_text(encoding="utf-8")).get(key)
+        return json.loads(WEBAPP_CONFIG.read_text(encoding="utf-8")).get(key, default)
     except FileNotFoundError:
         return default
     except (OSError, ValueError, AttributeError) as exc:
         _log(f"could not read {key} from {WEBAPP_CONFIG} ({type(exc).__name__}); using {default}")
         return default
+
+
+def _folder_setting(key: str, default: Path) -> Path:
+    """A folder path Lite keeps in `webapp_config.json`, or `default` when it is empty or unreadable."""
+    raw = _setting(key, None)
     return Path(raw.strip()).expanduser() if isinstance(raw, str) and raw.strip() else default
+
+
+def hold_window_s() -> int:
+    """Lite's `chief_hold_minutes` in seconds, or HOLD_WINDOW_S when unset or not a positive whole number."""
+    minutes = _setting("chief_hold_minutes", None)
+    if isinstance(minutes, bool) or not isinstance(minutes, int) or minutes <= 0:
+        return HOLD_WINDOW_S
+    return minutes * 60
 
 
 def chief_dir() -> Path:
@@ -177,7 +191,7 @@ def _line(out: Optional[str], prefix: str) -> Optional[str]:
 
 def _recent(name: str, now: float) -> bool:
     try:
-        return now - (chief_inbox.state_dir() / name).stat().st_mtime < HOLD_WINDOW_S
+        return now - (chief_inbox.state_dir() / name).stat().st_mtime < hold_window_s()
     except OSError:
         return False
 

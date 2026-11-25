@@ -259,6 +259,27 @@ class TestPatchConfig:
         assert client.post("/api/config", json={"chief_fallback_minutes": junk}).status_code == 400
         assert app.state.webapp_config.chief_fallback_minutes == 30
 
+    def test_chief_timings_default_and_round_trip(self, webapp_client):
+        """Each tunable timing: today's value until edited, its range in the
+        payload and saved by Settings; the fixed panel rides along."""
+        from src.chief import timings
+        from src.webapp_config import load_webapp_config
+
+        client, app, overrides = webapp_client
+        body = client.get("/api/config").json()
+        for spec in timings.TUNABLES:
+            assert body[spec.key] == spec.default
+            assert (body[f"{spec.key}_min"], body[f"{spec.key}_max"]) == (spec.minimum, spec.maximum)
+            assert client.post("/api/config", json={spec.key: spec.maximum}).status_code == 200
+            assert getattr(load_webapp_config(overrides["tmp_webapp_cfg_path"]), spec.key) == spec.maximum
+        assert body["chief_fixed_timings"]["values"] and body["chief_fixed_timings"]["rules"]
+
+    @pytest.mark.parametrize("junk", [True, 1.5, "60", 0, 29, 601])
+    def test_chief_timings_reject_junk(self, webapp_client, junk):
+        client, app, _ = webapp_client
+        assert client.post("/api/config", json={"chief_rering_seconds": junk}).status_code == 400
+        assert app.state.webapp_config.chief_rering_seconds == 60
+
 
     def test_chief_auto_drain_defaults_on_and_round_trips(self, webapp_client):
         """The queue drain is on until the owner turns it off, and the save

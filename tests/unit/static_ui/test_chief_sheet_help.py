@@ -58,4 +58,6 @@ def test_every_chief_control_is_explained():
         if not any(sheet.help.get(i, "").strip() for i in ids):
             unexplained.append(control.get("id") or control.get("aria-label"))
     assert unexplained == []
-    assert any(c.get("id") == "chiefFallbackMinutes" for c in sheet.controls)
+    ids = {c.get("id") for c in sheet.controls}
+    assert {"chiefFallbackMinutes", "chiefReringSeconds", "chiefUnreadAlertMinutes",
+            "chiefReofferMinutes", "chiefHoldMinutes"} <= ids

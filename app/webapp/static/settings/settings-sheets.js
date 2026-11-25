@@ -503,6 +503,16 @@ function wireChiefDoorbell() {
         value ? 'Chief fallback check every ' + value + ' min.' : 'Chief fallback check off.');
     });
   }
+  document.querySelectorAll('#chiefSheet [data-chief-timing]').forEach(function (field) {
+    field.addEventListener('change', function () {
+      const name = field.dataset.timingName;
+      const value = wholeNumberIn(field, name);
+      if (value === null) return;
+      const patch = {};
+      patch[field.dataset.chiefTiming] = value;
+      saveConfigField(field, patch, name + ' set to ' + value + '.');
+    });
+  });
   wireConfigSwitch(els.chiefAutoDrainToggle, 'chief_auto_drain', { label: 'Auto-drain queue' });
   wireConfigSwitch(els.chiefJobFailuresToggle, 'chief_job_failures', { label: 'Chief job failures' });
   wireConfigSwitch(els.chiefJobSelfHealToggle, 'chief_job_self_heal', { label: 'Job self-heal' });

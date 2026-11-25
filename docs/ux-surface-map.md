@@ -1537,11 +1537,14 @@ flowchart LR
   - a switch for counting only chief-dispatched sessions
   - a Skills folder field, with a line saying whether each issue skill is found, missing or unknown
   - Automations - Doorbell, Fallback check in minutes, Auto-drain queue, Auto-compact with its threshold, Job failures, Job self-heal and Weekly proposals
+  - Timings - Doorbell re-ring in seconds, Unread mail alert, Re-offer claimed mail and Turn-end hold in minutes
+  - How the chief works - the fixed timings, each with its value and reason, and the fixed rules, read-only
   - a one-line explanation under every control
   - Done
 - **Does:**
   - each switch saves when tapped and no restart is needed
   - Fallback check saves on change; 0 turns it off
+  - each Timings field saves on change within its range and applies without a restart
   - model, context and effort apply when the chief next starts; Same as Coding agent follows that sheet
   - a chief model outside the Copilot list starts on Copilot's own pick, with a warning
   - the Skills folder saves on blur; empty uses the bundled issue skills, and a lane start is refused while one is missing

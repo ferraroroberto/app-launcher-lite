@@ -61,6 +61,7 @@ export async function fetchConfig(shouldApply) {
     if (body.chief_fallback_minutes_max != null) els.chiefFallbackMinutes.max = body.chief_fallback_minutes_max;
     setFieldValue(els.chiefFallbackMinutes, String(Number(body.chief_fallback_minutes) || 0));
   }
+  renderChiefTimings(body);
   if (els.chiefAutoDrainToggle) {
     setSwitch(els.chiefAutoDrainToggle, body.chief_auto_drain !== false);
   }
@@ -110,6 +111,41 @@ function renderChiefAutoCompact(body) {
   setSwitch(els.chiefAutoCompactToggle, value > 0);
   setFieldValue(field, String(value > 0 ? value : _DEFAULT_CHIEF_AUTO_COMPACT));
   field.disabled = value === 0;
+}
+
+// Settings › Chief › Timings: each field names its config key in
+// data-chief-timing, and the server sends the value with its range.
+// The "How the chief works" panel is drawn from the server's fixed list, so
+// the numbers it shows are the ones the code runs with.
+function renderChiefTimings(body) {
+  document.querySelectorAll('#chiefSheet [data-chief-timing]').forEach(function (field) {
+    const key = field.dataset.chiefTiming;
+    if (body[key + '_min'] != null) field.min = body[key + '_min'];
+    if (body[key + '_max'] != null) field.max = body[key + '_max'];
+    if (body[key] != null) setFieldValue(field, String(body[key]));
+  });
+  const fixed = body.chief_fixed_timings;
+  const list = document.getElementById('chiefFixedList');
+  const rules = document.getElementById('chiefFixedRules');
+  if (!fixed || !list || !rules) return;
+  list.replaceChildren.apply(list, (fixed.values || []).map(function (item) {
+    const row = document.createElement('div');
+    row.className = 'context-sheet-row chief-fixed-row';
+    const dt = document.createElement('dt');
+    dt.textContent = item.label;
+    const dd = document.createElement('dd');
+    dd.textContent = item.value;
+    const why = document.createElement('dd');
+    why.className = 'chief-fixed-why';
+    why.textContent = item.why;
+    row.append(dt, dd, why);
+    return row;
+  }));
+  rules.replaceChildren.apply(rules, (fixed.rules || []).map(function (text) {
+    const li = document.createElement('li');
+    li.textContent = text;
+    return li;
+  }));
 }
 
 // Rebuild a native <select> from {value, label} pairs and set its value.

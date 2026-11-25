@@ -96,6 +96,21 @@ class GuardTests(unittest.TestCase):
         self.assertIsNone(chief_guard.on_agent_stop(self.chief_payload(), "chief-1"))
         self.assertIsNone(chief_guard.on_agent_stop(self.chief_payload(stop_hook_active=True), "chief-1"))
 
+    def test_the_hold_window_follows_lites_chief_hold_minutes(self) -> None:
+        self.assertEqual(chief_guard.hold_window_s(), 600)
+        self.webapp_config.write_text(json.dumps({"chief_hold_minutes": 25}), encoding="utf-8")
+        self.assertEqual(chief_guard.hold_window_s(), 1500)
+        for junk in (0, -5, True, "25", None):
+            self.webapp_config.write_text(json.dumps({"chief_hold_minutes": junk}), encoding="utf-8")
+            self.assertEqual(chief_guard.hold_window_s(), 600)
+        self.webapp_config.write_text(json.dumps({"chief_hold_minutes": 5}), encoding="utf-8")
+        self.lines["compact-due"] = "COMPACT_DUE percent=82 threshold=30\n"
+        self.assertIsNotNone(chief_guard.on_agent_stop(self.chief_payload(), "chief-1"))
+        nudge = self.state / "chief-compact-nudge"
+        aged = nudge.stat().st_mtime - 6 * 60
+        os.utime(nudge, (aged, aged))
+        self.assertIsNotNone(chief_guard.on_agent_stop(self.chief_payload(), "chief-1"))
+
     def test_unknown_compact_state_never_holds(self) -> None:
         self.lines["compact-due"] = "COMPACT_DUE=unknown reason=no session.usage_record\n"
         self.assertIsNone(chief_guard.on_agent_stop(self.chief_payload(), "chief-1"))

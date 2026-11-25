@@ -26,6 +26,7 @@ from src.agents import AGENTS, DEFAULT_AGENT
 from src.app_config import AppConfig
 from src.auth import tls_certificate
 from src.chief import skills_preflight
+from src.chief import timings as chief_timings
 from src.chief.launch_settings import chief_model_problem
 from src.desktop import lid_keep_awake, prevent_lock
 from src.launching import copilot_remote
@@ -82,6 +83,39 @@ def _serving_payload(cfg: WebappConfig) -> Dict[str, Any]:
         # (another process holds it) or null (not a Both start).
         "http_bind": {"bound": None if bind_state is None else bind_state == HTTP_BOUND, "port": bind_port},
         "cert": {"present": cert.present, "self_signed": cert.self_signed, "expires": cert.expires},
+    }
+
+
+def _chief_config_payload(cfg: WebappConfig) -> Dict[str, Any]:
+    """Settings > Chief's values, each number with its range."""
+    return {
+        # The chief's auto-compact threshold: percent, 0 = off.
+        "chief_auto_compact_threshold": cfg.chief_auto_compact_threshold,
+        "chief_auto_compact_threshold_min": MIN_CHIEF_AUTO_COMPACT_THRESHOLD,
+        "chief_auto_compact_threshold_max": MAX_CHIEF_AUTO_COMPACT_THRESHOLD,
+        "chief_doorbell": cfg.chief_doorbell,
+        # The launcher's fallback wake for the chief: minutes, 0 = off.
+        "chief_fallback_minutes": cfg.chief_fallback_minutes,
+        "chief_fallback_minutes_max": MAX_CHIEF_FALLBACK_MINUTES,
+        # The chief's tunable timings with their ranges, and the fixed ones
+        # the read-only "How the chief works" panel lists.
+        **chief_timings.config_payload(cfg),
+        "chief_fixed_timings": chief_timings.fixed_payload(),
+        "chief_auto_drain": cfg.chief_auto_drain,
+        "chief_job_failures": cfg.chief_job_failures,
+        "chief_job_self_heal": cfg.chief_job_self_heal,
+        "chief_weekly_proposals": cfg.chief_weekly_proposals,
+        # The chief's model, context, effort and worker cap, read-only here so
+        # the Settings > Chief row can show them without a passkey prompt.
+        # Writes stay on the passkey-gated PUT /api/board/chief/settings.
+        "chief_model": cfg.chief_model,
+        "chief_model_problem": chief_model_problem(cfg),
+        "chief_context": cfg.chief_context,
+        "chief_effort": cfg.chief_effort,
+        "chief_worker_cap": cfg.chief_worker_cap,
+        "chief_worker_cap_scope": cfg.chief_worker_cap_scope,
+        "chief_worker_cap_min": MIN_CHIEF_WORKER_CAP,
+        "chief_worker_cap_max": MAX_CHIEF_WORKER_CAP,
     }
 
 
@@ -142,29 +176,7 @@ async def get_config(request: Request) -> Dict[str, Any]:
         "large_upload_max_mb": cfg.large_upload_max_mb,
         "large_upload_max_mb_min": MIN_LARGE_UPLOAD_MAX_MB,
         "large_upload_max_mb_max": MAX_LARGE_UPLOAD_MAX_MB,
-        # The chief's auto-compact threshold: percent, 0 = off.
-        "chief_auto_compact_threshold": cfg.chief_auto_compact_threshold,
-        "chief_auto_compact_threshold_min": MIN_CHIEF_AUTO_COMPACT_THRESHOLD,
-        "chief_auto_compact_threshold_max": MAX_CHIEF_AUTO_COMPACT_THRESHOLD,
-        "chief_doorbell": cfg.chief_doorbell,
-        # The launcher's fallback wake for the chief: minutes, 0 = off.
-        "chief_fallback_minutes": cfg.chief_fallback_minutes,
-        "chief_fallback_minutes_max": MAX_CHIEF_FALLBACK_MINUTES,
-        "chief_auto_drain": cfg.chief_auto_drain,
-        "chief_job_failures": cfg.chief_job_failures,
-        "chief_job_self_heal": cfg.chief_job_self_heal,
-        "chief_weekly_proposals": cfg.chief_weekly_proposals,
-        # The chief's model, context, effort and worker cap, read-only here so
-        # the Settings > Chief row can show them without a passkey prompt.
-        # Writes stay on the passkey-gated PUT /api/board/chief/settings.
-        "chief_model": cfg.chief_model,
-        "chief_model_problem": chief_model_problem(cfg),
-        "chief_context": cfg.chief_context,
-        "chief_effort": cfg.chief_effort,
-        "chief_worker_cap": cfg.chief_worker_cap,
-        "chief_worker_cap_scope": cfg.chief_worker_cap_scope,
-        "chief_worker_cap_min": MIN_CHIEF_WORKER_CAP,
-        "chief_worker_cap_max": MAX_CHIEF_WORKER_CAP,
+        **_chief_config_payload(cfg),
         "copilot": copilot_payload(cfg),
         "auth_password_set": password.is_configured(legacy=cfg.auth_password),
         # Boot-autostart toggle: live-queried, not stored in
@@ -292,6 +304,7 @@ _PATCH_KEYS = frozenset({
     "large_upload_max_mb",
     "chief_auto_compact_threshold",
     "chief_fallback_minutes",
+    *chief_timings.TUNABLE_KEYS,
     "chief_doorbell",
     "chief_auto_drain",
     "chief_job_failures",
@@ -379,6 +392,8 @@ async def patch_config(request: Request) -> Any:
             patch[key] = str(patch[key] or "").strip()
     _checked_whole_number(patch, "chief_auto_compact_threshold", "an integer percent")
     _checked_whole_number(patch, "chief_fallback_minutes", "a whole number of minutes")
+    for spec in chief_timings.TUNABLES:
+        _checked_whole_number(patch, spec.key, f"a whole number of {spec.unit}")
     _checked_whole_number(patch, "large_upload_max_mb", "a whole number of MB")
     _checked_whole_number(patch, "speech_keep_recordings_hours", "a whole number of hours")
     _checked_whole_number(patch, "copilot_monthly_credits", "a whole number of AI credits")
