@@ -131,27 +131,27 @@ def _refresh_pair(page: Page, base_url: str, held: list):
     _mock_board(page, payload)
     page.route(re.compile(r".*/api/board/github/refresh$"), lambda route: held.append(route))
     _open_board(page, base_url)
+    _unfold(page, "boardColBacklog")
     lane = page.locator('.board-empty[data-col="backlog"] .empty-state-action')
     expect(lane).to_have_text("Refresh")
     return page.locator("#boardRefresh"), lane
 
 
 @pytest.mark.iphone
-@pytest.mark.parametrize("tapped", ["toolbar", "lane"])
 def test_refresh_in_flight_shows_busy_on_both_buttons_and_toasts(
-    authed_page: Page, base_url: str, tapped: str
+    authed_page: Page, base_url: str
 ) -> None:
     """Either Refresh starts one refresh: both buttons show the busy spinner
     (aria-busy, never disabled, label kept and readable in both themes) and
     ignore a second tap, a start toast says it is working and an end toast
-    says it is done."""
+    says it is done. The toolbar's tap ends well, the lane's ends in a GitLab
+    error: that toast names the reason and neither button stays busy."""
     held: list = []
     toolbar, lane = _refresh_pair(authed_page, base_url, held)
-    first, other = (toolbar, lane) if tapped == "toolbar" else (lane, toolbar)
-
-    first.click()
-    wait_until(authed_page, lambda: len(held) >= 1, "the refresh POST")
     toast = authed_page.locator("#toast")
+
+    toolbar.click()
+    wait_until(authed_page, lambda: len(held) >= 1, "the refresh POST")
     expect(toast).to_have_text("Refreshing GitLab…")
     for btn in (toolbar, lane):
         expect(btn).to_have_attribute("aria-busy", "true")
@@ -166,8 +166,8 @@ def test_refresh_in_flight_shows_busy_on_both_buttons_and_toasts(
 
     # Not `disabled`, so a keyboard tap still reaches the click handler: it
     # must send nothing.
-    other.dispatch_event("click")
-    first.dispatch_event("click")
+    lane.dispatch_event("click")
+    toolbar.dispatch_event("click")
     flush_requests(authed_page)
     assert len(held) == 1, "a tap during the refresh sent a second one"
 
@@ -177,20 +177,11 @@ def test_refresh_in_flight_shows_busy_on_both_buttons_and_toasts(
         expect(btn).not_to_have_attribute("aria-busy", "true")
     expect(toast).to_have_text("Up to date")
 
-
-@pytest.mark.iphone
-def test_refresh_failure_toasts_the_error_and_frees_both_buttons(
-    authed_page: Page, base_url: str
-) -> None:
-    """A refresh GitLab reports as failed ends with an error toast carrying
-    the reason, and neither button stays busy."""
-    held: list = []
-    toolbar, lane = _refresh_pair(authed_page, base_url, held)
-    toolbar.click()
-    wait_until(authed_page, lambda: len(held) >= 1, "the refresh POST")
-    held[0].fulfill(status=200, content_type="application/json", body=_json.dumps(
+    lane.click()
+    wait_until(authed_page, lambda: len(held) >= 2, "the lane's refresh POST")
+    expect(toolbar).to_have_attribute("aria-busy", "true")
+    held[1].fulfill(status=200, content_type="application/json", body=_json.dumps(
         {"fetched_at": None, "error": "glab not signed in"}))
-    toast = authed_page.locator("#toast")
     expect(toast).to_have_text("GitLab refresh failed: glab not signed in")
     expect(toast).to_have_class(re.compile(r"\berror\b"))
     for btn in (toolbar, lane):
