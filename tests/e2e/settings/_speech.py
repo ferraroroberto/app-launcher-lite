@@ -9,6 +9,7 @@ import io
 import json
 import re
 import wave
+from pathlib import Path
 
 from playwright.sync_api import Page, expect
 
@@ -100,6 +101,49 @@ def walk_kept_take_converts_in_the_browser(page: Page, base_url: str, auth_token
         serve.close()
 
 
+PHONE_TAKE = Path(__file__).resolve().parents[2] / "fixtures" / "phone_take.mp4"
+
+
+def _keep_audio(base_url: str, auth_token: str, mime: str, audio: bytes) -> str:
+    """Leave one kept take holding `audio` as the recorder wrote it."""
+    base = base_url + "/api/transcribe/recordings"
+    take_id = loopback("POST", base, headers=auth_headers(auth_token), json={"mime": mime}).json()["id"]
+    loopback("POST", f"{base}/{take_id}/chunk?ms=1000", data=audio,
+             headers={**auth_headers(auth_token), "Content-Type": "application/octet-stream"}
+             ).raise_for_status()
+    return take_id
+
+
+def walk_kept_phone_take_transcribes_and_failures_say_why(
+    page: Page, base_url: str, auth_token: str,
+) -> None:
+    """A kept AAC take, as a phone records it, reaches a strict backend as the
+    browser's WAV; a take this browser cannot decode fails with the browser's
+    own reason in its row, not only in the console."""
+    serve = fake_speech_backend.serve()
+    fake_url, uploads = next(serve)
+    set_speech(base_url, auth_token, speech_base_url=fake_url)
+    try:
+        good = _keep_audio(base_url, auth_token, "audio/mp4", PHONE_TAKE.read_bytes())
+        bad = _keep_audio(base_url, auth_token, "audio/mp4", b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64)
+        page.locator("#speechRecordingsRefresh").click()
+        row = page.locator(f'#speechRecordings [data-recording-id="{good}"]')
+        with page.expect_request(lambda r: r.url.endswith(f"/{good}/transcribe")) as sent:
+            row.get_by_role("button", name="Transcribe").click()
+        assert b'filename="recording.wav"' in (sent.value.post_data_buffer or b""), "the page sent no converted WAV"
+        expect(row.locator(".speech-recording-text")).to_have_text(fake_speech_backend.TRANSCRIPT)
+        assert fake_speech_backend.is_strict_wav(uploads[-1])
+
+        broken = page.locator(f'#speechRecordings [data-recording-id="{bad}"]')
+        broken.get_by_role("button", name="Transcribe").click()
+        expect(broken.locator(".speech-recording-status")).to_have_text("Failed")
+        expect(broken.locator(".speech-recording-error")).to_contain_text(
+            "Browser conversion: this browser could not decode its own audio/mp4 recording (EncodingError")
+    finally:
+        set_speech(base_url, auth_token, speech_base_url="http://127.0.0.1:9/v1")
+        serve.close()
+
+
 def walk_speech_sheet(page: Page, base_url: str, auth_token: str) -> None:
     reset = dict(speech_enabled=False, speech_base_url="", speech_model="", speech_api_key="")
     set_speech(base_url, auth_token, **reset)
@@ -131,6 +175,7 @@ def walk_speech_sheet(page: Page, base_url: str, auth_token: str) -> None:
 
         walk_recent_recordings(page, base_url, auth_token)
         walk_kept_take_converts_in_the_browser(page, base_url, auth_token)
+        walk_kept_phone_take_transcribes_and_failures_say_why(page, base_url, auth_token)
 
         page.locator("#speechApiKeyClear").click()
         expect(page.locator("#speechApiKeyState")).to_have_text("No key set.")

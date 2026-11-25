@@ -178,24 +178,27 @@ function showTranscript(row, text) {
 // The kept take as the 16 kHz mono WAV, converted here with Web Audio (the
 // path live dictation takes), so no ffmpeg is needed on the PC. Null when the
 // audio cannot be fetched or this browser cannot decode it: the server then
-// gets the stored recording and converts it if it can.
-async function takeAsWav(take) {
+// gets the stored recording and converts it if it can. `why.note` carries the
+// browser's own reason when it could not, for the row to show beside the error.
+async function takeAsWav(take, why) {
   try {
     const res = await apiRaw(_RECORDINGS + '/' + take.id + '/audio', {
       terminalToken: await ensureTerminalToken(),
     });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (!res.ok) throw new Error('the recording could not be fetched (HTTP ' + res.status + ')');
     const { takeToWav } = await import('../shared/voice-wav.js');
-    return await takeToWav(await res.blob());
+    return await takeToWav(await res.blob(), function (reason) { why.note = reason; });
   } catch (exc) {
-    console.info('[dictation] kept take not converted in the browser: ' + ((exc && exc.message) || exc));
+    why.note = (exc && exc.message) || String(exc);
+    console.info('[dictation] kept take not converted in the browser: ' + why.note);
     return null;
   }
 }
 
 async function transcribe(take, row, btn) {
+  const why = { note: '' };
   const out = await runBusy(btn, async function () {
-    const wav = await takeAsWav(take);
+    const wav = await takeAsWav(take, why);
     const url = _RECORDINGS + '/' + take.id + '/transcribe';
     let body;
     if (wav) {
@@ -209,7 +212,7 @@ async function transcribe(take, row, btn) {
     showTranscript(row, (body && body.transcript) || '');
   }, { start: 'Transcribing…', done: 'Transcribed', fail: 'Transcription failed' });
   if (!out.ok && !out.ignored) {
-    setStatus(row, 'failed', (out.error && out.error.message) || '');
+    setStatus(row, 'failed', (out.error && out.error.message) || '', why.note);
   }
 }
 

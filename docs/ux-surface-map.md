@@ -1597,7 +1597,7 @@ flowchart LR
   - Remove key, once a key is set
   - Test connection, with its result line
   - Keep recordings (hours), 0 keeping none
-  - Recent recordings, newest first, with Refresh; each take shows its time, length and status, with Play and Transcribe, and a transcript with Copy once transcribed
+  - Recent recordings, newest first, with Refresh; each take shows its time, length and status, with Play and Transcribe, a transcript with Copy once transcribed, and the browser's own reason beside the error of a take it could not convert
   - Done
 - **Does:**
   - every field saves as it changes

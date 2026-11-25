@@ -42,6 +42,7 @@ export async function uploadForm(blob, keep, pcmStart) {
   if (wav) {
     console.info('[dictation] uploading the take as WAV via ' + path);
     fd.append('file', wav, 'recording.wav');
+    if (keep) keep.wav(wav);
     return { fd: fd, path: path, step: '' };
   }
   const ext = (blob.type && blob.type.indexOf('mp4') >= 0) ? 'mp4' : 'webm';

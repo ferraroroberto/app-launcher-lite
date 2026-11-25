@@ -71,7 +71,10 @@ export async function takeToWav(blob, onFail) {
   } catch (exc) {
     console.warn('[dictation] Web Audio could not convert the take to WAV', exc);
     const name = (exc && exc.name) || 'error';
-    return fail('this browser could not decode its own ' + (blob.type || 'unknown') +
-      ' recording (' + name + ')', step + ' ' + name);
+    // The browser's own wording (Safari says "Decoding failed") is the clue.
+    const said = exc && exc.message ? name + ': ' + exc.message : name;
+    const verb = step === 'decodeAudioData' ? 'decode' : 'convert';
+    return fail('this browser could not ' + verb + ' its own ' + (blob.type || 'unknown') +
+      ' recording (' + said + ')', step + ' ' + name);
   }
 }
