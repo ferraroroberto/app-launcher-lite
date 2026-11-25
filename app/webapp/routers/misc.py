@@ -26,6 +26,7 @@ from app.webapp.shell_html import assemble_shell, shell_stat_key, trim_shell
 from src import instance_role, system_load
 from src.agents import detect_agents
 from src.build_info import build_identity, resolve_git_sha
+from src.clients import hub_health
 from src.clients import session as session_client
 from src.desktop import session_kind
 from src.desktop.browser import is_web_url, open_url
@@ -348,6 +349,39 @@ async def system_load_reading() -> Dict[str, Any]:
     """The page header's CPU reading: the shared sampler's cached
     sample, never a scan on request. A read also keeps the sampler awake."""
     return system_load.read()
+
+
+def hub_health_sampler(app: Any) -> ListenersSampler[Dict[str, Any]]:
+    """The app's hub machine-health sampler (its lifespan ticks it while polled).
+    The hub URL is read from the live config at each fetch."""
+    sampler = getattr(app.state, "hub_health_sampler", None)
+    if sampler is None:
+        sampler = app.state.hub_health_sampler = hub_health.build_sampler(
+            lambda: getattr(app.state.webapp_config, "llm_hub_url", "")
+        )
+    return sampler
+
+
+@router.get("/api/system/health")
+async def system_health_verdict(request: Request) -> Dict[str, Any]:
+    """The hub's machine health beside the CPU reading: ``ok`` / ``watch`` /
+    ``act`` / ``unknown``, with the ports, commit and disk rows when the hub
+    measured them.
+
+    A read never reaches the hub: a background sampler keeps the answer (one
+    bounded fetch per 30 s while this is polled) and this returns it with its
+    age. No hub URL, an unreachable or hung hub, an answer that is not a verdict,
+    a fetch still warming up and one gone stale are all ``unknown`` with a
+    ``why``, never ``ok``.
+    """
+    cfg: WebappConfig = request.app.state.webapp_config
+    if not (cfg.llm_hub_url or "").strip():
+        return hub_health.fetch("")
+    reading = hub_health_sampler(request.app).read()
+    out = dict(reading.value) if reading.value is not None else hub_health.unavailable(
+        reading.reason or "error", reading.detail)
+    out["age_seconds"] = reading.age_seconds
+    return out
 
 
 def _is_this_pc(request: Request) -> bool:

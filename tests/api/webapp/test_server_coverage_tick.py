@@ -224,14 +224,14 @@ class TestLifespanGate:
         assert len(self.load_ticks) == 1
         assert self.load_ticks[0].cancelled()
 
-    async def test_listeners_sampler_runs_on_every_instance(self, monkeypatch):
-        """The Apps tab's port probe is read on every instance, so its sampler
-        starts on every instance (it only scans while polled) and is cancelled
-        with the lifespan."""
+    async def test_polled_samplers_run_on_every_instance(self, monkeypatch):
+        """The Apps tab's port probe and the header's hub health are read on every
+        instance, so their samplers (one ListenersSampler each) start on every
+        instance (they only read while polled) and are cancelled with the lifespan."""
         monkeypatch.setenv(SESSION_HOST_PORT_ENV, "54321")  # disposable
         await self._run_lifespan(_app(), monkeypatch)
-        assert len(self.listener_ticks) == 1
-        assert self.listener_ticks[0].cancelled()
+        assert len(self.listener_ticks) == 2
+        assert all(task.cancelled() for task in self.listener_ticks)
 
     async def test_loop_lag_monitor_runs_on_every_instance(self, monkeypatch):
         """The event-loop lag monitor idles until its switch is on, on any instance."""

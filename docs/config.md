@@ -56,6 +56,12 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 
 `gitlab_group` is verified live against gitlab.com; `gitlab_host` for a self-hosted instance is not. See [GitLab](gitlab.md).
 
+### Machine health
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `llm_hub_url` | `""` | Base URL of the local hub on this computer. The PC load sheet's Health row and its ports, commit and disk rows come from `GET <base>/admin/api/machines/health`, read by a background sampler once per 30 s with a 3 s limit, only while a page is open and visible. Empty reads `Not confirmed` with the reason. Job failure summaries use the same hub when `notify_failure_summary` is on. |
+
 ### Copilot launch settings
 
 `src/launching/flags.py::build_copilot_flags` turns these into the `copilot` argv. Semantics verified on Copilot CLI 1.0.70:

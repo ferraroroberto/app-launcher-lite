@@ -38,6 +38,9 @@ export const SYSTEM_LOAD_WARMING_RETRY_MS = 3000;
 // loaded box the first sample can take far longer than 2 s, and an unbounded 3 s retry
 // would send the header's reads at three times the poll rate for as long as it does.
 export const SYSTEM_LOAD_WARMING_MAX_RETRIES = 2;
+// The hub's machine health beside it: the server's sampler reads the hub once per 30 s,
+// so asking more often only re-reads its cache. It rides the load poll on every third tick.
+export const SYSTEM_HEALTH_POLL_MS = 30000;
 // Git-status refresh (not tap-only): slow on
 // purpose — one git run per project per tick, gated to the tabs that show
 // the flags (Coding tiles, Board backlog) and to a foreground page.

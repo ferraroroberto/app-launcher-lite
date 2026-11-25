@@ -100,6 +100,7 @@ flowchart LR
   - the tab's icon and title
   - one status line that names only exceptions, worst first, and falls back to a plain count
   - the CPU reading button, a muted percentage that takes a tone at 70 and 90 percent and shows a dash when the server could not read it
+  - a small dot on the CPU reading's corner while the hub reports the machine as watch or needing action
   - the theme toggle
   - the Settings gear
 - **Does:**
@@ -117,6 +118,8 @@ flowchart LR
 - **Reach:** the CPU reading in any tab header
 - **Holds:**
   - the PC's private IP address
+  - a Health row with the hub's verdict (OK, Watch, Needs action or Not confirmed) and the hub's reason and suggested fix under it
+  - rows for ports in use, memory commit, the load on each disk, the top port holders and the last port exhaustion, when the hub measured them
   - the load reading and what is using it
   - a Screen row with a View live action
   - a toast area for the result of a copy
@@ -124,7 +127,9 @@ flowchart LR
 - **Does:**
   - Copy on the IP row puts the address on the clipboard
   - View live opens the Screen view
-- **States:** Unknown instead of an address, with Copy disabled, when the PC's address could not be read
+- **States:**
+  - Unknown instead of an address, with Copy disabled, when the PC's address could not be read
+  - Not confirmed instead of OK, with the reason in words, when no hub is set, the hub does not answer in time, its answer is not a verdict or the last reading is too old; the machine rows are then absent
 - **Leads to:** [Screen view](#screenview-screen-view) (Screen View live)
 
 ### `chrome.toast` Toast

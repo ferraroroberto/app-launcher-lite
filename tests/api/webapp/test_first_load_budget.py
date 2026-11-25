@@ -38,6 +38,7 @@ LAZY_VIEWS = (
     "/static/links/links-sheet.js",
     "/static/screen/screen-view.js",
     "/static/progress/progress-sheet.js",
+    "/static/health/machine-health.js",
     "/static/jobs.js",
     "/static/board.js",
     "/static/board/board-answers.js",

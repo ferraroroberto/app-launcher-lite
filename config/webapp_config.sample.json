@@ -40,6 +40,8 @@
   "_comment_gitlab": "The Board's forge: gitlab_group is the GitLab group or user namespace (subgroups included) whose projects the Board's glab reads span; empty keeps the panel dormant with a Settings hint. gitlab_host targets a self-hosted instance through glab's GITLAB_HOST; empty means glab's default (gitlab.com). glab must be installed and signed in (glab auth login).",
   "gitlab_group": "",
   "gitlab_host": "",
+  "_comment_llm_hub_url": "Base URL of the local LLM hub on this computer (scheme, host and port, no path). The header's CPU sheet reads the hub's machine health from <base>/admin/api/machines/health: a Health row, ports in use, memory commit and disk latency, and a dot on the CPU reading for watch or act. Empty means no hub: the sheet says so and nothing is read. Read live; a save takes effect on the next read.",
+  "llm_hub_url": "",
   "_comment_speech": "Speech to text (Settings > Speech to text). speech_enabled shows the record button in every message box; off, none shows. speech_base_url is the base of any OpenAI-shaped speech server (audio goes to <base>/audio/transcriptions), e.g. http://127.0.0.1:8000/v1 for the local LLM hub. speech_model is sent as the model name when set; speech_api_key is sent as a bearer key when set and is never returned by the API.",
   "speech_enabled": false,
   "_comment_prevent_lock": "Settings > This PC > Prevent lock. On, the app moves the pointer 1 px every 15 s and holds a keep-awake request so the PC does not lock for being idle; off (the default), nothing runs.",
