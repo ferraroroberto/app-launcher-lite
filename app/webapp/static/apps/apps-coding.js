@@ -11,6 +11,7 @@
 
 import { els, state } from '../state.js';
 import { apiFailToast, jsonApi, logPollFailure, toast } from '../api.js';
+import { runBusy } from '../_vendored/button/busy.js';
 import { agoFromMinutes } from '../shared/format.js';
 import { chip } from '../glance.js';
 import { mountLaunchToolbar } from '../launch-toolbar.js';
@@ -329,21 +330,17 @@ export async function refreshGitStatus(options) {
 // The Projects toolbar's refresh: fetch every remote, then re-run git now.
 // The footer's "Git checked just now" is the confirmation. A fetch that
 // fails still re-reads status, so its repos show as unknown.
-async function checkGitNow() {
-  const btn = els.gitRefreshBtn;
-  if (btn) btn.disabled = true;
-  try {
+function checkGitNow() {
+  return runBusy(els.gitRefreshBtn, async function () {
+    let fetchFailure = null;
     try {
       await fetchAll();
     } catch (exc) {
-      apiFailToast('Fetch failed', exc);
+      fetchFailure = exc;
     }
     await refreshGitStatus({ fresh: true });
-  } catch (exc) {
-    apiFailToast('Git status check failed', exc);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
+    if (fetchFailure) throw fetchFailure;
+  }, { start: 'Checking git…', done: 'Git checked just now', fail: 'Fetch failed' });
 }
 
 // The Projects card's controls, wired from apps.js::wireApps so this
