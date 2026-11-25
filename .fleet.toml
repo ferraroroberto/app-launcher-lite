@@ -83,6 +83,7 @@ comment_ratchet = { src = "scripts/comment_ratchet.py", sha = "48db2132dab2dfc38
 static_ratchet = { src = "scripts/static_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/static_ratchet.py" }
 docs_ratchet = { src = "scripts/docs_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/docs_ratchet.py" }
 build_info = { src = "src/build_info.py", sha = "a37f157cda14dda408c36df50335125bed8ce465", dest = "src/build_info.py" }
+health_routes = { src = "src/health_routes.py", sha = "732c304a4735d4e654f5acb3b6f53b7db67d47ef", dest = "src/health_routes.py" }
 structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/structure_ratchet.py" }
 structure_layout = { src = "scripts/structure_layout.py", sha = "adf0375e08a186330196b8d6be7b8b51078a73ae", dest = "scripts/structure_layout.py" }
 structure_band = { src = "scripts/structure_band.py", sha = "3b708fd3c54ab7b93b08d489406c405762c83c41", dest = "scripts/structure_band.py" }
@@ -96,7 +97,7 @@ conventions_state = { src = "scripts/conventions_state.py", sha = "4d0b0ff30e23e
 synthetic_host = { src = "tests/host/_synthetic_host.py", sha = "160b54e2e0bcf76541d0a5f9bb4d6265dd493c31", dest = "tests/host/_synthetic_host.py" }
 paced_browser = { src = "tests/e2e/_paced_browser.py", sha = "ce64203b017ba636c82737ee7f768c9ef6f422cd", dest = "tests/e2e/_paced_browser.py" }
 runtime_write_ratchet = { src = "scripts/runtime_write_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/runtime_write_ratchet.py" }
-usage_track_ratchet = { src = "scripts/usage_track_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/usage_track_ratchet.py" }
+usage_track_ratchet = { src = "scripts/usage_track_ratchet.py", sha = "732c304a4735d4e654f5acb3b6f53b7db67d47ef", dest = "scripts/usage_track_ratchet.py" }
 usage_track_scan = { src = "scripts/usage_track_scan.py", sha = "c4a7afcb413fe88de11e66f24269c8729ecd85d9", dest = "scripts/usage_track_scan.py" }
 ux_surface_ratchet = { src = "scripts/ux_surface_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/ux_surface_ratchet.py" }
 ux_surface_map = { src = "scripts/ux_surface_map.py", sha = "adf0375e08a186330196b8d6be7b8b51078a73ae", dest = "scripts/ux_surface_map.py" }
@@ -365,7 +366,7 @@ baseline = ".ratchets/runtime-write.json"
 [usage_track_ratchet]
 enabled  = true
 baseline = ".ratchets/usage-track.json"
-rules    = ["untracked-control", "untracked-sheet", "dynamic-id", "usage-log-wired"]
+rules    = ["untracked-control", "untracked-sheet", "dynamic-id", "usage-log-wired", "health-routes-wired"]
 builders = [
   "app/webapp/static/apps.js:runningVerb",
   "app/webapp/static/board/answer-item.js:optionList",
@@ -1286,7 +1287,7 @@ derive = "usageState"
 # Written by /upstream-sync and /downstream-sync (skills/_lib/upstream_sync); never by hand.
 url = "https://github.com/ferraroroberto/app-launcher"
 branch = "main"
-synced_sha = "ea6696b2f9551766bd1afd7357ecba499b5af3ff"
+synced_sha = "9d1c086bb7f64d6fe5ee879d4bd5eaccd9e8093d"
 
 [[upstream.skipped]]
 sha = "e6da43596a03b660e9efb10bda8c73150846c5f8"
@@ -1459,3 +1460,103 @@ reason = "already present"
 [[upstream.skipped]]
 sha = "ea6696b2f9551766bd1afd7357ecba499b5af3ff"
 reason = "already present"
+
+[[upstream.skipped]]
+sha = "12a801dbb26085d4a602965ffc0fb77672b7f6b8"
+reason = "already present: CLAUDE.md here already names the working restart spellings and warns off the bare tray.bat"
+
+[[upstream.skipped]]
+sha = "e1bf507df47cd248ae7b4f8d6e3264e54b42e790"
+reason = "already present: Settings > Prevent lock is in Lite (nudges the pointer every 15 s)"
+
+[[upstream.skipped]]
+sha = "fb91ec51ae6fbd1558e7c14a097d8542efd38ed5"
+reason = "already present: page-foot, build-watch and self_restart are already vendored at the same scaffold revision"
+
+[[upstream.skipped]]
+sha = "64f2fb531cf7881f21ac5fe826bc4b06399ef44f"
+reason = "already present: backslash wrapper paths are followed on POSIX in the Apps scan"
+
+[[upstream.skipped]]
+sha = "d43959b312f622f541bac1c771afa8095d1fc8cb"
+reason = "already present: the runtime request check already runs on the main page"
+
+[[upstream.skipped]]
+sha = "27d9fc7b9d8fa975852d64b7bdbb78f0a4eac3c6"
+reason = "already present: .bat backslash paths are normalised before joining and the path-sep rule is enabled"
+
+[[upstream.skipped]]
+sha = "d6e6447a6af56a9a11de5252fba694e216ac36b5"
+reason = "already present: finished sessions already fold out of the agent's turn on the Board"
+
+[[upstream.skipped]]
+sha = "cebfc05e96f667d144b6cb8d6d6dbd4db916058f"
+reason = "already present: every copy button already uses the HTTP-safe clipboard helper"
+
+[[upstream.skipped]]
+sha = "fd0c4c4fefd7471be26f4f7508bc31df7983f489"
+reason = "already present: a missing schtasks folder already reads as no tasks"
+
+[[upstream.skipped]]
+sha = "f20086ef877dd7576c140eb03461005f7b66a85f"
+reason = "not applicable: Lite declares no request-budget loop for prevent_lock, so there is nothing stale to drop"
+
+[[upstream.skipped]]
+sha = "59fe3de0338c4990e030c523c9ae0b409d9382f1"
+reason = "not carried: Life OS is not part of Lite"
+
+[[upstream.skipped]]
+sha = "5a15e4c2c86133b32b717ce60e9b5a07aadd0cc4"
+reason = "already present: the button component is vendored at a newer scaffold revision"
+
+[[upstream.skipped]]
+sha = "97c294f8acb34acb8b6f335dd4bd5ae895cf108a"
+reason = "not carried: Telegram is not part of Lite"
+
+[[upstream.skipped]]
+sha = "f4fb1dbdc522ed6581e96bc550ce203bf118689b"
+reason = "already present: the terminal probe test already answers the git refresh fetch from a mock"
+
+[[upstream.skipped]]
+sha = "f0392983e59bb7a2baabc4c5aa2d9426e69e93aa"
+reason = "not carried: Telegram is not part of Lite"
+
+[[upstream.skipped]]
+sha = "97e73874093ae1d757a1bc80fb58c416646889f7"
+reason = "already present: registered-tray readiness already checks health and build"
+
+[[upstream.skipped]]
+sha = "843e227060ca39b3f6079520b2b2b53232f5c7c0"
+reason = "already present: the JS bundle already builds in the background at start"
+
+[[upstream.skipped]]
+sha = "5d5a421d196498d83c7d695aef3bd1a19077dcb2"
+reason = "already present: Board Refresh and other slow buttons already show busy and a toast"
+
+[[upstream.skipped]]
+sha = "27792a725403b1b1043741d58e4b7862240bda77"
+reason = "already present: History already refreshes on demand with progress and a skip is not a failure"
+
+[[upstream.skipped]]
+sha = "6b9b189511f096a31a6fcdc3f588c9dde5ddf432"
+reason = "already present: the ratchets and their .ratchets/ baselines are already vendored; the one later ratchet change ships with the health routes"
+
+[[upstream.skipped]]
+sha = "bc650e0081808926a72e05f9473af1975af10325"
+reason = "already present: Sync all already shows progress per project and a final report"
+
+[[upstream.skipped]]
+sha = "0dd5f37c117c2e5de1098cfa45da295cad777bcc"
+reason = "already present: dictation already captures PCM in the browser and uploads WAV"
+
+[[upstream.skipped]]
+sha = "b36ef9abec8c209f4636cb57f19226ba1dbf9a73"
+reason = "already present: the launcher-side chief fallback wake is already in Lite"
+
+[[upstream.skipped]]
+sha = "27a49b275d78401165e11b98698110ad3f9f9bca"
+reason = "already present: chief timings are already tunable in Settings > Chief"
+
+[[upstream.skipped]]
+sha = "9d1c086bb7f64d6fe5ee879d4bd5eaccd9e8093d"
+reason = "already present: Apps tab port listeners already read from a background sampler"

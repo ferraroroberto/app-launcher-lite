@@ -37,6 +37,7 @@ from src.diagnostics import (
     listener_pids,
 )
 from src.git_utils import resolve_deployed_sha
+from src.health_routes import health_router
 from src.launching.vscode_workspace import is_vscode_installed
 from src.middleware import is_pc_itself, via_cloudflare
 from src.monitoring.listeners_sampler import ListenersSampler
@@ -52,6 +53,9 @@ from src.webapp_config import WebappConfig
 _log = logging.getLogger(__name__)
 
 router = APIRouter()
+# The fleet's standard liveness route (vendored); /api/version stays the app's
+# own below because it carries the session-host freshness facts.
+router.include_router(health_router(service="launcher", version=False))
 
 _IDENTITY = build_identity()
 _GIT_SHA = _IDENTITY["git_sha"]
@@ -337,11 +341,6 @@ async def agents() -> Dict[str, Any]:
     already-polled endpoint beats a second fetch for a single boolean.
     """
     return {"agents": detect_agents(), "vscode_available": is_vscode_installed()}
-
-
-@router.get("/healthz")
-async def healthz() -> Dict[str, Any]:
-    return {"ok": True, "service": "launcher"}
 
 
 @router.get("/api/system/load")
