@@ -43,7 +43,7 @@ flowchart TB
     JSBUNDLE["src/static_bundles/js_bundle.py\nES modules bundled in the background after start\n(pinned esbuild via npx)"]
     DOORBELL["chief_doorbell.py\nrings an idle chief with pending mail"]
     subgraph routers["routers/"]
-      R_MISC["misc.py — /, /healthz, /api/version, /api/system/load"]
+      R_MISC["misc.py — /, /healthz, /api/version, /api/system/load, /api/system/health"]
       R_AUTH["auth.py — /api/login"]
       R_CONFIG["config.py — /api/config, /api/status\nCopilot, GitLab and Team OS settings"]
       R_COPILOTUSAGE["copilot_usage.py — /api/copilot-usage\nUsage card, answered from memory; src/copilot_usage.py reads the Copilot CLI log in a worker thread"]

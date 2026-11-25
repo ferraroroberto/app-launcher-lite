@@ -356,9 +356,10 @@ class WebappConfig:
     webauthn_rp_name: str = "Launcher"
     webauthn_origin: str = ""
     # --- failure summaries ---------------------------------
-    # Base URL of an optional OpenAI-shape LLM endpoint that turns a failed
-    # job's output tail into a one-line summary. Empty (the default) skips
-    # the summary: this app has no hub dependency.
+    # Base URL of the optional local LLM hub on this computer. It turns a failed
+    # job's output tail into a one-line summary, and its
+    # /admin/api/machines/health feeds the CPU sheet's machine health. Empty (the
+    # default) skips both: this app has no hub dependency.
     llm_hub_url: str = ""
     # --- Jobs-tab failure notifications ---------------------
     # Pushover credentials — both empty means no-op notifier (executor

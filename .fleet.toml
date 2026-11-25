@@ -584,7 +584,7 @@ why        = "bounded wait during a send for the agent's turn to start; ends aft
 path       = "src/monitoring/listeners_sampler.py"
 function   = "ListenersSampler.tick_forever"
 interval_s = 1
-why        = "starts a listeners scan only while the Apps tab polled within the demand window, one at a time and spaced after the last finished; an idle wake only reads a timestamp"
+why        = "starts a listeners scan or the hub machine-health fetch only while its page polled within the demand window, one at a time and spaced after the last finished; an idle wake only reads a timestamp"
 
 [[request_budget.loops]]
 path       = "src/system_load.py"

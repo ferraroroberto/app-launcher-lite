@@ -9,7 +9,10 @@ page, never per tab, and stops while the page is hidden.
 The level is the server's (tests/unit/usage/test_system_load.py pins the rules); this
 pins what the header draws for each, the sheet, and the hidden-page gate.
 ``/api/system/load`` is route-mocked with invented data before ``goto()``
-and the poll is jumped on the fake clock (#1376), never waited out.
+and the poll is jumped on the fake clock (#1376), never waited out. The hub's
+machine health beside it (``/api/system/health``) is mocked the same way: the dot
+for watch or act, the Health and machine rows, a verdict that could not be read as
+"Not confirmed" with its reason, and the 30 s ask on the load poll.
 """
 from __future__ import annotations
 
@@ -441,6 +444,144 @@ def _assert_the_poll_stops_while_the_page_is_hidden(
     assert len(calls) == seen + 1
 
 
+def _route_health(page: Page, current: dict, calls: list) -> None:
+    """The hub's verdict, route-mocked; a page route wins over the context's quiet one."""
+
+    def handle(route) -> None:
+        calls.append(1)
+        route.fulfill(status=current.get("status", 200), content_type="application/json",
+                      body=json.dumps(current["body"]))
+
+    page.route(re.compile(r".*/api/system/health$"), handle)
+
+
+def _poll_until_the_verdict_is_asked(page: Page, calls: list) -> None:
+    """Jump load polls until one of them asks for the verdict (at most every third)."""
+    before = len(calls)
+    for _ in range(4):
+        _poll(page)
+        if len(calls) > before:
+            return
+    raise AssertionError("the verdict was never asked for in four load polls")
+
+
+_ACT_HEALTH = {
+    "verdict": "act", "why": None, "reason": "Ports in use are at 84%",
+    "fix": "Close the program holding the most ports",
+    "machine": {
+        "host": "example-host", "ports_percent": 84.0, "commit_percent": 68.0,
+        "holders": [{"name": "builder.exe", "pid": 4242, "value": 900.0, "tcp": 880.0, "udp": 20.0}],
+        "memory_holders": [], "last_event": None,
+        "disks": [
+            {"disk": "PhysicalDrive0", "drives": ["C:"], "state": "alert", "busy_percent": 98.0,
+             "queue": 7.5, "read_ms": 120.4, "write_ms": 310.0},
+            {"disk": "PhysicalDrive1", "drives": ["D:"], "state": "ok", "busy_percent": 1.0,
+             "queue": 0.0, "read_ms": 0.1, "write_ms": 0.3},
+        ],
+    },
+}
+_OK_HEALTH = {"verdict": "ok", "why": None, "reason": None, "fix": None}
+
+
+def _assert_an_act_verdict_draws_the_dot_and_the_machine_rows(
+    page: Page, health: dict, health_calls: list
+) -> None:
+    """The hub's verdict beside the reading: a dot in the danger tone, then the
+    sheet's Health row under the address, the hub's reason and fix, and the ports,
+    commit, disk and holder rows ahead of the CPU. A watch verdict wears the
+    attention dot, and an OK one draws none."""
+    reading = page.locator("#paneClaude > .home-head .cpu-reading")
+    health["body"] = _ACT_HEALTH
+    _poll_until_the_verdict_is_asked(page, health_calls)
+    expect(reading).to_have_attribute("data-pc-health", "danger")
+    expect(reading).to_have_attribute("aria-label", re.compile(r"PC health: needs action"))
+    dot = reading.evaluate("el => getComputedStyle(el, '::after').backgroundColor")
+    assert dot not in ("rgba(0, 0, 0, 0)", "transparent"), "the dot must be painted"
+
+    reading.click()
+    body = page.locator("#cpuSheetBody")
+    expect(body.locator("[data-row='health']")).to_contain_text("Needs action")
+    expect(body.locator("[data-row='health'] strong")).to_have_attribute("data-tone", "danger")
+    expect(body).to_contain_text("Ports in use are at 84%")
+    expect(body).to_contain_text("Suggested: Close the program holding the most ports")
+    expect(body.locator("[data-row='ports']")).to_contain_text("84")
+    expect(body.locator("[data-row='commit']")).to_contain_text("68")
+    expect(body.locator("[data-row='disk-0']")).to_contain_text("C:")
+    expect(body.locator("[data-row='disk-0'] strong")).to_have_attribute("data-tone", "danger")
+    expect(body.locator("[data-row='holder-0']")).to_contain_text("builder.exe")
+    rows = body.locator("[data-row]").evaluate_all("els => els.map(e => e.dataset.row)")
+    assert rows.index("ip") < rows.index("health") < rows.index("ports") < rows.index("cpu"), rows
+    page.locator("#cpuSheetDone").click()
+
+    health["body"] = {**_ACT_HEALTH, "verdict": "watch"}
+    _poll_until_the_verdict_is_asked(page, health_calls)
+    expect(reading).to_have_attribute("data-pc-health", "attention")
+
+    health["body"] = _OK_HEALTH
+    _poll_until_the_verdict_is_asked(page, health_calls)
+    expect(reading).to_have_attribute("data-pc-health", "")
+    reading.click()
+    expect(page.locator("#cpuSheetBody [data-row='health']")).to_contain_text("OK")
+    expect(page.locator("#cpuSheetBody [data-row='ports']")).to_have_count(0)
+    page.locator("#cpuSheetDone").click()
+
+
+_UNREAD_HEALTH = [
+    ("disabled", None, "No hub is set up"),
+    ("unreachable", "local-llm-hub unreachable", "Couldn't reach the hub"),
+    ("warming", None, "Reading the hub"),
+    ("overrun", "the scan has run 6.0s", "taking too long"),
+    ("stale", "the last scan is 95s old", "too old"),
+    ("hub", "no sample yet", "no sample yet"),
+    ("unreadable", None, "wasn't a verdict"),
+]
+
+
+def _assert_a_verdict_that_could_not_be_read_is_not_confirmed_with_its_reason(
+    page: Page, health: dict, health_calls: list
+) -> None:
+    """Never OK, never a dot, no machine rows, and each cause in its own words;
+    a failed ask of the launcher itself reads the same way."""
+    reading = page.locator("#paneClaude > .home-head .cpu-reading")
+    body = page.locator("#cpuSheetBody")
+    cases = [({"verdict": "unknown", "why": why, "reason": reason, "fix": None}, words)
+             for why, reason, words in _UNREAD_HEALTH]
+    for payload, words in cases:
+        health["body"] = payload
+        _poll_until_the_verdict_is_asked(page, health_calls)
+        expect(reading).to_have_attribute("data-pc-health", "")
+        reading.click()
+        expect(body.locator("[data-row='health']")).to_contain_text("Not confirmed")
+        expect(body).to_contain_text(words)
+        expect(body.locator("[data-row='health']")).not_to_contain_text("OK")
+        expect(body.locator("[data-row='ports']")).to_have_count(0)
+        page.locator("#cpuSheetDone").click()
+
+    health["status"], health["body"] = 500, {}
+    _poll_until_the_verdict_is_asked(page, health_calls)
+    reading.click()
+    expect(body.locator("[data-row='health']")).to_contain_text("Not confirmed")
+    expect(body).to_contain_text("Couldn't reach the launcher")
+    page.locator("#cpuSheetDone").click()
+    health["status"], health["body"] = 200, _OK_HEALTH
+
+
+def _assert_the_verdict_is_asked_for_every_thirty_seconds_not_every_poll(
+    page: Page, health_calls: list
+) -> None:
+    """The server answers from a cache it refreshes once per 30 s, so the page
+    asks on every third load poll: two polls after an ask add no request."""
+    _poll_until_the_verdict_is_asked(page, health_calls)
+    asked = len(health_calls)
+    _poll(page)
+    _poll(page)
+    flush_requests(page)
+    assert len(health_calls) == asked, "the load poll re-asked for the verdict inside 30 s"
+    _poll(page)
+    flush_requests(page)
+    assert len(health_calls) == asked + 1
+
+
 def test_the_tap_sheet_lists_cpu_memory_and_the_top_three(
     authed_page: Page, base_url: str, browser_name: str
 ) -> None:
@@ -451,7 +592,10 @@ def test_the_tap_sheet_lists_cpu_memory_and_the_top_three(
     current = {"body": _reading("danger", 93.0)}
     calls: list = []
     ip = {"value": _IP}
+    health = {"body": _OK_HEALTH}
+    health_calls: list = []
     _route_load(page, current, calls)
+    _route_health(page, health, health_calls)
     _route_ip(page, ip)
     _fake_clock.install(page)
     _boot(page, base_url)
@@ -476,5 +620,9 @@ def test_the_tap_sheet_lists_cpu_memory_and_the_top_three(
 
     _assert_the_sheet_groups_a_burn_and_shows_what_the_rows_leave_out(page, current)
     _assert_an_unreadable_sample_says_why_in_the_sheet(page, current)
+    current["body"] = _reading("normal", 20.0)
+    _assert_an_act_verdict_draws_the_dot_and_the_machine_rows(page, health, health_calls)
+    _assert_a_verdict_that_could_not_be_read_is_not_confirmed_with_its_reason(page, health, health_calls)
+    _assert_the_verdict_is_asked_for_every_thirty_seconds_not_every_poll(page, health_calls)
     _assert_an_unknown_ip_reads_unknown_and_cannot_be_copied(page, base_url, current, ip)
     _assert_the_poll_stops_while_the_page_is_hidden(page, current, calls)

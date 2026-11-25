@@ -1,4 +1,4 @@
-"""The Apps tab's port listeners, scanned in the background and read from memory.
+"""A slow read (the Apps tab's port listeners, the hub's machine health) taken in the background and served from memory.
 
 A psutil listener scan (socket table plus per-process name, exe, cwd and
 command line) costs about a second on a fast box and several on a slow one.
@@ -77,7 +77,9 @@ class ListenersSampler(Generic[T]):
         demand_s: float = DEMAND_WINDOW_SECONDS,
         budget_s: float = SCAN_BUDGET_SECONDS,
         max_age_s: float = MAX_AGE_SECONDS,
+        label: str = "listeners",
     ) -> None:
+        self.label = label
         self.scan = scan
         self.executor = executor
         self.clock = clock
@@ -111,8 +113,8 @@ class ListenersSampler(Generic[T]):
         age = None if at is None else round(now - at, 1)
         if log_overrun is not None:
             breadcrumbs.warning(
-                "⚠️ listeners scan has run %.1fs, over its %.1fs budget; the Apps tab reads unknown",
-                log_overrun, self.budget_s,
+                "⚠️ %s scan has run %.1fs, over its %.1fs budget; the reading is unknown",
+                self.label, log_overrun, self.budget_s,
             )
         if overrun:
             return Reading(None, "overrun", f"the scan has run {now - started:.1f}s, over its {self.budget_s:.0f}s budget", age)
@@ -140,7 +142,7 @@ class ListenersSampler(Generic[T]):
         except Exception:  # noqa: BLE001 — a pool that cannot take work must not wedge single-flight
             with self._lock:
                 self._in_flight_since = None
-            breadcrumbs.exception("❌ listeners scan could not be queued")
+            breadcrumbs.exception("❌ %s scan could not be queued", self.label)
             return False
         return True
 
@@ -166,11 +168,11 @@ class ListenersSampler(Generic[T]):
             self._last_finished = finished
         took = finished - started
         if reason is not None and not was_failing:
-            breadcrumbs.warning("⚠️ listeners scan unknown (%s): %s", reason, detail)
+            breadcrumbs.warning("⚠️ %s scan unknown (%s): %s", self.label, reason, detail)
         elif reason is None and was_failing:
-            breadcrumbs.info("✅ listeners scan recovered")
+            breadcrumbs.info("✅ %s scan recovered", self.label)
         if took > self.budget_s:
-            breadcrumbs.warning("⚠️ listeners scan took %.1fs (budget %.1fs)", took, self.budget_s)
+            breadcrumbs.warning("⚠️ %s scan took %.1fs (budget %.1fs)", self.label, took, self.budget_s)
 
     async def tick_forever(self) -> None:
         """Wake each WAKE_SECONDS and start a scan when one is due and wanted."""

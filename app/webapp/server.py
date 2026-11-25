@@ -488,6 +488,9 @@ async def _lifespan(app: FastAPI):
     # The Apps tab's port listeners: scanned on a one-thread pool of its own while
     # /api/ports/probe is polled; the route only reads the snapshot.
     tasks.append(asyncio.create_task(misc.listeners_sampler(app).tick_forever()))
+    # The hub's machine health beside the CPU reading: one bounded fetch per 30 s on a
+    # pool of its own while /api/system/health is polled; the route only reads the cache.
+    tasks.append(asyncio.create_task(misc.hub_health_sampler(app).tick_forever()))
     # Re-reads the terminal_timing_log switch each round, so a config save arms it live.
     tasks.append(asyncio.create_task(loop_lag.tick_forever(
         lambda: getattr(getattr(app.state, "webapp_config", None), "terminal_timing_log", False)
