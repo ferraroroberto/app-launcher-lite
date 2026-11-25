@@ -116,6 +116,19 @@ def recording_chunk(
         raise _http(exc)
 
 
+@router.post("/api/transcribe/recordings/{take_id}/wav")
+def recording_wav(
+    take_id: str, data: bytes = Body(..., media_type="application/octet-stream"),
+) -> Dict[str, Any]:
+    """Keep the browser's own WAV of the take in place of the recorder's copy."""
+    if not data:
+        raise HTTPException(status_code=400, detail="empty recording")
+    try:
+        return {"bytes": recordings.replace_with_wav(take_id, data)}
+    except recordings.RecordingError as exc:
+        raise _http(exc)
+
+
 @router.post("/api/transcribe/recordings/{take_id}/finish")
 def recording_finish(take_id: str, body: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     """Record how the take ended: ``{"status": stopped|transcribed|failed, "error",

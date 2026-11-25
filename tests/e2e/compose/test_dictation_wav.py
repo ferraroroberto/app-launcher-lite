@@ -51,6 +51,26 @@ _KEPT_TRANSCRIBED = """async () => {
 }"""
 
 
+# True once a transcribed take is kept as a WAV file.
+_KEPT_AS_WAV = """async () => {
+  const hit = performance.getEntriesByType('resource').find(e => /\\/api\\.js/.test(e.name));
+  const api = await import(hit ? hit.name : '/static/api.js');
+  const body = await api.jsonApi('/api/transcribe/recordings');
+  return body.recordings.some(r => r.status === 'transcribed' && r.mime === 'audio/wav');
+}"""
+
+
+# The first four bytes of the newest kept WAV take's audio.
+_KEPT_AUDIO_HEAD = """async () => {
+  const hit = performance.getEntriesByType('resource').find(e => /\\/api\\.js/.test(e.name));
+  const api = await import(hit ? hit.name : '/static/api.js');
+  const body = await api.jsonApi('/api/transcribe/recordings');
+  const take = body.recordings.find(r => r.mime === 'audio/wav');
+  const res = await fetch('/api/transcribe/recordings/' + take.id + '/audio');
+  return new TextDecoder().decode((await res.arrayBuffer()).slice(0, 4));
+}"""
+
+
 # The reason the browser could not convert the newest take that carries one.
 _KEPT_NOTE = """async () => {
   const hit = performance.getEntriesByType('resource').find(e => /\\/api\\.js/.test(e.name));
@@ -102,6 +122,11 @@ def test_dictation_uploads_wav_a_strict_backend_transcribes(
         assert 0.5 < seconds < 3.0 and peak > 500, f"the PCM WAV is not the take: {seconds:.2f}s, peak {peak}"
         # The same take was kept on disk beside the upload and marked transcribed.
         page.wait_for_function(_KEPT_TRANSCRIBED)
+        # The kept copy is the same WAV, not the recorder's MP4 or WebM, so a
+        # retry from Settings needs no conversion on any machine.
+        wait_until(page, lambda: page.evaluate(_KEPT_AS_WAV), "the kept take stored as WAV")
+        kept = page.evaluate(_KEPT_AUDIO_HEAD)
+        assert kept.startswith("RIFF"), f"the kept take is not a WAV: {kept!r}"
 
         # Without PCM capture the recorder's blob is decoded to the same WAV.
         page.evaluate("""() => {

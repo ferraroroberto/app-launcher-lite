@@ -7,8 +7,8 @@ still leaves the audio on disk; Settings > Speech to text lists the takes and
 can play one or send it to the speech endpoint again.
 
 Store: ``<audit dir>/recordings/<id>.<ext>`` (the browser's own recording,
-appended as it arrives, never re-encoded) plus ``<id>.json`` (the take's
-status). The audit directory is the one ``LAUNCHER_AUDIT_DIR`` relocates, so a
+appended as it arrives, never re-encoded, until the page swaps in its 16 kHz
+mono WAV of the finished take) plus ``<id>.json`` (the take's status). The audit directory is the one ``LAUNCHER_AUDIT_DIR`` relocates, so a
 test run never writes into the checkout's live ``webapp/``. Gitignored.
 
 Recordings are private audio: nothing here logs more than sizes and statuses.
@@ -178,6 +178,31 @@ def append(take_id: str, data: bytes, elapsed_ms: int) -> int:
             meta["ms"] = int(elapsed_ms)
             _write_meta(meta)
     return size + len(data)
+
+
+def replace_with_wav(take_id: str, wav: bytes) -> int:
+    """Keep the browser's 16 kHz mono WAV of the take instead of the recorder's copy.
+
+    A phone records MP4 that a later retry cannot always convert; the WAV the
+    page already built for the upload can always be sent as it is. The
+    recorder's copy goes only once the WAV is on disk, so a failed write loses
+    nothing.
+    """
+    if wav[:4] != b"RIFF" or wav[8:12] != b"WAVE":
+        raise RecordingError("not a WAV file")
+    if len(wav) > MAX_TAKE_BYTES:
+        raise RecordingError("recording too large", status=413)
+    with _lock:
+        meta = _read_meta(take_id)
+        old = recordings_dir() / f"{take_id}.{meta.get('ext', 'webm')}"
+        target = recordings_dir() / f"{take_id}.wav"
+        runtime_files.save_bytes(target, wav)
+        if old != target:
+            old.unlink(missing_ok=True)
+        meta.update(ext="wav", mime="audio/wav")
+        _write_meta(meta)
+    logger.info("ℹ️ dictation recording kept as WAV (%d bytes)", len(wav))
+    return len(wav)
 
 
 def set_status(take_id: str, status: str, error: str = "", note: Optional[str] = None) -> None:

@@ -49,6 +49,7 @@ export function keepTake(stream, mime) {
   const stopped = new Promise(function (resolve) { recorder.addEventListener('stop', resolve); });
   let lost = false;
   let note = '';
+  let wav = null;
   // Every request rides one chain, so chunks land in order and the outcome last.
   let chain = post(_BASE, { mime: recorder.mimeType || mime || 'audio/webm' })
     .then(function (body) { return (body && body.id) || null; }, quiet('opening the recording'));
@@ -76,12 +77,25 @@ export function keepTake(stream, mime) {
     stop: stop,
     // Why the browser could not convert this take to WAV; sent with its outcome.
     note: function (reason) { note = reason || ''; },
+    // The take as the 16 kHz mono WAV the page built for the upload. It replaces
+    // the recorder's copy once the outcome is sent, because a phone's MP4 copy
+    // is a container a later retry from Settings may not be able to convert.
+    wav: function (blob) { wav = blob || null; },
     end: function (status, error) {
       stop();
       // The recorder's last chunk is queued before 'stop' fires, so the chain
       // read after it holds every chunk.
-      stopped.then(function () { return chain; }).then(function (id) {
+      stopped.then(function () { return chain; }).then(async function (id) {
         if (!id) return null;
+        if (wav) {
+          // A failed swap leaves the recorder's copy, which still plays.
+          await apiRaw(_BASE + '/' + id + '/wav', {
+            method: 'POST', terminalToken: readTerminalToken(),
+            contentType: 'application/octet-stream', body: wav,
+          }).then(function (res) {
+            if (!res.ok) console.info('[dictation] keeping this take as WAV failed: HTTP ' + res.status);
+          }, quiet('keeping the take as WAV'));
+        }
         return post(_BASE + '/' + id + '/finish', { status: status, error: error || '', note: note });
       }).catch(quiet('recording the outcome'));
     },

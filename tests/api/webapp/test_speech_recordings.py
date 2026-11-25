@@ -175,3 +175,38 @@ def test_a_take_the_browser_could_not_convert_keeps_the_reason(webapp_client, st
     client.post(f"{BASE}/{take_id}/finish", json={"status": "transcribed", "note": ""})
     (row,) = client.get(BASE).json()["recordings"]
     assert row["note"] == ""
+
+
+def test_the_browsers_wav_replaces_a_kept_mp4_so_a_retry_needs_no_conversion(
+    webapp_client, strict_backend_no_ffmpeg,
+):
+    client, _, _ = webapp_client
+    base, uploads = strict_backend_no_ffmpeg
+    client.post("/api/config", json={"speech_enabled": True, "speech_base_url": base})
+    take_id = _mp4_take(client)
+    wav = speech_audio.silent_wav()
+    resp = client.post(f"{BASE}/{take_id}/wav", content=wav,
+                       headers={"Content-Type": "application/octet-stream"})
+    assert resp.status_code == 200
+    audio = client.get(f"{BASE}/{take_id}/audio")
+    assert audio.content == wav and audio.headers["content-type"].startswith("audio/wav")
+    (row,) = client.get(BASE).json()["recordings"]
+    assert row["mime"] == "audio/wav" and row["bytes"] == len(wav)
+    assert not list(recordings.recordings_dir().glob(f"{take_id}.mp4")), "the mp4 copy was left behind"
+    # With no body from the browser, the stored take is already the portable WAV.
+    assert client.post(f"{BASE}/{take_id}/transcribe").status_code == 200
+    assert fake_speech_backend.is_strict_wav(uploads[-1])
+
+
+def test_a_kept_take_is_replaced_only_by_a_wav(webapp_client):
+    client, _, _ = webapp_client
+    _on(client)
+    take_id = _mp4_take(client)
+    resp = client.post(f"{BASE}/{take_id}/wav", content=b"not a wav at all",
+                       headers={"Content-Type": "application/octet-stream"})
+    assert resp.status_code == 400
+    assert client.post(f"{BASE}/{take_id}/wav", content=b"",
+                       headers={"Content-Type": "application/octet-stream"}).status_code in (400, 422)
+    assert client.get(f"{BASE}/{take_id}/audio").content.startswith(b"\x00\x00\x00\x18ftyp")
+    assert client.post(f"{BASE}/{'0' * 32}/wav", content=speech_audio.silent_wav(),
+                       headers={"Content-Type": "application/octet-stream"}).status_code == 404
