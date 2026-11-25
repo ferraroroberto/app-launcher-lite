@@ -4,15 +4,19 @@ REM ============================================================================
 REM  SETUP - install App Launcher Lite on this PC, or bring its setup up to date
 REM ----------------------------------------------------------------------------
 REM  Safe to run any number of times; it never overwrites what this PC has
-REM  configured. The work is scripts\install.py (docs\install.md):
+REM  configured. The work is src\installer.py, driven by the [install] table of
+REM  .fleet.toml (docs\install.md):
 REM    setup.bat            create .venv, install requirements, create missing
-REM                         configs, add keys a config lacks (after a backup)
+REM                         configs, add keys a settings file lacks (after a
+REM                         backup), end with an ok/missing/unknown checklist
 REM    setup.bat -WhatIf    list every change, make none
 REM    setup.bat -Startup   also start the tray at log on
 REM  Then it offers the Copilot hooks and skills (copilot\install.py).
 REM  A batch file, not a .ps1, so an AllSigned execution policy never refuses it.
 REM  (PWA/tray icons are committed in the repo -- no generation step needed.)
 REM  After this runs once, `tray.bat` is enough for day-to-day use.
+REM  Keep this file ASCII-only: cmd.exe reads ahead in the codepage that was
+REM  active before chcp 65001 ran.
 REM ============================================================================
 
 setlocal
@@ -30,7 +34,9 @@ if not defined PY_EXE where python >nul 2>nul && set "PY_EXE=python"
 if not defined PY_EXE goto :no_python
 
 :run
-"%PY_EXE%" %PY_ARGS% "%SCRIPT_DIR%scripts\install.py" %*
+REM  -I: isolated mode keeps src\ off sys.path, so the app's src package is never
+REM  imported before its requirements exist.
+"%PY_EXE%" %PY_ARGS% -I "%SCRIPT_DIR%src\installer.py" %*
 if errorlevel 1 exit /b %ERRORLEVEL%
 
 REM  A -WhatIf run makes no change, so it asks nothing and installs nothing.
@@ -65,5 +71,5 @@ echo ===========================================================================
 exit /b 0
 
 :no_python
-echo ERROR: no Python found. Install Python 3 from python.org, then run setup.bat again.
+echo ERROR: no Python found. Install Python 3.11 or newer from python.org, then run setup.bat again.
 exit /b 1

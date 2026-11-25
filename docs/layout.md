@@ -53,12 +53,13 @@ app-launcher-lite/
 │   ├── static_bundles/         # js_bundle.py: main.js's module graph bundled at start by a pinned esbuild into /static/js-bundle/
 │   ├── subprocess_flags.py     # the NO_WINDOW spawn-flag convention (single source)
 │   ├── git_utils.py            # shared `git` subprocess runner; every git spawn goes through it
+│   ├── installer.py            # setup.bat's work, vendored: venv, requirements, configs from samples (never overwriting), checklist
 │   ├── git_upstream/           # ahead/behind against origin and the guarded fast-forward
 │   ├── documents/              # Settings > Documents: allowlist validation, path jail, read
 │   ├── auth/                   # job-scoped API tokens, the passkey (WebAuthn) gate, the self-signed TLS certificate
 │   ├── middleware/             # the webapp's auth gate: trust (loopback / tailnet), credentials, route guard table, bearer
 │   ├── clients/                # loopback HTTP clients (shared base, session-host) and the GitLab client (gitlab.py, via glab)
-│   ├── launching/              # agent launch: Copilot flags (flags.py), spawn helpers (launcher.py), the tray-restart check, the PowerShell script launcher (ps_script.py), the installer behind setup.bat (installer.py)
+│   ├── launching/              # agent launch: Copilot flags (flags.py), spawn helpers (launcher.py), the tray-restart check, the PowerShell script launcher (ps_script.py), setup.bat's app-side probes (install_checks.py)
 │   ├── board/                  # Board backend: column assembly, session-state join, drawer exchange, proof reports, owner checks, the viewed Board's single-flight forge refresh (view_refresh.py)
 │   ├── chief/                  # the chief's plan, journal, answers and dispatch briefs
 │   ├── session_view/           # a live session's views: transcript pages, changed files, the Chat outbox, plan and resume pickers
@@ -72,7 +73,6 @@ app-launcher-lite/
 ├── scripts/                    # launcher.py (thin entry point: sys.path shim -> app/cli/main), webapp.bat (webapp without the tray), webapp_tunnel_named.bat (uvicorn + cloudflared), operator tools and the vendored ratchets
 │   ├── verify-before-ship.ps1  # the pre-ship gate: disposable webapp + session-host, no tray needed
 │   ├── run-e2e.ps1             # dev-loop e2e runner against the live tray
-│   ├── install.py              # setup.bat's work: venv, requirements, configs from samples (never overwriting), checklist
 │   ├── restart-session-host.ps1 # confirmation-gated :8466 restart (see CLAUDE.md, session-host)
 │   ├── tray_lifecycle.ps1      # the tray's start / restart / reclaim logic, used by tray.bat
 │   ├── classify_e2e.py         # diff -> browser-slice routing
