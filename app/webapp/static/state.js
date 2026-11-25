@@ -34,6 +34,10 @@ export const WEBAUTHN_POLL_MS = 15000;
 // twice in a row by much. The retry covers the sampler's ~2 s first sample.
 export const SYSTEM_LOAD_POLL_MS = 10000;
 export const SYSTEM_LOAD_WARMING_RETRY_MS = 3000;
+// A warming read is retried this many times in a row, then the 10 s poll carries on: on a
+// loaded box the first sample can take far longer than 2 s, and an unbounded 3 s retry
+// would send the header's reads at three times the poll rate for as long as it does.
+export const SYSTEM_LOAD_WARMING_MAX_RETRIES = 2;
 // Git-status refresh (not tap-only): slow on
 // purpose — one git run per project per tick, gated to the tabs that show
 // the flags (Coding tiles, Board backlog) and to a foreground page.

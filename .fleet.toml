@@ -121,7 +121,8 @@ build-watch = { src = "app/webapp/static/_vendored/build-watch", sha = "48602060
 request_budget_ratchet = { src = "scripts/request_budget_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/request_budget_ratchet.py" }
 request_budget_scan = { src = "scripts/request_budget_scan.py", sha = "5ba99b0a04b1b5d7b3689f8f7a59bd3fe625a9bc", dest = "scripts/request_budget_scan.py" }
 poll = { src = "app/webapp/static/_vendored/poll", sha = "78df565389899bdb33b7f676b7e216fda39acb42", dest = "app/webapp/static/_vendored/poll" }
-request_budget_probe = { src = "tests/e2e/budget/_request_budget.py", sha = "be7de0edb225505f0b4773736b4eaf6b34a49363", dest = "tests/e2e/budget/_request_budget.py" }
+request_budget_probe = { src = "tests/e2e/budget/_request_budget.py", sha = "7c49213a6df844dc30987037913ba54e09de35d9", dest = "tests/e2e/budget/_request_budget.py" }
+webkit_budget_check = { src = "scripts/tools/webkit_budget_check.py", sha = "7c49213a6df844dc30987037913ba54e09de35d9", dest = "scripts/tools/webkit_budget_check.py" }
 
 # ---------------------------------------------------------------------------
 # [verify] -- the launch recipe the generated verify-app-launcher skill reads
@@ -393,11 +394,12 @@ handler_dirs = ["app/webapp/routers"]
 stat_cache   = ["src.life_os.stat_cache"]
 
 # Read by tests/e2e/budget/test_main_page_request_budget.py: what the main page may send in
-# a visible minute on a frozen clock, hidden being zero. A measured minute is 55 to 56
-# (system load every 2.5 s, apps, sessions and usage reads on their own ticks); 60 leaves
-# room for one extra tick and no more, so a new poll shows up as a failure.
+# a visible minute on a frozen clock, hidden being zero. A measured minute is 39 on Chromium
+# and 46 on WebKit, which also reads its status, version and theme boot calls inside the
+# minute (system load every 10 s, apps, sessions and usage reads on their own ticks); 50
+# leaves room for one extra tick and no more, so a new poll shows up as a failure.
 [request_budget]
-visible_requests_per_minute = 60
+visible_requests_per_minute = 50
 
 # Server loops that wake faster than the ratchet's 5 s floor, or on an interval the
 # source does not fix. Each runs only while something waits on it (a request, a launch

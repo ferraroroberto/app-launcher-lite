@@ -19,7 +19,7 @@
  * read is "Unknown" and Copy is disabled.
  */
 
-import { SYSTEM_LOAD_WARMING_RETRY_MS, state } from './state.js';
+import { SYSTEM_LOAD_WARMING_MAX_RETRIES, SYSTEM_LOAD_WARMING_RETRY_MS, state } from './state.js';
 import { copyText, jsonApi, logPollFailure } from './api.js';
 import { el, sheetRow } from './dom-utils.js';
 import { pctText } from './shared/format.js';
@@ -28,6 +28,7 @@ import { pctText } from './shared/format.js';
 // answer it reads as the server's own "still taking the first sample".
 let reading = { level: 'unknown', reason: 'warming' };
 let retryTimer = null;
+let warmingRetries = 0;
 
 function readingKnown(r) {
   return !!(r && r.level !== 'unknown' && typeof r.cpu_percent === 'number');
@@ -185,8 +186,11 @@ export async function fetchSystemLoad() {
   }
   render();
   // The sampler's first sample lands ~2 s after the first read wakes it:
-  // one short retry instead of a "–" for a whole poll.
-  if (reading && reading.reason === 'warming' && !retryTimer) {
+  // a short retry instead of a "–" for a whole poll, a bounded number of times.
+  if (!reading || reading.reason !== 'warming') {
+    warmingRetries = 0;
+  } else if (!retryTimer && warmingRetries < SYSTEM_LOAD_WARMING_MAX_RETRIES) {
+    warmingRetries += 1;
     retryTimer = setTimeout(function () {
       retryTimer = null;
       fetchSystemLoad().catch(function () {});
