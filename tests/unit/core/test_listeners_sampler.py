@@ -21,7 +21,7 @@ import pytest
 from app.webapp.routers import misc
 from src import diagnostics
 from src.diagnostics import ListenerScanUnavailable, PortOwner
-from src.listeners_sampler import ListenersSampler
+from src.monitoring.listeners_sampler import ListenersSampler
 
 
 class _Clock:

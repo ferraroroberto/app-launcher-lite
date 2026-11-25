@@ -581,7 +581,7 @@ interval_s = 0.05
 why        = "bounded wait during a send for the agent's turn to start; ends after 15 s"
 
 [[request_budget.loops]]
-path       = "src/listeners_sampler.py"
+path       = "src/monitoring/listeners_sampler.py"
 function   = "ListenersSampler.tick_forever"
 interval_s = 1
 why        = "starts a listeners scan only while the Apps tab polled within the demand window, one at a time and spaced after the last finished; an idle wake only reads a timestamp"
