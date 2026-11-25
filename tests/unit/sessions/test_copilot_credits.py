@@ -111,6 +111,37 @@ def test_the_number_is_read_one_way_or_not_at_all(figure, expected):
     assert ai_credits_used(_two_row(f" Plan: 26.957/35.100 · Session: {figure} AIC used")) == expected
 
 
+# ---- the footer's cells wrapped over two rows ---------------------------------
+
+# A long session viewed on a narrow terminal: each footer cell is two rows tall,
+# so ``Session: N`` sits on one row and its ``AIC`` unit on the row below.
+WRAPPED_TOP = " +0 Plan: 27.448/35.100 · Session: 39.74 · YOLO"
+WRAPPED_BOTTOM = " -0 (78% used) AIC used"
+
+
+def _wrapped(top: str = WRAPPED_TOP, bottom: str = WRAPPED_BOTTOM, above=(" ● Done.", "")):
+    return [*above, top, bottom, WIDE_RULE, "> ", WIDE_RULE, MODEL, "", ""]
+
+
+def test_a_footer_wrapped_over_two_rows_reads_its_figure():
+    assert ai_credits_used(_wrapped()) == 39.74
+    # The plain wrap: the figure ends one row, its unit starts the next.
+    assert ai_credits_used(_wrapped(" Plan: 27.448/35.100 · Session: 39.74", " AIC used · YOLO")) == 39.74
+    # A narrow terminal's shorter rules and a blank row above the footer.
+    narrow = [" ● Done.", "", WRAPPED_TOP, WRAPPED_BOTTOM, "─" * 46, "> ", "─" * 46, MODEL]
+    assert ai_credits_used(narrow) == 39.74
+
+
+def test_a_wrapped_footer_that_is_not_credits_reads_none():
+    # Another unit, a figure cut before its end and a row with no AIC below it.
+    assert ai_credits_used(_wrapped(" Plan: 27.448/35.100 · Session: 39.74 USD · YOLO")) is None
+    assert ai_credits_used(_wrapped(" Plan: 27.448/35.100 · Session: 39.7…")) is None
+    assert ai_credits_used(_wrapped(bottom=" -0 (78% used)")) is None
+    # A quoted pair of rows in the conversation, out of the status block's reach.
+    quoted = [" Session: 39.74", " AIC used", "", "", ""]
+    assert ai_credits_used(_wrapped(" Plan: 27.448/35.100 (78% used)", " -0", above=quoted)) is None
+
+
 def test_only_the_bottom_most_row_counts():
     older = ["  Session: 9.99 AIC used", RULE, "❯", RULE]
     assert ai_credits_used(older + _screen(WIDE_FOOTER)) == 5.62
@@ -220,6 +251,23 @@ def test_a_restarted_session_starts_again_from_its_screen(reads, monkeypatch):
         return sessions[0]["ai_credits"]
 
     assert asyncio.run(run()) == 0.4
+
+
+def test_a_reading_without_the_figure_keeps_the_last_one(reads, monkeypatch):
+    """A repaint caught mid-draw or a footer cut short reads ``None``: unknown,
+    so what was true a moment ago stays."""
+    async def run():
+        session_credits.attach_ai_credits(1, [_session()])
+        await _settle()
+        monkeypatch.setattr(session_credits, "_TTL_S", 0.0)
+        reads.screen = _screen(" Interactive · Medium · (3%)")
+        sessions = [_session()]
+        session_credits.attach_ai_credits(1, sessions)
+        await _settle()
+        session_credits.attach_ai_credits(1, sessions)
+        return sessions[0]["ai_credits"]
+
+    assert asyncio.run(run()) == 5.62
 
 
 def test_a_session_that_is_gone_leaves_no_cache_entry(reads):

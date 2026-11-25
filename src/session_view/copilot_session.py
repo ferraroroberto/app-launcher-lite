@@ -53,6 +53,11 @@ _PREFILTER = tuple(f'"{name}"' for name in _MODEL_EVENTS)
 # The status line's closing figure: Copilot's own context-window percentage.
 _CONTEXT_RE = re.compile(r"·\s*\((\d{1,3})%\)\s*$")
 _WORKING_RE = re.compile(r"^\s*\S?\s*Working\b")
+# A footer wrapped over two rows leaves the percent alone on the bottom row,
+# without the ``·`` that led it. Trusted only under the input box.
+_WRAPPED_CONTEXT_RE = re.compile(r"(?:^|\s)\((\d{1,3})%\)\s*$")
+# Non-blank rows the footer may take under the input box's bottom border.
+_FOOTER_ROWS_MAX = 2
 _RULE_CHARS = set("─━")
 
 # Event logs read so far, by path: (bytes consumed, model). A poll reads only
@@ -151,11 +156,27 @@ def _status_line(lines: List[str]) -> Optional[str]:
     return next((line for line in reversed(lines or []) if line.strip()), None)
 
 
+def _under_input_box(lines: List[str]) -> bool:
+    """Whether the bottom-most row sits within the footer's rows below the
+    input box's bottom border."""
+    below = 0
+    for line in reversed(lines or []):
+        text = line.strip()
+        if text and set(text) <= _RULE_CHARS:
+            return True
+        below += bool(text)
+        if below > _FOOTER_ROWS_MAX:
+            return False
+    return False
+
+
 def context_percent(lines: List[str]) -> Optional[int]:
     """The context-window percentage Copilot's status line shows, or ``None``
     when the line is not on screen or is cut short before the figure."""
     status = _status_line(lines)
     match = _CONTEXT_RE.search(status or "")
+    if not match and _under_input_box(lines):
+        match = _WRAPPED_CONTEXT_RE.search(status or "")
     if not match:
         return None
     value = int(match.group(1))
