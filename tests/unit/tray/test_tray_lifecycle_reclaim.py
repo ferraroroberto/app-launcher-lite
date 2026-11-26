@@ -55,6 +55,8 @@ if ($env:TL_MODE -eq 'list') {
     $script:ForeignHolders = @()
     $null = Invoke-ReclaimPorts
     try { Resolve-ForeignHolders; Write-Output 'RESOLVED' } catch { Write-Output ('THROWN=' + $_.Exception.Message) }
+} elseif ($env:TL_MODE -eq 'portsfree') {
+    try { Wait-OwnedPortsFree -TimeoutSeconds 2; Write-Output 'FREE' } catch { Write-Output ('THROWN=' + $_.Exception.Message) }
 } elseif ($env:TL_MODE -eq 'owner') {
     Write-Output ('PROBLEM=' + (Get-AnswerOwnerProblem ([int] $env:TL_PID)))
 } elseif ($env:TL_CASES) {
@@ -231,16 +233,18 @@ class TestWorktreeListing:
         assert [Path(r).resolve() for r in roots] == [sibling.resolve()]
 
 
-def _spawn_listener(script_dir: Path, role: str = "session-host") -> Tuple["subprocess.Popen[str]", int, int]:
-    """A throwaway ``<script_dir>/launcher.py <role>`` that listens on a free port."""
+def _spawn_listener(
+    script_dir: Path, role: str = "session-host", host: str = "127.0.0.1"
+) -> Tuple["subprocess.Popen[str]", int, int]:
+    """A throwaway ``<script_dir>/launcher.py <role>`` that listens on a free port of ``host``."""
     script_dir.mkdir(parents=True)
     with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
+        probe.bind((host, 0))
         port = probe.getsockname()[1]
     (script_dir / "launcher.py").write_text(
         "import os, socket, sys, time\n"
         "s = socket.socket()\n"
-        "s.bind(('127.0.0.1', int(sys.argv[3])))\n"
+        f"s.bind(({host!r}, int(sys.argv[3])))\n"
         "s.listen(1)\n"
         "print(os.getpid(), flush=True)\n"
         "time.sleep(120)\n",
@@ -495,3 +499,36 @@ class TestAnotherCheckoutOnTheOwnedPort:
         other_problem = problem(their_pid)
         assert f"PID {their_pid} runs from checkout {other}" in other_problem
         assert problem(999999).startswith("the command line of PID 999999 could not be read")
+
+
+def _non_loopback_ipv4() -> Optional[str]:
+    """One of this machine's own IPv4 addresses that is neither loopback nor link-local."""
+    psutil = pytest.importorskip("psutil")
+    for addrs in psutil.net_if_addrs().values():
+        for addr in addrs:
+            if addr.family == socket.AF_INET and not addr.address.startswith(("127.", "169.254.")):
+                return addr.address
+    return None
+
+
+class TestListenerOnAnotherAddress:
+    """Tailscale serves the webapp's port number on the tailnet addresses next to the webapp's
+    0.0.0.0 listener; that holder never blocks a restart."""
+
+    def test_restart_and_port_wait_leave_it_alone(self, tmp_path) -> None:
+        host = _non_loopback_ipv4()
+        if host is None:
+            pytest.skip("no non-loopback IPv4 address on this machine")
+        mine, other = tmp_path / "app-launcher-lite", tmp_path / "old-install" / "app-launcher-lite"
+        proc, port, pid = _spawn_listener(other, role="webapp", host=host)
+        TestAnotherCheckoutOnTheOwnedPort._other_checkout(other)
+        try:
+            env = {
+                "TL_VENV": str(mine / ".venv"), "TL_SCRIPTDIR": str(mine), "TL_PORTS": str(port),
+                "TL_WORKTREES": json.dumps([]), "TL_TRAYMATCH": r"launcher\.py\s+tray",
+            }
+            assert "RESOLVED" in _run_ps(tmp_path, {**env, "TL_MODE": "foreign"})
+            assert "FREE" in _run_ps(tmp_path, {**env, "TL_MODE": "portsfree"})
+            assert _alive(pid)
+        finally:
+            proc.kill()

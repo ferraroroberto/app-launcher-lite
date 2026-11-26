@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Iterator, List, Tuple
 
+import psutil
 import pytest
 
 from app.webapp.manager import PROJECT_ROOT, WebappManager, WebappManagerConfig
@@ -121,6 +122,35 @@ class TestAdoption:
         assert f"pid {pid} from another checkout" in message and "not adopted" in message
         assert "--replace-other-checkout" in message
         assert not spawned
+
+    def test_a_listener_on_another_address_does_not_block_adoption(self, tmp_path, serve) -> None:
+        # Tailscale listens on the same port number on the tailnet addresses only.
+        host = next(
+            (a.address for addrs in psutil.net_if_addrs().values() for a in addrs
+             if a.family == socket.AF_INET and not a.address.startswith(("127.", "169.254."))),
+            None,
+        )
+        if host is None:
+            pytest.skip("no non-loopback IPv4 address on this machine")
+        port, _pid = serve(PROJECT_ROOT)
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        bind = (
+            "import os, socket, sys, time\n"
+            "s = socket.socket(); s.bind((sys.argv[1], int(sys.argv[2]))); s.listen(1)\n"
+            "print(os.getpid(), flush=True); time.sleep(60)\n"
+        )
+        other = subprocess.Popen(
+            [sys.executable, "-c", bind, host, str(port)],
+            cwd=str(elsewhere), stdout=subprocess.PIPE, text=True, creationflags=NO_WINDOW,
+        )
+        try:
+            assert other.stdout is not None and int(other.stdout.readline())
+            status = self._manager(port).start(wait=False)
+        finally:
+            other.kill()
+            other.wait(timeout=10)
+        assert status.running is True
 
     def test_this_checkouts_webapp_is_adopted(self, serve) -> None:
         port, _pid = serve(PROJECT_ROOT)

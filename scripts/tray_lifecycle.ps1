@@ -290,6 +290,17 @@ function Wait-ProcessGone {
     return -not (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)
 }
 
+# The PIDs listening on $Port on a loopback or wildcard address: the ones a 127.0.0.1 probe
+# reaches and that keep the webapp from binding 0.0.0.0. A listener bound to one other address
+# (Tailscale serving the same port number on the tailnet addresses) coexists with the webapp, so
+# it neither blocks a restart nor counts as holding the port.
+function Get-ProbeListenerPids {
+    param([int] $Port)
+    return @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+        Where-Object { @('0.0.0.0', '::', '127.0.0.1', '::1') -contains [string] $_.LocalAddress } |
+        Select-Object -ExpandProperty OwningProcess -Unique)
+}
+
 # Returns the number of owned holders that were still alive after the kill. A stop that was
 # acknowledged but did not end the process is a failed reclaim, never a quiet success.
 function Invoke-ReclaimPorts {
@@ -297,6 +308,7 @@ function Invoke-ReclaimPorts {
     foreach ($port in (Get-OwnedPorts)) {
         $holders = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
             Select-Object -ExpandProperty OwningProcess -Unique)
+        $probed = @(Get-ProbeListenerPids $port)
         foreach ($ownerProcessId in $holders) {
             $cim = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $ownerProcessId) -ErrorAction SilentlyContinue
             if (-not $cim) { continue }
@@ -313,7 +325,9 @@ function Invoke-ReclaimPorts {
                 }
             } else {
                 Write-Host ("Leaving :{0}: held by PID {1}, which is not this repo's process." -f $port, $ownerProcessId)
-                $script:ForeignHolders += [pscustomobject]@{ Port = $port; ProcessId = $ownerProcessId; CommandLine = [string] $cim.CommandLine }
+                if ($probed -contains $ownerProcessId) {
+                    $script:ForeignHolders += [pscustomobject]@{ Port = $port; ProcessId = $ownerProcessId; CommandLine = [string] $cim.CommandLine }
+                }
             }
         }
     }
@@ -378,8 +392,7 @@ function Wait-OwnedPortsFree {
     do {
         $held = @()
         foreach ($port in (Get-OwnedPorts)) {
-            foreach ($holderPid in @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
-                    Select-Object -ExpandProperty OwningProcess -Unique)) {
+            foreach ($holderPid in (Get-ProbeListenerPids $port)) {
                 $held += (":{0} by PID {1}" -f $port, $holderPid)
             }
         }
