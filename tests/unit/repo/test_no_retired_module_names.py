@@ -56,6 +56,22 @@ def _prose(source: str):
                 yield getattr(node.body[0], "lineno", 1), doc
 
 
+def test_router_prose_names_only_modules_that_exist():
+    """A router comment naming a ``.py`` file the tree lacks is drift: usually a
+    caller list naming a module this fork never had or has since moved."""
+    present = {path.name for path in _py_files("src", "app", "scripts", "tests", "copilot")}
+    present.add("conversation_capture.py")  # fleet-config's, named on purpose
+    pattern = re.compile(r"(?<![\w*<])(\w+\.py)(?!\w)")
+    hits = [
+        f"{path.relative_to(PROJECT_ROOT).as_posix()}:{line}: {name}"
+        for path in _py_files("app/webapp/routers")
+        for line, text in _prose(path.read_text(encoding="utf-8"))
+        for name in pattern.findall(text)
+        if name not in present
+    ]
+    assert not hits, "describe the contract, or name a module that exists:\n" + "\n".join(hits)
+
+
 def test_no_comment_or_docstring_names_a_retired_flat_module():
     retired = _retired_names()
     assert retired, "no package modules found; the derivation is broken"

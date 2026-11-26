@@ -86,12 +86,8 @@ def requested_launch_context(body: Dict[str, Any], agent: str) -> Optional[str]:
 def known_run_dir(job_id: str, run_id: str) -> Optional[Path]:
     """A registered job's existing run dir, else ``None``.
 
-    Shared by every Jobs route that resolves ``{job_id}/{run_id}`` into a
-    directory before doing anything else — the kill, dismiss and get-one-run
-    routes in ``jobs.py`` and the pin/artifact/live-output routes in
-    ``jobs_run_store_routes.py`` all need this job-exists → join
-    run dir → ``is_dir`` sequence, so it lives here instead of inline per
-    route.
+    The job-exists check, join and ``is_dir`` every Jobs route needs before it
+    acts on a ``{job_id}/{run_id}`` pair.
     """
     if get_by_id(load_jobs(), job_id) is None:
         return None
@@ -120,8 +116,7 @@ async def audit_off_loop(
 
     Deliberately no try/except: ``audit.session_log``/``session_input``
     already swallow their own ``OSError``, and ``audit_event`` going bang is a
-    real fault worth surfacing — the failure semantics are exactly what they
-    were before the hop off the loop.
+    real fault worth surfacing.
 
     ``_pool`` runs the write on that executor instead of the audit pool,
     for a route whose answer must not wait behind other routes' threads (a
@@ -141,17 +136,11 @@ async def maybe_json(request: Request) -> Dict[str, Any]:
 
 
 def safe_int(body: Dict[str, Any], key: str, default: int) -> int:
-    """Read an ``int``-ish field out of a decoded request body, falling
-    back to ``default`` on anything that doesn't coerce.
+    """An ``int``-ish field of a decoded request body.
 
-    Five call sites (``board.py`` x2, ``board_chief.py``, ``apps.py``,
-    ``life_os.py`` — all the PTY-launch routes' ``rows``/``cols`` phone
-    terminal-size fields) used to do a bare ``int(body.get(key) or
-    default)``: a malformed body (e.g. ``{"rows": "abc"}``) raised an
-    uncaught ``ValueError`` that FastAPI turned into a bare 500 instead of
-    the 400 this is, from any authenticated caller. Mirrors the already-
-    guarded shape ``life_os.py``'s own ``_search_limit`` used for its
-    ``limit`` query param.
+    ``default`` when the field is absent, falsy or does not coerce: a malformed
+    body (``{"rows": "abc"}``) must not raise, because an uncaught
+    ``ValueError`` is a bare 500.
     """
     raw = body.get(key)
     if not raw:
@@ -247,7 +236,7 @@ def mirror_url(request: Request, cfg: WebappConfig, sid: str) -> str:
 # ``?session=`` deep link, which is tailnet-gated by design. Both the Coding
 # tab (``/api/claude-code/sessions``) and the Board (``/api/board``) hand it
 # to the client as ``web_url``, so the resolution lives here rather than in
-# either router (the Coding tab captured it first, the Board shares the field).
+# either router.
 
 _CLAUDE_WEB_URL_RE = re.compile(
     r"https://claude\.ai/code/session_"
@@ -264,8 +253,8 @@ _SESSION_LINK_SCAN_BYTES = 512 * 1024
 # a miss is cached only against the transcript it was read from: its
 # size and mtime, from one stat. An unchanged transcript is not reopened on
 # the next poll (a long-lived session whose card scrolled out of both windows
-# re-read 1 MiB every tick, and each open is another chance at the
-# multi-second stall once measured); one that has grown is scanned again.
+# would re-read 1 MiB every tick, and each open is another chance at a
+# multi-second stall); one that has grown is scanned again.
 _PROVIDER_URL_CACHE: Dict[str, str] = {}
 _PROVIDER_URL_MISSES: Dict[str, Tuple[int, int]] = {}
 _PROVIDER_URL_CACHE_MAX = 512
@@ -474,25 +463,16 @@ def should_mirror_to_pc(
 async def spawn_session_or_400(
     spawn_fn: Callable[..., Dict[str, Any]], /, *args: Any, **kwargs: Any
 ) -> Dict[str, Any]:
-    """Run ``spawn_claude_session`` off the event loop, mapping its two
-    failure modes onto HTTP responses.
-
-    The shared *head* of every session-launch route, the counterpart to
-    :func:`audit_session_start_and_maybe_mirror`'s tail: six call sites
-    across three routers — ``apps.py``'s Coding-tab remote + PTY launches,
-    ``board.py``'s issue-start, dispatch and chief-ensure, ``life_os.py``'s
-    skill launch — repeated this identical two-arm mapping verbatim, with
-    only the spawn arguments differing.
+    """Run a session spawn off the event loop, mapping its failures to HTTP.
 
     ``SessionHostError`` carries the session-host's own status through
-    (``exc.status``) so a 409 "already running" doesn't flatten into a 400;
-    an ``OSError`` — an unreadable project dir, a missing executable — is a
-    bad request by the time it reaches here.
+    (``exc.status``) so a 409 "already running" doesn't flatten into a 400; an
+    ``OSError`` (an unreadable project dir, a missing executable) is a bad
+    request by the time it reaches here.
 
-    ``spawn_fn`` is passed in rather than imported here so
-    ``tests/conftest.py``'s per-router ``spawn_claude_session``
-    monkeypatches still bite when the spawn runs on the caller's behalf —
-    same contract as ``audit_mod`` / ``mirror_fn`` below.
+    ``spawn_fn`` is passed in rather than imported here so the per-router
+    ``spawn_claude_session`` monkeypatches in tests still apply when the spawn
+    runs on the caller's behalf.
     """
     try:
         return await run_on(SESSION_HOST, spawn_fn, *args, **kwargs)
@@ -529,32 +509,16 @@ async def spawn_launcher_session(
 ) -> Tuple[Dict[str, Any], str]:
     """Spawn one launcher-owned session and return ``(session, sid)``.
 
-    Owns the two ``cfg``-derived arguments every launch route needs
-    — ``cfg.session_host_port`` and ``history_lines=cfg.terminal_history_lines``
-    — plus the ``sid = str(session.get("session_id") or "")`` line that
-    follows each one, so the five call sites across four routers —
-    ``apps.py``'s Coding-tab PTY launch, ``board.py``'s
-    issue-start and dispatch, ``board_chief.py``'s chief-ensure and
-    ``life_os_spawn.py``'s skill launch — build the call through here,
-    not by hand. Threading one more spawn argument
-    (as ``history_lines`` itself once was) means editing this one function.
+    Adds the two ``cfg``-derived spawn arguments (``session_host_port`` and
+    ``history_lines``) and applies Copilot's remote-session setting first;
+    ``label`` is sent only when set.
 
-    This is deliberately **not** a ``spawn_and_audit`` that also runs
-    :func:`audit_session_start_and_maybe_mirror`: only ``apps.py`` runs the
-    two back to back. The other
-    sites do mandatory, order-dependent work in between — ``_mark_chief_managed``,
-    ``_type_into_session``, and in ``board_chief`` a ready-wait, a rename and
-    the ``/chief`` send whose ordering is load-bearing (rename FIRST, then
-    /chief). Collapsing the two halves would force that into callbacks.
+    It stops before :func:`audit_session_start_and_maybe_mirror` on purpose: a
+    caller may have order-dependent work between the spawn and that tail, such
+    as typing into the new session.
 
-    ``apps.py``'s **remote** branch is not a caller: it passes no
-    ``rows``/``cols``/``history_lines`` at all, and widening it to send them
-    would change the request it makes for no gain (the session-host's
-    ``create_remote`` takes none of the three).
-
-    ``spawn_fn`` is passed in rather than imported here for the same reason
-    as :func:`spawn_session_or_400` — so ``tests/conftest.py``'s per-router
-    ``spawn_claude_session`` monkeypatches still bite.
+    ``spawn_fn`` is passed in for the same reason as in
+    :func:`spawn_session_or_400`.
     """
     extra: Dict[str, Any] = {"history_lines": cfg.terminal_history_lines}
     if label:
@@ -593,35 +557,22 @@ async def audit_session_start_and_maybe_mirror(
     brief_chars: Optional[int] = None,
     mirror: bool = True,
 ) -> None:
-    """Audit a freshly spawned PTY session, then mirror it to a PC terminal
-    window if appropriate — the shared tail every PTY-launch
-    call site (Coding tab ``apps.py``, Board issue-start/dispatch
-    ``board.py``) needs right after ``spawn_claude_session``.
+    """Audit a freshly spawned session, then mirror it to a PC window if due.
 
-    Life OS (``routers/life_os_spawn.py``) routes through here too, rather
-    than carrying its own parallel copy of this tail, passing its two
-    differences — the ``remote`` kind and its own ``resume_sid`` field — as
-    ``kind`` / ``resume_sid``. One audit+mirror workflow, not two copies
-    that would otherwise need to be kept in step by hand on every change.
-
-    The three parameters that carry the difference all default to the PTY
-    behaviour the other call sites already had: ``kind="pty"`` (the mirror
-    is PTY-only — a detached session has no window to mirror),
-    ``resume_sid=None`` (dropped by ``_fmt_fields``, so an audit line that
-    never carried the field still doesn't) and the ``session_start`` event
-    name, which a remote launch overrides with ``remote_launch``.
+    ``kind="remote"`` audits as ``remote_launch`` instead of ``session_start``
+    and is never mirrored: a detached session has no window. ``mirror=False``
+    suppresses the window for any kind. ``request`` is ``None`` for a start no
+    client asked for, which is audited as ``startup`` and not mirrored.
+    ``resume``, ``resume_sid``, ``skill`` and ``brief_chars`` left ``None``
+    are dropped from the audit line.
 
     ``audit_mod`` / ``mirror_fn`` must be the *caller's own* module-level
-    ``audit`` / ``open_local_terminal_window`` references (not this module's)
-    so ``tests/conftest.py``'s per-router monkeypatches — which stub the
-    audit writer and stub the mirror spawn to keep unit tests from spawning
-    real windows or writing real audit logs — still take effect when this
-    helper runs on the caller's behalf.
+    ``audit`` / ``open_local_terminal_window`` references, not this module's,
+    so the per-router monkeypatches in tests (no real audit log, no real
+    window) still apply when this runs on the caller's behalf.
     """
-    # Both writes go off the event loop (the call site the earlier
-    # event-loop sweep missed): this is the shared tail every PTY spawn
-    # runs — Coding tab, Board issue-start/dispatch, and the fleet chief — so
-    # a slow audit write here freezes the single-worker loop on every launch.
+    # Both writes go off the event loop: this runs on every launch, so a slow
+    # audit write here would freeze the single-worker loop each time.
     await audit_off_loop(
         audit_mod.audit_event,
         "remote_launch" if kind == "remote" else "session_start",
@@ -638,8 +589,7 @@ async def audit_session_start_and_maybe_mirror(
         # A Board issue-start dispatch brief: its size only, never
         # its content. None (no brief) is dropped from the line.
         brief_chars=brief_chars,
-        # No request: the Telegram boot-time autostart, which no
-        # client asked for.
+        # No request: no client asked for this start.
         client=client_ip(request) if request is not None else "startup",
     )
     await audit_off_loop(
