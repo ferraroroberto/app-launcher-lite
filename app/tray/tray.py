@@ -52,6 +52,7 @@ from app.webapp.manager import (
 from src import AppConfig, runtime_files
 from src._tunnel_config import read_tunnel_hostname
 from src.app_config import resolve_webapp_port
+from src.launching.process_checkout import FOREIGN, OURS, port_owner
 from src.launching.ps_script import run_script
 from src.subprocess_flags import NO_WINDOW, NO_WINDOW_NEW_GROUP
 from src.webapp_config import append_auth_token, load_webapp_config
@@ -276,7 +277,18 @@ class TrayApp:
         """
         port = _session_host_port()
         if registered_trays.port_listening(port):
-            logger.info(f"🔗 Adopting running session-host on :{port}")
+            # Nothing is spawned either way: the port is taken. What changes is that a host from
+            # another checkout is named as such instead of being reported as adopted.
+            owner = port_owner(port, PROJECT_ROOT)
+            if owner.state == FOREIGN:
+                msg = f"session-host on :{port} is {owner.detail}, not this checkout; not adopted"
+                logger.error(f"❌ {msg}")
+                _notify("Session host belongs to another checkout", msg)
+                return f"refused the session-host on :{port}: {owner.detail}"
+            if owner.state != OURS:
+                logger.warning(f"⚠️  session-host on :{port}: checkout not confirmed ({owner.detail})")
+                return f"left the session-host on :{port} in place, checkout not confirmed: {owner.detail}"
+            logger.info(f"🔗 Adopting running session-host on :{port} ({owner.detail})")
             return f"adopted the session-host already listening on :{port}"
         # `start` launches the child and cmd exits, orphaning it out of this
         # tray's subtree; /b keeps it windowless (the pythonw child is windowless

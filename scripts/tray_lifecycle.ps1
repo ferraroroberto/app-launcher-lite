@@ -12,7 +12,10 @@
       started from this repo's own `-wt-<N>` git worktrees, ends a plain start
       on the same build check as a restart, and appends the failing phase
       (helper, reclaim, launch, readiness) with the old and new PID, the scheme
-      and the last error line to webapp\restart.log.
+      and the last error line to webapp\restart.log. A restart also refuses an
+      owned port held by another checkout's process (or replaces that checkout
+      with -ReplaceOtherCheckout), waits for the owned ports to be free, and its
+      build check passes only when the answering pid runs from this checkout.
       Vendored for the lite fork so the tray has zero external dependencies;
       this repo-local copy replaces the machine-shared
       %USERPROFILE%\.claude\tray\tray_lifecycle.ps1. Keep ASCII-only.
@@ -104,7 +107,11 @@ param(
     [string] $VersionUrl,
 
     # launch: bounded stale-serve detection.
-    [int] $VerifyTimeoutSeconds = 30
+    [int] $VerifyTimeoutSeconds = 30,
+
+    # launch -Restart: stop another checkout of this app (its trays, then the holder) when it holds
+    # an owned port, instead of refusing the restart.
+    [switch] $ReplaceOtherCheckout
 )
 
 # Scope every match by the holder's CommandLine containing this repo's .venv path
@@ -306,10 +313,94 @@ function Invoke-ReclaimPorts {
                 }
             } else {
                 Write-Host ("Leaving :{0}: held by PID {1}, which is not this repo's process." -f $port, $ownerProcessId)
+                $script:ForeignHolders += [pscustomobject]@{ Port = $port; ProcessId = $ownerProcessId; CommandLine = [string] $cim.CommandLine }
             }
         }
     }
     return [int] $survivors
+}
+
+$script:ForeignHolders = @()
+
+# The checkout root a command line was started from: the folder holding its (scripts\)launcher.py,
+# else the one holding its .venv. $null when the command line names neither. A path with a space
+# is not read; the root then only names the holder, and a replace still needs it to be a checkout.
+function Get-CommandLineRoot {
+    param([string] $CommandLine)
+    if (-not $CommandLine) { return $null }
+    $m = [regex]::Match($CommandLine, '([A-Za-z]:[\\/][^"\s]*?)[\\/]+(scripts[\\/]+)?launcher\.py', 'IgnoreCase')
+    if ($m.Success) { return $m.Groups[1].Value }
+    $m = [regex]::Match($CommandLine, '([A-Za-z]:[\\/][^"\s]*?)[\\/]+\.venv[\\/]', 'IgnoreCase')
+    if ($m.Success) { return $m.Groups[1].Value }
+    return $null
+}
+
+# Another checkout of this app holds an owned port: refuse the restart, naming it, or (with
+# -ReplaceOtherCheckout) stop that checkout's trays first, so their watchdogs cannot bring the
+# holder back, and then the holder. A holder that is not a checkout of this app is never stopped.
+function Resolve-ForeignHolders {
+    foreach ($holder in $script:ForeignHolders) {
+        $root = Get-CommandLineRoot $holder.CommandLine
+        $where = if ($root) { "checkout $root" } else { 'an unknown checkout' }
+        $what = ("owned port :{0} is held by PID {1} from {2}, not this checkout {3} ({4})" -f `
+            $holder.Port, $holder.ProcessId, $where, (Get-RepoRoot), (Format-OneLine $holder.CommandLine 200))
+        if (-not $ReplaceOtherCheckout) {
+            throw ("restart refused: {0}. Stop that copy first, or run tray.bat --restart --replace-other-checkout to replace it." -f $what)
+        }
+        $isCheckout = $root -and (Test-Path -LiteralPath (Join-Path $root 'tray.bat')) -and
+            (Test-Path -LiteralPath (Join-Path $root 'scripts\tray_lifecycle.ps1'))
+        if (-not $isCheckout) {
+            throw ("restart refused: {0}; it is not a checkout of this app, so it was not stopped." -f $what)
+        }
+        Write-Host ("Replacing other checkout {0}: {1}" -f $root, $what)
+        foreach ($cim in @(Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe' OR Name = 'python.exe'")) {
+            if ($cim.CommandLine -and $TrayMatch -and $cim.CommandLine -match $TrayMatch -and
+                (Test-UnderVenv $cim.CommandLine (Join-Path $root '.venv'))) {
+                Write-Host ("  stopping its tray PID {0}" -f $cim.ProcessId)
+                # A venv launcher and its interpreter both match, and /T on the first already ends
+                # the second, so a "not found" here is expected.
+                try { & taskkill /T /F /PID $cim.ProcessId > $null 2>&1 } catch { }
+            }
+        }
+        $script:OldPids += $holder.ProcessId
+        Stop-Process -Id $holder.ProcessId -Force -ErrorAction SilentlyContinue
+        if (-not (Wait-ProcessGone -ProcessId $holder.ProcessId)) {
+            throw ("restart failed: PID {0} of checkout {1} is still running on :{2} after the stop." -f $holder.ProcessId, $root, $holder.Port)
+        }
+    }
+}
+
+# A stop is done when the owned ports are free, not when the kill was sent: name any PID that
+# still listens once the wait is over.
+function Wait-OwnedPortsFree {
+    param([int] $TimeoutSeconds = 10)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        $held = @()
+        foreach ($port in (Get-OwnedPorts)) {
+            foreach ($holderPid in @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
+                    Select-Object -ExpandProperty OwningProcess -Unique)) {
+                $held += (":{0} by PID {1}" -f $port, $holderPid)
+            }
+        }
+        if ($held.Count -eq 0) { return }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+    throw ("restart failed: owned port(s) still held after the stop: {0}" -f ($held -join ', '))
+}
+
+# Which checkout the process answering /api/version runs from: '' when it is this one, otherwise
+# why it is not (another checkout, or an owner that could not be read).
+function Get-AnswerOwnerProblem {
+    param($ServedPid)
+    if (-not ($ServedPid -is [int] -or $ServedPid -is [long])) { return 'the answer carries no pid' }
+    $cim = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $ServedPid) -ErrorAction SilentlyContinue
+    if (-not $cim -or -not $cim.CommandLine) { return ("the command line of PID {0} could not be read" -f $ServedPid) }
+    $checkout = Get-OwningCheckout $cim.CommandLine
+    if ($checkout -and $checkout.Kind -eq 'primary') { return '' }
+    $root = Get-CommandLineRoot $cim.CommandLine
+    $where = if ($root) { "checkout $root" } else { 'an unknown checkout' }
+    return ("PID {0} runs from {1}, not this checkout {2}" -f $ServedPid, $where, (Get-RepoRoot))
 }
 
 function Stop-TrayProcesses {
@@ -433,9 +524,12 @@ function Wait-VersionMatchesHead {
                     $servedSha = $response.git_sha
                     if (-not $servedSha) { $servedSha = $response.gitSha }
                     $lastSha = [string] $servedSha
-                    if (Test-GitShaMatches -ServedSha $lastSha -HeadSha $head) {
+                    $ownerProblem = Get-AnswerOwnerProblem $response.pid
+                    if ($ownerProblem) {
+                        $lastError = "$url served git_sha '$lastSha', but $ownerProblem"
+                    } elseif (Test-GitShaMatches -ServedSha $lastSha -HeadSha $head) {
                         # The answering process's own pid, not the launcher stub Start-Process returned.
-                        if ($response.pid -is [int] -or $response.pid -is [long]) { $script:NewPid = [int] $response.pid }
+                        $script:NewPid = [int] $response.pid
                         $assetHash = $response.asset_hash
                         if (-not $assetHash) { $assetHash = $response.assetHash }
                         if ($assetHash) {
@@ -444,8 +538,9 @@ function Wait-VersionMatchesHead {
                             Write-Host ("Verified {0} serves git_sha {1}." -f $url, $lastSha)
                         }
                         return
+                    } else {
+                        $lastError = "$url served git_sha '$lastSha', expected HEAD '$head'"
                     }
-                    $lastError = "$url served git_sha '$lastSha', expected HEAD '$head'"
                 } catch {
                     $lastError = "$url : $($_.Exception.Message)"
                 }
@@ -494,10 +589,13 @@ switch ($Action) {
                 }
                 $script:ReclaimedCount = 0
                 $script:ReclaimFailure = $null
+                $script:ForeignHolders = @()
                 if ((Invoke-ReclaimPorts) -gt 0) {
                     $why = if ($script:ReclaimFailure) { $script:ReclaimFailure } else { "an old process still holds an owned port" }
                     throw ("restart failed: {0}" -f $why)
                 }
+                Resolve-ForeignHolders
+                Wait-OwnedPortsFree
                 if ($trayPids.Count -eq 0 -and $script:ReclaimedCount -eq 0) {
                     # Starting fresh is not a restart: nothing was replaced, so a stale build may still be serving.
                     Write-Host ("NOTE: no running {0} tray or owned port holder matched {1}; nothing was stopped, so this starts a tray beside whatever else is running. The build check below says whether the new one is the one serving." -f $AppName, $VenvDir)

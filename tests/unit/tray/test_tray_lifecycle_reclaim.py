@@ -49,6 +49,14 @@ if ($env:TL_MODE -eq 'list') {
 } elseif ($env:TL_MODE -eq 'detect') {
     $TrayMatch = $env:TL_TRAYMATCH
     Write-Output ('PIDS=' + ((@(Get-TrayProcessIds)) -join ','))
+} elseif ($env:TL_MODE -eq 'foreign') {
+    $TrayMatch = $env:TL_TRAYMATCH
+    $ReplaceOtherCheckout = [bool] $env:TL_REPLACE
+    $script:ForeignHolders = @()
+    $null = Invoke-ReclaimPorts
+    try { Resolve-ForeignHolders; Write-Output 'RESOLVED' } catch { Write-Output ('THROWN=' + $_.Exception.Message) }
+} elseif ($env:TL_MODE -eq 'owner') {
+    Write-Output ('PROBLEM=' + (Get-AnswerOwnerProblem ([int] $env:TL_PID)))
 } elseif ($env:TL_CASES) {
     $out = @()
     foreach ($c in (ConvertFrom-Json $env:TL_CASES)) { $out += (Test-OwnsProcess $c) }
@@ -409,3 +417,81 @@ class TestRestartWithNothingToStop:
         # The start and the build check fail in this empty repo; the message comes before both.
         assert "NOTE: no running probe tray or owned port holder matched" in done.stdout
         assert "nothing was stopped" in done.stdout
+
+
+class TestAnotherCheckoutOnTheOwnedPort:
+    """Two checkouts of the app: a restart from one never quietly leaves the other serving."""
+
+    @pytest.fixture
+    def listeners(self):
+        spawned: List["subprocess.Popen[str]"] = []
+        yield spawned
+        for proc in spawned:
+            proc.kill()
+
+    @staticmethod
+    def _other_checkout(root: Path) -> None:
+        (root / "scripts").mkdir(parents=True, exist_ok=True)
+        (root / "tray.bat").write_text("@echo off\n", encoding="ascii")
+        (root / "scripts" / "tray_lifecycle.ps1").write_text("# stand-in\n", encoding="ascii")
+
+    def _restart_reclaim(self, tmp_path: Path, mine: Path, port: int, replace: bool) -> str:
+        env = {
+            "TL_MODE": "foreign", "TL_VENV": str(mine / ".venv"), "TL_SCRIPTDIR": str(mine),
+            "TL_PORTS": str(port), "TL_WORKTREES": json.dumps([]),
+            "TL_TRAYMATCH": r"launcher\.py\s+tray",
+        }
+        if replace:
+            env["TL_REPLACE"] = "1"
+        return _run_ps(tmp_path, env)
+
+    def test_restart_refuses_and_names_the_other_checkout(self, tmp_path, listeners) -> None:
+        mine, other = tmp_path / "app-launcher-lite", tmp_path / "old-install" / "app-launcher-lite"
+        self._other_checkout(other)
+        proc, port, pid = _spawn_listener(other / "web", role="webapp")
+        listeners.append(proc)
+        out = self._restart_reclaim(tmp_path, mine, port, replace=False)
+        assert "THROWN=restart refused" in out
+        assert f"held by PID {pid}" in out and str(other / "web") in out
+        assert "--replace-other-checkout" in out
+        assert _alive(pid)
+
+    def test_replace_stops_the_other_checkouts_tray_and_holder(self, tmp_path, listeners) -> None:
+        mine, other = tmp_path / "app-launcher-lite", tmp_path / "old-install" / "app-launcher-lite"
+        self._other_checkout(other)
+        holder, port, holder_pid = _spawn_listener(other / "holder", role="webapp")
+        listeners.append(holder)
+        self._other_checkout(other / "holder")
+        # the other copy's tray, whose watchdog would bring its webapp back
+        tray_proc, _tray_port, tray_pid = _spawn_listener(other / "holder" / ".venv", role="tray")
+        listeners.append(tray_proc)
+        out = self._restart_reclaim(tmp_path, mine, port, replace=True)
+        assert "RESOLVED" in out, out
+        assert _wait_dead(holder_pid)
+        assert _wait_dead(tray_pid)
+
+    def test_replace_never_stops_a_process_that_is_not_a_checkout(self, tmp_path, listeners) -> None:
+        mine, stranger = tmp_path / "app-launcher-lite", tmp_path / "something-else"
+        proc, port, pid = _spawn_listener(stranger, role="webapp")
+        listeners.append(proc)
+        out = self._restart_reclaim(tmp_path, mine, port, replace=True)
+        assert "THROWN=restart refused" in out and "not a checkout of this app" in out
+        assert _alive(pid)
+
+    def test_build_check_rejects_an_answer_from_another_checkout(self, tmp_path, listeners) -> None:
+        mine, other = tmp_path / "app-launcher-lite", tmp_path / "old-install" / "app-launcher-lite"
+        ours, _p1, our_pid = _spawn_listener(mine / ".venv", role="webapp")
+        theirs, _p2, their_pid = _spawn_listener(other / ".venv", role="webapp")
+        listeners.extend([ours, theirs])
+
+        def problem(pid: int) -> str:
+            out = _run_ps(tmp_path, {
+                "TL_MODE": "owner", "TL_VENV": str(mine / ".venv"), "TL_SCRIPTDIR": str(mine),
+                "TL_WORKTREES": json.dumps([]), "TL_PID": str(pid),
+            })
+            return out.strip().split("PROBLEM=", 1)[1]
+
+        assert problem(our_pid) == ""
+        other_problem = problem(their_pid)
+        assert f"PID {their_pid} runs from checkout {other}" in other_problem
+        assert problem(999999).startswith("the command line of PID 999999 could not be read")

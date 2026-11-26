@@ -284,7 +284,15 @@ def test_session_host_heal_spawns_only_when_nothing_listens(monkeypatch):
     app = tray.TrayApp.__new__(tray.TrayApp)
 
     monkeypatch.setattr(tray.registered_trays, "port_listening", lambda _p: True)
+    owner = SimpleNamespace(state=tray.OURS, detail=":18446 held by pid 7 from this checkout")
+    monkeypatch.setattr(tray, "port_owner", lambda _port, _root: owner)
     assert app._start_session_host() == "adopted the session-host already listening on :18446"
+    assert spawned == []
+
+    # a host from another checkout on the port is named, never reported as adopted
+    monkeypatch.setattr(tray, "_notify", lambda *_a: None)
+    owner = SimpleNamespace(state=tray.FOREIGN, detail=":18446 held by pid 9 from another checkout X")
+    assert app._start_session_host().startswith("refused the session-host on :18446")
     assert spawned == []
 
     monkeypatch.setattr(tray.registered_trays, "port_listening", lambda _p: False)
