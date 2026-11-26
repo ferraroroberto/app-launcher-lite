@@ -273,6 +273,9 @@ def test_compose_send_forwards_text_to_pty(
 def _assert_mic_follows_the_speech_setting(page: Page, base_url: str, auth_token: str, sid: str) -> None:
     """Each step reopens the terminal: the composer re-reads the setting per open."""
     mic = page.locator(f"{COMPOSER} .composer-mic")
+    # The mic also needs MediaRecorder, which an iPhone has and Playwright's
+    # WebKit build on Windows lacks: stand one in so the setting alone decides.
+    page.add_init_script("window.MediaRecorder = window.MediaRecorder || class {};")
     try:
         for patch, visible in (
             ({"speech_enabled": False, "speech_base_url": "http://127.0.0.1:8000/v1"}, False),
