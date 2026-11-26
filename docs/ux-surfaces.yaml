@@ -1465,6 +1465,7 @@ surfaces:
       - Done
     does:
       - Done sends every answer at once
+      - tap a web address in a question or its detail opens it in a new tab
     why: one sheet answers everything that waits, instead of one dialog per question
 
   - id: board.mrs-jobs
