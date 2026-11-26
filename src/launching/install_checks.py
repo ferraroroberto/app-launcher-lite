@@ -15,7 +15,6 @@ Usage (from the repo root)::
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import sys
@@ -23,6 +22,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from src import boot_autostart, password
+from src.webapp_settings.config_file import read_json
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WEBAPP_CONFIG = REPO_ROOT / "config" / "webapp_config.json"
@@ -40,9 +40,9 @@ def _where(path: object) -> str:
 def signin_state(config: Path = WEBAPP_CONFIG, hash_file: Optional[Path] = None) -> int:
     """Whether a password signs in: a stored hash, or the config's older ``auth_password``."""
     try:
-        data = json.loads(config.read_text(encoding="utf-8"))
+        data = read_json(config)
         legacy = str(data.get("auth_password") or "")
-    except (OSError, UnicodeDecodeError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError):  # ValueError covers bytes that are not UTF-8
         return UNKNOWN
     return OK if password.is_configured(legacy=legacy, path=hash_file) else MISSING
 
