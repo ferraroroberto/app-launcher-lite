@@ -688,8 +688,9 @@ function sendPtySize(t) {
   const size = ptySendSize(t.term.rows, t.term.cols);
   const key = size.rows + 'x' + size.cols;
   if (key === t.lastSentSize) return;
+  const resized = !!t.lastSentSize;
   t.lastSentSize = key;
-  if (t.isFullscreen) beginRepaintBatch(t);
+  if (t.isFullscreen) beginRepaintBatch(t, resized);
   t.ws.send(JSON.stringify({
     type: 'resize', rows: size.rows, cols: size.cols,
   }));

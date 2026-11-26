@@ -82,6 +82,8 @@ def leg_terminal_follows_its_box(
         "window.__resizeFrames.length >= 2 && "
         "window.__resizeFrames.at(-1).rows > window.__resizeFrames[0].rows"
     )
+    # The resize may draw nothing: the canvas must not stay hidden waiting for it.
+    expect(page.locator("#terminalHost .xterm")).to_be_visible(timeout=3000)
     frames = page.evaluate("window.__resizeFrames.length")
 
     # A growing composer pans the canvas; a cleared one gives the rows back.
