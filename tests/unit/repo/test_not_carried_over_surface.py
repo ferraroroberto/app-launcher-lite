@@ -52,3 +52,24 @@ def test_every_retired_feature_is_still_listed_as_not_carried_over() -> None:
     listed = claude[start:claude.index("\n", start)]
     missing = [name for name, _ in _RETIRED.values() if name not in listed]
     assert not missing, f"CLAUDE.md no longer lists {missing}: drop the entry from _RETIRED too"
+
+
+def _listed_features(doc: str, marker: str) -> List[str]:
+    """The items of the one-line feature list that follows ``marker`` in ``doc``."""
+    text = (_ROOT / doc).read_text(encoding="utf-8")
+    start = text.index(marker)
+    line = re.sub(r"\([^()]*\)", "", text[start:text.index("\n", start)])
+    listed = line.split(":", 1)[1].split(". ")[0].strip(" *.")
+    return [item.strip() for item in re.split(r",| and ", listed) if item.strip()]
+
+
+def test_claude_md_drops_nothing_the_readme_does_not() -> None:
+    """An upstream sync skips what CLAUDE.md lists, so an entry the README does
+    not also drop would silently skip work on a feature Lite ships."""
+    readme = _listed_features("README.md", "**Dropped from the full app**")
+    extra = [
+        item
+        for item in _listed_features("CLAUDE.md", "**Not carried over from app-launcher:**")
+        if not any(f"{other} ".startswith(f"{item} ") for other in readme)
+    ]
+    assert not extra, f"CLAUDE.md lists {extra} as not carried over; README.md does not"

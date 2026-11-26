@@ -24,7 +24,7 @@ The two content endpoints surface private, gitignored knowledge
 (``context/`` ``memory/`` ``examples/`` ``conversations/`` + the shared
 ``identity/``). They are gated like the live terminal — refused over the
 Cloudflare tunnel, private-network-only, passkey-required (see
-``app/webapp/middleware.py``) — and the file-content endpoint is
+``src/middleware/routes.py``) — and the file-content endpoint is
 **path-jailed** to ``team_os_dir`` (the jail is the whole security story
 for an endpoint that reads arbitrary files under a root).
 """

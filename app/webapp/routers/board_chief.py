@@ -125,8 +125,8 @@ async def _mark_chief_managed(
     cfg: WebappConfig, request: Request, sid: str, repo: str, number: int
 ) -> bool:
     """Best-effort: record a launcher-dispatched worker as chief-managed
-    so `hooks/notify_on_idle.py` and
-    `hooks/block_askuserquestion_chief.py` route it like one dispatched
+    so `copilot/hooks/chief_inbox.py` and
+    `copilot/hooks/chief_guard.py` route it like one dispatched
     through `chief_ops.py dispatch` -- the CLI-only path that already
     marked correctly. `start_issue`/`dispatch_goal` are the paths chief
     actually calls (over loopback, never through the CLI wrapper), so
