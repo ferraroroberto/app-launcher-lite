@@ -27,6 +27,14 @@ The bar carries ‹ back, the title, an icon-only **Terminal ⇄ Chat** toggle a
 
 The phone's floating tab bar hides while the session view is open.
 
+## Copy link
+
+**Copy link** copies the session's provider URL when it has one, because that link keeps working after the launcher is closed and from any network; the toast names which link went to the clipboard. The server resolves it per agent as the session's `web_url`, for full-control rows only.
+
+- **Claude:** the `claude.ai/code/...` URL captured from the terminal.
+- **Copilot:** `https://<host>/copilot/tasks/<task id>` (for example `https://ghe.example.com/copilot/tasks/<task id>`). The host is the one the Copilot CLI is signed in to, and `copilot_web_url_prefix` overrides the prefix ([config](config.md)). The task id is `mc_task_id` in the session folder's `workspace.yaml`, which Copilot writes when the session is shared remotely (the **Remote session** setting, or `/remote on`). It is not the session id the folder is named by: GitHub's task API answers "not found" for that one (probed on CLI 1.0.114). Whether the built link opens on a GitHub Enterprise host is `unknown`: no such account has been tried.
+- **Otherwise** (no task id, a github.com sign-in without the override, a detached session): the launcher's own `?session=` link, and the toast says it works only while the launcher runs, on the tailnet.
+
 ## Stop and kill
 
 Stop asks Copilot to quit with its own command (`/exit`) so its shutdown hooks run, waits briefly for a clean exit, then force-terminates. The window always closes; there is no confirm (the chief, once active, is the exception). The command is typed as three separate keystrokes with a beat between them — Esc, the command, then Enter — because a burst lets a TUI that binds Alt-keys read Esc plus `/` as one meta key and swallow the slash, or race the harness's slash-command popup.

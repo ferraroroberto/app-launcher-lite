@@ -559,7 +559,9 @@ flowchart LR
   - in Chat mode Show or Hide steps, Show or Hide automatic, Load new and Reload
   - Compact, for a Copilot session
   - Stop and kill
-- **Does:** Compact sends /compact to the session and toasts the host's verdict
+- **Does:**
+  - Compact sends /compact to the session and toasts the host's verdict
+  - Copy link copies the provider's own session URL, else the launcher link, and the toast says which
 - **Leads to:**
   - [Rename session](#terminalrename-dialog-rename-session) (Rename)
   - [Links sheet](#terminallinks-sheet-links-sheet) (Links)

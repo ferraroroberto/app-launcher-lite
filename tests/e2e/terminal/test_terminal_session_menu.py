@@ -6,8 +6,9 @@ the terminal that only appears while scrolled up.
 
 These pin:
 
-* Copy link writes this launcher's own ``?session=<sid>`` deep link, with a
-  toast that says it is tailnet-only.
+* Copy link writes the session's provider link (the server's ``web_url``),
+  else this launcher's own ``?session=<sid>`` deep link with a toast saying it
+  only works while the launcher runs.
 * Rename from the menu updates the bar title at once, not on the next poll.
 * The Latest pill is hidden at the tail and within a screen of it, visible
   once scrolled further up, and a tap returns to the tail and hides it.
@@ -21,6 +22,7 @@ One test opens the overlay once and runs the pill leg, then the menu checks.
 
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
@@ -30,6 +32,12 @@ from tests.e2e._surface import surface
 from tests.e2e.fixtures.waits import OVERLAY_OPEN_MS
 
 pytestmark = [pytest.mark.smoke, pytest.mark.unbundled]
+
+# Placeholder enterprise host and synthetic ids: the real host is the
+# machine's Copilot sign-in, and a stub child has no task and no Claude card,
+# so the one field it cannot produce is stamped onto the real list response.
+_COPILOT_WEB_URL = "https://ghe.example.com/copilot/tasks/0d4b6f52-1c7e-4a39-b2a8-6e5f9c3d1a77"
+_CLAUDE_WEB_URL = "https://claude.ai/code/session_SYNTHETICLINKFIXTURE0682"
 
 _CLIPBOARD_MOCK = """
 (() => {
@@ -54,6 +62,7 @@ async () => {
     .map((r) => r.name)
     .find((n) => n.includes('/static/state.js?v='));
   const { state } = await import(hit || '/static/state.js');
+  window.__state = state;
   window.__term = () => state.terminal && state.terminal.term;
 }
 """
@@ -88,12 +97,44 @@ _TWO_FRAMES = (
     "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
 )
 
+def _inject_web_url(page: Page, sid: str, row: dict) -> None:
+    """Stamp ``row`` onto this session in the real sessions list; the dict is
+    read on every response, so a leg can switch it."""
+
+    def _handler(route):
+        response = route.fetch()
+        body = response.json()
+        for session in body.get("sessions", []):
+            if session.get("session_id") == sid:
+                session.update(row)
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+    page.route(re.compile(r".*/api/claude-code/sessions$"), _handler)
+
+
 def _copy_link(page: Page) -> None:
     menu = page.locator(".terminal-menu")
     page.locator("#terminalMenu").click()
     expect(menu).to_be_visible()
     page.get_by_role("menuitem", name="Copy session link").click()
     expect(menu).to_be_hidden()
+
+
+def _leg_copies_the_provider_link(page: Page, row: dict, agent: str, url: str, name: str) -> None:
+    """Both the poll's source and the page's current copy switch, so a poll
+    landing mid-leg agrees with the page."""
+    row.update(agent=agent, web_url=url)
+    page.evaluate(
+        "([agent, url]) => { const v = window.__state.sessionView.session;"
+        " for (const s of [v, ...window.__state.sessions]) {"
+        " if (s.session_id === v.session_id) { s.agent = agent; s.web_url = url; } } }",
+        [agent, url],
+    )
+    done = page.evaluate("() => window.__copied.length")
+    _copy_link(page)
+    page.wait_for_function("(n) => window.__copied.length === n", arg=done + 1, timeout=5_000)
+    assert page.evaluate("() => window.__copied.at(-1)") == url
+    expect(page.locator("#toast")).to_have_text(re.compile(f"{name} web link copied"))
 
 
 def _open_overlay(page: Page, base_url: str, sid: str) -> None:
@@ -144,21 +185,16 @@ def test_menu_copy_link_and_rename_update_the_bar(
     sid = launched_pty_session
     authed_page.add_init_script(_CLIPBOARD_MOCK)
     authed_page.add_init_script(_WS_FRAME_PROBE)
+    row = {"agent": "copilot", "web_url": _COPILOT_WEB_URL}
+    _inject_web_url(authed_page, sid, row)
     _open_overlay(authed_page, base_url, sid)
 
     _leg_latest_pill_shows_only_when_scrolled_up(authed_page)
     surface(authed_page, "terminal.overlay")
 
-    _copy_link(authed_page)
-    authed_page.wait_for_function("() => window.__copied.length === 1", timeout=5_000)
-    copied = authed_page.evaluate("() => window.__copied[0]")
-    expected = authed_page.evaluate(
-        "(sid) => location.origin + location.pathname + '?session=' + sid", sid
-    )
-    assert copied == expected, f"copied {copied!r}, expected the ?session= link {expected!r}"
-    expect(authed_page.locator("#toast")).to_have_text(
-        re.compile(r"Launcher link copied \(tailnet only\)")
-    )
+    _leg_copies_the_provider_link(authed_page, row, "copilot", _COPILOT_WEB_URL, "Copilot")
+    _leg_copies_the_provider_link(authed_page, row, "claude", _CLAUDE_WEB_URL, "Claude")
+    row.update(agent="copilot", web_url="")
 
     authed_page.locator("#terminalMenu").click()
     expect(authed_page.locator(".terminal-menu")).to_be_visible()
@@ -173,4 +209,24 @@ def test_menu_copy_link_and_rename_update_the_bar(
     # rename callback updated the bar, not a later sessions fetch.
     expect(authed_page.locator("#terminalTitle")).to_have_text(
         "Menu rename 981", timeout=2_000
+    )
+
+    # Last, because it mutates the page's own state: the bare ?session=
+    # deep-link shape, where the sessions list does not carry the row and the
+    # overlay holds a bare {session_id, name} with no web_url. It must land on
+    # the launcher link, never on `undefined`, and say what that link is.
+    authed_page.evaluate(
+        "(sid) => { window.__state.sessions = [];"
+        " window.__state.sessionView.session = {session_id: sid, name: sid}; }",
+        sid,
+    )
+    _copy_link(authed_page)
+    authed_page.wait_for_function("() => window.__copied.length === 3", timeout=5_000)
+    fallback = authed_page.evaluate("() => window.__copied[2]")
+    expected = authed_page.evaluate(
+        "(sid) => location.origin + location.pathname + '?session=' + sid", sid
+    )
+    assert fallback == expected, f"copied {fallback!r}, expected the ?session= link {expected!r}"
+    expect(authed_page.locator("#toast")).to_have_text(
+        re.compile("Launcher link copied: works only while the launcher runs")
     )

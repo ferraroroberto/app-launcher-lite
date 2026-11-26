@@ -276,12 +276,11 @@ async def _build_board_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[str
         live, state["rows"],
         active_issue_repos=board.active_issue_repos(active_issues["rows"], claim_states),
     )
-    # The drawer's Rename opens the same Rename / link dialog as the Coding
-    # tab, which reads ``web_url`` — without this it said "Not available yet"
-    # for a live Claude PTY session the Coding tab linked fine. Same
-    # bounded transcript scan, off the loop and memoized in _helpers, so the
-    # Board poll re-uses whatever the (identically-paced) sessions poll found.
-    await steps.run("attach_provider_web_urls", attach_provider_web_urls, session_cards)
+    # A session opened from a Board card copies the same link as one opened
+    # from the Coding tab, which reads ``web_url``. Same bounded reads, off
+    # the loop and cached, so the Board poll re-uses whatever the
+    # (identically-paced) sessions poll found.
+    await steps.run("attach_provider_web_urls", attach_provider_web_urls, session_cards, cfg)
     board.mark_chief_mailbox_unread(session_cards, await steps.run(
         "chief_mailbox_unread", chief_doorbell.unread_mailbox_age, cfg))
     columns = board.build_board(session_cards, github, job_cards)

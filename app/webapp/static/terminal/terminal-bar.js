@@ -6,8 +6,8 @@
  * scrolling.
  *
  *   ⋮ menu — Rename · Copy link · Changed files · [Hide/Show steps · Reload, Chat mode
- *   only] · Compact (a Copilot session, either mode) · Stop and kill. Copy link copies this launcher's tailnet-only
- *   ?session= link. Built once on the vendored row-menu component
+ *   only] · Compact (a Copilot session, either mode) · Stop and kill. Copy link copies the provider's own session URL,
+ *   else this launcher's ?session= link. Built once on the vendored row-menu component
  *   (the same one as the sessions-list gear); the chat-only rows are
  *   declared with function-valued `hidden`, so the menu re-evaluates them
  *   on every open and they are simply absent from the DOM in Terminal
@@ -68,6 +68,27 @@ function currentSession() {
 function sessionShareUrl(sid) {
   return window.location.origin + window.location.pathname +
     '?session=' + encodeURIComponent(sid);
+}
+
+// What ⋮ Copy link writes, and how to describe it. The server resolves the
+// provider's own session URL per agent as `web_url` (Claude's captured
+// remote-control link, Copilot's web view of its task): it keeps working
+// without this launcher, so it is copied when there is one. The launcher's
+// ?session= link is the fallback, and the toast says which one went to the
+// clipboard, so a downgrade is never silent. The bare {session_id, name} a
+// ?session= deep link opens with carries no web_url and lands on the fallback.
+const PROVIDER_NAMES = { claude: 'Claude', copilot: 'Copilot' };
+
+function sessionCopyLink(s) {
+  const web = String(s.web_url || '');
+  if (web) {
+    const name = PROVIDER_NAMES[s.agent] || 'Provider';
+    return { url: web, message: name + ' web link copied' };
+  }
+  return {
+    url: sessionShareUrl(s.session_id),
+    message: 'Launcher link copied: works only while the launcher runs, on the tailnet',
+  };
 }
 
 export function closeTerminalMenu() {
@@ -253,8 +274,9 @@ function copyCurrentSessionLink() {
   if (!s) return;
   // iOS only allows a clipboard write inside the tap gesture: the helper is
   // called synchronously from the click handler.
-  writeClipboard(sessionShareUrl(s.session_id)).then(
-    function () { toast('Launcher link copied (tailnet only)', 'good', { icon: 'link' }); },
+  const link = sessionCopyLink(s);
+  writeClipboard(link.url).then(
+    function () { toast(link.message, 'good', { icon: 'link' }); },
     function (exc) { apiFailToast('Copy link failed', exc); }
   );
 }
