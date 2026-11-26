@@ -14,7 +14,10 @@ REM
 REM  Idempotent:
 REM    tray.bat              -> no-op if an AppLauncherLite tray is already running
 REM    tray.bat --restart    -> stop the running tray (and its service tree) and
-REM                             start a fresh one
+REM                             start a fresh one; refuses when another checkout
+REM                             of this app holds an owned port
+REM    tray.bat --restart --replace-other-checkout
+REM                          -> also stop that other checkout's tray and holder
 REM
 REM  Detection matches the tray process by command line + this project's .venv
 REM  path via CIM, then kills BY PID with /T. We never blanket-kill pythonw, so
@@ -83,6 +86,8 @@ set "TRAY_LAUNCH=scripts\launcher.py tray"
 set "WANT_RESTART="
 if /i "%~1"=="--restart" set "WANT_RESTART=1"
 if /i "%~1"=="-r"        set "WANT_RESTART=1"
+set "REPLACE_ARG="
+if /i "%~2"=="--replace-other-checkout" set "REPLACE_ARG=-ReplaceOtherCheckout"
 
 REM === ADAPT (3/4): in the -TrayMatch below, replace with a regex matching
 REM     THIS app's tray invocation, e.g. (scripts[\\/]+)?launcher\.py\s+tray  or  -m\s+tray
@@ -114,9 +119,9 @@ REM  AllSigned / Restricted, loads the script as a ScriptBlock instead of `-File
 REM  unsigned file), leaving the policy as the machine set it. Without the venv it is the plain -File.
 REM  No parenthesised if-block: a path holding ")" would end it early.
 if not exist "%TRAY_VENV%\Scripts\python.exe" goto :plain_start
-"%TRAY_VENV%\Scripts\python.exe" -m src.launching.ps_script "%TRAY_PS%" launch -AppName "%TRAY_APP_NAME%" -ScriptDir "%SCRIPT_DIR_ARG%" -VenvDir "%TRAY_VENV%" -TrayMatch "(scripts[\\/]+)?launcher\.py\s+tray" -Ports "%OWNED_PORTS%" -TrayLaunch "%TRAY_LAUNCH%" -VersionUrl "%VERSION_URL%" !RESTART_ARG!
+"%TRAY_VENV%\Scripts\python.exe" -m src.launching.ps_script "%TRAY_PS%" launch -AppName "%TRAY_APP_NAME%" -ScriptDir "%SCRIPT_DIR_ARG%" -VenvDir "%TRAY_VENV%" -TrayMatch "(scripts[\\/]+)?launcher\.py\s+tray" -Ports "%OWNED_PORTS%" -TrayLaunch "%TRAY_LAUNCH%" -VersionUrl "%VERSION_URL%" !RESTART_ARG! !REPLACE_ARG!
 exit /b %ERRORLEVEL%
 
 :plain_start
-%PS% -NoProfile -NonInteractive -File "%TRAY_PS%" launch -AppName "%TRAY_APP_NAME%" -ScriptDir "%SCRIPT_DIR_ARG%" -VenvDir "%TRAY_VENV%" -TrayMatch "(scripts[\\/]+)?launcher\.py\s+tray" -Ports "%OWNED_PORTS%" -TrayLaunch "%TRAY_LAUNCH%" -VersionUrl "%VERSION_URL%" !RESTART_ARG!
+%PS% -NoProfile -NonInteractive -File "%TRAY_PS%" launch -AppName "%TRAY_APP_NAME%" -ScriptDir "%SCRIPT_DIR_ARG%" -VenvDir "%TRAY_VENV%" -TrayMatch "(scripts[\\/]+)?launcher\.py\s+tray" -Ports "%OWNED_PORTS%" -TrayLaunch "%TRAY_LAUNCH%" -VersionUrl "%VERSION_URL%" !RESTART_ARG! !REPLACE_ARG!
 exit /b %ERRORLEVEL%

@@ -4,10 +4,12 @@ A matching ``git_sha`` does not prove a restart: a restart that never ran
 leaves the old process serving, and when that process already loaded ``HEAD``
 the sha matches anyway. The webapp's ``pid`` changes only with a new process,
 so the check records it before the restart (``snapshot``) and, afterwards
-(``verify``), passes only when the answer carries a different ``pid`` and a
-``git_sha`` that matches ``HEAD``. Anything that cannot be established
-(no baseline, no pid in the answer, nothing answering) is its own failure,
-never a pass.
+(``verify``), passes only when the answer carries a different ``pid``, that
+pid runs from this checkout, and its ``git_sha`` matches ``HEAD``. The checkout
+matters because a second clone at the same commit answers with the same sha on
+the same port. Anything that cannot be established (no baseline, no pid in the
+answer, an owner whose directory cannot be read, nothing answering) is its own
+failure, never a pass.
 
 ``restart`` is the one command to run, identical from Git Bash, PowerShell and cmd::
 
@@ -47,6 +49,7 @@ import requests
 from src import runtime_files
 from src.build_info import resolve_git_sha
 from src.clients._loopback_http import pooled_request
+from src.launching.process_checkout import FOREIGN, OURS, classify_pid, process_checkout
 from src.subprocess_flags import NO_WINDOW
 
 _log = logging.getLogger(__name__)
@@ -88,12 +91,18 @@ def fetch_version(port: int) -> Optional[Dict[str, Any]]:
 
 
 def decide(
-    before: Dict[str, Any], after: Optional[Dict[str, Any]], head_sha: str
+    before: Dict[str, Any],
+    after: Optional[Dict[str, Any]],
+    head_sha: str,
+    *,
+    root: Path = _REPO_ROOT,
+    checkout_of: Optional[Callable[[int], Optional[Path]]] = None,
 ) -> Tuple[bool, str]:
-    """``(replaced, reason)``: whether ``after`` is a new process serving ``head_sha``.
+    """``(replaced, reason)``: whether ``after`` is a new process from ``root`` serving ``head_sha``.
 
     ``before`` is the snapshot (``{"pid": int | None}``): a ``None`` pid means
-    no webapp was answering, so any answering process is new.
+    no webapp was answering, so any answering process is new. ``checkout_of``
+    defaults to :func:`process_checkout`, looked up when called.
     """
     if after is None:
         return False, "no webapp answering on the port"
@@ -108,7 +117,12 @@ def decide(
     before_pid = before.get("pid")
     if before_pid is not None and pid == before_pid:
         return False, f"same process still serving (pid {pid}): the restart did not replace it"
-    return True, f"new process pid {pid} (was {before_pid}) serves git_sha {served}"
+    owner = classify_pid(pid, root, checkout_of or process_checkout)
+    if owner.state == FOREIGN:
+        return False, f"pid {pid} runs from another checkout {owner.checkout}, not this one {root}"
+    if owner.state != OURS:
+        return False, f"cannot confirm pid {pid} runs from this checkout {root}: {owner.detail}"
+    return True, f"new process pid {pid} (was {before_pid}) from {owner.checkout} serves git_sha {served}"
 
 
 def _log_line(message: str) -> None:
@@ -172,6 +186,7 @@ def restart(
     timeout_s: float = DEFAULT_VERIFY_TIMEOUT_S,
     *,
     run: Callable[..., "subprocess.CompletedProcess[Any]"] = subprocess.run,
+    replace_other_checkout: bool = False,
 ) -> int:
     """Snapshot, run this checkout's ``tray.bat --restart`` by absolute path, then verify.
 
@@ -179,16 +194,19 @@ def restart(
     full path, never the bare name, so no shell has to find it on its search path or
     rewrite its arguments; a bat that exits non-zero or hangs fails here with its own
     message instead of leaving ``verify`` to time out on the old process.
+    ``replace_other_checkout`` passes ``--replace-other-checkout``, so a port held by another
+    checkout of this app is taken over instead of refusing the restart.
     """
     if not TRAY_BAT.is_file():
         _log_line(f"restart NOT CONFIRMED: {TRAY_BAT} does not exist")
         return 2
     snapshot(port)
-    _log_line(f"restart running {TRAY_BAT} --restart")
+    args = [str(TRAY_BAT), "--restart"] + (["--replace-other-checkout"] if replace_other_checkout else [])
+    _log_line(f"restart running {' '.join(args)}")
     sys.stdout.flush()
     try:
         done = run(
-            [str(TRAY_BAT), "--restart"],
+            args,
             cwd=str(TRAY_BAT.parent),
             stdin=subprocess.DEVNULL,
             stdout=_std_handle(sys.stdout),
@@ -277,6 +295,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("action", choices=("snapshot", "verify", "restart", "session-host"))
     parser.add_argument("--port", type=int, default=None, help="webapp port (default: the configured one)")
     parser.add_argument("--timeout", type=float, default=None)
+    parser.add_argument(
+        "--replace-other-checkout", action="store_true",
+        help="restart: stop another checkout of this app that holds the port, instead of refusing",
+    )
     args = parser.parse_args(argv)
     port = args.port
     if port is None:
@@ -289,7 +311,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         return wait_session_host(port, SESSION_HOST_WAIT_S if args.timeout is None else args.timeout)
     timeout = DEFAULT_VERIFY_TIMEOUT_S if args.timeout is None else args.timeout
     if args.action == "restart":
-        return restart(port, timeout)
+        return restart(port, timeout, replace_other_checkout=args.replace_other_checkout)
     return verify(port, timeout)
 
 

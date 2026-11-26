@@ -51,6 +51,22 @@ process is restarted.
    restart cannot be confirmed. Neither is a pass. Report the last line.
    `snapshot` and `verify` also run alone, around a hand-run restart.
 
+   **Two checkouts on one machine.** A second clone at the same commit answers
+   `/api/version` with the same `git_sha` on the same port, so both checks also
+   ask which checkout the answering process runs from: `verify` reads the
+   working directory of the reported `pid` (`src/launching/process_checkout.py`)
+   and `tray_lifecycle.ps1`'s build check reads its command line. Another
+   checkout, or an owner that cannot be read, fails the check and names it. A
+   restart that finds an owned port held by another checkout of this app stops
+   with `restart refused` and that checkout's path; `restart_check restart
+   --replace-other-checkout` (or `.\tray.bat --restart --replace-other-checkout`)
+   stops that checkout's trays, so their watchdogs cannot bring it back, and
+   then the holder. A holder that is not a checkout of this app is never
+   stopped. After the stop the restart waits for the owned ports to be free and
+   names any PID still listening. The tray itself adopts a running webapp only
+   when it runs from this checkout, and names a session-host from another
+   checkout instead of reporting it adopted.
+
    When `tray.bat` exits non-zero, the helper behind it has already appended
    one `tray.bat restart FAILED phase=<phase> old_pid=.. new_pid=.. scheme=..
    error=<first error line>` line to the same `webapp/restart.log`, just above
