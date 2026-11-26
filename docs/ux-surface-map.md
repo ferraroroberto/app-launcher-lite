@@ -558,6 +558,7 @@ flowchart LR
 - **Does:**
   - the page connects the PTY lazily and a reconnect redraws from the kept history
   - the screen follows its box, with the last row above the composer; it takes more rows when the box grows and pans when it shrinks
+  - a phone takes the terminal's size back when a desktop browser on the same session changed it, so its screen never stays garbled
 - **Leads to:**
   - [On-screen keys](#terminalkeys-popover-on-screen-keys) (keys button)
   - [Attach menu](#terminalattach-menu-attach-menu) (attach button)

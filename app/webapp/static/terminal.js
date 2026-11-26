@@ -25,7 +25,7 @@
  */
 
 import { els, state, SESSIONS_POLL_MS } from './state.js';
-import { apiFailToast, jsonApi } from './api.js';
+import { apiFailToast, isDesktopClient, jsonApi } from './api.js';
 import { fetchSessions, sessionTitle } from './sessions.js';
 import { enableNativeTouchScroll } from './terminal/terminal-touch.js';
 import { loadXterm } from './terminal/xterm-loader.js';
@@ -341,6 +341,7 @@ export async function attachTerminalPane(session) {
     // the first real fit has run; batch* is owned by terminal-connection.js.
     // resizeSettleTimer holds a pending settled resize frame.
     lastSentSize: null, fsSized: false, resizeSettleTimer: null,
+    sentAt: 0, reclaimedAt: 0,
     batchBuf: null, batchTimer: null, batchQuietTimer: null, batchDeadline: 0,
     onShutdown: closeTerminal,
   };
@@ -359,6 +360,7 @@ export async function attachTerminalPane(session) {
   t.disposeLatest = watchLatestPill(t);
 
   t.applySize = function () { applyTerminalSize(t, session); };
+  t.onShown = function () { recheckPtySize(t); };
   wireSizeTracking(t);
 
   t.term.onData(function (d) {
@@ -426,6 +428,7 @@ function resumeCachedTerminal(sid, cached, tt) {
   if (wsAlive) {
     if (cached.ws.readyState === WebSocket.OPEN) setTerminalStatus(null);
     if (cached.applySize) cached.applySize();
+    if (cached.onShown) cached.onShown();
     try {
       cached.term.refresh(0, cached.term.rows - 1);
       cached.term.scrollToBottom();
@@ -532,12 +535,15 @@ function registerWarmTerminal(t) {
 function startTitleRefresh(t) {
   t.titleTimer = startPoll(function () {
     if (t !== state.terminal) return null;
+    const askedAt = Date.now();
     return jsonApi('/api/claude-code/sessions').then(function (body) {
       if (t !== state.terminal) return;
       const s = (body.sessions || []).find(function (x) {
         return x.session_id === t.sid;
       });
-      if (s) refreshTerminalTitle(t, s);
+      if (!s) return;
+      refreshTerminalTitle(t, s);
+      reclaimPtySize(t, s, askedAt);
     }).catch(function () { /* best-effort; title just won't refresh */ });
   }, SESSIONS_POLL_MS);
 }
@@ -690,10 +696,41 @@ function sendPtySize(t) {
   if (key === t.lastSentSize) return;
   const resized = !!t.lastSentSize;
   t.lastSentSize = key;
+  t.sentAt = Date.now();
   if (t.isFullscreen) beginRepaintBatch(t, resized);
   t.ws.send(JSON.stringify({
     type: 'resize', rows: size.rows, cols: size.cols,
   }));
+}
+
+// A desktop browser's terminal sizes the shared PTY too. Output laid out for
+// its width shows as scattered fragments in a phone's narrower grid, and the
+// agent only repaints on a size change, so the phone sends its own size again.
+// `session` is a sessions-list row asked for at `askedAt`; a row asked for
+// around our own send may still hold the old size. The cooldown keeps two
+// watching phones from taking the size off each other on every poll.
+const RECLAIM_COOLDOWN_MS = 30000;
+const SIZE_APPLY_MS = 1000;
+
+function reclaimPtySize(t, session, askedAt) {
+  if (t.mirror || isDesktopClient() || inChatMode()) return;
+  if (!t.lastSentSize || t.resizeSettleTimer ||
+      askedAt - t.sentAt < SIZE_APPLY_MS) return;
+  if (!session.rows || !session.cols) return;
+  const theirs = session.rows + 'x' + session.cols;
+  const ours = ptySendSize(t.term.rows, t.term.cols);
+  if (theirs === ours.rows + 'x' + ours.cols) return;
+  if (Date.now() - t.reclaimedAt < RECLAIM_COOLDOWN_MS) return;
+  t.reclaimedAt = Date.now();
+  t.lastSentSize = theirs;
+  sendPtySize(t);
+}
+
+// The pane is in front of the user again: check the PTY's size now, without
+// waiting out the poll or an earlier cooldown.
+function recheckPtySize(t) {
+  t.reclaimedAt = 0;
+  if (t.titleTimer) t.titleTimer.kick();
 }
 
 // Keep the terminal sized to its box for as long as it lives: the mirror

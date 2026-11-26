@@ -33,8 +33,30 @@ STUB_CHILD_SOURCE = '''\
 Stands in for the real Copilot CLI under the disposable autoboot session-host:
 instant startup, echoes each input line (ConPTY cooked mode echoes keystrokes
 too), exits on /exit (or /quit) so the host's graceful stop path works.
+/fullscreen turns it into a full-screen TUI: it repaints a frame laid out for
+the terminal's size, on every size change and only then, as Copilot does.
 """
+import os
 import sys
+import threading
+import time
+
+
+def paint_on_resize():
+    drawn = None
+    while True:
+        size = os.get_terminal_size()
+        if size != drawn:
+            drawn = size
+            cols, rows = size
+            frame = "".join(
+                "\\x1b[%d;1H%s" % (row, ("row %02d of %dx%d " % (row, rows, cols)).ljust(cols - 1, "."))
+                for row in range(1, rows + 1)
+            )
+            sys.stdout.write("\\x1b[H\\x1b[2J" + frame)
+            sys.stdout.flush()
+        time.sleep(0.1)
+
 
 print("[e2e-stub] lightweight PTY child ready (issue #534)", flush=True)
 while True:
@@ -45,6 +67,9 @@ while True:
     if text.strip() in ("/exit", "/quit"):
         print("[e2e-stub] bye", flush=True)
         break
+    if text.strip() == "/fullscreen":
+        threading.Thread(target=paint_on_resize, daemon=True).start()
+        continue
     print(text, flush=True)
 '''
 

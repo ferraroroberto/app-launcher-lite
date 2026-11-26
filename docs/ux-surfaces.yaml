@@ -561,6 +561,7 @@ surfaces:
     does:
       - the page connects the PTY lazily and a reconnect redraws from the kept history
       - the screen follows its box, with the last row above the composer; it takes more rows when the box grows and pans when it shrinks
+      - a phone takes the terminal's size back when a desktop browser on the same session changed it, so its screen never stays garbled
     links:
       - to: terminal.keys-popover
         via: keys button

@@ -129,6 +129,7 @@ export function setSessionMode(mode) {
     if (t && t.sid === s.session_id) {
       // Already connected (or warm): just re-measure the pane it hid behind.
       if (t.applySize) t.applySize();
+      if (t.onShown) t.onShown();
       updateLatestPill();
       try { t.term.focus(); } catch (_) { /* no xterm yet */ }
     } else {
