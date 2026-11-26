@@ -13,12 +13,13 @@ import { fetchConfig } from './claude-options.js';
 
 const byId = function (id) { return document.getElementById(id); };
 
-// Puts the saved address in the field (unless it is being typed in) and returns
-// what the Settings row shows: the saved host, or Off.
-export function renderHub(cfg) {
+// Puts the saved address in the field and returns what the Settings row shows:
+// the saved host, or Off. A field being typed in is left alone; a save passes
+// `overFocus`, as its field is locked and nothing can be typed.
+export function renderHub(cfg, overFocus) {
   const url = (cfg && cfg.llm_hub_url) || '';
   const field = byId('hubUrl');
-  if (field && field !== document.activeElement) field.value = url;
+  if (field && (overFocus || field !== document.activeElement)) field.value = url;
   if (!url) return 'Off';
   try { return new URL(url).host; } catch (_) { return url; }
 }
@@ -49,6 +50,9 @@ async function saveUrl(url) {
   } catch (exc) {
     showResult((exc && exc.message) || 'Not saved.', 'error');
   } finally {
+    // Put the stored address back before unlocking: WebKit keeps focus on a
+    // disabled field until the next frame, which a fast answer beats.
+    renderHub(state.config, true);
     field.disabled = useLocal.disabled = false;
   }
 }

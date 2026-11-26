@@ -61,10 +61,36 @@ def walk_hub_sheet(page: Page, base_url: str, auth_token: str) -> None:
         assert _saved(base_url, auth_token) == hub
         expect(row).to_have_text(hub.removeprefix("http://"))
 
+    # A refusal that lands before the next frame finds the field still focused:
+    # WebKit drops focus from a disabled field only when it renders. The
+    # stub answers in microtasks alone, so no frame can come first. The value
+    # is read as the field unlocks: the passkey status poll repaints an
+    # unfocused field later and would hide a field left on the refused address.
+    page.evaluate("""() => {
+        const field = document.getElementById('hubUrl');
+        new MutationObserver((_, observer) => {
+            if (field.disabled) return;
+            field.dataset.atUnlock = field.value;
+            observer.disconnect();
+        }).observe(field, { attributeFilter: ['disabled'] });
+        const real = window.fetch;
+        window.fetch = (url, opts) => {
+            if (url !== '/api/config' || opts?.method !== 'POST') return real(url, opts);
+            window.fetch = real;
+            const body = { detail: 'Refused at once.' };
+            return Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve(body) });
+        };
+    }""")
+    url.fill("http://127.0.0.1:2")
+    url.press("Enter")
+    expect(result).to_contain_text("Refused at once.")
+    expect(url).to_have_attribute("data-at-unlock", hub)
+
     # The stand-in is gone: its port no longer answers, and the old value stays.
     url.fill(hub.replace("127.0.0.1", "localhost"))
     url.press("Enter")
     expect(result).to_contain_text("Nothing is listening")
+    expect(url).to_have_value(hub)
     assert _saved(base_url, auth_token) == hub
 
     url.fill("")
