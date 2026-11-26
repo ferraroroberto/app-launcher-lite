@@ -158,7 +158,7 @@ build-watch = { src = "app/webapp/static/_vendored/build-watch", sha = "48602060
 request_budget_ratchet = { src = "scripts/request_budget_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/request_budget_ratchet.py" }
 request_budget_scan = { src = "scripts/request_budget_scan.py", sha = "5ba99b0a04b1b5d7b3689f8f7a59bd3fe625a9bc", dest = "scripts/request_budget_scan.py" }
 poll = { src = "app/webapp/static/_vendored/poll", sha = "78df565389899bdb33b7f676b7e216fda39acb42", dest = "app/webapp/static/_vendored/poll" }
-request_budget_probe = { src = "tests/e2e/budget/_request_budget.py", sha = "d15277a91fdaff7d24790c19a0d187baa559228a", dest = "tests/e2e/budget/_request_budget.py" }
+request_budget_probe = { src = "tests/e2e/budget/_request_budget.py", sha = "ce2242f45e2f844d7806cd04c2a275d245f8dae5", dest = "tests/e2e/budget/_request_budget.py" }
 webkit_budget_check = { src = "scripts/tools/webkit_budget_check.py", sha = "d15277a91fdaff7d24790c19a0d187baa559228a", dest = "scripts/tools/webkit_budget_check.py" }
 
 # ---------------------------------------------------------------------------
