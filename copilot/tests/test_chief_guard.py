@@ -46,7 +46,7 @@ class GuardTests(unittest.TestCase):
         fake.start()
         self.addCleanup(fake.stop)
         self.webapp_config = self.state / "webapp_config.json"
-        config = mock.patch.object(chief_guard, "WEBAPP_CONFIG", self.webapp_config)
+        config = mock.patch.object(chief_guard.lite_config, "WEBAPP_CONFIG", self.webapp_config)
         config.start()
         self.addCleanup(config.stop)
 
@@ -229,7 +229,7 @@ class SkillSwapTests(unittest.TestCase):
         self.addCleanup(td.cleanup)
         self.tmp = Path(td.name)
         # No webapp_config.json: skills_dir empty, so the bundled skills, unless a test writes one.
-        config = mock.patch.object(chief_guard, "WEBAPP_CONFIG", self.tmp / "webapp_config.json")
+        config = mock.patch.object(chief_guard.lite_config, "WEBAPP_CONFIG", self.tmp / "webapp_config.json")
         config.start()
         self.addCleanup(config.stop)
 

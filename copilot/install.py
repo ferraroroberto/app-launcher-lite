@@ -82,9 +82,10 @@ from typing import Callable, Dict, List, Optional
 
 import install_state
 
-# The webapp's scheme resolver is the same module the chief uses, so the installer follows
-# Settings > Serve over exactly as it does.
+# The settings reader and the webapp's scheme resolver are the modules the hooks and chief
+# use, so the installer reads Lite's settings and follows Serve over exactly as they do.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills", "_lib"))
+import lite_config  # noqa: E402
 import lite_webapp  # noqa: E402
 
 COPILOT_REPO = os.path.dirname(os.path.abspath(__file__))
@@ -313,19 +314,11 @@ class Installer:
     # --- Lite's config ---------------------------------------------------------------------------
 
     def skills_dir_setting(self) -> Dict[str, str]:
-        if not os.path.isfile(WEBAPP_CONFIG):
-            return {"state": "empty"}
         try:
-            body = json.loads(read_text(WEBAPP_CONFIG))
-            value = body.get("skills_dir") if isinstance(body, dict) else None
-        except ValueError:
-            return {"state": "unknown", "why": "webapp_config.json did not parse"}
-        value = ("" if value is None else str(value)).strip()
-        if not value:
-            return {"state": "empty"}
-        if not (os.path.splitdrive(value)[0] or value.startswith(("\\", "/"))):
-            return {"state": "unknown", "why": f"skills_dir is not an absolute path: {value}"}
-        return {"state": "set", "path": value}
+            folder = lite_config.folder_in(lite_config.load(Path(WEBAPP_CONFIG)), "skills_dir")
+        except ValueError as exc:
+            return {"state": "unknown", "why": str(exc)}
+        return {"state": "set", "path": str(folder)} if folder else {"state": "empty"}
 
     def add_missing_config_key(self, key: str, json_value: str) -> None:
         """Splice one missing key in after the opening brace, so every other byte stays; backup first."""
@@ -628,10 +621,9 @@ class Installer:
             self.say("[ok] Copilot folder setting: no webapp_config.json, so Lite uses this checkout's copilot folder")
             return
         try:
-            body = json.loads(read_text(WEBAPP_CONFIG))
-            current = str((body.get("fleet_config_dir") if isinstance(body, dict) else None) or "")
-        except ValueError:
-            self.say("[unknown] Copilot folder setting not read (webapp_config.json did not parse): check it in Lite's Settings -> Folders")
+            current = str(lite_config.load(Path(WEBAPP_CONFIG)).get("fleet_config_dir") or "")
+        except ValueError as exc:
+            self.say(f"[unknown] Copilot folder setting not read ({exc}): check it in Lite's Settings -> Folders")
             return
         if not current.strip():
             self.say("[ok] Copilot folder setting is empty: Lite uses this checkout's copilot folder")
