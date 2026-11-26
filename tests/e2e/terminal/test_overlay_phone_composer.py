@@ -26,6 +26,9 @@ same page and PTY, each leg a former test kept as a named helper:
   every control inside the viewport with no scroller, at 320px and at the
   projection's default width. iPhone only, where that width reproduces.
 
+Last, the terminal follows its box (``_refit_legs.py``): the mirror window,
+then a terminal first opened under a phone keyboard, at phone and desktop widths.
+
 The bar legs stub the context ring's route with a number (a stub-child PTY
 paints no statusline, and the ring only draws with one) and the sessions
 list's ``model`` field (the derivation is pinned by
@@ -43,6 +46,10 @@ import pytest
 from playwright.sync_api import Page, expect
 
 from tests.e2e.fixtures.waits import OVERLAY_OPEN_MS
+from tests.e2e.terminal._refit_legs import (
+    leg_mirror_keeps_the_last_row_above_its_composer,
+    leg_terminal_follows_its_box,
+)
 
 pytestmark = [pytest.mark.smoke, pytest.mark.iphone]
 
@@ -525,3 +532,6 @@ def test_overlay_keeps_composer_reachable_on_a_phone(
         _leg_terminal_bar_fits_at_once_on_default_phone(
             page, base_url, sid, stubs, default_viewport
         )
+    leg_mirror_keeps_the_last_row_above_its_composer(page, base_url, sid)
+    for width, height in ((390, 844), (1280, 800)):
+        leg_terminal_follows_its_box(page, base_url, sid, width, height)

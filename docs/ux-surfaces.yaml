@@ -548,6 +548,7 @@ surfaces:
       - a status strip and an activity line
     does:
       - the page connects the PTY lazily and a reconnect redraws from the kept history
+      - the screen follows its box, with the last row above the composer; it takes more rows when the box grows and pans when it shrinks
     links:
       - to: terminal.keys-popover
         via: keys button

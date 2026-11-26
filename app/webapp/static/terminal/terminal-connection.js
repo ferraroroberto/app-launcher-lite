@@ -113,7 +113,10 @@ export function stampOutput(terminal, data) {
   if (data.indexOf(ATTACH_CHIP_MARK) !== -1) terminal.attachChipAt = now;
 }
 
-export function beginRepaintBatch(terminal) {
+// `resized`: a later size change on a live connection. Unlike a connect, it may
+// draw nothing at all (a taller idle screen), so its quiet gap starts at once
+// instead of leaving the canvas hidden until the deadline.
+export function beginRepaintBatch(terminal, resized) {
   if (!terminal || !terminal.isFullscreen) return;
   // Every caller (a fresh (re)connect's ws.onopen, or the first real size
   // sent on a connection) means "start a clean concealment window" — never
@@ -148,6 +151,11 @@ export function beginRepaintBatch(terminal) {
   terminal.batchTimer = setTimeout(function () {
     flushRepaintBatch(terminal);
   }, REPAINT_BATCH_MAX_MS);
+  if (resized) {
+    terminal.batchQuietTimer = setTimeout(function () {
+      flushRepaintBatch(terminal);
+    }, REPAINT_BATCH_QUIET_MS);
+  }
 }
 
 function revealTerminal(terminal) {
