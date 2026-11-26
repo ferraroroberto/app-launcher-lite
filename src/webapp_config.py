@@ -653,6 +653,35 @@ def _migrate_legacy_keys(raw: Dict[str, Any], source: Path) -> Dict[str, Any]:
     return migrated
 
 
+class ConfigUnreadableError(ValueError):
+    """A save was refused because the file on disk cannot be read as settings."""
+
+
+def _read_json(target: Path) -> Any:
+    # utf-8-sig: a Windows editor may save the file with a byte-order mark.
+    return json.loads(target.read_text(encoding="utf-8-sig"))
+
+
+def _refuse_unreadable(target: Path) -> None:
+    """Raise rather than let a save write over a file that holds no readable settings.
+
+    The loader answers such a file with defaults, so the config being saved
+    would replace the owner's values with them. A missing file is fine.
+    """
+    if not target.exists():
+        return
+    try:
+        problem = "" if isinstance(_read_json(target), dict) else "it is not a JSON object"
+    except (OSError, ValueError) as exc:
+        problem = (exc.strerror or type(exc).__name__) if isinstance(exc, OSError) else str(exc)
+    if problem:
+        logger.warning(f"⚠️  Refusing to save over {target}: {problem}")
+        raise ConfigUnreadableError(
+            f"{target.name} could not be read ({problem}), so nothing was saved. "
+            "Fix the file or move it away, then save again."
+        )
+
+
 def load_webapp_config(
     path: Optional[Path] = None, *, apply_env_override: bool = True
 ) -> WebappConfig:
@@ -676,7 +705,7 @@ def load_webapp_config(
         return _finish_load(cfg, apply_env_override)
 
     try:
-        raw = json.loads(target.read_text(encoding="utf-8"))
+        raw = _read_json(target)
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning(
             f"⚠️  Could not read {target} ({exc}); falling back to defaults"
@@ -708,8 +737,13 @@ def load_webapp_config(
 
 
 def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
-    """Atomically write the config back to disk."""
+    """Atomically write the config back to disk.
+
+    Raises :class:`ConfigUnreadableError`, writing nothing, when the file there
+    now cannot be read.
+    """
     target = _resolve_config_path(path)
+    _refuse_unreadable(target)
     runtime_files.make_dirs(target.parent)
 
     # Derived straight from the dataclass — the field list, in

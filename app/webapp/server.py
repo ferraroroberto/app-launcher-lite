@@ -17,9 +17,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 from starlette.types import Scope
 
 from app.webapp import chief_doorbell, loop_lag, perf_apply
@@ -92,7 +92,7 @@ from src.static_versioning import (
 )
 from src.stylesheet_bundle import BUNDLE_RELPATH, build_bundle
 from src.usage_log import usage_router
-from src.webapp_config import load_webapp_config
+from src.webapp_config import ConfigUnreadableError, load_webapp_config
 
 _log = logging.getLogger(__name__)
 # The lifespan's instance-role lines: a child so the file handler
@@ -562,6 +562,11 @@ def _budget_overrides(app: FastAPI):
     return read
 
 
+def _config_unreadable(_request: Request, exc: Exception) -> JSONResponse:
+    """A refused settings save, for the routes that do not catch it themselves."""
+    return JSONResponse({"detail": str(exc)}, status_code=409)
+
+
 def create_app() -> FastAPI:
     app_config = load_app_config()
     webapp_cfg = load_webapp_config()
@@ -589,6 +594,8 @@ def create_app() -> FastAPI:
     # through it unchanged. No bypass path: the SSE stream is
     # `text/event-stream`, skipped by content type.
     app.add_middleware(StreamSafeGZipMiddleware, bypass_paths=())
+
+    app.add_exception_handler(ConfigUnreadableError, _config_unreadable)
 
     app.state.app_config = app_config
     app.state.webapp_config = webapp_cfg
