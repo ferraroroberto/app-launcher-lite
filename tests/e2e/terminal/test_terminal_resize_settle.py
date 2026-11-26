@@ -1,25 +1,19 @@
 """Regression pin for issue #930 — a keyboard sweep must not storm the PTY.
 
-Every PTY resize SIGWINCHes Claude Code into a full-viewport repaint, and the
-copy already in xterm's scrollback survives it, so each resize frame can land
-a duplicate of the visible conversation. The iOS keyboard sweep fires
-``visualViewport`` resize/scroll events mid-animation, and ``applySize()``
-used to forward every intermediate row count straight to the PTY — a single
-keyboard cycle produced bursts like ``44 -> 20 -> 6 -> 20 -> 44`` (measured in
-a live chief session's transcript), including ``1``- and ``6``-row samples
-that are never a real viewport.
+A Copilot terminal is full-screen: once sized, a shrinking box (keyboard up)
+pans the canvas and sends nothing, and only a box that outgrows the canvas
+grows the rows. Every resize frame repaints the agent, so the frame that does
+go out is settled, and floored (an iOS keyboard sweep samples 1- and 6-row
+sizes that are never a real viewport). The keyboard can't be raised headlessly,
+so this drives the same code path by resizing the terminal host synchronously
+and firing ``resize`` — an event ``applySize()`` listens on — then reads the
+resize frames the page actually put on the WebSocket. It pins:
 
-The fix keeps xterm's local ``fit()`` immediate (the UI still tracks the
-keyboard) but settles the frame that reaches the PTY, and floors it. The
-keyboard can't be raised headlessly, so this drives the same code path by
-resizing the terminal host synchronously and firing ``resize`` — the event
-``applySize()`` listens on — then reads the resize frames the page actually
-put on the WebSocket. It pins:
-
+* a first size taken in a tiny box is clamped before it is sent;
 * nothing is sent mid-sweep;
-* a sweep that returns to where it started sends nothing at all;
-* a sweep that ends somewhere new sends exactly one frame, for the final size;
-* a sub-floor sample is clamped before it is sent.
+* a sweep that returns to where it started, or ends smaller, sends nothing;
+* a smaller box pans the canvas;
+* a sweep that ends bigger sends exactly one settled frame, with more rows.
 """
 
 from __future__ import annotations
@@ -43,17 +37,31 @@ _AFTER_SETTLE_MS = 301
 # Resize the terminal host through each height synchronously, firing the
 # window 'resize' applySize() is bound to after every step — the same shape as
 # a keyboard sweep's burst of visualViewport events. Returns how many frames
-# went out *during* the sweep.
+# went out *during* the sweep, once the page's own ResizeObserver on the host
+# has run: the fake clock does not drive it, and a delivery landing mid-jump
+# re-arms the settle past the jump, so a frame still to come reads as none.
 _SWEEP = r"""
-(heights) => {
+async (heights) => {
   const host = document.getElementById('terminalHost');
   const before = window.__resizeFrames.length;
   for (const h of heights) {
     host.style.flex = '0 0 ' + h + 'px';
     window.dispatchEvent(new Event('resize'));
   }
-  return window.__resizeFrames.length - before;
+  const sent = window.__resizeFrames.length - before;
+  // Created after the app's observer, so it is delivered after it.
+  await new Promise((done) => {
+    const seen = new ResizeObserver(() => { seen.disconnect(); done(); });
+    seen.observe(host);
+  });
+  return sent;
 }
+"""
+
+# How far the canvas is translated up, in px.
+_PANNED_PX = r"""
+() => -new DOMMatrix(getComputedStyle(
+  document.querySelector('#terminalHost .xterm')).transform).m42
 """
 
 
@@ -83,48 +91,53 @@ def test_keyboard_sweep_settles_to_one_floored_resize(
     row = page.locator(
         f'#sessionsList li.session-item[data-session-id="{launched_pty_session}"]'
     )
+    # The first size is taken with the host squeezed under the floor.
+    squeeze = page.add_style_tag(content="#terminalHost { flex: 0 0 10px !important }")
     open_session_row(page, row, "terminal")
     # The phone's authoritative first size goes out on WS open, unsettled.
     page.wait_for_function(
         "window.__resizeFrames.length >= 1", timeout=OVERLAY_OPEN_MS
     )
+    min_rows = page.evaluate("import('/static/terminal.js').then(m => m.PTY_MIN_ROWS)")
+    first = _frames(page)[0]
+    assert min_rows and first["rows"] == min_rows, (
+        f"a 10px host sent rows={first['rows']} (floor {min_rows!r}) — a "
+        "sub-viewport size reached the PTY"
+    )
 
     # Establish a known tall baseline and let it settle out.
+    squeeze.evaluate("el => el.remove()")
+    _clear(page)
     page.evaluate(_SWEEP, [600])
     _fake_clock.advance(page, _AFTER_SETTLE_MS)
+    baseline = _frames(page)
+    assert baseline, "the terminal never grew to its 600px baseline"
     _clear(page)
 
     # 1. Keyboard up and back down: nothing mid-sweep, nothing after it.
     sent_mid_sweep = page.evaluate(_SWEEP, [300, 90, 300, 600])
     assert sent_mid_sweep == 0, (
         f"{sent_mid_sweep} resize frame(s) went out mid-sweep — every "
-        "intermediate keyboard sample SIGWINCHes the agent into another "
-        "full-viewport repaint (issue #930)"
+        "intermediate keyboard sample repaints the agent (issue #930)"
     )
     _fake_clock.advance(page, _AFTER_SETTLE_MS)
     assert _frames(page) == [], (
-        f"a sweep that returned to its starting size sent {_frames(page)!r} — "
-        "each frame is a repaint that duplicates the conversation in scrollback"
+        f"a sweep that returned to its starting size sent {_frames(page)!r}"
     )
 
-    # 2. Keyboard up and staying up: exactly one frame, for the final size.
+    # 2. Keyboard up and staying up: the canvas pans, the PTY is not resized.
     page.evaluate(_SWEEP, [300, 90, 300])
     _fake_clock.advance(page, _AFTER_SETTLE_MS)
-    settled = _frames(page)
-    assert len(settled) == 1, (
-        f"expected exactly one settled resize frame, got {settled!r}"
-    )
-    _clear(page)
+    assert _frames(page) == [], f"a shrink resized the PTY: {_frames(page)!r}"
+    # A 600px canvas in a 300px box: the pan covers the lost height.
+    panned = page.evaluate(_PANNED_PX)
+    assert panned > 250, f"a 300px box panned only {panned}px"
 
-    # 3. A sub-floor sample is clamped before it reaches the PTY.
-    page.evaluate(_SWEEP, [10])
+    # 3. A box bigger than before: one frame, once it settles.
+    sent_mid_sweep = page.evaluate(_SWEEP, [300, 90, 800])
+    assert sent_mid_sweep == 0, f"{sent_mid_sweep} resize frame(s) went out mid-sweep"
     _fake_clock.advance(page, _AFTER_SETTLE_MS)
-    floored = _frames(page)
-    min_rows = page.evaluate("import('/static/terminal.js').then(m => m.PTY_MIN_ROWS)")
-    assert len(floored) == 1, f"expected one floored frame, got {floored!r}"
-    assert min_rows and floored[0]["rows"] == min_rows, (
-        f"a 10px host sent rows={floored[0]['rows']} (floor {min_rows!r}) — a "
-        "sub-viewport sample reached the PTY"
+    grown = _frames(page)
+    assert len(grown) == 1 and grown[0]["rows"] > baseline[-1]["rows"], (
+        f"expected one settled frame above {baseline[-1]!r}, got {grown!r}"
     )
-
-    page.evaluate("document.getElementById('terminalHost').style.flex = ''")
