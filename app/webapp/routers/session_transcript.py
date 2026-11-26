@@ -8,8 +8,9 @@ plus a byte-offset cursor for the next older page. Source resolution is the
 the hook row's recorded ``events.jsonl`` when that file exists, else the
 folder the row's key (the Copilot session id) names, else the file correlated
 from the filesystem by cwd + launch time against Copilot's own per-session
-``workspace.yaml`` (or, for a resumed folder, the ``session.resume`` its log
-records at the launch). A session no source can name answers
+``workspace.yaml`` (or, for a resumed folder, the process lock or
+``session.resume`` of the launch), followed to a conversation picked after
+it while the launch's folder holds no turn. A session no source can name answers
 ``no_transcript`` with a ``missing`` field naming the failed link, rather
 than guessing a neighbour's file, and an agent this fork cannot launch answers
 ``unsupported_agent``. None of them read the launcher's PTY capture, so
@@ -23,7 +24,9 @@ request does not, so it is a separate row, not covered for free).
 The same path also reads *forwards*: ``?after=<offset>&size=<n>``
 returns only what the file has grown by since that offset, which is what the
 Chat pane's live refresh ticks on, and answers from one ``stat`` when
-``size`` says the file has not grown at all. One path rather than a second
+``size`` says the file has not grown at all. A resume can move a session to
+another file, where that offset means nothing, so both reads name theirs in
+``log_id`` and the client reloads when it changes. One path rather than a second
 route on purpose — a new path shape needs its own ``_TERMINAL_GUARD_RULES``
 row, and this is the same resource, the same caller and the same gate, read
 from the other end of the file.
@@ -147,7 +150,7 @@ def _resolve_path(
     """``(history file, which link named it)`` for this session: the path the
     row records, else the folder its Copilot session id names, else the
     Copilot event log correlated from the filesystem by cwd + launch time (or
-    by the resume a reopened folder records). Each link is tried in turn
+    by the reopening a resumed folder shows). Each link is tried in turn
     because any one can be missing: only agentStop records a path, a
     recorded file can move, and a resumed folder predates the launch window.
     Only the last link lists the session-state folder."""
@@ -334,6 +337,7 @@ async def _build_transcript(
         "source": flavor,
         "reason": None,
         "session_id": sid,
+        "log_id": _log_id(path),
         **page,
     }
     if before is None:
@@ -379,10 +383,16 @@ async def _tail_response(
         "source": flavor,
         "reason": None,
         "session_id": sid,
+        "log_id": _log_id(path),
         **tail,
         "activity": await _activity(flavor, path, steps),
         "pending_input": _pending_input(session),
     }
+
+
+def _log_id(path: Path) -> str:
+    """Which log answered: Copilot names each session folder after its id."""
+    return path.parent.name
 
 
 def _pending_input(session: Optional[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
