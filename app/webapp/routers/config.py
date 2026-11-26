@@ -538,6 +538,13 @@ async def status(request: Request) -> Dict[str, Any]:
         "terminal": terminal_reachability(request),
         # The PC load sheet's IP row; null until discovery has found one.
         "private_ip": private_network.current(),
+        # Why the settings file could not be read; only the PC itself gets an
+        # answer then.
+        "config_error": (
+            f"{cfg.load_error}. Remote access is off until the file is fixed "
+            "and the app restarted."
+            if cfg.load_error else None
+        ),
     }
 
 

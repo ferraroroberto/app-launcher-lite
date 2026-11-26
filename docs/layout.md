@@ -57,7 +57,7 @@ app-launcher-lite/
 │   ├── git_upstream/           # ahead/behind against origin and the guarded fast-forward
 │   ├── documents/              # Settings > Documents: allowlist validation, path jail, read
 │   ├── auth/                   # job-scoped API tokens, the passkey (WebAuthn) gate, the self-signed TLS certificate
-│   ├── middleware/             # the webapp's auth gate: trust (loopback / tailnet), credentials, route guard table, bearer
+│   ├── middleware/             # the webapp's auth gate: trust (loopback / tailnet), credentials, route guard table, bearer, the unreadable-config refusal
 │   ├── clients/                # loopback HTTP clients (shared base, session-host) and the GitLab client (gitlab.py, via glab)
 │   ├── launching/              # agent launch: Copilot flags (flags.py), spawn helpers (launcher.py), the tray-restart check, the PowerShell script launcher (ps_script.py), setup.bat's app-side probes (install_checks.py)
 │   ├── board/                  # Board backend: column assembly, session-state join, drawer exchange, proof reports, owner checks, the viewed Board's single-flight forge refresh (view_refresh.py)

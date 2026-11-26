@@ -105,7 +105,7 @@ Each take is also saved on this PC while you record and kept for the retention w
 
 ## Configuration
 
-There is no `.env`. Committed samples live next to each gitignored real file in `config/`: `config.sample.json`, `webapp_config.sample.json`, `apps.sample.json`, `jobs.sample.json`. The full key reference is [docs/config.md](docs/config.md); the keys you set on a fresh machine:
+There is no `.env`. Committed samples live next to each gitignored real file in `config/`: `config.sample.json`, `webapp_config.sample.json`, `apps.sample.json`, `jobs.sample.json`. The full key reference is [docs/config.md](docs/config.md). A missing file means defaults. A `webapp_config.json` that is there but cannot be read also loads as defaults, and then the webapp answers only the PC itself, saying why on the page and in `webapp/webapp-warnings.log`, until the file is fixed and the app restarted. The keys you set on a fresh machine:
 
 | File | Key | Default | Effect |
 | --- | --- | --- | --- |
