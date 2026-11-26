@@ -92,7 +92,8 @@ from src.static_versioning import (
 )
 from src.stylesheet_bundle import BUNDLE_RELPATH, build_bundle
 from src.usage_log import usage_router
-from src.webapp_config import ConfigUnreadableError, load_webapp_config
+from src.webapp_config import load_webapp_config
+from src.webapp_settings.config_file import ConfigUnreadableError
 
 _log = logging.getLogger(__name__)
 # The lifespan's instance-role lines: a child so the file handler
@@ -579,9 +580,8 @@ def create_app() -> FastAPI:
     ensure_warning_log_handler()
 
     app = FastAPI(
-        title="Launcher",
-        version="0.1.0",
-        lifespan=_lifespan,
+        title="Launcher", version="0.1.0", lifespan=_lifespan,
+        exception_handlers={ConfigUnreadableError: _config_unreadable},
     )
 
     app.add_middleware(
@@ -594,8 +594,6 @@ def create_app() -> FastAPI:
     # through it unchanged. No bypass path: the SSE stream is
     # `text/event-stream`, skipped by content type.
     app.add_middleware(StreamSafeGZipMiddleware, bypass_paths=())
-
-    app.add_exception_handler(ConfigUnreadableError, _config_unreadable)
 
     app.state.app_config = app_config
     app.state.webapp_config = webapp_cfg

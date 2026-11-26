@@ -33,7 +33,7 @@ app-launcher-lite/
 ├── src/                        # logic layer (no UI imports); flat modules first, then one subpackage per domain
 │   ├── app_config.py           # log level, webapp embed section, the webapp port
 │   ├── webapp_config.py        # host / scan paths / agent settings / secrets / terminal knobs
-│   ├── webapp_settings/        # the defaults and value sets every webapp_config field validates against; performance.py is the speed-limit table and presets
+│   ├── webapp_settings/        # the defaults and value sets every webapp_config field validates against; performance.py is the speed-limit table and presets, config_file.py reads the file and refuses to save over an unreadable one
 │   ├── self_restart.py         # vendored: /api/restart routes, the detached restart runner and its run record
 │   ├── agents.py               # coding-agent registry (Copilot CLI only) + PATH detection
 │   ├── registry.py             # apps registry (load / save / scan)
