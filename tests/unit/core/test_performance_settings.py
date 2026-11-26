@@ -23,6 +23,13 @@ def test_every_limit_is_a_config_field_with_the_table_default():
         assert getattr(defaults, knob.key) == knob.default, knob.key
 
 
+def test_the_sample_config_seeds_every_limit_at_its_default():
+    # A fresh install copies the sample to the real config, so its values are what ships.
+    path = Path(__file__).resolve().parents[3] / "config" / "webapp_config.sample.json"
+    sample = json.loads(path.read_text(encoding="utf-8"))
+    assert {key: sample.get(key) for key in perf.KEYS} == perf.STANDARD
+
+
 @pytest.mark.parametrize("name", [perf.PRESET_STANDARD, perf.PRESET_LIGHT])
 def test_each_preset_is_inside_the_hard_limits(name):
     assert perf.problems(perf.PRESETS[name]) == []

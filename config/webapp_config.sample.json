@@ -112,7 +112,7 @@
   "pool_session_reads": 12,
   "pool_input": 4,
   "pool_sends": 0,
-  "pool_git_status": 8,
+  "pool_git_status": 2,
   "git_status_ttl_s": 10,
   "request_budget_scale": 1.0,
   "webauthn_rp_id": "",
