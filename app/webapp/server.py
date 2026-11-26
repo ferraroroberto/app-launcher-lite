@@ -82,6 +82,7 @@ from src.desktop import prevent_lock
 from src.jobs import snapshot as jobs_snapshot
 from src.launching import launcher
 from src.middleware import BearerTokenMiddleware
+from src.middleware.unreadable_config import UnreadableConfigGate, report_unreadable_config
 from src.runtime_data import runtime_db_path
 from src.static_bundles.js_bundle import BUNDLE_DIR as JS_BUNDLE_DIR
 from src.static_bundles.js_bundle import BundleError, build_js_bundle
@@ -578,6 +579,7 @@ def create_app() -> FastAPI:
     ensure_doorbell_log_handler(chief_doorbell.logger)
     ensure_chief_events_log_handler()
     ensure_warning_log_handler()
+    report_unreadable_config(webapp_cfg, _log)  # after the file handler, so it is kept
 
     app = FastAPI(
         title="Launcher", version="0.1.0", lifespan=_lifespan,
@@ -588,6 +590,7 @@ def create_app() -> FastAPI:
         BearerTokenMiddleware,
         get_config=lambda: app.state.webapp_config,
     )
+    app.add_middleware(UnreadableConfigGate, get_config=lambda: app.state.webapp_config)
     # Outside the auth middleware, so the timing covers it.
     app.add_middleware(RequestTimingMiddleware, get_budget_overrides=_budget_overrides(app))
     # Added last → outermost, so an auth failure or a bodyless 304 passes
