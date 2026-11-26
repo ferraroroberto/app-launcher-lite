@@ -82,6 +82,15 @@ class TestScriptCommand:
             argv, _ = ps_script.script_command("x.ps1", [], policy=policy)
             assert "-ExecutionPolicy" not in argv
 
+    @pytest.mark.windows_only
+    @pytest.mark.parametrize("codepage, flags", [(0, NO_WINDOW), (437, 0)])
+    def test_only_a_caller_with_a_console_shares_it(
+        self, monkeypatch: pytest.MonkeyPatch, codepage: int, flags: int
+    ) -> None:
+        """A console-less caller (the tray) must never flash a window."""
+        monkeypatch.setattr(ps_script.ctypes.windll.kernel32, "GetConsoleCP", lambda: codepage)
+        assert ps_script._window_flags() == flags
+
 
 @pytest.mark.windows_only
 class TestUnderAllSigned:
