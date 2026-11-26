@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.board.transcript import _read_tail_bytes
 from src.chief.copilot_state import copilot_home
+from src.session_view import copilot_reopen
 
 logger = logging.getLogger(__name__)
 # The request-timing log (webapp/slow-requests.log): a scan slow enough to
@@ -188,7 +189,9 @@ def find_copilot_transcript(
     what makes the ordinary case unambiguous, not a tie-break.
 
     No folder in the window → :func:`_scan_resumed_workspaces` looks for
-    the older folder a ``--resume`` launch reopened.
+    the older folder a ``--resume=<id>`` launch reopened. A window folder
+    nobody has said anything in is left behind when a conversation is picked
+    after launch, so :func:`_follow_picked` answers the picked one.
 
     A qualifying folder whose ``events.jsonl`` does not exist yet also
     answers ``None`` — Copilot creates that file at the first prompt, so a
@@ -209,8 +212,8 @@ def find_copilot_transcript(
 def _correlate_copilot(
     session: Dict[str, Any], miss_ttl_s: Optional[float]
 ) -> Tuple[Optional[Path], Optional[Path]]:
-    """:func:`find_copilot_transcript`'s cached match: ``(log, the in-window
-    folder's log when it was not written yet at the scan)``."""
+    """:func:`find_copilot_transcript`'s match: ``(log, the matched folder's
+    log when it is not written yet)``."""
     project_dir = _normalize_dir(session.get("project_dir"))
     started = _started_epoch(session)
     if not project_dir or started is None:
@@ -221,6 +224,33 @@ def _correlate_copilot(
         else _COPILOT_CLOCK_SKEW_SECONDS
     )
     ttl = DEFAULT_MISS_TTL_S if miss_ttl_s is None else max(0.0, float(miss_ttl_s))
+    log, waiting = _match_launch(project_dir, started, early_slop, ttl)
+    return _follow_picked(log, waiting, started, early_slop, ttl)
+
+
+def _follow_picked(
+    log: Optional[Path], waiting: Optional[Path], started: float, early_slop: float, ttl: float
+) -> Tuple[Optional[Path], Optional[Path]]:
+    """The launch's match, or the conversation its Copilot process opened
+    after it (:mod:`src.session_view.copilot_reopen`) while the matched
+    folder holds no turn of its own."""
+    own = log or waiting
+    if own is None or (log is not None and not copilot_reopen.holds_no_turn(log)):
+        return log, waiting
+    shown = copilot_reopen.shown_folder(
+        _COPILOT_STATE_DIR, own.parent,
+        started - early_slop, started + _COPILOT_START_SLOP_SECONDS, ttl,
+    )
+    if shown is None:
+        return log, waiting
+    events = shown / "events.jsonl"
+    return (events, None) if events.is_file() else (None, events)
+
+
+def _match_launch(
+    project_dir: str, started: float, early_slop: float, ttl: float
+) -> Tuple[Optional[Path], Optional[Path]]:
+    """The cached folder match on cwd + launch time, or on a resume then."""
     key = (str(_COPILOT_STATE_DIR), project_dir, started, early_slop)
     with _scan_lock(key):
         try:
@@ -382,35 +412,43 @@ def _scan_resumed_workspaces(
     """The folder a resumed launch reopened, when the launch-window match
     found none.
 
-    ``--resume`` reopens a folder Copilot created long before this launch,
-    so its ``created_at`` never falls in the window; what marks it is the
-    ``session.resume`` event Copilot appends at the launch. A folder
-    qualifies when its ``cwd`` is this session's and its log records a
-    resume inside the same window; only logs written since the launch are
-    read. The same fail-safe holds: anything but exactly one is None.
+    ``--resume=<id>`` reopens a folder Copilot created long before this
+    launch, so its ``created_at`` never falls in the window. A folder
+    qualifies when its ``cwd`` is this session's and either a live process
+    took its lock inside the same window, which is all there is before the
+    first prompt, or its log records a ``session.resume`` there; only logs
+    written since the launch are read for one. The same fail-safe holds:
+    anything but exactly one is None.
     """
     try:
         workspaces = list(_COPILOT_STATE_DIR.glob("*/workspace.yaml"))
     except OSError:
         return None
     earliest = started - early_slop
+    latest = started + _COPILOT_START_SLOP_SECONDS
     matches: List[Path] = []
     for workspace in workspaces:
         cwd, created = _copilot_workspace(workspace)
         if created is None or cwd != project_dir or created >= earliest:
             continue
         events = workspace.parent / "events.jsonl"
-        try:
-            if events.stat().st_mtime < earliest:
-                continue
-        except OSError:
-            continue
-        if any(earliest <= t <= started + _COPILOT_START_SLOP_SECONDS
-               for t in _copilot_resume_times(events)):
+        if _reopened_in(events, earliest, latest):
             matches.append(events)
         if len(matches) > 1:
             return None
     return matches[0] if len(matches) == 1 else None
+
+
+def _reopened_in(events: Path, earliest: float, latest: float) -> bool:
+    """Whether this log's folder was opened again between those instants."""
+    try:
+        written = events.stat().st_mtime
+    except OSError:
+        return False
+    if any(t <= latest for t in copilot_reopen.lock_holders(events.parent, earliest).values()):
+        return True
+    return written >= earliest and any(
+        earliest <= t <= latest for t in _copilot_resume_times(events))
 
 
 def _copilot_resume_times(events: Path) -> List[float]:
