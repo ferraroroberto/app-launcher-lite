@@ -1390,7 +1390,9 @@ flowchart LR
   - an Other field on every item
   - an Anything else box
   - Done
-- **Does:** Done sends every answer at once
+- **Does:**
+  - Done sends every answer at once
+  - tap a web address in a question or its detail opens it in a new tab
 - **Why:** one sheet answers everything that waits, instead of one dialog per question
 
 ### `board.mrs-jobs` MRs and jobs
