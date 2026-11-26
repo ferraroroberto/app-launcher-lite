@@ -31,7 +31,9 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `host` | `0.0.0.0` | Webapp bind address. The webapp *port* is `config.json`'s `webapp.port`; a leftover `port` key in an older file is ignored, except in a linked git worktree, where the `port` that worktree setup writes here wins so a worktree webapp never binds the primary's port. |
+| `host` | `0.0.0.0` | Webapp bind address. The webapp *port* is `config.json`'s `webapp.port`; a leftover `port` key in an older file is ignored, except in a linked git worktree, where the `port` that worktree setup writes here wins so a worktree webapp never binds the primary's port. A leftover `session_host_port` is ignored too: `webapp.session_host_port` sets it. |
+| `serve_over` | `auto` | How the webapp is served, applied at the next restart (Settings > Connections > **Serve over**): `auto` is HTTPS when `webapp/certificates/` holds `cert.pem` and `key.pem`, else HTTP; `https` serves HTTPS (HTTP until a certificate exists); `http` never uses TLS; `both` adds plain HTTP on `serve_http_port` beside HTTPS. See [Remote access](../README.md#remote-access--tailscale-or-any-vpn). |
+| `serve_http_port` | `8475` | The plain-HTTP port `both` adds; with `both` it must differ from the webapp and session-host ports. If another program holds it, the start logs a warning and serves HTTPS only. |
 
 ### Coding, Apps and Team OS
 
@@ -41,6 +43,7 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 | `projects_ignore` | `[]` | Case-insensitive folder-name globs (`*`, `?`) hidden from the Coding tab; VCS and build directories are always skipped. |
 | `coding_favorites` | `[]` | Starred project ids, managed by the per-tile ★. |
 | `coding_hidden_agents` | `[]` | Launch buttons hidden from project rows: agent ids (only `copilot` here) plus the pseudo-ids `vscode` (the whole project ⋮ menu) and `github`. A *hidden* list, so anything new appears by default. |
+| `coding_favorite_agent` | `copilot` | The agent whose launch button stays on a project row. Only `copilot` exists here, and an unknown id is saved as the default. |
 | `apps_scan_root` | parent of this repo | Root the Apps-tab scan walks for launcher bats. Empty scans nothing; set it empty when another launcher install shares the PC. |
 | `mini_apps_root` | `""` | Optional folder of small helper bats; a scan lists each `.bat` directly inside it in the Apps tab's **Mini apps** group, autostart off. Empty hides the group. Read on the next webapp start. |
 | `team_os_dir` | sibling `../team-os` | Team OS checkout root (skills at `.claude/skills`). When that directory is missing the tab shows disabled. |
@@ -54,7 +57,7 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 | `gitlab_group` | `""` | GitLab group or user namespace (subgroups included) the Board's `glab` queries span. Empty keeps the panel dormant with a Settings hint. |
 | `gitlab_host` | `""` | Self-hosted GitLab instance, passed to every `glab` call (the Board's and the chief's) as `GITLAB_HOST`. Empty takes the host of the checkout's `origin` when that is not GitHub, else gitlab.com. |
 
-`gitlab_group` is verified live against gitlab.com; `gitlab_host` for a self-hosted instance is not. See [GitLab](gitlab.md).
+What is verified live against GitLab is listed in [GitLab](gitlab.md#verified-live-and-not).
 
 ### Machine health
 
@@ -76,12 +79,51 @@ UI preferences and secrets, written by the web UI's **Save**. The field list liv
 | `copilot_skip_permissions` | `false` | Opt-in `--allow-all` (every tool permission). |
 | `copilot_remote_session` | `true` | Remote access for every Copilot session Lite launches (Coding, Board and chief, Team OS), shown in Settings as **Remote session**. Copilot has no launch flag for it: it is the user settings `ahpEnvironment.acceptRemoteConnections` and `ahpEnvironment.publishNewSessionsByDefault`, which Lite sets together before each Copilot launch (`copilot config`, skipped when they already match). `false` sets both off, so a new session starts unshared. Those two settings live in `~/.copilot/settings.json` (or `$COPILOT_HOME`) and are shared by every Copilot session on the PC, including ones started outside Lite; a session reads them as it starts, so a running session keeps its state. Probed on CLI 1.0.114. |
 | `copilot_web_url_prefix` | `""` | Override only. A full-control Copilot session's **Copy link** gives `https://<host>/copilot/tasks/<task id>`, where `<host>` is the GitHub Enterprise host the Copilot CLI is signed in to (`lastLoggedInUser.host` in `~/.copilot/config.json`, or under `$COPILOT_HOME`). A github.com sign-in derives no link. Set a full URL prefix, e.g. `https://ghe.example.com/copilot/tasks/`, only when the derived one is wrong or to give a github.com account a link; empty, or not an `http(s)` URL, keeps the derived one. See [session view](session-view.md#copy-link). |
-| `chief_model` | `gpt-6-luna` | The chief's Copilot model; the chief needs the helpers in `copilot/` ([README](../README.md#status)). A value outside `copilot_models` shows as not offered in Settings > Chief, and a start uses Copilot's own pick and returns a `warning`. |
-| `chief_context` | `""` | The chief's `--context` (`""`, `default`, `long_context`). `""` follows `copilot_context`, so an install that never sets it launches the chief as before. |
-| `chief_effort` | `""` | The chief's `--effort` (`""`, `none` … `max`), with the same only-beside-an-explicit-model rule as `copilot_effort`. `""` follows `copilot_effort`. |
 | `launch_presets` | `[]` | Named Copilot launches: `{id, name, agent: "copilot", model, effort, context?}` rows (at most 12, unique names), written through `POST /api/config` (an `id` is assigned when absent) or from Settings › Coding agent › Launch presets, which adds, edits, renames and removes them; a refused write is a 400 whose body carries `field` (`name`, `model`, `effort`, `context`, or empty for the list) and the row `index`. `GET /api/config` gives the editor `copilot.preset_efforts` (each listed model's efforts) and `copilot.preset_contexts`. The Projects launch toolbar offers a dropdown with Default and one row per preset whose model is in `copilot_models`; a launch from a preset sends `--model`, `--effort` and, when the preset has a `context` (`default` or `long_context`), `--context`; without one the saved `copilot_context` applies. `effort` must be one the model offers: `mai-code-2-flash` takes `low`, `medium`, `high`, `xhigh` and `max`, `gpt-6-luna` takes `none` through `max` but not `minimal` (both probed), any other model takes any level the CLI accepts and the CLI decides. The launch route refuses a model outside `copilot_models`. |
 
 The `.sample` file carries a `copilot_models` default list; a per-launch model (Team OS, Board) follows the same rules, and an empty or `default` override means no `--model` and no `--effort`.
+
+### Usage card
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `copilot_monthly_credits` | `300` | Settings > Coding agent > **Monthly allowance** (AI credits, 1–100000). A fallback only: the Code tab's Usage card takes the allowance from the Copilot plan as the CLI last cached it, and names this value when that cannot be read. |
+
+### Chief
+
+Settings > Chief, plus the chief's state files. The behaviour behind each switch is described in [The chief](board.md#the-chief).
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `chief_model` | `gpt-6-luna` | The chief's Copilot model; the chief needs the helpers in `copilot/` ([README](../README.md#status)). A value outside `copilot_models` shows as not offered in Settings > Chief, and a start uses Copilot's own pick and returns a `warning`. |
+| `chief_context` | `""` | The chief's `--context` (`""`, `default`, `long_context`). `""` follows `copilot_context`, so an install that never sets it launches the chief as before. |
+| `chief_effort` | `""` | The chief's `--effort` (`""`, `none` … `max`), with the same only-beside-an-explicit-model rule as `copilot_effort`. `""` follows `copilot_effort`. |
+| `chief_worker_cap` | `3` | The most worker sessions the chief runs at once, 1–10. The chief itself never counts. |
+| `chief_worker_cap_scope` | `chief` | What the cap counts: `chief` only the sessions the chief started, `all` every live session. |
+| `skills_dir` | `""` | Folder holding the `issue-add`, `issue-start`, `issue-yolo` and `issue-finish` skills a lane runs (Settings > Chief > **Skills folder**). Empty uses the ones bundled in the Copilot folder; a lane start is refused while one is missing. See [installing the Copilot side](../copilot/docs/install.md). |
+| `chief_doorbell` | `false` | Type one wake-up line into an idle chief whose mailbox holds events. |
+| `chief_fallback_minutes` | `30` | Ring the idle chief once when mail has waited this long, or worker slots sat free beside queued plan rows; 0–1440, `0` off. Independent of the doorbell. |
+| `chief_rering_seconds` | `60` | Wait before ringing again after a ring that did not land, 30–600. |
+| `chief_unread_alert_minutes` | `15` | Unread mail this old moves the chief to Your turn, 5–240. |
+| `chief_reoffer_minutes` | `15` | Claimed but unacknowledged mail is offered again after this long, 10–120. |
+| `chief_hold_minutes` | `10` | The turn-end hook holds the chief at most once per this window, 5–60. |
+| `chief_auto_drain` | `true` | Let the chief queue unattended audit fixes and start them when a worker slot frees. |
+| `chief_auto_compact_threshold` | `30` | Context-use percent at which the chief compacts itself, 10–90; `0` off. |
+| `chief_job_failures` | `true` | Leave the chief a mailbox event when a Job run fails or its script is missing, while a chief is live. |
+| `chief_job_self_heal`, `chief_weekly_proposals` | `false` | Opt-in switches served to the chief on `GET /api/board/chief/settings`. The app starts nothing for them, and nothing in this repo's `copilot/` reads them. |
+| `chief_plan_file`, `chief_managed_file`, `chief_inbox_dir` | `chief-plan.json`, `chief-managed.json`, `chief-inbox` under `~/.copilot/app-launcher-lite-state/` | The chief's plan, the register of sessions it started and its mailbox folder. |
+
+### Speech to text
+
+Settings > Connections > **Speech to text**; the request and recording behaviour is in the [README](../README.md#speech-to-text).
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `speech_enabled` | `false` | Shows the record button in every message box. |
+| `speech_base_url` | `""` | Base `http(s)` URL of an OpenAI-shaped speech server; audio goes to `<base>/audio/transcriptions`. |
+| `speech_model` | `""` | Model name sent with each upload; omitted when empty. |
+| `speech_api_key` | `""` | Bearer key sent when set. A secret, never returned by the API. |
+| `speech_keep_recordings_hours` | `24` | Hours each dictation take stays on disk, 0–720; `0` keeps none. |
 
 ### Auth and terminal
 
@@ -110,12 +152,12 @@ The `.sample` file carries a `copilot_models` default list; a per-launch model (
 | `pool_hot_poll`, `pool_session_reads`, `pool_input`, `pool_sends`, `pool_git_status` | `8`, `12`, `4`, `0`, `2` | Thread limits for the Board and session builds, transcript reads, message sends, every other route without its own pool (`0` picks from the CPU count), and the git scan (one thread runs one git process at a time, so this is also the most git processes alive during a scan). Settings > Performance; applied live. |
 | `git_status_ttl_s` | `10` | Seconds a git scan is served as it is before the next poll refreshes it behind the response. |
 | `request_budget_scale` | `1.0` | Multiplier on every request budget, so a slow PC logs fewer breaches. |
-
-Every row from `transcript_page_cache_size` down is a Settings > Performance limit with a hard range and a Light machine preset value: [performance](performance.md).
 | `large_upload_max_mb` | `2048` | Limit for the composer's **Attach large file (not read)**, 1–10240 MB; the ordinary attach keeps its fixed 12 MB. |
 | `outbox_scratch_roots` | `["%TEMP%/claude"]` | Folders, besides a session's own, an agent may send a file to Chat from. `%VAR%` and `~` expand; Settings › Folders validates each on save. |
 | `documents` | `[]` | Files the reading sheet may show, each `{id, title, repo, path}` ([Documents](documents.md)). |
 | `session_retention_days` | `365` | A daily sweep deletes per-session logs and transcripts older than this; live sessions are never touched. `0` keeps everything. Hand-edit only. |
+
+The poll, pool and cache rows above, from `transcript_page_cache_size` through `request_budget_scale`, are Settings > Performance limits, each with a hard range and a Light machine preset value: [performance](performance.md).
 
 ### Jobs notifications and coverage
 
@@ -132,6 +174,7 @@ Every row from `transcript_page_cache_size` down is a Settings > Performance lim
 | --- | --- | --- |
 | `secrets` | `{}` | Named secret values referenced from `jobs.json` as `$secret:<key>` (webhook secrets, job env). |
 | `api_tokens` | `[]` | Job-scoped bearer-token records minted from Settings — salted hashes only, never hand-edit. A job-scoped token can only call `POST /api/jobs/<id>/run` for its allowed jobs. |
+| `telegram_bot_token` / `telegram_chat_id` | `""` | Used only by the login lock-out alert; either empty sends none. |
 
 The dataclass in `src/webapp_config.py` may still carry fields from the full app that the lite UI never reads; the tables above are the contract.
 

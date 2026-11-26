@@ -10,7 +10,7 @@ An in-process FastAPI `TestClient` suite under `tests/` covers the webapp's API 
 & .\.venv\Scripts\python.exe -m pytest tests -m "not smoke" -v
 ```
 
-Every `glab` call and every session-host call is mocked at the client seams, so the suite runs on a machine with no `glab` and no `copilot` installed. GitLab response shapes are pinned in the `tests/unit/board/test_gitlab_client.py` fixtures; those fixtures follow the documented REST shape and are not a recording of a live GitLab (not yet verified live, see [gitlab.md](gitlab.md)).
+Every `glab` call and every session-host call is mocked at the client seams, so the suite runs on a machine with no `glab` and no `copilot` installed. GitLab response shapes are pinned in the `tests/unit/board/test_gitlab_client.py` fixtures; the suite never reads a live GitLab, so [gitlab.md](gitlab.md#verified-live-and-not) says which shapes are verified against one.
 
 Runtimes live in `CLAUDE.md` and only there: they are a property of the machine measuring them, and a copy here would go stale unnoticed. `-m "not smoke"` excludes the live-tray Playwright suite below.
 

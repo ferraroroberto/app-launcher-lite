@@ -44,4 +44,4 @@ glab auth login
 
 Pick your GitLab host (gitlab.com or a self-hosted instance) and follow the prompts. The token stays in glab's own credential store; nothing in this repo holds it, and none belongs in a config file, an issue or a commit.
 
-Then set `gitlab_group` (and `gitlab_host` for a self-hosted instance) in Settings. What the Board does with GitLab is verified live except the merge-request shapes and a few items; [gitlab.md](gitlab.md) lists each as verified or `unknown`.
+Then set `gitlab_group` (and `gitlab_host` for a self-hosted instance) in Settings. [gitlab.md](gitlab.md#verified-live-and-not) lists what the Board does with GitLab as verified live or not.
