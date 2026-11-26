@@ -28,6 +28,7 @@ same page and PTY, each leg a former test kept as a named helper:
 
 Last, the terminal follows its box (``_refit_legs.py``): the mirror window,
 then a terminal first opened under a phone keyboard, at phone and desktop widths.
+Then a PC browser joins the phone's session (``_two_sizers_leg.py``).
 
 The bar legs stub the context ring's route with a number (a stub-child PTY
 paints no statusline, and the ring only draws with one) and the sessions
@@ -43,12 +44,16 @@ import re
 from typing import Optional
 
 import pytest
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Browser, Page, expect
 
+from tests.e2e.fixtures.env import autoboot_enabled
 from tests.e2e.fixtures.waits import OVERLAY_OPEN_MS
 from tests.e2e.terminal._refit_legs import (
     leg_mirror_keeps_the_last_row_above_its_composer,
     leg_terminal_follows_its_box,
+)
+from tests.e2e.terminal._two_sizers_leg import (
+    leg_phone_terminal_survives_a_pc_browser_joining,
 )
 
 pytestmark = [pytest.mark.smoke, pytest.mark.iphone]
@@ -501,7 +506,8 @@ def _leg_terminal_bar_fits_at_once_on_default_phone(
 
 
 def test_overlay_keeps_composer_reachable_on_a_phone(
-    authed_page: Page, base_url: str, launched_pty_session: str, browser_name: str
+    authed_page: Page, base_url: str, launched_pty_session: str, browser_name: str,
+    browser: Browser, request: pytest.FixtureRequest,
 ) -> None:
     page = authed_page
     sid = launched_pty_session
@@ -535,3 +541,6 @@ def test_overlay_keeps_composer_reachable_on_a_phone(
     leg_mirror_keeps_the_last_row_above_its_composer(page, base_url, sid)
     for width, height in ((390, 844), (1280, 800)):
         leg_terminal_follows_its_box(page, base_url, sid, width, height)
+    # Only the autoboot stub child paints the full-screen frame this leg reads.
+    if autoboot_enabled(request.config):
+        leg_phone_terminal_survives_a_pc_browser_joining(page, browser, base_url, sid)
