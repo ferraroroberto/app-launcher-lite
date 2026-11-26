@@ -4,7 +4,7 @@ The tab-by-tab feature index. Setup, running and the gate stay in the [README](.
 
 The web UI is one phone-first PWA with five work tabs — **Coding · Apps · Jobs · Team OS · Board** — plus **Settings** behind the gear in every page header. Every tab opens with the same page header: the tab's name, one context line, the theme toggle and the gear. On a wide desktop window (1100 px and up, mouse pointer) the tabs move into a left rail, the Coding tab becomes list-and-detail (a session's view opens in a pane beside the list), Jobs docks a job's sheet beside the list, and Apps becomes two columns.
 
-The coding agent is **GitHub Copilot CLI** (`copilot`) and the forge is **GitLab via `glab`**; nothing else is offered. A GitLab item below is implemented against GitLab's documented REST API and is **not yet verified live** (see [GitLab](gitlab.md)).
+The coding agent is **GitHub Copilot CLI** (`copilot`) and the forge is **GitLab via `glab`**; nothing else is offered. Which GitLab reads and writes are verified live is listed in [GitLab](gitlab.md#verified-live-and-not).
 
 ## Coding
 

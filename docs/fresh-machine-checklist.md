@@ -101,7 +101,7 @@ Tap **▶ Start** on a small Backlog issue of a project under `projects_dir` (or
 | Steps | State |
 | --- | --- |
 | The proof commands of steps 2, 4 (the venv's Python), 6 and 7, on the build machine, which already carries the setup | run and passed there, on Copilot CLI 1.0.114, `glab` 1.131 and Python 3.14: `copilot --version`, `glab auth status`, the probe's static run, the installer's `-WhatIf` and the git-access check (`ok`), and `/api/version` with the session-host reachable |
-| Steps 1, 5, 8 and 9 | `unknown`: not run here (the steps that install tools or start a lane on a machine that has none) |
-| Every step on a machine or user profile with none of the setup | `unknown`: no clean machine has been used yet. A first run there may break on anything above, in particular the `winget` ids of step 1, the config creation on a profile with no `config\` files and the git credential step |
+| Steps 1, 5, 8 and 9, on the build machine | `unknown`: not run there (the steps that install tools or start a lane on a machine that has none) |
+| The checklist on a clean machine | followed and validated by the owner; no per-step proof output is recorded, so a single step's result there is `unknown` |
 
 Record each break found on a clean machine by fixing the step above, so the list stays the one that works.

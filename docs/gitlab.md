@@ -53,7 +53,7 @@ Every read is `glab api` against REST v4, one subprocess per call with a 20 s ti
 
 - **Default-branch pipelines:** the group's live projects (archived and CI-off ones left out), then one `projects/<id>/pipelines?ref=<default>` read each, four in flight. The default branch comes from the project row: GitLab answers `[]` for a ref it does not know, so a guessed branch would read as "no pipelines". The latest finished pipeline (`failed` or `success`) decides: `red`, `green`, or `unknown` when the read failed or the row names no default branch. A project with no finished pipeline is not a row. The Board draws a red project as one `CI failed` row and an unreadable one as `CI unknown`; see [board.md](board.md#red-pipelines). No pipeline-file check is made first: the empty answer already says "no pipeline".
 
-**No forge call ever runs on a poll.** `refresh()` runs only on the Board's ↻ button or once on a stale tab activation (with a 60 s cooldown); the 5 s poll reads the in-memory snapshot. A failed refresh keeps the previous data and surfaces an `error` badge; a never-filled cache is "never fetched", not "nothing open".
+**No forge call ever runs on a poll.** `refresh()` runs only on the Board's ↻ button, or in the server's one single-flight refresh per 5 minutes while a Board is viewed ([board.md](board.md#refresh--cache-contract)); the 5 s poll reads the in-memory snapshot. A failed refresh keeps the previous data and surfaces an `error` badge; a never-filled cache is "never fetched", not "nothing open".
 
 ## What the History sheet reads
 
@@ -84,7 +84,7 @@ A new gitlab.com account must verify its identity before shared runners take its
 
 ## Merging
 
-The Board merges nothing. The chief's merge verb in `copilot/` runs `glab mr merge --auto-merge`. On a GitLab test project an earlier copy of the verb merged one request and read it back clean, and refused two conflicting requests with GitLab's own reason; this tree's copy carries the same reason handling and is unit-tested, but has not been re-run live from here. A self-hosted host is `unknown` (see [Status](../README.md#status)).
+The Board merges nothing. The chief's merge verb in `copilot/` runs `glab mr merge --auto-merge`. On a GitLab test project an earlier copy of the verb merged one request and read it back clean, and refused two conflicting requests with GitLab's own reason; this tree's copy carries the same reason handling and is unit-tested, but has not been re-run live from here. A self-hosted host is `unknown`.
 
 ## Two remotes for this repo
 
