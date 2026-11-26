@@ -197,6 +197,7 @@ function disposeTerminal(t) {
   _termCache.delete(t.sid);
   clearTerminalReconnect(t);
   if (t.sizeTimer) t.sizeTimer.stop();
+  if (t.boxObserver) t.boxObserver.disconnect();
   if (t.titleTimer) t.titleTimer.stop();
   if (t.disposeTouch) { try { t.disposeTouch(); } catch (_) {} }
   if (t.disposeLatest) { try { t.disposeLatest(); } catch (_) {} }
@@ -561,14 +562,12 @@ function applyTerminalSize(t, session) {
   if (t !== state.terminal || inChatMode()) return;
   if (t.mirror) {
     resizeMirrorTerm(t, session);
-    return;
+  } else {
+    pinOverlayToKeyboard();
+    if (t.isFullscreen && t.fsSized && t.lastSentSize) growPinnedRows(t);
+    else reflowTerminal(t);
   }
-  pinOverlayToKeyboard();
-  if (t.isFullscreen && t.fsSized && t.lastSentSize) {
-    panFullscreenCanvas(t.term);
-    return;
-  }
-  reflowTerminal(t);
+  panCanvas(t.term);
 }
 
 // Match the phone's PTY dimensions; never touch the PTY itself.
@@ -611,52 +610,47 @@ function pinOverlayToKeyboard() {
   }
 }
 
-// Full-screen differential agent: once sized, the PTY is PINNED for the
-// rest of the session's lifetime — no further reflow, ever (#432b).
-// EVERY change after the first real size (keyboard up/down, compose
-// bar, browser chrome, a PWA layout-viewport shrink, OR a phone
-// rotation) PANS/letterboxes the fixed-size canvas instead.
-// Empirical (probe): Codex/ratatui re-emits its
-// ENTIRE transcript on any winsize change — rows or cols, either
-// direction (~65 KB on a long conversation) — so a single stray
-// SIGWINCH replays the whole conversation through the phone terminal.
-// iOS supports neither the manifest `orientation` member nor
-// `ScreenOrientation.lock()`, so rotation can't be blocked at the
-// platform level — pinning cols makes it harmless instead: landscape
-// just shows the same portrait-width canvas letterboxed (xterm sizes
-// its own canvas off `cols`, not the host box, so no extra CSS is
-// needed). The host is overflow:hidden, so panned-off top rows clip
-// cleanly; panning by the content-vs-box overflow also covers the
-// keyboard-down case (overflow 0 → transform cleared). Claude (inline)
-// and the fullscreen first-fit case fall through to reflowTerminal,
-// which also clears the pan.
-// (The pan shortcut additionally requires a size to have been SENT —
-// the pre-WS first fit sets fsSized, but the phone's authoritative
-// size must still go out on the first open.)
-function panFullscreenCanvas(term) {
+// Full-screen differential agent: once sized, the PTY's columns are PINNED
+// for the rest of the terminal's lifetime and its rows never shrink. A box
+// that gets smaller (keyboard up, taller composer, browser chrome, rotation)
+// PANS the canvas instead. Empirical (probe): Codex/ratatui re-emits its
+// ENTIRE transcript on any winsize change (~65 KB on a long conversation), so
+// a stray SIGWINCH replays the whole conversation through the phone terminal.
+// Rows do grow when the box outgrows them: a terminal first sized while the
+// keyboard was up would otherwise keep that short canvas after it closed.
+// Growing only, a keyboard open/close cycle still resizes nothing.
+function growPinnedRows(t) {
+  let rows = 0;
+  try { rows = t.fit.proposeDimensions().rows; } catch (_) { /* unmeasured */ }
+  if (rows > t.term.rows) {
+    try { t.term.resize(t.term.cols, rows); } catch (_) { /* best effort */ }
+  }
+  // Also with nothing grown: a size grown while the socket was down goes out
+  // on reconnect, and an unchanged one is deduped.
+  queuePtySize(t);
+}
+
+// Shift the canvas up by whatever spills below the host's box, so the last
+// row (the prompt) ends inside it and never under the composer; 0 clears the
+// pan. Measured against the HOST's real box, not the visual-viewport height,
+// which also counts the header and compose bars. The canvas starts below the
+// host's top padding, which the fit addon does not subtract, so even a fresh
+// fit can spill by a few pixels. The host is overflow:hidden, so panned-off
+// top rows clip cleanly.
+function panCanvas(term) {
+  const host = els.terminalHost;
   const screen = term.element &&
     term.element.querySelector('.xterm-screen');
-  const contentH = screen ? screen.getBoundingClientRect().height : 0;
-  // Pan against the HOST's real box, not the visual-viewport height:
-  // the overlay also holds the header bar and the
-  // compose bar, so the viewport height over-states the terminal's
-  // visible box by their combined height — under-panning by exactly
-  // that much and hiding the bottom rows (the prompt echo) behind
-  // the compose bar whenever the native keyboard is up. The overlay
-  // pinning above already resized the flex layout, so the host rect
-  // is the box the canvas actually shows through.
-  const boxH = els.terminalHost ?
-    els.terminalHost.getBoundingClientRect().height : 0;
-  const panY = terminalPanY(contentH, boxH);
-  if (term.element) {
-    term.element.style.transform =
-      panY ? ('translateY(-' + panY + 'px)') : '';
-  }
+  if (!host || !screen) return;
+  const contentH = screen.getBoundingClientRect().height +
+    (parseFloat(getComputedStyle(host).paddingTop) || 0);
+  const panY = terminalPanY(contentH, host.getBoundingClientRect().height);
+  term.element.style.transform =
+    panY ? ('translateY(-' + panY + 'px)') : '';
 }
 
 function reflowTerminal(t) {
   const term = t.term;
-  if (term.element) term.element.style.transform = '';
   try { if (t.fit) t.fit.fit(); } catch (_) {}
   // Keep the prompt (bottom row) in view after a keyboard-driven
   // reflow, but only if the user hadn't scrolled up to read history.
@@ -664,20 +658,23 @@ function reflowTerminal(t) {
     const b = term.buffer.active;
     if (b.viewportY >= b.baseY - 1) term.scrollToBottom();
   } catch (_) {}
-  if (t.ws && t.ws.readyState === WebSocket.OPEN) {
-    // The first size on this terminal is the phone's authoritative one
-    // and goes out at once; every later change is settled so a
-    // keyboard sweep's intermediate samples never reach the PTY.
-    if (t.resizeSettleTimer) clearTimeout(t.resizeSettleTimer);
-    t.resizeSettleTimer = null;
-    if (t.lastSentSize) {
-      t.resizeSettleTimer = setTimeout(function () { sendPtySize(t); },
-        RESIZE_SETTLE_MS);
-    } else {
-      sendPtySize(t);
-    }
-  }
+  queuePtySize(t);
   t.fsSized = true;
+}
+
+// The first size on a terminal is the phone's authoritative one and goes out
+// at once; every later change is settled so a keyboard sweep's intermediate
+// samples never reach the PTY.
+function queuePtySize(t) {
+  if (!t.ws || t.ws.readyState !== WebSocket.OPEN) return;
+  if (t.resizeSettleTimer) clearTimeout(t.resizeSettleTimer);
+  t.resizeSettleTimer = null;
+  if (t.lastSentSize) {
+    t.resizeSettleTimer = setTimeout(function () { sendPtySize(t); },
+      RESIZE_SETTLE_MS);
+  } else {
+    sendPtySize(t);
+  }
 }
 
 function sendPtySize(t) {
@@ -702,6 +699,12 @@ function sendPtySize(t) {
 // polls the phone's size, the phone listens to every viewport change.
 function wireSizeTracking(t) {
   const applySize = t.applySize;
+  // The composer growing, a notice appearing or the view coming back changes
+  // the host's box with no viewport event to announce it.
+  if (window.ResizeObserver) {
+    t.boxObserver = new ResizeObserver(applySize);
+    t.boxObserver.observe(els.terminalHost);
+  }
   if (t.mirror) {
     // The phone may rotate or resize — re-sync to its size periodically.
     t.sizeTimer = startPoll(function () {

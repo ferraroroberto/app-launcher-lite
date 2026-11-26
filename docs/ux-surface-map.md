@@ -545,7 +545,9 @@ flowchart LR
   - a Jump to latest button once scrolled back
   - the composer bar
   - a status strip and an activity line
-- **Does:** the page connects the PTY lazily and a reconnect redraws from the kept history
+- **Does:**
+  - the page connects the PTY lazily and a reconnect redraws from the kept history
+  - the screen follows its box, with the last row above the composer; it takes more rows when the box grows and pans when it shrinks
 - **Leads to:**
   - [On-screen keys](#terminalkeys-popover-on-screen-keys) (keys button)
   - [Attach menu](#terminalattach-menu-attach-menu) (attach button)
