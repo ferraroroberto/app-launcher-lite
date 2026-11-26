@@ -1,4 +1,5 @@
-"""The terminal follows its box, so its last row never hides behind the composer.
+"""Legs of ``test_overlay_phone_composer.py``: the terminal follows its box, so
+its last row never hides behind the composer.
 
 A Copilot terminal is full-screen: once sized, its PTY is not resized again by a
 shrink, the canvas pans. Two things left it cut off: a terminal first sized
@@ -20,8 +21,6 @@ from tests.e2e.fixtures.ui import (
     stub_session_mirror,
 )
 from tests.e2e.fixtures.waits import OVERLAY_OPEN_MS
-
-pytestmark = [pytest.mark.smoke, pytest.mark.iphone]
 
 _LONG = "\n".join(f"line {i} of a long message" for i in range(12))
 
@@ -52,18 +51,17 @@ def _expect_geometry(page: Page, rule: str, what: str) -> None:
         pytest.fail(f"{what}: {page.evaluate(_GEOMETRY)}")
 
 
-@pytest.mark.parametrize("width,height", [(390, 844), (1280, 800)])
-def test_terminal_follows_its_box(
-    authed_page: Page, base_url: str, launched_pty_session: str, width: int, height: int
+def leg_terminal_follows_its_box(
+    page: Page, base_url: str, sid: str, width: int, height: int
 ) -> None:
-    page = authed_page
+    """A terminal first opened from Chat with the keyboard up, then the composer."""
     page.add_init_script(RECORD_RESIZE_FRAMES)
     page.set_viewport_size({"width": width, "height": height})
     stub_session_mirror(page)
     page.goto(base_url, wait_until="domcontentloaded")
-    row = page.locator(
-        f'#sessionsList li.session-item[data-session-id="{launched_pty_session}"]'
-    )
+    # A remembered Terminal mode would size the terminal before the keyboard is up.
+    page.evaluate("localStorage.removeItem('launcher.sessionModes')")
+    row = page.locator(f'#sessionsList li.session-item[data-session-id="{sid}"]')
     open_session_row(page, row, "chat")
 
     # Type a long message with the keyboard up, then switch to Terminal.
@@ -97,16 +95,13 @@ def test_terminal_follows_its_box(
     )
 
 
-def test_mirror_window_keeps_the_last_row_above_its_composer(
-    authed_page: Page, base_url: str, launched_pty_session: str
+def leg_mirror_keeps_the_last_row_above_its_composer(
+    page: Page, base_url: str, sid: str
 ) -> None:
     # The PC mirror never resizes the PTY, so a short window can only pan. The
     # ?terminal= link on a loopback origin is the mirror window.
-    page = authed_page
     page.set_viewport_size({"width": 1280, "height": 800})
-    page.goto(
-        f"{base_url}/?terminal={launched_pty_session}", wait_until="domcontentloaded"
-    )
+    page.goto(f"{base_url}/?terminal={sid}", wait_until="domcontentloaded")
     expect(page.locator("#terminalHost .xterm-screen")).to_be_visible(
         timeout=OVERLAY_OPEN_MS
     )
