@@ -268,6 +268,18 @@ def _check_plan_panel_sends_feedback(page: Page, tr, picker, panel) -> None:
     }, picker.answers
 
 
+def _check_a_moved_log_reloads_its_whole_history(page: Page, tr) -> None:
+    """#713: the forward cursor belongs to one log. When a resume moves the
+    session to another, its history sits below that offset, so a tick that only
+    appended would never show it."""
+    tr.log_id = "log-b"
+    tr.entries[:] = [_turn("user", "from the earlier run", 10)]
+    _tick(page, tr)
+    chat = page.locator("#transcriptList")
+    expect(chat).to_contain_text("from the earlier run", timeout=OVERLAY_OPEN_MS)
+    expect(chat).not_to_contain_text("opening conftest now")
+
+
 @pytest.mark.iphone
 def test_new_turns_appear_with_no_user_action(authed_page: Page, base_url: str) -> None:
     """The feature: the conversation refreshes by itself, starting from a chat
@@ -315,24 +327,7 @@ def test_new_turns_appear_with_no_user_action(authed_page: Page, base_url: str) 
 
     _check_plan_panel_sends_feedback(page, tr, picker, panel)
 
-
-def test_a_resume_that_moves_the_log_reloads_its_whole_history(
-    authed_page: Page, base_url: str
-) -> None:
-    """#713: the forward cursor belongs to one log. When a resume moves the
-    session to another, its history sits below that offset, so a tick that only
-    appended would never show it."""
-    page = authed_page
-    tr = _boot(page, base_url)
-    _open_chat(page)
-    chat = page.locator("#transcriptList")
-    expect(chat).to_contain_text("opening conftest now", timeout=OVERLAY_OPEN_MS)
-
-    tr.log_id = "log-b"
-    tr.entries[:] = [_turn("user", "from the earlier run", 10)]
-    _tick(page, tr)
-    expect(chat).to_contain_text("from the earlier run", timeout=OVERLAY_OPEN_MS)
-    expect(chat).not_to_contain_text("opening conftest now")
+    _check_a_moved_log_reloads_its_whole_history(page, tr)
 
 
 def test_live_polling_follows_the_visible_chat_only(
