@@ -19,9 +19,16 @@ from types import SimpleNamespace
 import pytest
 
 from app.webapp import route_pools, server
-from src import instance_role, session_retention
+from scripts import session_retention as retention_cli
+from src import audit, instance_role, session_retention
 from src.clients import session as session_client
-from src.webapp_config import SESSION_HOST_PORT_ENV, WebappConfig, _validate
+from src.webapp_config import (
+    SESSION_HOST_PORT_ENV,
+    WEBAPP_CONFIG_PATH_ENV,
+    WebappConfig,
+    _validate,
+    load_webapp_config,
+)
 
 DAY = 86400
 NOW = 1_800_000_000.0  # fixed clock: 2027-01-15
@@ -357,9 +364,9 @@ async def _noop_async(*a, **k):
     return None
 
 
-def test_scheduled_sweep_uses_the_audit_sessions_dir(tmp_path, monkeypatch):
-    from src import audit
-
+@pytest.fixture
+def expired_log(tmp_path, monkeypatch) -> Path:
+    """A 400-day-old log in a temp directory standing in for the audit one."""
     d = tmp_path / "sessions"
     d.mkdir()
     old = d / "old.log"
@@ -369,7 +376,66 @@ def test_scheduled_sweep_uses_the_audit_sessions_dir(tmp_path, monkeypatch):
     (d / "fresh.log").write_text("x", encoding="utf-8")
     monkeypatch.setattr(audit, "_SESSIONS_DIR", d)
     monkeypatch.setattr(session_client, "list_sessions", lambda port: [])
+    return old
 
+
+def test_scheduled_sweep_uses_the_audit_sessions_dir(expired_log):
     report = session_retention.run_scheduled_sweep(8466, 365)
 
-    assert report.removed == 1 and not old.exists()
+    assert report.removed == 1 and not expired_log.exists()
+
+
+def _config_file(tmp_path: Path, body) -> Path:
+    path = tmp_path / "webapp_config.json"
+    if body is not None:
+        path.write_text(body, encoding="utf-8")
+    return path
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body, kept",
+    [('{"session_retention_days": 0,', True), ("{}", False), (None, False)],
+    ids=["unreadable", "readable", "missing"],
+)
+async def test_tick_deletes_nothing_while_the_config_is_unreadable(
+    body, kept, tmp_path, monkeypatch, expired_log, caplog
+):
+    cfg = load_webapp_config(_config_file(tmp_path, body))
+    app = SimpleNamespace(state=SimpleNamespace(webapp_config=cfg))
+    sleeps = []
+
+    async def _one_cycle(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) > 1:
+            raise asyncio.CancelledError
+
+    async def _inline(pool, fn, *a):
+        return fn(*a)
+
+    monkeypatch.setattr(server.asyncio, "sleep", _one_cycle)
+    monkeypatch.setattr(server, "run_on", _inline)
+
+    with caplog.at_level("WARNING"), pytest.raises(asyncio.CancelledError):
+        await server._session_retention_tick(app)
+
+    assert expired_log.exists() is kept
+    assert ("retention sweep skipped" in caplog.text) is kept
+
+
+def test_dry_run_needs_days_while_the_config_is_unreadable(
+    tmp_path, monkeypatch, capsys, expired_log
+):
+    monkeypatch.setenv(WEBAPP_CONFIG_PATH_ENV, str(_config_file(tmp_path, "{")))
+    argv = ["session_retention.py", "--dir", str(expired_log.parent)]
+
+    monkeypatch.setattr(sys, "argv", argv)
+    assert retention_cli.main() == 2
+    out = capsys.readouterr().out
+    assert "could not be read" in out and "--days" in out
+    assert "would remove" not in out
+
+    monkeypatch.setattr(sys, "argv", argv + ["--days", "365"])
+    assert retention_cli.main() == 0
+    assert "would remove old.log" in capsys.readouterr().out
+    assert expired_log.exists()

@@ -438,6 +438,9 @@ async def _session_retention_tick(app: FastAPI) -> None:
     session-host, so its "live" list would protect none of the real sessions.
     The config is re-read each cycle so a Settings save that swaps
     ``app.state.webapp_config`` is honoured without a restart.
+
+    An unreadable config file loads as defaults, so the owner's window is
+    unknown and nothing is swept.
     """
     from src import session_retention
 
@@ -445,7 +448,13 @@ async def _session_retention_tick(app: FastAPI) -> None:
     while True:
         cfg = getattr(app.state, "webapp_config", None)
         days = _session_retention_days(cfg)
-        if cfg is not None and days > 0:
+        load_error = getattr(cfg, "load_error", "")
+        if load_error:
+            _log.warning(
+                "⚠️ session retention sweep skipped, nothing deleted: the "
+                "retention window is unknown (%s)", load_error,
+            )
+        elif cfg is not None and days > 0:
             try:
                 await run_on(
                     SESSION_FILES, session_retention.run_scheduled_sweep,

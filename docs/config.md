@@ -157,7 +157,7 @@ Settings > Connections > **Speech to text**; the request and recording behaviour
 | `large_upload_max_mb` | `2048` | Limit for the composer's **Attach large file (not read)**, 1–10240 MB; the ordinary attach keeps its fixed 12 MB. |
 | `outbox_scratch_roots` | `["%TEMP%/claude"]` | Folders, besides a session's own, an agent may send a file to Chat from. `%VAR%` and `~` expand; Settings › Folders validates each on save. |
 | `documents` | `[]` | Files the reading sheet may show, each `{id, title, repo, path}` ([Documents](documents.md)). |
-| `session_retention_days` | `365` | A daily sweep deletes per-session logs and transcripts older than this; live sessions are never touched. `0` keeps everything. Hand-edit only. |
+| `session_retention_days` | `365` | A daily sweep deletes per-session logs and transcripts older than this; live sessions are never touched. `0` keeps everything. While the config file cannot be read the window is unknown and nothing is deleted. Hand-edit only. |
 
 The poll, pool and cache rows above, from `transcript_page_cache_size` through `request_budget_scale`, are Settings > Performance limits, each with a hard range and a Light machine preset value: [performance](performance.md).
 
