@@ -41,6 +41,7 @@ from src import request_timing, runtime_files
 from src.chief import copilot_state
 from src.chief import timings as chief_timings
 from src.webapp_settings import performance
+from src.webapp_settings.config_file import read_json, refuse_unreadable
 from src.webapp_settings.values import (  # noqa: F401 — re-exported for webapp_config.<name> callers
     CREDENTIAL_KEYS,
     DEFAULT_CHIEF_AUTO_COMPACT_THRESHOLD, DEFAULT_CHIEF_FALLBACK_MINUTES, DEFAULT_CHIEF_MODEL, DEFAULT_CHIEF_WORKER_CAP,
@@ -676,7 +677,7 @@ def load_webapp_config(
         return _finish_load(cfg, apply_env_override)
 
     try:
-        raw = json.loads(target.read_text(encoding="utf-8"))
+        raw = read_json(target)
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning(
             f"⚠️  Could not read {target} ({exc}); falling back to defaults"
@@ -708,8 +709,13 @@ def load_webapp_config(
 
 
 def save_webapp_config(cfg: WebappConfig, path: Optional[Path] = None) -> Path:
-    """Atomically write the config back to disk."""
+    """Atomically write the config back to disk.
+
+    Raises ``ConfigUnreadableError``, writing nothing, when the file there
+    now cannot be read.
+    """
     target = _resolve_config_path(path)
+    refuse_unreadable(target)
     runtime_files.make_dirs(target.parent)
 
     # Derived straight from the dataclass — the field list, in

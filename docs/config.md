@@ -27,6 +27,8 @@ The `webapp` section also takes three tuning knobs whose defaults are almost alw
 
 UI preferences and secrets, written by the web UI's **Save**. The field list lives in `src/webapp_config.py` (dataclass and serializer); the sample file and this page track it.
 
+The file may carry a byte-order mark, which some Windows editors write. A file that cannot be read as a JSON object, such as one with a syntax error, is never written over: the app logs a warning, a save is refused with the reason and the file stays as it was. Until it is fixed or moved away, the app does not use what is in it.
+
 ### Network
 
 | Key | Default | Effect |
