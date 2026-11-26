@@ -1651,7 +1651,7 @@ surfaces:
       - Done, and a result line
     does:
       - the address saves as it changes (on leaving the field or Enter)
-      - a non-blank address is saved only when the hub answers /healthz now; a bad address or a hub that does not answer is refused with the reason and the saved value stays
+      - a non-blank address is saved only when the hub answers /healthz now; a bad address or a hub that does not answer is refused with the reason, the saved value stays and the field goes back to it
       - saving a blank address turns the hub off; either change takes effect without a restart
       - the PC load sheet's Health row reads Not confirmed, with the reason, while no hub is set or the hub does not answer
     states:
