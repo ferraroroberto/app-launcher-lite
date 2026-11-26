@@ -121,6 +121,10 @@ def test_the_signin_probe_reads_the_hash_or_the_older_config_value(tmp_path: Pat
     assert install_checks.signin_state(config, hash_file) == install_checks.MISSING
     config.write_text('{"auth_password": "old"}', encoding="utf-8")
     assert install_checks.signin_state(config, hash_file) == install_checks.OK
+    config.write_text('{"auth_password": "old"}', encoding="utf-8-sig")  # a Windows editor's byte-order mark
+    assert install_checks.signin_state(config, hash_file) == install_checks.OK
+    config.write_text("{", encoding="utf-8-sig")
+    assert install_checks.signin_state(config, hash_file) == install_checks.UNKNOWN
 
 
 def test_an_autostart_entry_for_another_copy_is_unknown_never_ok(tmp_path: Path) -> None:
