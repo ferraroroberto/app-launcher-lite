@@ -53,6 +53,7 @@ def _readers() -> dict[str, Path]:
         # A private copy: tests/conftest.py stubs the shared module's settings_path for every test.
         "remote settings": _fresh("lite_copilot_remote", _ROOT / "src" / "launching" / "copilot_remote.py").settings_path(),
         "transcript lookup": _fresh("lite_transcript_locate", _ROOT / "src" / "session_view" / "transcript_locate.py")._COPILOT_STATE_DIR,
+        "web link host": _fresh("lite_copilot_host", _ROOT / "src" / "session_view" / "copilot_host.py")._COPILOT_CONFIG,
         "chief context": _fresh("lite_copilot_context", _COPILOT / "skills" / "_lib" / "chief" / "copilot_context.py").COPILOT_SESSION_STATE,
         "probe": _fresh("lite_copilot_probe", _COPILOT / "scripts" / "copilot_probe.py").SESSION_STATE_DIR,
     }

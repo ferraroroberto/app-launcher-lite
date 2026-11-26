@@ -567,6 +567,7 @@ surfaces:
       - Stop and kill
     does:
       - Compact sends /compact to the session and toasts the host's verdict
+      - Copy link copies the provider's own session URL, else the launcher link, and the toast says which
     links:
       - to: terminal.rename-dialog
         via: Rename

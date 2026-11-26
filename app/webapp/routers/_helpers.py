@@ -16,13 +16,15 @@ from urllib.parse import urlencode
 from fastapi import HTTPException, Request, WebSocket
 
 from app.webapp.route_pools import AUDIT, OUTBOUND, SESSION_HOST, run_on
-from src import audit, instance_role
+from src import audit, board, instance_role
 from src import jobs as jobs_mod
 from src.auth.webauthn_gate import WebAuthnGate
 from src.clients.session import SessionHostError
 from src.jobs.config import get_by_id, load_jobs
 from src.launching import copilot_remote
 from src.launching.presets import OPEN_MODEL_AGENTS, PRESET_CONTEXTS, efforts_for
+from src.session_view.copilot_host import copilot_signed_in_host
+from src.session_view.transcript_locate import copilot_task_id
 from src.webapp_config import (
     WebappConfig,
     append_auth_token,
@@ -268,6 +270,12 @@ _PROVIDER_URL_CACHE: Dict[str, str] = {}
 _PROVIDER_URL_MISSES: Dict[str, Tuple[int, int]] = {}
 _PROVIDER_URL_CACHE_MAX = 512
 
+# GitHub Copilot's enterprise web view addresses a task as
+# ``https://<host>/copilot/tasks/<task id>``. Nothing is memoized here: the
+# host and the task id are each re-read only when their own file changes.
+_COPILOT_TASKS_PATH = "/copilot/tasks/"
+_PUBLIC_GITHUB_HOST = "github.com"
+
 
 def provider_web_url(agent: str, transcript: Path) -> str:
     """Return the provider-native web URL captured from a PTY transcript.
@@ -301,18 +309,58 @@ def provider_web_url(agent: str, transcript: Path) -> str:
     return f"https://claude.ai/code/session_{session_token}"
 
 
-def attach_provider_web_urls(sessions: List[Dict[str, Any]]) -> None:
+def copilot_web_base(override: str) -> str:
+    """The URL a Copilot task id is appended to, or ``""`` for none.
+
+    An ``http(s)`` override wins; otherwise the enterprise host the Copilot
+    CLI is signed in to. github.com derives nothing: the ``/copilot/tasks/``
+    template is the enterprise view, so such an account gets a link only
+    through the override. The host is never a repo value.
+    """
+    override = (override or "").strip()
+    if override.startswith(("https://", "http://")):
+        return override
+    host = copilot_signed_in_host()
+    if not host or host == _PUBLIC_GITHUB_HOST:
+        return ""
+    return f"https://{host}{_COPILOT_TASKS_PATH}"
+
+
+def attach_provider_web_urls(
+    sessions: List[Dict[str, Any]],
+    cfg: Optional[WebappConfig] = None,
+    state_rows: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> None:
     """Enrich live full-control rows without requiring a session-host restart.
 
     Every row gets a ``web_url`` key so the client never has to distinguish
-    "no link" from "field absent"; only ``kind == "pty"`` rows are scanned.
+    "no link" from "field absent"; only ``kind == "pty"`` rows are resolved:
+    Claude's from its captured remote-control card, Copilot's from the link
+    base (:func:`copilot_web_base`) plus its task id. The Copilot session is
+    named by the state row it claims (a Board card carries it as
+    ``state_sid``, the Coding list passes ``state_rows``), else by the launch
+    match. With no base, no Copilot folder is read.
     Blocking file IO — callers run it off the event loop.
     """
+    override = cfg.copilot_web_url_prefix if cfg is not None else ""
+    copilot_base: Optional[str] = None
     for session in sessions:
         session["web_url"] = ""
         if session.get("kind") != "pty":
             continue
         sid = str(session.get("session_id") or "")
+        if session.get("agent") == "copilot":
+            if copilot_base is None:
+                copilot_base = copilot_web_base(override).rstrip("/")
+            if not copilot_base:
+                continue
+            row_sid = session.get("state_sid")
+            if not row_sid and state_rows:
+                row_sid = board.state_sid_for_session(sessions, state_rows, sid)
+            task_id = copilot_task_id(session, row_sid)
+            if task_id:
+                session["web_url"] = f"{copilot_base}/{task_id}"
+            continue
         cached = _PROVIDER_URL_CACHE.get(sid)
         if cached:
             session["web_url"] = cached

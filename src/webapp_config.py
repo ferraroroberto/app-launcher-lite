@@ -195,8 +195,11 @@ class WebappConfig:
     # saved `--model` ("" or "default" lets Copilot pick); `copilot_autopilot`
     # maps to `--autopilot`, `copilot_context` to `--context` ("" omits it),
     # `copilot_effort` to `--effort` (sent only with an explicit model), and
-    # `copilot_skip_permissions` to `--allow-all`.
+    # `copilot_skip_permissions` to `--allow-all`. `copilot_web_url_prefix`
+    # only overrides the Copy link base derived from the CLI's signed-in
+    # enterprise host (`src.session_view.copilot_host`).
     copilot_skip_permissions: bool = False
+    copilot_web_url_prefix: str = ""
     copilot_models: list = field(default_factory=lambda: list(DEFAULT_COPILOT_MODELS))
     copilot_model: str = DEFAULT_COPILOT_MODEL
     copilot_autopilot: bool = True

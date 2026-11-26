@@ -69,6 +69,11 @@ _COPILOT_YAML_CAP_BYTES = 64 * 1024
 # here are LF, but nothing about the format promises that.
 _COPILOT_CWD_RE = re.compile(r"^cwd:[ \t]*(.+?)[ \t\r]*$", re.M)
 _COPILOT_CREATED_RE = re.compile(r"^created_at:[ \t]*(\S+?)[ \t\r]*$", re.M)
+_COPILOT_TASK_RE = re.compile(
+    r"^mc_task_id:[ \t]*([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})[ \t\r]*$", re.M
+)
+# Per ``workspace.yaml``: its ``(size, mtime_ns)`` and the task id read then.
+_COPILOT_TASK_CACHE: Dict[Path, Tuple[Tuple[int, int], Optional[str]]] = {}
 # `cwd` and `created_at` are fixed when Copilot creates a session folder, so a
 # sidecar that parsed once is never read again: the Chat pane, its live tick
 # and the Board all resolve on every request, and this box keeps hundreds of
@@ -198,10 +203,18 @@ def find_copilot_transcript(
     once in its life, and concurrent callers for one session share a scan.
     ``miss_ttl_s`` overrides :data:`DEFAULT_MISS_TTL_S`.
     """
+    return _correlate_copilot(session, miss_ttl_s)[0]
+
+
+def _correlate_copilot(
+    session: Dict[str, Any], miss_ttl_s: Optional[float]
+) -> Tuple[Optional[Path], Optional[Path]]:
+    """:func:`find_copilot_transcript`'s cached match: ``(log, the in-window
+    folder's log when it was not written yet at the scan)``."""
     project_dir = _normalize_dir(session.get("project_dir"))
     started = _started_epoch(session)
     if not project_dir or started is None:
-        return None
+        return None, None
     early_slop = (
         _COPILOT_DETACHED_LAUNCH_SECONDS
         if session.get("kind") == "remote"
@@ -213,13 +226,13 @@ def find_copilot_transcript(
         try:
             listing_sig = _COPILOT_STATE_DIR.stat().st_mtime_ns
         except OSError:
-            return None
+            return None, None
         now = time.time()
         hit = _COPILOT_MATCH_CACHE.get(key)
         if hit is not None:
             held, found = _cached_match(hit, listing_sig, started, now, ttl)
             if held:
-                return found
+                return found, hit[2]
         scan_started = time.monotonic()
         found, candidate, folders = _scan_copilot_workspaces(project_dir, started, early_slop)
         if found is None:
@@ -228,7 +241,7 @@ def find_copilot_transcript(
         if len(_COPILOT_MATCH_CACHE) >= _COPILOT_MATCH_CACHE_MAX:
             _COPILOT_MATCH_CACHE.clear()
         _COPILOT_MATCH_CACHE[key] = (listing_sig, found, candidate, now)
-        return found
+        return found, candidate
 
 
 def _scan_lock(key: _MatchKey) -> threading.Lock:
@@ -315,6 +328,52 @@ def copilot_events_for_id(copilot_session_id: Optional[str]) -> Optional[Path]:
         return None
     path = _COPILOT_STATE_DIR / copilot_session_id / "events.jsonl"
     return path if path.is_file() else None
+
+
+def copilot_task_id(
+    session: Dict[str, Any], copilot_session_id: Optional[str] = None
+) -> Optional[str]:
+    """The id Copilot's web view addresses this live session's task by, or None.
+
+    That is ``mc_task_id`` in the session folder's ``workspace.yaml``, which
+    Copilot writes once the session is shared remotely. It is not the session
+    id the folder is named by: GitHub's task API answers "not found" for
+    that one (probed on CLI 1.0.114). The folder is the one
+    ``copilot_session_id`` (the sessions-state row's key) names, else the
+    correlated one, with or without its event log yet. The file is read again
+    only when its size or mtime moves, since ``/remote on`` can add the id at
+    any point of a session's life.
+    """
+    folder = None
+    if copilot_session_id and _COPILOT_ID_RE.match(copilot_session_id):
+        named = _COPILOT_STATE_DIR / copilot_session_id
+        folder = named if (named / "workspace.yaml").is_file() else None
+    if folder is None:
+        log, waiting = _correlate_copilot(session, None)
+        hit = log or waiting
+        folder = hit.parent if hit else None
+    return _workspace_task_id(folder / "workspace.yaml") if folder else None
+
+
+def _workspace_task_id(path: Path) -> Optional[str]:
+    """``mc_task_id`` from one ``workspace.yaml``; only a UUID answers, so
+    nothing else can land in a URL."""
+    try:
+        st = path.stat()
+        identity = (st.st_size, st.st_mtime_ns)
+        cached = _COPILOT_TASK_CACHE.get(path)
+        if cached is not None and cached[0] == identity:
+            return cached[1]
+        with path.open("rb") as fh:
+            raw = fh.read(_COPILOT_YAML_CAP_BYTES)
+    except OSError:
+        return None
+    match = _COPILOT_TASK_RE.search(raw.decode("utf-8", errors="replace"))
+    task_id = match.group(1) if match else None
+    if len(_COPILOT_TASK_CACHE) >= _COPILOT_MATCH_CACHE_MAX:
+        _COPILOT_TASK_CACHE.clear()
+    _COPILOT_TASK_CACHE[path] = (identity, task_id)
+    return task_id
 
 
 def _scan_resumed_workspaces(

@@ -186,9 +186,11 @@ async def _build_sessions_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[
         logger.debug(f"session list failed: {exc}")
         sessions = []
     if sessions:
-        await steps.run("attach_provider_web_urls", attach_provider_web_urls, sessions)
         state = await steps.run(
             "read_sessions_state", board.read_sessions_state, Path(cfg.sessions_state_file)
+        )
+        await steps.run(
+            "attach_provider_web_urls", attach_provider_web_urls, sessions, cfg, state["rows"]
         )
         columns = await steps.run(
             "session_board_columns", _session_board_columns, cfg, sessions, state["rows"]

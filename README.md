@@ -30,7 +30,7 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 
 **Port steps still open** (each independently shippable):
 
-1. A writer for the Board's `.proof/` visual-proof reports (the Board only reads them), and a remote-view link the launcher captures and shows (Copilot CLI 1.0.114 prints an environment id, not a link). The Chat view, its Copilot transcript reader and context ring, and the Remote session setting have shipped.
+1. A writer for the Board's `.proof/` visual-proof reports (the Board only reads them). The Chat view, its Copilot transcript reader and context ring, the Remote session setting and **Copy link** to a session's Copilot web view have shipped ([which link](docs/session-view.md#copy-link); `copilot_web_url_prefix`, e.g. `https://ghe.example.com/copilot/tasks/`, overrides the derived one).
 2. Run the fresh-machine checklist on a machine that has none of the setup; the checklist itself is written ([docs/fresh-machine-checklist.md](docs/fresh-machine-checklist.md)).
 
 **Dropped from the full app** (not documented, not planned): Telegram (no job alerts; only the login lock-out alert can send through it), Life OS, inspiration, OCR/TTS, the other agents' usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board (GitLab pipelines have their own row), screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.

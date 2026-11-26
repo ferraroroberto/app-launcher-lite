@@ -165,6 +165,7 @@ async def test_board_cards_carry_the_same_provider_link_as_the_coding_tab(
                     fleet_config_dir=str(tmp_path / "fleet-config"),
                     projects_dir="",
                     chief_plan_file=str(tmp_path / "chief-plan.json"),
+                    copilot_web_url_prefix="",
                 )
             )
         )
@@ -195,3 +196,116 @@ def test_the_memo_is_bounded_over_a_long_lived_tray(monkeypatch, tmp_path):
         assert rows[0]["web_url"] == _LINK
 
     assert len(_helpers._PROVIDER_URL_CACHE) <= 4
+
+
+# Placeholder host and synthetic ids: the real host is the machine's own
+# Copilot sign-in and never appears in the repo.
+_GHE_HOST = "ghe.example.com"
+_COPILOT_PREFIX = f"https://{_GHE_HOST}/copilot/tasks/"
+_SESSION_ID = "79c18133-52bd-4f8f-9260-b33c853158be"
+_TASK_ID = "0d4b6f52-1c7e-4a39-b2a8-6e5f9c3d1a77"
+# 2026-09-17T21:57:30Z; Copilot's folder is stamped 4 s later.
+_STARTED = 1_789_682_250.0
+
+
+def _copilot_folder(root, folder=_SESSION_ID, task_id=_TASK_ID):
+    """A Copilot session folder at launch: no ``events.jsonl`` yet, since that
+    only appears at the first prompt. ``task_id`` None is a session that was
+    never shared remotely."""
+    (root / folder).mkdir(exist_ok=True)
+    lines = [f"id: {folder}", "cwd: E:/work/project", "created_at: 2026-09-17T21:57:34Z"]
+    if task_id:
+        lines.append(f"mc_task_id: {task_id}")
+    (root / folder / "workspace.yaml").write_text(
+        "".join(line + "\n" for line in lines), encoding="utf-8"
+    )
+
+
+def _copilot_row(sid="s-cop"):
+    return {"session_id": sid, "kind": "pty", "agent": "copilot",
+            "project_dir": r"E:\work\project", "started_at": _STARTED}
+
+
+def _link(rows, override="", state_rows=None):
+    from types import SimpleNamespace
+
+    cfg = SimpleNamespace(copilot_web_url_prefix=override)
+    attach_provider_web_urls(rows, cfg, state_rows)
+    return [row["web_url"] for row in rows]
+
+
+@pytest.fixture
+def copilot_env(monkeypatch, tmp_path):
+    """Copilot's session-state dir under tmp_path, signed in to ``host``."""
+    from src.session_view import transcript_locate
+
+    monkeypatch.setattr(transcript_locate, "_COPILOT_STATE_DIR", tmp_path)
+    signed_in = {"host": _GHE_HOST}
+    monkeypatch.setattr(_helpers, "copilot_signed_in_host", lambda: signed_in["host"])
+    return signed_in
+
+
+def test_copilot_link_is_its_enterprise_host_plus_its_task_id(copilot_env, tmp_path):
+    """The task id, never the session id the folder is named by: GitHub's task
+    API does not know that one. Only full-control rows are resolved."""
+    _copilot_folder(tmp_path)
+
+    links = _link([_copilot_row(), {**_copilot_row("s-detached"), "kind": "remote"}])
+
+    assert links == [_COPILOT_PREFIX + _TASK_ID, ""]
+
+
+def test_a_task_id_written_later_is_picked_up(copilot_env, tmp_path):
+    """``/remote on`` can share a session at any point, so a miss is not final."""
+    _copilot_folder(tmp_path, task_id=None)
+    assert _link([_copilot_row()]) == [""]
+
+    _copilot_folder(tmp_path)
+
+    assert _link([_copilot_row()]) == [_COPILOT_PREFIX + _TASK_ID]
+
+
+def test_the_claimed_state_row_names_the_copilot_session(copilot_env, tmp_path):
+    """Two folders in one launch window are ambiguous to the launch match; the
+    state row the session claims (or a Board card's ``state_sid``) names one."""
+    other = "1111aaaa-2222-4bbb-8ccc-333344445555"
+    _copilot_folder(tmp_path)
+    _copilot_folder(tmp_path, folder=other, task_id=other.replace("1111", "9999"))
+    state_rows = {_SESSION_ID: {"agent": "copilot", "launcher_session_id": "s-cop"}}
+
+    assert _link([_copilot_row()]) == [""]
+    assert _link([_copilot_row()], state_rows=state_rows) == [_COPILOT_PREFIX + _TASK_ID]
+    assert _link([{**_copilot_row(), "state_sid": _SESSION_ID}]) == [_COPILOT_PREFIX + _TASK_ID]
+
+
+def test_override_wins_and_a_public_or_unknown_sign_in_derives_nothing(
+    copilot_env, tmp_path
+):
+    _copilot_folder(tmp_path)
+    override = "https://other.example.com/copilot/tasks"
+
+    assert _link([_copilot_row()], override) == [f"{override}/{_TASK_ID}"]
+    assert _link([_copilot_row()], "not a url") == [_COPILOT_PREFIX + _TASK_ID]
+    for host in ("github.com", None):
+        copilot_env["host"] = host
+        assert _link([_copilot_row()]) == [""]
+
+
+@pytest.mark.parametrize("body, host", [
+    ('// User settings belong in settings.json.\n'
+     '{"lastLoggedInUser": {"host": "https://GHE.example.com", "login": "x"}}', _GHE_HOST),
+    ('{"lastLoggedInUser": {"host": "https://ghe.example.com/evil?x=1"}}', None),
+    ('{"lastLoggedInUser": null}', None),
+    ("not json", None),
+])
+def test_the_signed_in_host_is_read_from_the_copilot_config(
+    monkeypatch, tmp_path, body, host
+):
+    from src.session_view import copilot_host
+
+    config = tmp_path / "config.json"
+    config.write_text(body, encoding="utf-8")
+    monkeypatch.setattr(copilot_host, "_COPILOT_CONFIG", config)
+    monkeypatch.setattr(copilot_host, "_memo", (None, None))
+
+    assert copilot_host.copilot_signed_in_host() == host
