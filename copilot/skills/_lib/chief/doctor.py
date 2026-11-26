@@ -39,6 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
+import lite_config
 from fleet_core import hooks_state
 from git_run import run_git
 from no_window import NO_WINDOW
@@ -250,18 +251,10 @@ class Doctor:
             return Check("install", "launcher", FAIL, {"reason": f"no CHIEF_SID line (exit {code})"})
         return Check("install", "launcher", PASS, {"answers": _short(out)})
 
-    def _skills_dir(self) -> Optional[str]:
-        try:
-            body = json.loads(self.install.read_text(str(self.checkout / "config" / "webapp_config.json")))
-        except (OSError, ValueError):
-            return None
-        value = body.get("skills_dir") if isinstance(body, dict) else None
-        return str(value).strip() or None if value else None
-
     def check_skills(self, shared: bool) -> List[Check]:
         if shared:
             return [Check("install", "skills", PASS, {"mode": "shared", "note": "the full fleet owns the skills folder"})]
-        skills_dir = self._skills_dir()
+        skills_dir = lite_config.folder("skills_dir", self.checkout / "config" / "webapp_config.json")
         checks = []
         for source in self.install.list_dirs(str(self.copilot_dir / "skills")):
             name = os.path.basename(source)

@@ -24,6 +24,8 @@ A lane runs `/issue-start` or `/issue-yolo` and ships with `/issue-finish`. Thos
 - **`skills_dir` empty** (the default): Lite's own copies in `copilot/skills/`.
 - **`skills_dir` set** to a folder holding `issue-add/`, `issue-start/`, `issue-yolo/` and `issue-finish/` (each with a `SKILL.md`): that folder. The installer links those four into `~/.copilot/skills/`, and into `~/.claude/skills/` when that is a real folder, and does not install Lite's bundled copies of them. Lite's other skills (`e2e`, `quick`, `_lib`) install as usual.
 
+`skills_dir`, like every folder setting the Copilot side reads from `config/webapp_config.json`, is an absolute path (`~` is expanded). The hooks, the chief helpers and the installer share one reader (`copilot/skills/_lib/lite_config.py`), so none of them uses a value another rejects.
+
 Settings > Chief > **Skills folder** holds the setting. The line under it reports `found`, `missing` or `unknown` for each skill and says where it resolved. A lane start, from the Board or from the chief, is refused while any of the four is missing or unknown, and the refusal names the skill.
 
 ## 1. A fresh machine

@@ -62,8 +62,10 @@ import session_state  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 CHIEF_OPS = REPO / "skills" / "_lib" / "chief_ops.py"
-# copilot/ -> the app-launcher-lite checkout's runtime settings, where `fleet_config_dir` lives.
-WEBAPP_CONFIG = REPO.parent / "config" / "webapp_config.json"
+# Appended, never inserted: `skills/_lib` must not shadow this folder's `_lib` module.
+sys.path.append(str(CHIEF_OPS.parent))
+import lite_config  # noqa: E402
+
 ASK_TOOL = "ask_user"
 SHELL_TOOLS = ("powershell", "bash", "shell")
 # What only the full fleet reaches: the skills folder of its Claude Code user scope and of its own
@@ -120,41 +122,21 @@ def chief_ops(*args: str) -> Optional[str]:
     return res.stdout
 
 
-def _setting(key: str, default: Any) -> Any:
-    """A value Lite keeps in `webapp_config.json`, or `default` when the file or key is missing or unreadable."""
-    try:
-        return json.loads(WEBAPP_CONFIG.read_text(encoding="utf-8")).get(key, default)
-    except FileNotFoundError:
-        return default
-    except (OSError, ValueError, AttributeError) as exc:
-        _log(f"could not read {key} from {WEBAPP_CONFIG} ({type(exc).__name__}); using {default}")
-        return default
-
-
-def _folder_setting(key: str, default: Path) -> Path:
-    """A folder path Lite keeps in `webapp_config.json`, or `default` when it is empty or unreadable."""
-    raw = _setting(key, None)
-    return Path(raw.strip()).expanduser() if isinstance(raw, str) and raw.strip() else default
-
-
-def hold_window_s() -> int:
+def hold_window_s() -> float:
     """Lite's `chief_hold_minutes` in seconds, or HOLD_WINDOW_S when unset or not a positive whole number."""
-    minutes = _setting("chief_hold_minutes", None)
-    if isinstance(minutes, bool) or not isinstance(minutes, int) or minutes <= 0:
-        return HOLD_WINDOW_S
-    return minutes * 60
+    return lite_config.minutes("chief_hold_minutes", HOLD_WINDOW_S)
 
 
 def chief_dir() -> Path:
     """The folder the launcher starts the chief in: Lite's `fleet_config_dir`, else this `copilot/`."""
-    return _folder_setting("fleet_config_dir", REPO)
+    return lite_config.folder("fleet_config_dir") or REPO
 
 
 def skill_dir_for(name: str) -> Path:
     """Where a lane's `name` skill lives: Lite's `skills_dir` for the four issue skills when it is
     set (the machine's own skills repo), else this checkout's bundled copy."""
     bundled = REPO / "skills"
-    root = _folder_setting("skills_dir", bundled) if name in ISSUE_SKILLS else bundled
+    root = (lite_config.folder("skills_dir") or bundled) if name in ISSUE_SKILLS else bundled
     return root / name
 
 

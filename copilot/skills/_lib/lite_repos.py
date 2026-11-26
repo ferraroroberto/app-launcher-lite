@@ -10,36 +10,21 @@ what app-launcher-lite's own default does.
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Optional
 
+import lite_config
+from lite_config import LITE_ROOT
+
 logger = logging.getLogger(__name__)
-
-# copilot/skills/_lib/ -> the app-launcher-lite checkout root, three levels up.
-LITE_ROOT = Path(__file__).resolve().parents[3]
-WEBAPP_CONFIG = LITE_ROOT / "config" / "webapp_config.json"
-
-
-def _configured(path: Path) -> str:
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return ""
-    except (OSError, ValueError) as exc:
-        logger.warning("⚠️ could not read %s (%s); using the folder beside this checkout", path, exc)
-        return ""
-    value = raw.get("projects_dir") if isinstance(raw, dict) else None
-    return value.strip() if isinstance(value, str) else ""
 
 
 def repos_root(config: Optional[Path] = None, lite_root: Optional[Path] = None) -> Path:
     """`projects_dir` when it names a folder, else the parent of this checkout."""
-    configured = _configured(config or WEBAPP_CONFIG)
+    configured = lite_config.folder("projects_dir", config)
     if configured:
-        candidate = Path(configured).expanduser()
-        if candidate.is_dir():
-            return candidate.resolve()
-        logger.warning("⚠️ projects_dir %r is not a folder; using the folder beside this checkout", configured)
+        if configured.is_dir():
+            return configured.resolve()
+        logger.warning("⚠️ projects_dir %s is not a folder; using the folder beside this checkout", configured)
     return (lite_root or LITE_ROOT).parent

@@ -101,7 +101,7 @@ class Lite:
             (_COPILOT / "hooks" / "chief-ops.template.cmd").read_bytes())
         (self.copilot / "skills" / "_lib" / "chief_ops.py").write_text(
             "import os, sys\nprint('ARGS=' + ' '.join(sys.argv[1:]))\nprint('CWD=' + os.getcwd())\n", encoding="utf-8")
-        for helper in ("lite_ports.py", "lite_webapp.py"):
+        for helper in ("lite_config.py", "lite_ports.py", "lite_webapp.py"):
             (self.copilot / "skills" / "_lib" / helper).write_bytes((_COPILOT / "skills" / "_lib" / helper).read_bytes())
         (self.copilot / "skills" / "demo").mkdir()
         (self.copilot / "skills" / "demo" / "SKILL.md").write_text("demo", encoding="utf-8")

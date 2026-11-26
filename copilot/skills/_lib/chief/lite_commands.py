@@ -9,11 +9,10 @@ Each handler prints the same `KEY=value` lines as its fleet-config counterpart.
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 from typing import Optional
 
-import lite_repos
+import lite_config
 from fleet_core import hooks_state
 
 from . import launcher, mailbox, rails
@@ -22,14 +21,7 @@ from . import launcher, mailbox, rails
 def reoffer_seconds(config: Optional[Path] = None) -> float:
     """Lite's `chief_reoffer_minutes` in seconds, the value the launcher's doorbell also
     counts stale claims by; `mailbox.CLAIM_STALE_SECONDS` when unset or unreadable."""
-    path = config or lite_repos.WEBAPP_CONFIG
-    try:
-        minutes = json.loads(path.read_text(encoding="utf-8")).get("chief_reoffer_minutes")
-    except (OSError, ValueError, AttributeError):
-        return mailbox.CLAIM_STALE_SECONDS
-    if isinstance(minutes, bool) or not isinstance(minutes, int) or minutes <= 0:
-        return mailbox.CLAIM_STALE_SECONDS
-    return float(minutes * 60)
+    return float(lite_config.minutes("chief_reoffer_minutes", mailbox.CLAIM_STALE_SECONDS, config))
 
 
 def cmd_inbox(args: argparse.Namespace) -> int:
