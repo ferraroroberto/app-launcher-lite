@@ -24,15 +24,6 @@ _REFUSAL = (
 )
 
 
-def report_unreadable_config(cfg: Any, logger: logging.Logger) -> None:
-    """Log, at start, the file, the parse error and what is refused because of it."""
-    if cfg.load_error:
-        logger.error(
-            f"❌ {cfg.load_error}. Running on defaults and refusing every request "
-            "that is not from this PC until the file is fixed and the app restarted."
-        )
-
-
 class UnreadableConfigGate:
     """Plain ASGI, because ``BaseHTTPMiddleware`` never sees a WebSocket."""
 
@@ -52,3 +43,17 @@ class UnreadableConfigGate:
                 await refusal(scope, receive, send)
                 return
         await self.app(scope, receive, send)
+
+
+def guard_unreadable_config(app: Any, cfg: Any, logger: logging.Logger) -> None:
+    """Add the gate to ``app`` and log, once at start, why it is refusing.
+
+    Call it after the log file handlers are attached, so the line is kept.
+    The gate reads ``app.state.webapp_config`` per request.
+    """
+    app.add_middleware(UnreadableConfigGate, get_config=lambda: app.state.webapp_config)
+    if cfg.load_error:
+        logger.error(
+            f"❌ {cfg.load_error}. Running on defaults and refusing every request "
+            "that is not from this PC until the file is fixed and the app restarted."
+        )
