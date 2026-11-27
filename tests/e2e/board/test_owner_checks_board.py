@@ -24,7 +24,8 @@ pytestmark = pytest.mark.smoke
 
 ARTIFACT = "https://claude.ai/code/artifact/0123abcd"
 RUN = ["cd /d C:\\demo && demo.exe pair --device kitchen-speaker --wait-for-the-button --timeout 120 --verbose",
-       "demo.exe status"]
+       "<root>\\demo\\demo.exe status"]
+FLEET_ROOT = "/srv/fleet"
 
 _OWNER_ITEMS = [
     {"ref": "demo#7", "repo": "demo", "number": 7, "title": "Pair the kitchen speaker",
@@ -52,6 +53,7 @@ def _payload() -> dict:
         "refreshing": False, "unknown": [{"repo": "other", "reason": "403"}],
         "items": copy.deepcopy(_OWNER_ITEMS),
     }
+    payload["fleet_root"] = FLEET_ROOT
     return payload
 
 
@@ -426,14 +428,18 @@ def test_done_applies_a_large_sheet_of_tapped_and_typed_answers(
     assert posts == [[expected["demo#139"]]], posts
 
 
+_CLIPBOARD_STUB = (
+    "() => { window.__copied = []; Object.defineProperty(navigator, 'clipboard', { configurable: true,"
+    " value: { writeText: (t) => { window.__copied.push(t); return Promise.resolve(); } } }); }")
+
+
 def _assert_run_block_copies_and_scrolls_inside(page: Page, owner, dialog) -> None:
     """The unfolded detail and the answer sheet draw the run lines as code
     blocks, one per place in order, with the expected result under them. Copy
-    takes a block's lines as written; a long line scrolls inside its block and
+    takes a block's lines with the fleet root for ``<root>``, which the block
+    keeps showing; a long line scrolls inside its block and
     neither the page nor the sheet scrolls sideways, in either theme."""
-    page.evaluate(
-        "() => { window.__copied = []; Object.defineProperty(navigator, 'clipboard', { configurable: true,"
-        " value: { writeText: (t) => { window.__copied.push(t); return Promise.resolve(); } } }); }")
+    page.evaluate(_CLIPBOARD_STUB)
     row = owner.locator('.board-owner-row[data-ref="demo#7"]')
     row.locator(".action-row-main").click()
     detail = row.locator(".board-owner-detail")
@@ -456,7 +462,7 @@ def _assert_run_block_copies_and_scrolls_inside(page: Page, owner, dialog) -> No
     sheet_block.locator(".md-block-copy").click()
     # The sheet's own toast: the page's sits under the dialog.
     expect(dialog.locator("#chiefAnswersToast")).to_contain_text("Command copied")
-    assert page.evaluate("() => window.__copied") == ["\n".join(RUN)] * 2
+    assert page.evaluate("() => window.__copied") == ["\n".join(RUN).replace("<root>", FLEET_ROOT)] * 2
     dialog.locator("#chiefAnswersClose").click()
     expect(dialog).to_be_hidden()
     row.locator(".action-row-main").click()
@@ -543,6 +549,16 @@ def test_owner_checks_use_the_chief_answer_form_at_phone_width(
         "[demo#9] Problem found validating Read-aloud on the lock screen: it stops after a minute"
         " (please file a fix)"
     ), "submit": True}], chief_posts
+
+    # No confirmed root: the lines are copied as written, and the toast says so.
+    _mock_board(authed_page, {**_payload(), "fleet_root": None})
+    _open_board(authed_page, base_url)
+    authed_page.evaluate(_CLIPBOARD_STUB)
+    row = owner.locator('.board-owner-row[data-ref="demo#7"]')
+    row.locator(".action-row-main").click()
+    row.locator(".board-owner-detail .md-block-copy").first.click()
+    expect(authed_page.locator("#toast")).to_have_text("Command copied with <root> unfilled: fleet folder unknown")
+    assert authed_page.evaluate("() => window.__copied") == ["\n".join(RUN)]
 
 
 @pytest.mark.iphone

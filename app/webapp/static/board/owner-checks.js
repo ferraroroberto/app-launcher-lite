@@ -197,6 +197,7 @@ function runBlock(stretch) {
   copy.title = 'Copy';
   copy.dataset.copy = text;
   copy.dataset.what = 'Command';
+  copy.dataset.fillRoot = '';
   copy.dataset.track = 'board.owner-run-copy';
   copy.innerHTML = icon('copy');
   head.appendChild(copy);
