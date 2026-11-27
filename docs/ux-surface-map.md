@@ -1350,7 +1350,7 @@ flowchart LR
   - an unfolded owner check's command block with Copy and its expected result, each missing one said on its own line
 - **Does:**
   - a row unfolds its detail in place
-  - Copy on an owner check's command block copies its lines
+  - Copy on an owner check's command block copies its lines, with this PC's fleet root in place of <root>
   - Trust this folder on a needs-folder-trust row answers Copilot's prompt with remember this folder
   - a group's Answer opens the answer sheet
 - **Leads to:**
@@ -1393,6 +1393,7 @@ flowchart LR
   - Done
 - **Does:**
   - Done sends every answer at once
+  - Copy on an owner check's command block copies its lines, with this PC's fleet root in place of <root>
   - tap a web address in a question or its detail opens it in a new tab
 - **Why:** one sheet answers everything that waits, instead of one dialog per question
 
