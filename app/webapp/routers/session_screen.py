@@ -32,8 +32,7 @@ from app.webapp.routers.board_spawn import SESSION_HOST_UNREACHABLE, read_live_s
 from src import audit
 from src.agents import agent_of
 from src.clients import session as session_client
-from src.session_view import copilot_session, model_switch
-from src.session_view.copilot_credits import ai_credits_used
+from src.session_view import copilot_figures, copilot_session, model_switch
 from src.session_view.vt_screen import read_vt_screen
 from src.webapp_config import WebappConfig
 
@@ -96,10 +95,6 @@ async def _type_into_pty(port: int, sid: str, keys: List[Tuple[str, bool]]) -> N
 # The last state logged per session, so a poll every few seconds leaves one
 # line per change rather than one per tick.
 _CONTEXT_SEEN: Dict[str, str] = {}
-# A session's last readable ``(percent, ai_credits)``: a footer caught
-# mid-repaint or cut short reads neither, and the ring keeps what was true a
-# moment ago instead of blanking. It goes when the session does.
-_COPILOT_LAST: Dict[str, Tuple[Optional[int], Optional[float]]] = {}
 
 
 def _log_context(sid: str, state: str, detail: str = "") -> None:
@@ -226,12 +221,13 @@ async def session_switch_model(sid: str, request: Request) -> Dict[str, Any]:
 
 @router.get("/api/claude-code/sessions/{sid}/context")
 async def session_context(sid: str, request: Request) -> Dict[str, Any]:
-    """How full the session's context window is, as its terminal's status line
+    """How full the session's context window is, as its terminal's footer
     shows it now (Tailscale + passkey).
 
     ``{"available", "percent", "ai_credits", "reason"}``. ``ai_credits`` is the
-    float the footer shows as ``Session: N AIC used``, or ``None`` without it.
-    ``percent`` is an int only when the status line ends in ``(NN%)``;
+    float the footer shows as ``Session: N AIC used`` and ``percent`` the int it
+    shows as ``(NN%)``; each is ``None`` once the footer has shown none for
+    :data:`~src.session_view.copilot_figures.KEEP_S`.
     ``reason`` tells apart a session that is gone, an agent with no such
     figure, a detached one (no screen to read), a screen that can't be read
     (``no_screen``), and a footer showing no context figure
@@ -271,16 +267,11 @@ async def _build_context(cfg: WebappConfig, sid: str, steps: BuildSteps) -> Dict
     if reason is not None:
         if reason == "session_not_found":
             _CONTEXT_SEEN.pop(sid, None)
-            _COPILOT_LAST.pop(sid, None)
+            copilot_figures.forget(sid)
         else:
             _log_context(sid, reason)
         return {"available": False, "percent": None, "ai_credits": None, "reason": reason}
-    percent = copilot_session.context_percent(lines)
-    credits = ai_credits_used(lines)
-    last_percent, last_credits = _COPILOT_LAST.get(sid, (None, None))
-    percent = last_percent if percent is None else percent
-    credits = last_credits if credits is None else credits
-    _COPILOT_LAST[sid] = (percent, credits)
+    percent, credits = copilot_figures.observe(sid, lines)
     if percent is None:
         _log_context(sid, "not showing")
         return {"available": True, "percent": None, "ai_credits": credits, "reason": "not_showing"}

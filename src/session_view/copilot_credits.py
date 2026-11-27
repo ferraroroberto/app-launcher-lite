@@ -1,24 +1,15 @@
 """The AI credits a Copilot session has spent, read off its terminal's footer.
 
-Copilot CLI paints the running total on a status row of its screen, for
-example ``Session: 5.62 AIC used``. That number is the only source: nothing
-Copilot writes to disk carries it, and this repo does no accounting of its own,
-so a session that restarts starts again from whatever its screen says.
+Copilot CLI paints the running total in its footer, for example
+``Session: 5.62 AIC used``. That number is the only source: nothing Copilot
+writes to disk carries it, and this repo does no accounting of its own, so a
+session that restarts starts again from whatever its screen says.
 
-Two layouts are read. Older Copilots paint the figure on the bottom-most
-non-blank row. Current ones paint it on the status row above the input box and
-put the model, effort and context percent on the bottom row::
-
-    Plan: 26.957/35.100 (76% used) · Session: 15.99 AIC used · YOLO
-    ──────────────────────────────────────────
-    > (input box)
-    ──────────────────────────────────────────
-    <model name> · Extra High · (9%)
-
-The bottom row is tried first. Failing that, only the status row directly
-above the input box counts, found through the box's two border rules: nothing
-higher up is read, so a line quoted in the conversation is never credits. A
-row cut short by a narrow terminal, a Copilot that paints no credits and the
+The figure is picked by its label and unit from any footer row
+(:mod:`src.session_view.copilot_footer`), the rows under the input box before
+the status block above it, nearest the bottom first. A footer cell wrapped over
+two rows (``Session: N`` above its ``AIC`` unit) reads too. A row cut short by a
+narrow terminal, a Copilot that paints no credits and the
 ``Plan: 459/1500 (30% used)`` allowance row all read ``None``: unknown, never a
 zero.
 
@@ -30,22 +21,18 @@ from __future__ import annotations
 import re
 from typing import List, Optional
 
+from src.session_view.copilot_footer import footer
+
+# The label, unless a word runs into it: "the footer says Session: 5 AIC" is
+# prose, not a footer cell.
+_LABEL = r"(?<![A-Za-z] )\bSession:\s*"
 # ``Session: 5.62 AIC used``; the unit is required: a figure in any other unit
 # is not credits. The number's separators are decided by ``_amount``.
-_CREDITS_RE = re.compile(r"\bSession:\s*([\d.,]*\d)\s*AIC\b")
+_CREDITS_RE = re.compile(_LABEL + r"([\d.,]*\d)\s*AIC\b")
 # ``Session: 39.74`` ending its row or followed by a cell separator: the unit
 # is on the next row. Any other word after the number is some other unit.
-_SESSION_FIGURE_RE = re.compile(r"\bSession:\s*([\d.,]*\d)\s*(?:[·|•].*)?$")
+_SESSION_FIGURE_RE = re.compile(_LABEL + r"([\d.,]*\d)\s*(?:[·|•].*)?$")
 _UNIT_RE = re.compile(r"\bAIC\b")
-_RULE_CHARS = set("─━")
-
-# Rows searched between the input box's borders, and above its top border, for
-# the status row: an input box grows with a long prompt, the status row sits
-# at most a blank row or two off the border.
-_INPUT_ROWS_MAX = 10
-_STATUS_GAP_MAX = 3
-# Non-blank rows allowed below the box's bottom border (the model row).
-_BELOW_BOX_MAX = 2
 
 _COMMA_GROUPS = re.compile(r"\d{1,3}(,\d{3})+")
 _DOT_GROUPS = re.compile(r"\d{1,3}(\.\d{3})+")
@@ -80,60 +67,15 @@ def _amount(token: str) -> Optional[float]:
     return float(whole.replace(".", "") + "." + fraction) if _DOT_GROUPS.fullmatch(whole) else None
 
 
-def _is_rule(row: str) -> bool:
-    text = row.strip()
-    return bool(text) and set(text) <= _RULE_CHARS
-
-
-def _row_credits(row: Optional[str]) -> Optional[float]:
-    match = _CREDITS_RE.search(row or "")
-    return _amount(match.group(1)) if match else None
-
-
-def _status_rows(rows: List[str], bottom: int) -> List[str]:
-    """The non-blank rows just above the input box that ends at ``rows[bottom]``'s
-    footer, top to bottom and at most two, or ``[]`` when the screen shows no
-    such box."""
-    index, below = bottom, 0
-    while index >= 0 and not _is_rule(rows[index]):
-        below += rows[index].strip() != ""
-        if below > _BELOW_BOX_MAX:
-            return []
-        index -= 1
-    top = index - 1
-    while top >= 0 and index - top <= _INPUT_ROWS_MAX and not _is_rule(rows[top]):
-        top -= 1
-    if top < 0 or not _is_rule(rows[top]):
-        return []
-    above = [row for row in rows[max(0, top - _STATUS_GAP_MAX):top] if row.strip()]
-    return above[-2:]
-
-
-def _wrapped_credits(upper: str, lower: str) -> Optional[float]:
-    """The figure when ``Session: N`` ends ``upper`` and the unit starts ``lower``."""
-    match = _SESSION_FIGURE_RE.search(upper)
-    if match and _UNIT_RE.search(lower):
-        return _amount(match.group(1))
-    return None
-
-
-def _status_credits(rows: List[str], bottom: int) -> Optional[float]:
-    status = _status_rows(rows, bottom)
-    if not status:
-        return None
-    found = _row_credits(status[-1])
-    if found is None and len(status) == 2:
-        found = _wrapped_credits(status[0], status[1])
-    return found
-
-
 def ai_credits_used(lines: List[str]) -> Optional[float]:
     """The credits the footer says this session has used, or ``None`` when it
     shows none (or one that can't be read unambiguously)."""
-    rows = list(lines or [])
-    bottom = next((i for i in range(len(rows) - 1, -1, -1) if rows[i].strip()), None)
-    if bottom is None:
-        return None
-    if _CREDITS_RE.search(rows[bottom]):
-        return _row_credits(rows[bottom])
-    return _status_credits(rows, bottom)
+    found = footer(lines)
+    for rows in (found.below, found.above):
+        for index in range(len(rows) - 1, -1, -1):
+            match = _CREDITS_RE.search(rows[index])
+            if not match and index and _UNIT_RE.search(rows[index]):
+                match = _SESSION_FIGURE_RE.search(rows[index - 1])
+            if match:
+                return _amount(match.group(1))
+    return None

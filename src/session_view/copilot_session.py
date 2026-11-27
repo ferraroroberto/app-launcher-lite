@@ -13,7 +13,7 @@ Probed live on Copilot CLI 1.0.114:
   prompt, with every record since launch, so a session nobody has prompted
   has no log: its model is its launch flag, and a switch there could not be
   confirmed, so it is refused.
-* The status line under the prompt names the model, the effort and the
+* The footer under the prompt names the model, the effort and the
   context-window use, as Copilot computes it::
 
       ← open sidebar · Interactive · Manual Approval · / commands  · space hold to record GPT-6 Luna · Medium · (10%)
@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, List, Mapping, Optional, Tuple
 
 from src.session_view import transcript_locate
+from src.session_view.copilot_footer import footer, is_rule
 
 logger = logging.getLogger(__name__)
 
@@ -50,15 +51,13 @@ _MODEL_EVENTS = {
 }
 _PREFILTER = tuple(f'"{name}"' for name in _MODEL_EVENTS)
 
-# The status line's closing figure: Copilot's own context-window percentage.
-_CONTEXT_RE = re.compile(r"·\s*\((\d{1,3})%\)\s*$")
+# Copilot's own context-window percentage, ``(10%)`` closing a footer cell
+# (``(76% used)`` is the plan's, not the window's).
+_CONTEXT_RE = re.compile(r"\((\d{1,3})%\)(?=\s*(?:$|[·|•]))")
+# With no input box to mark the footer, only the status line's own closing
+# ``· (10%)`` counts: a bare figure there can be conversation text.
+_UNBOXED_CONTEXT_RE = re.compile(r"·\s*\((\d{1,3})%\)\s*$")
 _WORKING_RE = re.compile(r"^\s*\S?\s*Working\b")
-# A footer wrapped over two rows leaves the percent alone on the bottom row,
-# without the ``·`` that led it. Trusted only under the input box.
-_WRAPPED_CONTEXT_RE = re.compile(r"(?:^|\s)\((\d{1,3})%\)\s*$")
-# Non-blank rows the footer may take under the input box's bottom border.
-_FOOTER_ROWS_MAX = 2
-_RULE_CHARS = set("─━")
 
 # Event logs read so far, by path: (bytes consumed, model). A poll reads only
 # what was appended since, so a long session's log is read once in full.
@@ -156,31 +155,17 @@ def _status_line(lines: List[str]) -> Optional[str]:
     return next((line for line in reversed(lines or []) if line.strip()), None)
 
 
-def _under_input_box(lines: List[str]) -> bool:
-    """Whether the bottom-most row sits within the footer's rows below the
-    input box's bottom border."""
-    below = 0
-    for line in reversed(lines or []):
-        text = line.strip()
-        if text and set(text) <= _RULE_CHARS:
-            return True
-        below += bool(text)
-        if below > _FOOTER_ROWS_MAX:
-            return False
-    return False
-
-
 def context_percent(lines: List[str]) -> Optional[int]:
-    """The context-window percentage Copilot's status line shows, or ``None``
-    when the line is not on screen or is cut short before the figure."""
-    status = _status_line(lines)
-    match = _CONTEXT_RE.search(status or "")
-    if not match and _under_input_box(lines):
-        match = _WRAPPED_CONTEXT_RE.search(status or "")
-    if not match:
-        return None
-    value = int(match.group(1))
-    return value if 0 <= value <= 100 else None
+    """The context-window percentage Copilot's footer shows under the input box,
+    or ``None`` when it is not on screen or is cut short before the figure."""
+    found = footer(lines)
+    pattern = _CONTEXT_RE if found.boxed else _UNBOXED_CONTEXT_RE
+    for row in reversed(found.below):
+        match = pattern.search(row)
+        if match:
+            value = int(match.group(1))
+            return value if value <= 100 else None
+    return None
 
 
 def switch_refusal(lines: List[str]) -> Optional[str]:
@@ -196,7 +181,7 @@ def switch_refusal(lines: List[str]) -> Optional[str]:
     rows = [line for line in lines if line.strip()]
     for index in range(len(rows) - 2, 0, -1):
         above, row, below = rows[index - 1].strip(), rows[index], rows[index + 1].strip()
-        if row.lstrip().startswith("❯") and set(above) <= _RULE_CHARS and set(below) <= _RULE_CHARS:
+        if row.lstrip().startswith("❯") and is_rule(above) and is_rule(below):
             if row.strip()[1:].strip():
                 # Also the search row of an open menu, drawn the same way.
                 return "Copilot's prompt holds text or a menu is open: clear it on the terminal first"

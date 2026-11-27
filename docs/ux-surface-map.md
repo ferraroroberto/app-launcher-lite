@@ -537,6 +537,7 @@ flowchart LR
   - the model chip hides when the model is not known
   - the context ring hides when the agent's screen shows no context figure, as on a Copilot session too narrow for its status line
   - a Copilot session whose footer shows its AI credits gets a label beside the ring, such as 9% · 5.6 AIC
+  - the ring and the credits stay for one minute past a screen that shows no figure, then hide as unknown
 - **Phone:** covers the page
 - **Desktop:** docks beside the session list in the wide layout
 - **Leads to:**
