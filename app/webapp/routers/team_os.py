@@ -45,6 +45,7 @@ from app.webapp.routers._helpers import (
     client_ip,
     ensure_copilot_remote,
     maybe_json,
+    safe_int,
     spawn_session_or_400,
 )
 from src import audit
@@ -222,8 +223,8 @@ async def _spawn_skill_session(
     # poured 120-col text that re-wrapped into garble when the overlay's
     # first fit() shrank the PTY to phone width. Same contract as the
     # Coding-tab launch route; ignored for kind="remote".
-    rows = int(body.get("rows") or 40)
-    cols = int(body.get("cols") or 120)
+    rows = safe_int(body, "rows", 40)
+    cols = safe_int(body, "cols", 120)
     await ensure_copilot_remote(cfg, "copilot")
     session = await spawn_session_or_400(
         spawn_claude_session,

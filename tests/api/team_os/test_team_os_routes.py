@@ -172,6 +172,27 @@ class TestLaunchSkill:
         assert captured["rows"] == 40
         assert captured["cols"] == 120
 
+    @pytest.mark.parametrize("bad", ['"abc"', "[40]", '{"n": 40}', "1e999"])
+    def test_launch_defaults_size_when_malformed(
+        self, team_os_client, monkeypatch, bad
+    ):
+        """A size that does not coerce takes the default, never a 500.
+
+        Raw JSON text: ``1e999`` decodes to infinity, which no client-side
+        encoder will send.
+        """
+        client, _, _ = team_os_client
+        captured: dict = {}
+        self._capture_spawn(monkeypatch, captured)
+        resp = client.post(
+            "/api/team-os/skills/journal-daily/launch",
+            content=f'{{"mode": "pty", "rows": {bad}, "cols": {bad}}}',
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 200, resp.text
+        assert captured["rows"] == 40
+        assert captured["cols"] == 120
+
     @pytest.mark.parametrize(
         "model", ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
     )

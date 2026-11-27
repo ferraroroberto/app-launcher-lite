@@ -14,11 +14,17 @@ defences, pinned here against a mock PTY:
 
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
+import pytest
+from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
+
+from app.webapp.session_host import server
 from src import session_host
 from src.session_host import PtySession
 from src.vt_snapshot import VtSnapshot
@@ -115,3 +121,32 @@ def test_noop_leaves_the_vt_mirror_untouched():
 
     session._vt.resize.assert_not_called()
     session._pty.setwinsize.assert_not_called()
+
+
+def test_resize_route_defaults_a_malformed_size(monkeypatch):
+    session = MagicMock()
+    monkeypatch.setattr(server.manager, "get", lambda sid: session)
+
+    resp = TestClient(server.app).post(
+        "/sessions/sid/resize", json={"rows": "abc", "cols": [40]}
+    )
+
+    assert resp.status_code == 200
+    session.resize.assert_called_once_with(40, 120)
+
+
+def test_ws_resize_frame_with_a_malformed_size_keeps_the_pump_alive():
+    """The webapp proxy forwards a browser's frame verbatim, so a bad size
+    must not raise out of the pump and drop the terminal."""
+    session = MagicMock()
+    websocket = MagicMock()
+    websocket.receive_text = AsyncMock(side_effect=[
+        '{"type": "resize", "rows": "abc", "cols": 1e999}',
+        '{"type": "resize", "rows": 20, "cols": 51}',
+        WebSocketDisconnect(),
+    ])
+
+    with pytest.raises(WebSocketDisconnect):
+        asyncio.run(server._pump_from_client(websocket, session))
+
+    assert session.resize.call_args_list == [call(40, 120), call(20, 51)]
