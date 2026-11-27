@@ -300,7 +300,7 @@ def test_api_board_merges_live_sessions_and_state(webapp_client):
     ]
     state_file = Path(app.state.webapp_config.sessions_state_file)
     state_file.write_text(json.dumps({
-        "t-uuid": {"project": "photo-ocr", "status": "needs-you",
+        "t-uuid": {"project": "photo-ocr", "status": "needs-you", "agent": "claude",
                    "cwd": "E:/automation/photo-ocr",
                    "updated_at": _iso(datetime.now(timezone.utc) - timedelta(minutes=3))},
     }), encoding="utf-8")
@@ -325,7 +325,7 @@ def test_api_board_chief_never_lands_in_your_turn(webapp_client):
     ]
     state_file = Path(app.state.webapp_config.sessions_state_file)
     state_file.write_text(json.dumps({
-        "t-uuid": {"project": "fleet-config", "status": "needs-you",
+        "t-uuid": {"project": "fleet-config", "status": "needs-you", "agent": "claude",
                    "cwd": "E:/automation/fleet-config",
                    "updated_at": _iso(datetime.now(timezone.utc) - timedelta(minutes=3))},
     }), encoding="utf-8")

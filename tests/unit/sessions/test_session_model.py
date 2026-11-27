@@ -37,8 +37,9 @@ from src.session_model import attach_models, session_model_label
     # Codex and Pi ignore the Claude transcript field.
     ({"agent": "codex", "flags": "--model gpt-5.6-terra", "transcript_model": "claude-opus-5-5"}, "Terra"),
     ({"agent": "pi", "flags": "", "transcript_model": "claude-opus-5-5"}, None),
-    # Agent missing from the payload defaults to Claude, like the launcher.
-    ({"flags": "--model opus"}, "Opus"),
+    # A row naming no agent is the launcher's default agent, Copilot: its model
+    # id is shown as logged, never read through the Claude catalog.
+    ({"flags": "", "transcript_model": "mai-code-2-flash"}, "mai-code-2-flash"),
     # Codex: flag, or the live title, which wins (an in-session /model switch).
     ({"agent": "codex", "flags": "--model gpt-5.6-terra -c x=1"}, "Terra"),
     ({"agent": "codex", "flags": "--model gpt-5.6-terra", "live_title": "proj | gpt-5.6-sol"}, "Sol"),

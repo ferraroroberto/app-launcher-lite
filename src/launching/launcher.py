@@ -31,6 +31,7 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
+from src.agents import DEFAULT_AGENT
 from src.app_runtime import find_child_process
 from src.clients import session as session_client
 from src.desktop.browser import find_browser
@@ -166,7 +167,7 @@ def spawn_claude_session(
     flags: str,
     session_host_port: int,
     kind: str = "pty",
-    agent: str = "claude",
+    agent: str = DEFAULT_AGENT,
     rows: int = 40,
     cols: int = 120,
     history_lines: Optional[int] = None,

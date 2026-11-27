@@ -3,8 +3,8 @@
 Joins the **live session list** from the session-host
 (``session_client.list_sessions``) with the hook-written state rows
 (:mod:`src.board.state`) into board cards. The join is exact launcher id +
-agent when a writer supplies those fields; legacy Claude rows fall back to an
-agent-gated normalized-cwd claim. Two legacy live sessions in one directory
+agent when a writer supplies those fields; rows without a launcher id fall back
+to an agent-gated normalized-cwd claim. Two such live sessions in one directory
 tie-break by most recent ``started_at``; the rest show ``unknown``.
 
 Shared session title: the state row also carries ``name``/``name_source``
@@ -27,6 +27,7 @@ from typing import AbstractSet, Any, Callable, Dict, FrozenSet, List, Optional, 
 
 from src import audit
 from src._log_once import log_once
+from src.agents import agent_of
 from src.board import card_status
 from src.board.active_issue_claims import CLAIM_DEAD
 from src.board.copilot_status import copilot_waiting_status
@@ -129,7 +130,7 @@ def _plan_picker_on_screen(sess: Dict[str, Any]) -> bool:
     if (
         not sid
         or sess.get("kind") != "pty"
-        or str(sess.get("agent") or "claude").lower() != "claude"
+        or agent_of(sess) != "claude"
         or not sess.get("alive", True)
     ):
         return False
@@ -162,18 +163,9 @@ def _normalize_dir(raw: Any) -> str:
     return str(raw or "").replace("\\", "/").rstrip("/").lower()
 
 
-def _row_agent(row: Dict[str, Any]) -> str:
-    """A state row with no ``agent`` is a Claude Code row by definition."""
-    return str(row.get("agent") or "claude").strip().lower()
-
-
-def _session_agent(session: Dict[str, Any]) -> str:
-    return str(session.get("agent") or "claude").strip().lower()
-
-
 def _cwd_agent_key(session: Dict[str, Any]) -> tuple:
     """(normalized project dir, agent) — the cwd fallback's matching grain."""
-    return (_normalize_dir(session.get("project_dir")), _session_agent(session))
+    return (_normalize_dir(session.get("project_dir")), agent_of(session))
 
 
 def _match_state_row(
@@ -184,9 +176,9 @@ def _match_state_row(
 ) -> Optional[str]:
     """Claim an agent-compatible state row for one live session.
 
-    A writer-provided ``launcher_session_id`` is exact and wins first. Legacy
-    Claude rows have neither that field nor ``agent`` and retain the normalized
-    cwd fallback. Rows carrying a different launcher id are never allowed to
+    A writer-provided ``launcher_session_id`` is exact and wins first. A row
+    without it takes the normalized cwd fallback (one naming no ``agent`` is
+    the default agent's, :func:`src.agents.agent_of`). Rows carrying a different launcher id are never allowed to
     fall back by cwd — that would reintroduce the same-session collision exact
     identity exists to prevent.
 
@@ -213,12 +205,12 @@ def _match_state_row(
     launcher id sharing a directory.
     """
     session_id = str(session.get("session_id") or "")
-    agent = _session_agent(session)
+    agent = agent_of(session)
     exact_sid: Optional[str] = None
     exact_stamp = _EPOCH
     for sid, row in unmatched.items():
         launcher_sid = str(row.get("launcher_session_id") or "")
-        if launcher_sid and launcher_sid == session_id and _row_agent(row) == agent:
+        if launcher_sid and launcher_sid == session_id and agent_of(row) == agent:
             stamp = parse_iso(row.get("updated_at")) or _EPOCH
             if exact_sid is None or stamp > exact_stamp:
                 exact_sid, exact_stamp = sid, stamp
@@ -235,7 +227,7 @@ def _match_state_row(
     best_sid: Optional[str] = None
     best_stamp = _EPOCH
     for sid, row in unmatched.items():
-        if _row_agent(row) != agent or row.get("launcher_session_id"):
+        if agent_of(row) != agent or row.get("launcher_session_id"):
             continue
         row_cwd = _normalize_dir(row.get("cwd"))
         if row_cwd != project_dir_norm and not row_cwd.startswith(project_dir_norm + "/"):
@@ -423,7 +415,7 @@ def attach_transcript_model(
     pairs, _ = _claim_walk(live, state_rows)
     out: List[Dict[str, Any]] = []
     for sess, row, _sid in pairs:
-        agent = str(sess.get("agent") or "claude").lower()
+        agent = agent_of(sess)
         if agent == "copilot":
             model = copilot_session.current_model(copilot_session.event_log(sess))
         else:
@@ -443,7 +435,7 @@ def merge_sessions(
     """Join live session-host sessions with hook state rows into board cards.
 
     Live sessions are walked newest-first. Exact launcher-session id + agent
-    claims win; legacy Claude rows fall back to cwd recency. Later sessions in
+    claims win; rows without a launcher id fall back to cwd recency. Later sessions in
     the same directory render ``unknown``. A state row with no live match only
     becomes an external card when recent transcript activity independently
     proves the process still exists — hook state alone is not liveness.
@@ -559,7 +551,7 @@ def derive_card_status(
         row, status, anchor, now=now, live_title=live_title,
         last_output_at=last_output_at, tail=tail, process_confirmed=process_confirmed,
     )
-    if status == card_status.NEEDS_YOU_STAMP and row and _row_agent(row) == "copilot":
+    if status == card_status.NEEDS_YOU_STAMP and row and agent_of(row) == "copilot":
         status = copilot_waiting_status(row.get("transcript_path"))
     else:
         status = _refine_waiting_status(status, tail)
@@ -649,7 +641,7 @@ def _external_card(
     return {
         "session_id": None,
         "kind": "external",
-        "agent": _row_agent(row),
+        "agent": agent_of(row),
         "project_dir": cwd,
         "name": str(project),
         # The row carries no pid and the session-host does not own the

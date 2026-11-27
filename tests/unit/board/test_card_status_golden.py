@@ -62,6 +62,7 @@ def _row(raw: str) -> Dict[str, object]:
     return {
         "project": "golden",
         "status": raw,
+        "agent": "claude",
         "transcript_path": _TRANSCRIPT,
         "cwd": "E:/golden",
         "updated_at": _iso(_UPDATED),

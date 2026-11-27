@@ -343,10 +343,6 @@ def on_pre_tool_use(payload: Dict[str, Any], sid: str) -> Optional[Dict[str, Any
     return _deny(why)
 
 
-def _same_dir(a: Path, b: Path) -> bool:
-    return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
-
-
 def lite_skill_swap(prompt: str) -> Optional[str]:
     """The prompt with a foreign copy of one of lite's skills replaced by the one lite uses, else None.
 
