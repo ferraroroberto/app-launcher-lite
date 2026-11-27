@@ -23,6 +23,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import gitlab_namespace
@@ -216,17 +217,19 @@ def _request(
 GLAB_TIMEOUT = 30.0
 
 
-def run_glab(args: List[str], timeout: float = GLAB_TIMEOUT, host: str = "") -> subprocess.CompletedProcess:
+def run_glab(args: List[str], timeout: float = GLAB_TIMEOUT, host: str = "",
+             cwd: Optional[Path] = None) -> subprocess.CompletedProcess:
     """`glab <args>` against `host` (`GITLAB_HOST`), UTF-8 decoded, no console window, stdin closed.
 
     glab sends a bare `group/project` to its default host, so every call names the host
-    it means; `host` empty is gitlab.com. Raises `FileNotFoundError` when glab is not
-    installed: the callers report that as its own state, never as an empty answer.
+    it means; `host` empty is gitlab.com. `cwd` is the checkout glab reads its project from
+    when `args` name none. Raises `FileNotFoundError` when glab is not installed: the
+    callers report that as its own state, never as an empty answer.
     """
     return subprocess.run(  # noqa: S603 -- fixed executable, argv built by the callers
         ["glab", *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=timeout, creationflags=NO_WINDOW, stdin=subprocess.DEVNULL,
-        env=gitlab_namespace.glab_env(host),
+        env=gitlab_namespace.glab_env(host), cwd=cwd,
     )
 
 

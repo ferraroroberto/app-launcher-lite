@@ -30,7 +30,7 @@ What runs and what does not is stated plainly, so nothing reads as working that 
 
 **Session view:** the Chat view reads Copilot's transcript and shows a context ring, the Remote session setting shares sessions, and **Copy link** gives a session's Copilot web view ([which link](docs/session-view.md#copy-link); `copilot_web_url_prefix`, e.g. `https://ghe.example.com/copilot/tasks/`, overrides the derived one).
 
-**Not written:** nothing here writes the `.proof/` visual-proof reports the Board reads, so a Done card offers **Proof** only where a repo writes that store itself.
+**Visual proof:** the lane skills store a before and after report for a merged UI change on this PC, and its Done card offers **Proof** ([what is written and when](docs/board.md)).
 
 **Dropped from the full app** (not documented, not planned): Telegram (no job alerts; only the login lock-out alert can send through it), Life OS, inspiration, OCR/TTS, the other agents' usage and quota tiles, the context filter, other coding agents (Claude, Codex, Antigravity, Pi, Grok), GitHub Actions CI cards on the Board (GitLab pipelines have their own row), screen time, the remote power guard, process auto-restart, the PC health row, the perf ledger and timings, fleet scope and `/delegate`.
 
