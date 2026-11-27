@@ -12,12 +12,14 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Iterator, List, Tuple
 
 import psutil
 import pytest
 
 from app.webapp.manager import PROJECT_ROOT, WebappManager, WebappManagerConfig
+from src import diagnostics
 from src.launching import process_checkout, restart_check
 from src.subprocess_flags import NO_WINDOW
 
@@ -87,6 +89,28 @@ class TestPortOwner:
         )
         assert owner.state == process_checkout.UNKNOWN
         assert process_checkout.port_owner(1, tmp_path, pids_of=lambda _p: None).state == process_checkout.UNKNOWN
+
+
+@pytest.mark.parametrize("table_readable", [True, False], ids=["windows", "macos"])
+def test_another_address_is_ignored_with_or_without_the_socket_table(monkeypatch, table_readable) -> None:
+    # Windows reads the machine-wide table; macOS refuses it, so each process is asked instead.
+    addresses = {11: "127.0.0.1", 22: "0.0.0.0", 33: "192.0.2.10"}
+
+    def conn(pid: int) -> SimpleNamespace:
+        laddr = SimpleNamespace(ip=addresses[pid], port=4242)
+        return SimpleNamespace(pid=pid, status=psutil.CONN_LISTEN, laddr=laddr)
+
+    def table(**_kw):
+        if not table_readable:
+            raise psutil.AccessDenied()
+        return [conn(pid) for pid in addresses]
+
+    monkeypatch.setattr(psutil, "net_connections", table)
+    monkeypatch.setattr(psutil, "process_iter", lambda: [
+        SimpleNamespace(pid=pid, net_connections=lambda kind, pid=pid: [conn(pid)]) for pid in addresses
+    ])
+    assert process_checkout.probe_listener_pids(4242) == [11, 22]
+    assert diagnostics.listener_pids(4242) == [11, 22, 33]
 
 
 class TestRestartCheck:
