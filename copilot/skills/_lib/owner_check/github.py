@@ -287,6 +287,8 @@ def _labelled(repo: str, label: str) -> List[Dict[str, Any]]:
 
 def _item(repo: str, row: Dict[str, Any], kind: str) -> Dict[str, Any]:
     latest = block.latest_block(str(c.get("body") or "") for c in row.get("comments") or []) or {}
+    # A label with no block of its own kind is still an item; its fields stay empty, never invented.
+    own = latest if latest.get("kind") == kind else {}
     return {
         "repo": repo,
         "number": row.get("number"),
@@ -295,12 +297,13 @@ def _item(repo: str, row: Dict[str, Any], kind: str) -> Dict[str, Any]:
         "url": row.get("url") or "",
         "state": row.get("state") or "",
         "kind": kind,
-        # A label with no block is still an item; its fields stay empty, never invented.
-        "block": bool(latest) and latest.get("kind") == kind,
-        "reason": latest.get("reason", "") if latest.get("kind") == kind else "",
-        "try": latest.get("try", "") if latest.get("kind") == kind else "",
-        "proof": latest.get("proof", []) if latest.get("kind") == kind else [],
-        "since": latest.get("since", "") if latest.get("kind") == kind else "",
+        "block": bool(own),
+        "reason": own.get("reason", ""),
+        "try": own.get("try", ""),
+        "run": own.get("run", []),
+        "expect": own.get("expect", ""),
+        "proof": own.get("proof", []),
+        "since": own.get("since", ""),
     }
 
 
@@ -323,11 +326,11 @@ def fleet_repo_names(projects_toml: Optional[Path] = None) -> List[str]:
 
 
 def merge_same_try(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """One Board line per flow: items of one repo and kind with an identical `try` merge."""
+    """One Board line per flow: items of one repo and kind with an identical `try`, `run` and `expect` merge."""
     kept: List[Dict[str, Any]] = []
-    first: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+    first: Dict[Tuple[str, str, str, str], Dict[str, Any]] = {}
     for item in items:
-        key = (item["repo"], item["kind"], str(item.get("try") or ""))
+        key = (item["repo"], item["kind"], str(item.get("try") or ""), step_key(item))
         if not key[2]:
             kept.append(item)
         elif key in first:
@@ -338,13 +341,19 @@ def merge_same_try(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return kept
 
 
-def same_try_siblings(repo: str, number: int, kind: str, try_text: str) -> List[int]:
-    """Other issues in `repo` labelled for `kind` whose latest block carries the same `try`."""
+def step_key(note: Dict[str, Any]) -> str:
+    """The exact `run` and `expect` of a block or item, as one comparable string."""
+    return json.dumps([note.get("run") or [], str(note.get("expect") or "")], sort_keys=True)
+
+
+def same_try_siblings(repo: str, number: int, kind: str, latest: Dict[str, Any]) -> List[int]:
+    """Other issues in `repo` labelled for `kind` whose latest block carries the same step."""
+    try_text = str(latest.get("try") or "")
     if not try_text:
         return []
-    rows = _labelled(repo, block.LABELS[kind])
-    return [int(row["number"]) for row in rows
-            if row.get("number") != number and _item(repo, row, kind)["try"] == try_text]
+    items = (_item(repo, row, kind) for row in _labelled(repo, block.LABELS[kind]) if row.get("number") != number)
+    return [int(it["number"]) for it in items
+            if it["try"] == try_text and step_key(it) == step_key(latest)]
 
 
 def newest_first(items: List[Dict[str, Any]]) -> None:

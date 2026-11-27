@@ -1,5 +1,6 @@
 /* The copy button on a rendered Markdown blockquote or fenced code
-block.
+block, and on the Board's owner-step command block, which borrows the fence's
+frame (board/owner-checks.js).
 
 `markdown.js` emits the button with the quote's (or block's) plain text in
 `data-copy`,
@@ -19,11 +20,15 @@ export function wireQuoteCopy() {
   document.addEventListener('click', function (ev) {
     const btn = ev.target.closest && ev.target.closest('.md-quote-copy, .md-block-copy');
     if (!btn) return;
-    const what = btn.classList.contains('md-block-copy') ? 'Code' : 'Quote';
+    const what = btn.dataset.what || (btn.classList.contains('md-block-copy') ? 'Code' : 'Quote');
     ev.preventDefault();
-    const fail = function () { toast('Clipboard unavailable — copy manually', 'error'); };
-    writeClipboard(btn.getAttribute('data-copy') || '').then(
-      function () { toast(what + ' copied', 'good', { icon: 'copy' }); },
+    // Inside a modal sheet the page's toast sits under the dialog and the
+    // rest of the page is inert: use the sheet's own toast when it has one.
+    const dialog = btn.closest('dialog');
+    const host = (dialog && dialog.querySelector('.sheet-toast')) || undefined;
+    const fail = function () { toast('Clipboard unavailable — copy manually', 'error', { host: host }); };
+    writeClipboard(btn.getAttribute('data-copy') || '', { host: host }).then(
+      function () { toast(what + ' copied', 'good', { icon: 'copy', host: host }); },
       fail
     );
   });

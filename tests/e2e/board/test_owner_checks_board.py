@@ -23,11 +23,15 @@ from tests.e2e.fixtures.waits import stable_eval, stable_read
 pytestmark = pytest.mark.smoke
 
 ARTIFACT = "https://claude.ai/code/artifact/0123abcd"
+RUN = ["cd /d C:\\demo && demo.exe pair --device kitchen-speaker --wait-for-the-button --timeout 120 --verbose",
+       "demo.exe status"]
 
 _OWNER_ITEMS = [
     {"ref": "demo#7", "repo": "demo", "number": 7, "title": "Pair the kitchen speaker",
      "url": "https://gitlab.com/octo/demo/-/issues/7", "state": "OPEN", "kind": "before-start",
      "block": True, "reason": "needs a real device", "try": "hold the pair button for 5 s",
+     "run": [{"where": "terminal", "text": RUN[0]}, {"where": "terminal", "text": RUN[1]},
+             {"where": "screen", "text": "the speaker's light"}], "expect": "the light turns solid",
      "proof": [], "since": "2026-10-30", "mark": None, "mark_at": None, "mark_until": None},
     {"ref": "demo#9", "repo": "demo", "number": 9, "title": "Read-aloud on the lock screen",
      "url": "https://gitlab.com/octo/demo/-/issues/9", "state": "OPEN", "kind": "validate-after",
@@ -76,9 +80,9 @@ def test_owner_checks_show_in_your_turn_and_answer_through_the_sheet(
 ) -> None:
     """Each owner check is a Your turn row (title, ref, age), grouped by
     kind and counted in the lane and the header; its tap unfolds why, what to
-    try and the links (the artifact opens the artifact). A label without a
-    readable block is listed as "details unknown", never hidden, and an
-    unreadable repo is said. The sheet answers them: Validated and a typed
+    try and the links (the artifact opens the artifact). A note with no command
+    or expected result says each is not recorded; a label without a readable
+    block is listed as "no note", never hidden, and an unreadable repo is said. The sheet answers them: Validated and a typed
     Problem go to the owner-check route as one batch, then the chief
     hears what landed in one message."""
     answers, chief_posts = _open_owner_board(authed_page, base_url)
@@ -94,7 +98,7 @@ def test_owner_checks_show_in_your_turn_and_answer_through_the_sheet(
     expect(groups.nth(1).locator(".board-plan-heading")).to_have_text("Validate to close (2)")
     expect(lane.locator(".board-owner-state")).to_contain_text("1 repo unreadable")
     unknown = lane.locator('.board-owner-row[data-ref="demo#11"]')
-    expect(unknown.locator(".board-owner-unknown")).to_have_text("details unknown")
+    expect(unknown.locator(".board-owner-unknown")).to_have_text("no note")
 
     row = lane.locator('.board-owner-row[data-ref="demo#9"]')
     expect(row).to_contain_text("demo#9")
@@ -102,6 +106,9 @@ def test_owner_checks_show_in_your_turn_and_answer_through_the_sheet(
     detail = row.locator(".board-owner-detail")
     expect(detail).to_contain_text("Why: a live phone")
     expect(detail).to_contain_text("Try: lock the phone and tap play")
+    expect(detail.locator(".board-owner-missing")).to_have_text(
+        ["No command recorded.", "No expected result recorded."])
+    expect(detail.locator(".board-owner-run")).to_have_count(0)
     expect(detail.locator('a.board-owner-link[href="' + ARTIFACT + '"]')).to_have_text("Artifact")
     expect(detail.locator("a.board-owner-link")).to_have_text(["Issue #9", "MR !12", "Artifact"])
     box = detail.locator(".board-owner-link").first.bounding_box()
@@ -114,7 +121,7 @@ def test_owner_checks_show_in_your_turn_and_answer_through_the_sheet(
     expect(dialog.locator("#chiefAnswersTitleText")).to_have_text("Owner checks: Validate to close")
     blocks = dialog.locator(".owner-answer")
     expect(blocks).to_have_count(2)
-    expect(blocks.nth(1)).to_contain_text("Details unknown")
+    expect(blocks.nth(1)).to_contain_text("No command recorded: the issue has the label")
     done = dialog.locator("#chiefAnswersDone")
     expect(done).to_be_disabled()
     # Newest first: demo#9 (filed 10-31) leads the undated demo#11.
@@ -419,6 +426,51 @@ def test_done_applies_a_large_sheet_of_tapped_and_typed_answers(
     assert posts == [[expected["demo#139"]]], posts
 
 
+def _assert_run_block_copies_and_scrolls_inside(page: Page, owner, dialog) -> None:
+    """The unfolded detail and the answer sheet draw the run lines as code
+    blocks, one per place in order, with the expected result under them. Copy
+    takes a block's lines as written; a long line scrolls inside its block and
+    neither the page nor the sheet scrolls sideways, in either theme."""
+    page.evaluate(
+        "() => { window.__copied = []; Object.defineProperty(navigator, 'clipboard', { configurable: true,"
+        " value: { writeText: (t) => { window.__copied.push(t); return Promise.resolve(); } } }); }")
+    row = owner.locator('.board-owner-row[data-ref="demo#7"]')
+    row.locator(".action-row-main").click()
+    detail = row.locator(".board-owner-detail")
+    blocks = detail.locator(".board-owner-run")
+    expect(blocks.locator(".md-block-lang")).to_have_text(["Plain terminal", "On screen"])
+    expect(blocks.nth(0).locator("code")).to_have_text("\n".join(RUN), use_inner_text=True)
+    expect(detail).to_contain_text("Expect: the light turns solid")
+    blocks.nth(0).locator(".md-block-copy").click()
+    expect(page.locator("#toast")).to_contain_text("Command copied")
+    theme_was = page.evaluate("() => document.documentElement.getAttribute('data-theme')")
+    for theme in ("light", "dark"):
+        page.evaluate("(t) => document.documentElement.setAttribute('data-theme', t)", theme)
+        _assert_scrolls_inside(page, blocks.nth(0))
+    page.evaluate("(t) => document.documentElement.setAttribute('data-theme', t)", theme_was)
+
+    detail.locator(".board-owner-answer").click()
+    sheet_block = dialog.locator('[data-key="owner:demo#7"] .board-owner-run').nth(0)
+    _assert_scrolls_inside(page, sheet_block)
+    assert stable_eval(dialog, "el => el.scrollWidth - el.clientWidth") <= 0
+    sheet_block.locator(".md-block-copy").click()
+    # The sheet's own toast: the page's sits under the dialog.
+    expect(dialog.locator("#chiefAnswersToast")).to_contain_text("Command copied")
+    assert page.evaluate("() => window.__copied") == ["\n".join(RUN)] * 2
+    dialog.locator("#chiefAnswersClose").click()
+    expect(dialog).to_be_hidden()
+    row.locator(".action-row-main").click()
+
+
+def _assert_scrolls_inside(page: Page, block) -> None:
+    hidden = stable_eval(block.locator("pre"), "el => el.scrollWidth - el.clientWidth")
+    assert hidden > 0, "the long line should overflow its own listing"
+    right = stable_eval(block, "el => el.getBoundingClientRect().right")
+    assert right <= page.viewport_size["width"], right
+    wide = page.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
+    assert wide <= 0, f"the page scrolls sideways by {wide}px"
+
+
 @pytest.mark.iphone
 def test_owner_checks_use_the_chief_answer_form_at_phone_width(
     authed_page: Page, base_url: str
@@ -445,6 +497,8 @@ def test_owner_checks_use_the_chief_answer_form_at_phone_width(
     owner = authed_page.locator("#boardColYours .board-owner")
     dialog = authed_page.locator("#chiefAnswersDialog")
     done = dialog.locator("#chiefAnswersDone")
+
+    _assert_run_block_copies_and_scrolls_inside(authed_page, owner, dialog)
 
     owner.locator('.board-owner-group[data-group="before_start"] .board-owner-answer-group').click()
     step = dialog.locator('[data-key="owner:demo#7"]')

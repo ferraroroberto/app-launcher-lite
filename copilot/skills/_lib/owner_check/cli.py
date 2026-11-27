@@ -216,7 +216,7 @@ def _clear_siblings(repo: str, number: int, issue: dict, answer: str) -> int:
     if kind not in block.LABELS or block.LABELS[kind] not in issue["labels"]:
         return EXIT_NONE
     try:
-        siblings = github.same_try_siblings(repo, number, kind, str(latest.get("try") or ""))
+        siblings = github.same_try_siblings(repo, number, kind, latest)
         for sibling in siblings:
             body = block.format_block(block.CLEARED, f"answered on the Board with {repo}#{number} (same try)",
                                       "", (), _today(), answer=answer)

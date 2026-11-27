@@ -132,6 +132,8 @@ Work that waits on the owner rather than on a session: shipped work to try as a 
 
 **The list is a cached read with its age.** It costs calls per project, so it never rides the 5 s poll: the Board's refresh starts it in a background thread (one at a time, no closer than a minute apart), and `GET /api/board` carries the cache as `owner_checks` (`available`, `fetched_at`, `error`, `refreshing`, `unknown`, `items`). `available: false` until a list has landed, so the Board says *Owner checks not loaded yet* instead of an empty list; a read that did not land is `unknown`, never "none".
 
+**The exact step.** A note may carry `run` lines, each naming where it happens (`terminal`, `elevated`, `browser`, `phone`, `screen`), and `expect`, what success looks like. An item's detail and its answer-sheet block draw consecutive lines of one place as a code block headed by that place, with Copy; the block scrolls sideways inside itself. `expect` is text under it. What is missing is said on its own: no command recorded, no expected result recorded, or no readable note at all (its row also carries a *no note* chip).
+
 **On the Board** the items sit in Your turn under the sessions in three disjoint groups: *Before you start*, *Validate to close* and *Try what shipped*. The launcher keeps four marks of its own in `webapp/owner-check-marks.json` (`later` snooze, `problem`, `paused`, `closing`); a marked item stays listed but leaves the "needs you" count. Answers have their own sheet, apart from the chief's, with the Chat composer's paperclip for attaching files (`answer-files.js`).
 
 ## The chief

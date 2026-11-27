@@ -117,6 +117,19 @@ class ForgeTests(unittest.TestCase):
             result = forge.list_items(["demo"])
         self.assertEqual(result, {"items": [], "unknown": [{"repo": "demo", "reason": "401 unauthorized"}]})
 
+    def test_list_carries_the_exact_step_and_merges_only_the_same_one(self) -> None:
+        items = []
+        for number, command in ((5, "make a"), (6, "make a"), (7, "make b"), (8, "")):
+            note = BLOCK + (f"\n- run: terminal: `{command}`\n- expect: a token is listed" if command else "")
+            row = {"number": number, "comments": [{"body": note}]}
+            items.append(forge._item("demo", row, block.BEFORE_START))
+        self.assertEqual((items[0]["run"], items[0]["expect"]),
+                         ([{"where": "terminal", "text": "make a"}], "a token is listed"))
+        self.assertEqual((items[3]["run"], items[3]["expect"]), ([], ""))
+        merged = forge.merge_same_try(items)
+        self.assertEqual([(it["number"], it.get("merged")) for it in merged],
+                         [(5, ["demo#6"]), (7, None), (8, None)])
+
     def test_merge_requests_are_never_issues_on_gitlab(self) -> None:
         self.assertFalse(forge.is_pull_request("demo", 5))
         self.assertEqual(forge.pr_url("demo", 7), "https://gitlab.com/ferraroroberto/demo/-/merge_requests/7")
