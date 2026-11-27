@@ -81,27 +81,24 @@ Migration stops App Launcher Lite and every session it hosts. Run it from a plai
 
 1. Finish or save your open sessions, and close any terminal or editor whose folder is inside the app.
 2. Finish or remove the app folder's git worktrees (`git worktree list`): they stay tied to the old folder's `.git`. Uncommitted changes and local branches stay in the old copy too.
-3. Choose **Quit** in the tray's menu. The installer finds a running copy by the folder path in its processes' command lines, so a copy started under another spelling of that path (a junction, a mapped drive) is only partly found: the tray is missed, and it restarts what the stop ended. Quit stops the whole copy however it was started.
-4. If Tailscale Serve publishes the webapp's port, turn that mapping off. `tailscale serve status` lists it with its target; note both. `tailscaled` listens on the same port number, and the installer counts it as the old copy still holding the port: the run fails after it has already stopped the app, with nothing renamed.
 
-   ```powershell
-   tailscale serve status
-   tailscale serve --https=<port> off
-   ```
-
-   After the migration, add it back with the target you noted: `tailscale serve --bg --https=<port> <target>`.
+The tray can stay running: the run stops every process that runs from the folder, including one started through a junction to it. A Tailscale Serve mapping to the webapp's port can stay too, because only loopback and wildcard listeners count as holding the port.
 
 ### Reinstall in the same folder (the usual case)
 
-From the folder above the app:
+It works whatever version the installed copy is, because it runs from a fresh clone and never runs the old copy's code. Run these in order from `<root>`, the folder that holds `app-launcher-lite`:
 
 ```powershell
-cd <parent folder>
-.\app-launcher-lite\setup.bat -InPlace -WhatIf    # the backup name, what it would stop, every file it would copy
-.\app-launcher-lite\setup.bat -InPlace
+cd <root>
+git -C app-launcher-lite remote get-url origin                                  # prints <origin URL>
+git clone <origin URL> app-launcher-lite.incoming                               # a fresh clone beside the install; run nothing in it yet
+.\app-launcher-lite.incoming\setup.bat -Replace app-launcher-lite -WhatIf      # the backup name, what it would stop, every file it would copy
+.\app-launcher-lite.incoming\setup.bat -Replace app-launcher-lite
 ```
 
-`-WhatIf` changes nothing. The real run stops what still runs from the folder, renames it to `app-launcher-lite.bak-YYYYMMDD-N`, clones the remote's default branch into the original path, copies the files above, runs the install, starts the tray, and passes only when the new clone answers `/api/version` with its own commit from a process in that folder. The path does not change, so the Startup link, the Copilot hooks and the scheduled Jobs need no edit.
+`-WhatIf` changes nothing. The real run stops what still runs from `app-launcher-lite`, renames it to `app-launcher-lite.bak-YYYYMMDD-N` (uncommitted edits stay there), moves `app-launcher-lite.incoming` to `app-launcher-lite`, copies the files above, runs the install, starts the tray, and passes only when the new clone answers `/api/version` with its own commit from a process in that folder. The path does not change, so the Startup link, the Copilot hooks and the scheduled Jobs need no edit.
+
+The install must be a git checkout with an `origin`, and the incoming clone must come from the same one, with no changed files and no `.venv`; otherwise the run is `refused` and changes nothing. On an install whose `setup.bat` already has `-InPlace`, `.\app-launcher-lite\setup.bat -InPlace` does the same and makes the clone itself.
 
 ### Beside it (another folder, or an old copy that is not a git clone)
 

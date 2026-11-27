@@ -54,7 +54,7 @@ app-launcher-lite/
 │   ├── subprocess_flags.py     # the NO_WINDOW spawn-flag convention (single source)
 │   ├── git_utils.py            # shared `git` subprocess runner; every git spawn goes through it
 │   ├── installer.py            # setup.bat's work, vendored: venv, requirements, configs from samples (never overwriting), checklist
-│   ├── installer_*.py          # setup.bat -MigrateFrom / -InPlace and their [install.migrate] declaration, vendored
+│   ├── installer_*.py          # setup.bat -MigrateFrom / -Replace / -InPlace and their [install.migrate] declaration, vendored
 │   ├── git_upstream/           # ahead/behind against origin and the guarded fast-forward
 │   ├── documents/              # Settings > Documents: allowlist validation, path jail, read
 │   ├── auth/                   # job-scoped API tokens, the passkey (WebAuthn) gate, the self-signed TLS certificate
