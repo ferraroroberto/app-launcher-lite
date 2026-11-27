@@ -25,6 +25,7 @@ from src.launching import copilot_remote
 from src.launching.presets import OPEN_MODEL_AGENTS, PRESET_CONTEXTS, efforts_for
 from src.session_view.copilot_host import copilot_signed_in_host
 from src.session_view.transcript_locate import copilot_task_id
+from src.session_hosting.body_fields import safe_int as safe_int  # the routers import it from here
 from src.webapp_config import (
     WebappConfig,
     append_auth_token,
@@ -133,22 +134,6 @@ async def maybe_json(request: Request) -> Dict[str, Any]:
         except Exception:
             return {}
     return {}
-
-
-def safe_int(body: Dict[str, Any], key: str, default: int) -> int:
-    """An ``int``-ish field of a decoded request body.
-
-    ``default`` when the field is absent, falsy or does not coerce: a malformed
-    body (``{"rows": "abc"}``) must not raise, because an uncaught
-    ``ValueError`` is a bare 500.
-    """
-    raw = body.get(key)
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        return default
 
 
 def cert_present() -> bool:

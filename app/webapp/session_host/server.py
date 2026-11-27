@@ -66,6 +66,7 @@ from src.session_host_input import (
     INPUT_DROPPED,
     INPUT_NOT_INGESTED,
 )
+from src.session_hosting.body_fields import safe_int
 from src.session_hosting.channel_claims import DuplicateChannelSession
 
 logger = logging.getLogger(__name__)
@@ -201,8 +202,8 @@ async def create_session(request: Request) -> Dict[str, Any]:
     # Phone-supplied spawn dimensions: size the PTY to the
     # real viewport before first paint so a ratatui TUI isn't cut.
     # Omitted → the manager's legacy 40×120 default.
-    rows = int(body.get("rows") or 40)
-    cols = int(body.get("cols") or 120)
+    rows = safe_int(body, "rows", 40)
+    cols = safe_int(body, "cols", 120)
     # User-configurable scrollback depth for full-screen agents (Settings
     # tab). Omitted/absent → SessionManager's
     # own default (older webapp builds, or a caller that doesn't set it).
@@ -357,7 +358,7 @@ async def session_resize(sid: str, request: Request) -> Dict[str, Any]:
     if session is None:
         raise HTTPException(status_code=404, detail=f"unknown session {sid}")
     body = await _json(request)
-    session.resize(int(body.get("rows") or 40), int(body.get("cols") or 120))
+    session.resize(safe_int(body, "rows", 40), safe_int(body, "cols", 120))
     return {"ok": True}
 
 
@@ -569,7 +570,7 @@ async def _pump_from_client(
             # write() blocks in real time on large payloads.
             await pools.run_on(pools.PTY_WRITES, session.write, str(msg.get("data") or ""))
         elif kind == "resize" and role != "pc":
-            session.resize(int(msg.get("rows") or 40), int(msg.get("cols") or 120))
+            session.resize(safe_int(msg, "rows", 40), safe_int(msg, "cols", 120))
 
 
 def _upload_dir(project_dir: str) -> Path:

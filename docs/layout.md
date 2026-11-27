@@ -40,7 +40,7 @@ app-launcher-lite/
 │   ├── scanner.py              # bat classifier + project-dir + team-os skill discovery
 │   ├── session_host.py         # PtySession + SessionManager (ConPTY via pywinpty)
 │   ├── session_host_*.py       # PTY-protocol scanning, composer state, input delivery, declared-path parsing
-│   ├── session_hosting/        # session kinds + stop modes, child env, detached console sessions, deferred submit
+│   ├── session_hosting/        # session kinds + stop modes, child env, detached console sessions, deferred submit, request-body field reads
 │   ├── vt_snapshot.py          # headless VT mirror per fullscreen session (reconnect snapshot)
 │   ├── audit.py                # terminal audit + per-session logs; session_retention.py is its daily sweep
 │   ├── diagnostics.py          # log ring buffer + port-owner introspection
