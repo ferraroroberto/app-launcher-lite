@@ -60,6 +60,17 @@ def test_refresh_fills_the_cache_and_a_missing_block_stays_listed(cli):
     assert no_block["block"] is False and no_block["reason"] == ""
 
 
+def test_the_exact_step_reaches_the_board_and_its_absence_stays_empty(cli):
+    responses, _ = cli
+    step = {"run": [{"where": "terminal", "text": 'echo "a  b"'}, {"where": "screen", "text": " "}, "junk"],
+            "expect": "a b is printed"}
+    responses["list"] = (0, json.dumps({"items": [dict(ITEMS[0], **step), ITEMS[1]], "unknown": []}))
+    first, second = owner_checks.refresh("fleet")["items"]
+    assert first["run"] == [{"where": "terminal", "text": 'echo "a  b"'}]
+    assert first["expect"] == "a b is printed"
+    assert second["run"] == [] and second["expect"] == ""
+
+
 def test_a_failed_refresh_keeps_the_older_items(cli):
     responses, _ = cli
     owner_checks.refresh("fleet")

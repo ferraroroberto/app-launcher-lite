@@ -191,7 +191,7 @@ def _clean_item(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "url": str(raw.get("url") or ""),
         "state": str(raw.get("state") or ""),
         "kind": kind,
-        # A label with no readable block: shown as "details unknown", never hidden.
+        # A label with no readable block: shown with a "no note" chip, never hidden.
         "block": bool(raw.get("block")),
         "reason": str(raw.get("reason") or ""),
         # The back-fill boilerplate never travels as a Try: "generic" says the
@@ -201,9 +201,21 @@ def _clean_item(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "try_generic": generic,
         "try_lines": [],
         "try_from": "",
+        # The exact step. Empty is "none recorded", which the card says; never filled in here.
+        "run": _run_lines(raw.get("run")),
+        "expect": str(raw.get("expect") or "").strip(),
         "proof": [str(p) for p in proof if str(p).strip()] if isinstance(proof, list) else [],
         "since": str(raw.get("since") or ""),
     }
+
+
+def _run_lines(raw: Any) -> List[Dict[str, str]]:
+    """The note's command lines as ``{"where", "text"}``, their own spacing kept."""
+    return [
+        {"where": str(line.get("where") or ""), "text": str(line["text"])}
+        for line in (raw if isinstance(raw, list) else [])
+        if isinstance(line, dict) and str(line.get("text") or "").strip()
+    ]
 
 
 def read_items(fleet_config_dir: str) -> Dict[str, Any]:

@@ -89,7 +89,7 @@ Two sessions on one repo collide in the study phase, long before either cuts a b
 
 ## Owner checks and drain
 
-`skills/_lib/owner_check/` is fleet-config's owner-check package. `cli.py`, `block.py`, `rule.py`, `backfill.py`, `reclassify.py` and `repair.py` are byte-identical ports. The forge seam `github.py` keeps upstream's module name and every function they call, but answers through `glab` against GitLab: issue view, notes and closing merge requests via `glab api`, labels via `glab issue update`, and merge request files via the `diffs` API. A failed call raises `GhError`, which every caller reports as `unknown`. The launcher's Board (`cli.py list --json`, `clear`), lite `issue-start`'s gate (`cli.py gate <repo>#<N>`), `dispatch`'s owner rail and `plan add --kind owner` all read it.
+`skills/_lib/owner_check/` is fleet-config's owner-check package. `block.py`, `rule.py`, `backfill.py`, `reclassify.py` and `repair.py` are byte-identical ports. `cli.py` is upstream's with one later line (its `clear` matches merged siblings on the whole step). A note's `run` lines (where each runs, and the literal command) and `expect` are read and listed, but Lite's `mark` and `finish` do not write them yet, so a note Lite posts carries neither and the Board says no command is recorded. The forge seam `github.py` keeps upstream's module name and every function they call, but answers through `glab` against GitLab: issue view, notes and closing merge requests via `glab api`, labels via `glab issue update`, and merge request files via the `diffs` API. A failed call raises `GhError`, which every caller reports as `unknown`. The launcher's Board (`cli.py list --json`, `clear`), lite `issue-start`'s gate (`cli.py gate <repo>#<N>`), `dispatch`'s owner rail and `plan add --kind owner` all read it.
 
 Labels are plain `needs-owner` and `needs-validation` by default, which work on any GitLab tier. Opting in with `[owner_check] label_scope = "<scope>"` in this repo's `.fleet.toml` writes GitLab scoped labels instead (`<scope>::needs-owner`, one of a kind per issue). Reads map them back to the plain name, so every reader's `"needs-owner" in labels` check is unchanged. On gitlab.com's free tier the one-of-a-kind rule is not enforced (an issue held both scoped labels at once), so scoped labels behave as plain ones there. The fleet is every sibling checkout with a GitLab remote. GitLab numbers merge requests apart from issues, so a "PR" in the package's vocabulary is a merge request iid.
 
@@ -144,9 +144,8 @@ These files are byte-identical copies of `fleet-config`'s `skills/_lib/` at comm
 | `skills/_lib/chief/mailbox.py` | `50c0498fb8edb3f2b99bd92bf328fa6ca377b11e98659804dbfd7e8fe2129a79` |
 | `skills/_lib/chief/digest.py` | `152d2db0e73381b17ac77905376ba6d1b197f7f322625874e28182ef0addfd29` |
 | `skills/_lib/chief/rails.py` | `8608a2ff8b7f4dbc00224fbaa943d165b2cd8a38e04d725f98c1d1ab3f5638bf` |
-| `skills/_lib/owner_check/block.py` | `bf896b68ba15c6cab78b51e60cb9b5e778130ae87bfbbbffbad501642074e198` |
+| `skills/_lib/owner_check/block.py` | `0489d2470140f85fe5e34fe07e9c3c851338bc0c888ef1410698200d301e04c6` |
 | `skills/_lib/owner_check/__init__.py` | `5b5d28ef222565346788384d0a32b6dbf7dd406fd8f7d010eda35aca4ac0e3de` |
-| `skills/_lib/owner_check/cli.py` | `22582e7a1899d4c745e5aa49ffd1f2dd0964d6467bc2493fc74d2408f940a141` |
 | `skills/_lib/owner_check/rule.py` | `2afbf5256e706e0a0626f63906f49007deda82539886d2085e6ad8ca3d2095b4` |
 | `skills/_lib/owner_check/backfill.py` | `4ca958f116bc38b166d37f7449645e32edff58fca868764958f151479e7756f7` |
 | `skills/_lib/owner_check/reclassify.py` | `95dc261cc8ac241a21c02202a2e32cc9e478c2a990460b5dfc7836cfe3223211` |

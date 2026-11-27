@@ -1347,8 +1347,10 @@ flowchart LR
   - a needs folder trust chip on a session sitting on Copilot's trust prompt
   - the chief's row with a mailbox unread chip, only while the doorbell is on and a mailbox event has waited 15 minutes
   - the owner-check groups Before you start, Validate to close and Try what shipped, one fold each
+  - an unfolded owner check's command block with Copy and its expected result, each missing one said on its own line
 - **Does:**
   - a row unfolds its detail in place
+  - Copy on an owner check's command block copies its lines
   - Trust this folder on a needs-folder-trust row answers Copilot's prompt with remember this folder
   - a group's Answer opens the answer sheet
 - **Leads to:**
@@ -1385,6 +1387,7 @@ flowchart LR
 - **Reach:** Answer in an owner-check group or a chief question
 - **Holds:**
   - one block per waiting item with its options, the recommended one already picked
+  - an owner check's command block with Copy and its expected result
   - an Other field on every item
   - an Anything else box
   - Done

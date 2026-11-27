@@ -140,17 +140,70 @@ function unblocksText(item) {
   return refs.length ? 'unblocks ' + refs.join(', ') : '';
 }
 
-// Why it needs you and what to try; a label with no readable block says so.
+// Why it needs you, what to try, the exact command and what success looks
+// like; a label with no readable block says so.
 export function details(item, cls) {
   const nodes = [];
   if (item.unblocks && item.unblocks.length) nodes.push(labelled(cls, 'Unblocks', item.unblocks.join(', ')));
   if (!item.block) {
-    nodes.push(el('p', cls, 'Details unknown: the issue carries the label but no readable owner-check note. Open the issue to see what it needs.'));
+    nodes.push(missing(cls, 'No command recorded: the issue has the label but no readable owner-check note. Open the issue to see what it needs.'));
     return nodes;
   }
   if (item.reason) nodes.push(labelled(cls, 'Why', item.reason));
   nodes.push.apply(nodes, tryNodes(item, cls));
+  nodes.push.apply(nodes, stepNodes(item, cls));
   return nodes;
+}
+
+// What the note does not hold, said as its own line.
+function missing(cls, text) {
+  return el('p', cls + ' board-owner-missing', text);
+}
+
+// Where a run line happens (the note's `where`), as its block's header.
+const WHERE_LABEL = {
+  terminal: 'Plain terminal',
+  elevated: 'Elevated shell',
+  browser: 'Open on the PC',
+  phone: 'On the phone',
+  screen: 'On screen',
+};
+
+// The run lines, one block per stretch of lines sharing a place so the order
+// is kept, then what success looks like. Each missing one has its own line.
+function stepNodes(item, cls) {
+  const stretches = [];
+  (item.run || []).forEach(function (line) {
+    const last = stretches[stretches.length - 1];
+    if (last && last.where === line.where) last.lines.push(line.text);
+    else stretches.push({ where: line.where, lines: [line.text] });
+  });
+  const nodes = stretches.length ? stretches.map(runBlock) : [missing(cls, 'No command recorded.')];
+  nodes.push(item.expect ? labelled(cls, 'Expect', item.expect) : missing(cls, 'No expected result recorded.'));
+  return nodes;
+}
+
+// The code-listing frame markdown.js draws for a fence, so quote-copy.js's
+// delegated listener serves its Copy button.
+function runBlock(stretch) {
+  const where = WHERE_LABEL[stretch.where] || 'Run';
+  const text = stretch.lines.join('\n');
+  const block = el('div', 'md-block board-owner-run');
+  const head = el('div', 'md-block-head');
+  head.appendChild(el('span', 'md-block-lang', where));
+  const copy = el('button', 'icon-button md-block-copy');
+  copy.type = 'button';
+  copy.setAttribute('aria-label', 'Copy: ' + where);
+  copy.title = 'Copy';
+  copy.dataset.copy = text;
+  copy.dataset.what = 'Command';
+  copy.dataset.track = 'board.owner-run-copy';
+  copy.innerHTML = icon('copy');
+  head.appendChild(copy);
+  const pre = el('pre', 'md-code');
+  pre.appendChild(el('code', null, text));
+  block.append(head, pre);
+  return block;
 }
 
 // What to try: the recorded Try; else lines the issue's own checklist offers,
@@ -183,7 +236,7 @@ function itemRow(item, onAnswer) {
   const title = item.title || item.ref;
   const meta = [item.ref, unblocksText(item)].filter(Boolean).join(' · ');
   const tail = markText(item) || sinceText(item.since);
-  const chips = item.block ? [] : [chip('details unknown', 'attention', 'board-owner-unknown')];
+  const chips = item.block ? [] : [chip('no note', 'attention', 'board-owner-unknown')];
   const row = actionRow({
     className: 'board-item board-owner-row' + (waiting(item) ? '' : ' is-answered'),
     title: title,

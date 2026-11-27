@@ -2,7 +2,9 @@
 
 Pure formatting and parsing. The format is defined in `docs/owner-check.md`; a
 block is a marker line, a bold title and `- key: value` lines, so it reads as
-plain prose on GitHub and parses back without a markdown library.
+plain prose on GitHub and parses back without a markdown library. `run` repeats,
+one line per command, and its text is fenced in backticks so GitHub shows it
+literally. A block without `run`/`expect` parses with both empty.
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ _TITLES = {
     BEFORE_START: "Owner check: before start",
     CLEARED: "Owner check: cleared",
 }
-FIELDS = ("kind", "reason", "try", "proof", "related", "since", "answer")
+FIELDS = ("kind", "reason", "try", "run", "expect", "proof", "related", "since", "answer")
 _LINE = re.compile(r"^- (" + "|".join(FIELDS) + r"): ?(.*)$")
 
 
@@ -38,11 +40,17 @@ _PLACEHOLDER = re.compile(r"^\W*(tbd|todo|n/?a|none|see (the )?(issue|above|body
                           r"look into it|ask roberto|owner decides?)\W*$", re.IGNORECASE)
 
 
+def vague_text(text: str) -> Optional[str]:
+    """`"is empty or a placeholder"`, or None when `text` says something."""
+    text = _one_line(text)
+    return "is empty or a placeholder" if not text or _PLACEHOLDER.match(text) else None
+
+
 def vague_action(text: str) -> Optional[str]:
     """Why an owner action is too vague to answer cold, or None when it is concrete."""
     text = _one_line(text)
-    if not text or _PLACEHOLDER.match(text):
-        return "is empty or a placeholder"
+    if vague_text(text):
+        return vague_text(text)
     if len(text.split()) < _MIN_ACTION_WORDS:
         return f"names no concrete action (under {_MIN_ACTION_WORDS} words)"
     return None
@@ -50,6 +58,26 @@ def vague_action(text: str) -> Optional[str]:
 
 def _one_line(value: str) -> str:
     return " ".join(str(value or "").split())
+
+
+def _fence(text: str) -> str:
+    """`text` as a markdown code span, whatever backticks it holds."""
+    return f"`` {text} ``" if "`" in text else f"`{text}`"
+
+
+def unfence(text: str) -> str:
+    """The code span's content, or `text` itself when it is not one."""
+    for start, end in (("`` ", " ``"), ("`", "`")):
+        if len(text) > len(start) + len(end) and text.startswith(start) and text.endswith(end):
+            return text[len(start):-len(end)]
+    return text
+
+
+def _run_line(line: str) -> Dict[str, str]:
+    where, sep, text = line.partition(": ")
+    if not sep or " " in where or where.startswith("`"):
+        where, text = "", line
+    return {"where": where, "text": unfence(text.strip())}
 
 
 def format_block(
@@ -60,6 +88,8 @@ def format_block(
     since: str = "",
     answer: str = "",
     related: Sequence[str] = (),
+    run: Sequence[Dict[str, str]] = (),
+    expect: str = "",
 ) -> str:
     """The comment body for one state change. Empty optional fields are left out."""
     if kind not in KINDS:
@@ -68,33 +98,44 @@ def format_block(
         "kind": kind,
         "reason": _one_line(reason),
         "try": _one_line(try_text),
+        "expect": _one_line(expect),
         "proof": ", ".join(_one_line(p) for p in proof if _one_line(p)),
         "related": ", ".join(_one_line(r) for r in related if _one_line(r)),
         "since": _one_line(since),
         "answer": _one_line(answer),
     }
     lines = [MARKER, f"**{_TITLES[kind]}**", ""]
-    lines += [f"- {key}: {values[key]}" for key in FIELDS if values[key]]
+    for key in FIELDS:
+        if key == "run":
+            lines += [f"- run: {line['where']}: {_fence(line['text'])}" for line in run]
+        elif values[key]:
+            lines.append(f"- {key}: {values[key]}")
     return "\n".join(lines) + "\n"
 
 
 def parse_block(body: str) -> Optional[Dict[str, object]]:
     """The block's fields, or None when `body` carries no valid v1 block.
 
-    `proof` and `related` come back as lists; every other field as a string.
+    `proof` and `related` come back as lists, `run` as a list of `{"where", "text"}`,
+    every other field as a string.
     """
     if MARKER not in (body or ""):
         return None
     fields: Dict[str, object] = {}
+    runs: List[Dict[str, str]] = []
     for raw in body.split(MARKER, 1)[1].splitlines():
         m = _LINE.match(raw.strip())
-        if m:
+        if m and m.group(1) == "run":
+            runs.append(_run_line(m.group(2).strip()))
+        elif m:
             fields[m.group(1)] = m.group(2).strip()
     if fields.get("kind") not in KINDS:
         return None
     for key in ("proof", "related"):
         value = str(fields.get(key, ""))
         fields[key] = [p.strip() for p in value.split(",") if p.strip()]
+    fields["run"] = runs
+    fields.setdefault("expect", "")
     return fields
 
 
