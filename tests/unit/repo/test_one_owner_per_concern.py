@@ -8,8 +8,10 @@ from pathlib import Path
 from src._json_io import read_json_or
 
 _ROOT = Path(__file__).resolve().parents[3]
-# The reader itself, plus readers whose "missing" and "unreadable" are different answers.
-_OK = {"src/_json_io.py", "src/chief_session_end.py", "src/desktop/lid_keep_awake.py", "src/launching/copilot_remote.py"}
+# The reader itself, plus readers whose "missing" and "unreadable" are different answers
+# (installer_declaration.py is also vendored and stdlib-only, so it cannot import the reader).
+_OK = {"src/_json_io.py", "src/chief_session_end.py", "src/desktop/lid_keep_awake.py", "src/launching/copilot_remote.py",
+       "src/installer_declaration.py"}
 _HAND_ROLLED = re.compile(r"json\.loads\([^\n]*\.read_text\([^\n]*\n(?:[^\n]*\n){0,1}\s*except FileNotFoundError")
 
 
