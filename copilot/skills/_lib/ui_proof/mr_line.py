@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
 import gitlab_namespace
+from fleet_core import runtime_files
 
 from chief import launcher, lite_merge
 
@@ -49,7 +50,7 @@ def _update(run: Glab, mr: int, description: str) -> subprocess.CompletedProcess
     # A file, not an argument: `--description -` opens an editor and a long one passes the command-line limit.
     with tempfile.TemporaryDirectory(prefix="ui-proof-mr-") as scratch:
         body = Path(scratch) / "description.md"
-        body.write_bytes(description.encode("utf-8"))  # bytes: no newline translation on Windows
+        runtime_files.save_bytes(body, description.encode("utf-8"))  # bytes: no newline translation on Windows
         return run(["mr", "update", str(mr), "--description-file", str(body)])
 
 
