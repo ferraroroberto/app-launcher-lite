@@ -375,8 +375,6 @@ def _open_chief_sheet(page: Page, base_url: str) -> None:
 _CHIEF_SWITCHES = [
     ("chiefAutoDrain", "chief_auto_drain", "Auto-drain queue", "worker slot", True),
     ("chiefDoorbell", "chief_doorbell", "Chief doorbell", "mailbox", False),
-    ("chiefJobSelfHeal", "chief_job_self_heal", "Job self-heal", "repair a Job", False),
-    ("chiefWeeklyProposals", "chief_weekly_proposals", "Weekly proposals", "weekly proposals", False),
 ]
 
 

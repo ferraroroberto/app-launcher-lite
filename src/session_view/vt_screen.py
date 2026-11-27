@@ -20,7 +20,7 @@ from websockets.exceptions import InvalidHandshake, WebSocketException
 
 from src.clients import session as session_client
 from src.request_timing import TimedExecutor
-from src.session_view.plan_picker import screen_lines
+from src.session_view.capture_screen import screen_lines
 
 logger = logging.getLogger(__name__)
 

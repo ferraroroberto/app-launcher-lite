@@ -7,7 +7,7 @@
  *
  * A turn is an automatic prompt plus the agent turn after it. Consecutive
  * automatic turns form one group, and a turn holding something that waits on
- * the owner — a question, a plan, a file sent to them — is never folded and
+ * the owner — a file sent to them — is never folded and
  * ends the group it sits in. Anything the server did not mark stays visible.
  *
  * The group's first list item hosts its divider, so the list keeps the shape
@@ -83,7 +83,7 @@ function itemOf(li) {
   if (li.classList.contains('tr-agent-item')) {
     return {
       kind: 'agent',
-      keep: !!li._trParts.querySelector(':scope > .tr-ask-item, :scope > .tr-plan-item, :scope > .tr-file-item'),
+      keep: !!li._trParts.querySelector(':scope > .tr-file-item'),
     };
   }
   return { kind: 'other' };

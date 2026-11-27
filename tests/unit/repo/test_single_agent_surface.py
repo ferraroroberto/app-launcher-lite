@@ -4,7 +4,9 @@
 app-launcher keeps bringing back per-agent builders, settings and transcript
 grammars that nothing can reach, because each is still referenced from a
 table. This holds the places they land: ``src/launching/flags.py``,
-``WebappConfig`` and the transcript reader's agent and grammar tables.
+``WebappConfig``, the transcript reader's agent and grammar tables, the model
+catalog and every agent comparison in product code: a route or reader gated to
+an agent this fork cannot launch can never act.
 """
 from __future__ import annotations
 
@@ -13,12 +15,20 @@ from dataclasses import fields
 from pathlib import Path
 
 from src import agents
-from src.launching import flags
+from src.launching import flags, model_catalog
 from src.session_view.transcript import FLAVORS
 from src.webapp_config import WebappConfig
 
 # Agent ids the full app launches and this fork does not.
 _RETIRED_AGENTS = ("claude", "codex", "grok", "pi", "antigravity")
+
+_ROOT = Path(__file__).resolve().parents[3]
+_RETIRED_GATE = re.compile(rf"""[=!]=\s*["'](?:{"|".join(_RETIRED_AGENTS)})["']""")
+# Gates still shipped, as file -> count. Only shrinks.
+_KNOWN_GATES = {
+    "app/webapp/routers/_helpers.py": 2,  # Claude's remote-control web link
+    "app/webapp/routers/session_transcript.py": 1,  # the background-tasks reader
+}
 
 # A `claude_*` field that is not a launch setting of the Claude agent.
 _NOT_AN_AGENT_SETTING = {"claude_show_local_window"}
@@ -54,3 +64,19 @@ def test_the_transcript_reader_maps_only_launchable_agents() -> None:
 def test_there_is_no_transcript_grammar_for_a_retired_agent() -> None:
     grammars = {path.stem for path in Path(flags.__file__).parents[1].glob("transcript_flavors/*.py")}
     assert not grammars & set(_RETIRED_AGENTS), grammars & set(_RETIRED_AGENTS)
+
+
+def test_no_new_code_is_gated_to_a_retired_agent() -> None:
+    gates = {
+        path.relative_to(_ROOT).as_posix(): count
+        for folder in ("src", "app")
+        for path in (_ROOT / folder).rglob("*.py")
+        if (count := len(_RETIRED_GATE.findall(path.read_text(encoding="utf-8"))))
+    }
+    assert gates == _KNOWN_GATES, "delete the branch for an agent never launched, or lower _KNOWN_GATES"
+
+
+def test_the_model_catalog_holds_only_launchable_agents() -> None:
+    catalogs = {name for name in dir(model_catalog) if name.endswith("MODEL_SPECS")}
+    assert catalogs == {f"{agent.upper()}_MODEL_SPECS" for agent in agents.AGENTS}
+

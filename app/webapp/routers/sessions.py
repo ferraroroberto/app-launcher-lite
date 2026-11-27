@@ -200,9 +200,9 @@ async def _build_sessions_payload(cfg: WebappConfig, steps: BuildSteps) -> Dict[
             "attach_last_turn", board.attach_last_turn, sessions, state["rows"]
         )
         # The model's display name, for the chat header's pill: the
-        # transcript's newest answer first, then the spawn flags.
+        # event log's newest model first, then the spawn flags.
         sessions = await steps.run(
-            "attach_transcript_model", board.attach_transcript_model, sessions, state["rows"]
+            "attach_transcript_model", board.attach_transcript_model, sessions
         )
         sessions = attach_models(sessions)
         attach_ai_credits(cfg.session_host_port, sessions)

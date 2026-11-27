@@ -1,16 +1,9 @@
 """Thin HTTP client for the local-llm-hub chat endpoint.
 
-The Coding terminal's read-aloud control offers a "summarize & read" action: the
-agent's last reply is condensed by the hub's cheap ``claude-haiku-4-5`` into a
-short, driving-oriented gist (the essence + any decision to take) before it is
-spoken. This module owns the single non-streaming chat call to the hub's
-OpenAI-shape ``POST /v1/chat/completions`` at ``http://127.0.0.1:8000``; the
-webapp proxies to it over loopback so the phone never talks to the hub directly.
-
-Like :mod:`src.clients.tts`, the hub binds loopback only and serves plain HTTP
-(no self-signed TLS), so calls use ``verify=True`` (the default) and a plain
-``http://`` base. The call is a blocking ``requests`` round-trip wrapped in
-``asyncio.to_thread`` by the router.
+:func:`src.notifications.summarise_failure` asks the hub for a one-line root
+cause of a failed Job run. This module owns that single non-streaming call to
+the hub's OpenAI-shape ``POST /v1/chat/completions``. The hub binds loopback
+and serves plain HTTP, and the call is a blocking ``requests`` round-trip.
 """
 
 from __future__ import annotations
@@ -22,26 +15,12 @@ from src.clients import _loopback_http
 
 logger = logging.getLogger(__name__)
 
-# Cheap, fast model for a short summary — the hub routes this to the local
-# Claude Code subscription (see the home-stack local-llm-hub). Must be the
-# hyphenated, versioned hub id — the hub does exact-match
-# routing, no alias table.
+# Cheap, fast model for a short summary. Must be the hyphenated, versioned hub
+# id: the hub does exact-match routing, no alias table.
 DEFAULT_MODEL = "claude-haiku-4-5"
 
-# Driving-mode system prompt: the listener is at the wheel and needs the gist
-# plus any decision, not a transcript. Kept terse so Haiku returns plain
-# speakable prose (no markdown, no preamble).
-SUMMARY_SYSTEM_PROMPT = (
-    "You summarize an AI coding assistant's reply for someone who is driving "
-    "and listening hands-free. In 2-3 short sentences, give the essence of the "
-    "reply and explicitly call out any decision or action the listener needs to "
-    "take. Plain spoken prose only: no markdown, no lists, no code, no preamble "
-    "such as 'Here is a summary'. If the reply asks the listener a question, "
-    "lead with that question."
-)
-
-# A summary is a short generation, but allow ample headroom for a cold model
-# loading its weights on the first call after the hub boots.
+# A summary is a short generation, but allow headroom for a cold model loading
+# on the first call after the hub boots.
 _SUMMARIZE_TIMEOUT = 60.0
 
 
@@ -56,23 +35,16 @@ def chat_url(base_url: str) -> str:
 
 def build_summary_payload(
     text: str,
-    model: Optional[str] = None,
+    system_prompt: str,
     *,
-    system_prompt: Optional[str] = None,
+    model: Optional[str] = None,
     max_tokens: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Build the chat-completions body that asks the hub a question about ``text``.
-
-    Defaults to the driving-mode reply summary (:data:`SUMMARY_SYSTEM_PROMPT`).
-    ``system_prompt``/``max_tokens`` let a caller ask a different question of
-    the same hub client instead of hand-rolling a second one — e.g.
-    :func:`src.notifications.summarise_failure` asks for a
-    one-line failure root cause.
-    """
+    """Build the chat-completions body that asks ``system_prompt`` about ``text``."""
     payload: Dict[str, Any] = {
         "model": model or DEFAULT_MODEL,
         "messages": [
-            {"role": "system", "content": system_prompt or SUMMARY_SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": text},
         ],
         "stream": False,
@@ -86,7 +58,7 @@ def _extract_content(body: Any) -> str:
     """Pull the assistant message text out of an OpenAI-shape completion.
 
     Returns ``""`` for any unexpected shape so the caller can raise a clean
-    502 rather than leaking a KeyError to the phone. Handles both a plain
+    error rather than leaking a KeyError. Handles both a plain
     string ``content`` and the list-of-parts form some backends return.
     """
     try:
@@ -109,18 +81,13 @@ def _extract_content(body: Any) -> str:
 def summarize(
     base_url: str,
     text: str,
-    model: Optional[str] = None,
+    system_prompt: str,
     *,
-    system_prompt: Optional[str] = None,
+    model: Optional[str] = None,
     max_tokens: Optional[int] = None,
     timeout: float = _SUMMARIZE_TIMEOUT,
 ) -> str:
-    """Return a short response from the hub about ``text``.
-
-    Defaults to the driving-mode reply summary (Coding tab read-aloud).
-    ``system_prompt``/``max_tokens``/``timeout`` let a caller
-    ask a different question through this same hub client — see
-    :func:`build_summary_payload`.
+    """Return the hub's short answer to ``system_prompt`` about ``text``.
 
     Raises :class:`LlmError` (status 503) when the hub is unreachable, the
     upstream status when it answers ``>= 400``, or 502 when it returns an
@@ -132,9 +99,7 @@ def summarize(
         error=LlmError,
         service="local-llm-hub",
         timeout=timeout,
-        json=build_summary_payload(
-            text, model=model, system_prompt=system_prompt, max_tokens=max_tokens
-        ),
+        json=build_summary_payload(text, system_prompt, model=model, max_tokens=max_tokens),
         allow_empty=False,
     )
     summary = _extract_content(body)

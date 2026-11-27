@@ -256,15 +256,9 @@ class WebappConfig:
     # Settings > Chief turns it off; readers take auto_drain from the
     # chief settings payload.
     chief_auto_drain: bool = True
-    # One chief-mailbox event per failed Job run / newly red main-branch CI
-    # run; on by default, written only while a chief is live.
+    # One chief-mailbox event per failed Job run; on by default, written only
+    # while a chief is live.
     chief_job_failures: bool = True
-    chief_ci_failures: bool = True
-    # Two switches fleet-config's chief reads over loopback from
-    # GET /api/board/chief/settings; the app starts nothing for either. Off
-    # by default: each lets the chief act on its own, so the owner opts in.
-    chief_job_self_heal: bool = False
-    chief_weekly_proposals: bool = False
     # Bearer token enforced when the request did NOT come from a
     # loopback IP. Empty string disables enforcement entirely.
     auth_token: str = ""

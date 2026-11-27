@@ -3,14 +3,11 @@
 A preset is a shortcut the Coding and Team OS launch dropdowns offer next to
 "Default". It lives in ``webapp_config.json`` as a list of
 ``{id, name, agent, model, effort}`` rows; a Copilot row may also carry a
-``context`` tier (``default`` or ``long_context``, sent as ``--context``). The
-model and effort come from the shared catalog, never from a list of ids kept
-here. Only agents that take a per-launch model carry one.
+``context`` tier (``default`` or ``long_context``, sent as ``--context``).
 
-Copilot differs from the other agents in one way: which model ids an account
-may use is the install's call (``copilot_models``), so a Copilot preset names
-any model id and the launch checks it against that list. The catalog row, when
-there is one, only narrows the efforts.
+Which model ids an account may use is the install's call (``copilot_models``),
+so a preset names any model id and the launch checks it against that list. The
+catalog row, when there is one, only narrows the efforts.
 
 Two readers, two disciplines: :func:`load_launch_presets` reads a saved file
 and keeps every well-shaped row, so a model dropped from the catalog never
@@ -23,21 +20,10 @@ from __future__ import annotations
 import uuid
 from typing import Any, Dict, List, Tuple
 
-from src.launching.model_catalog import (
-    CLAUDE_MODEL_SPECS,
-    CODEX_MODEL_SPECS,
-    COPILOT_MODEL_SPECS,
-    available_values,
-)
+from src.launching.model_catalog import COPILOT_MODEL_SPECS
 from src.webapp_settings.values import VALID_COPILOT_CONTEXTS, VALID_COPILOT_EFFORTS
 
-PRESET_AGENTS: Dict[str, Dict[str, Dict[str, Any]]] = {
-    "claude": CLAUDE_MODEL_SPECS,
-    "codex": CODEX_MODEL_SPECS,
-    "copilot": COPILOT_MODEL_SPECS,
-}
-
-# The agents whose model is any id the install lists, not one from the catalog.
+# The agents that take a per-launch model, any id the install lists.
 OPEN_MODEL_AGENTS = ("copilot",)
 
 # A preset's context tier; "" is "keep the saved one" and is never stored.
@@ -66,15 +52,14 @@ class PresetError(ValueError):
 def efforts_for(agent: str, model: str) -> Tuple[str, ...]:
     """The efforts ``agent``'s ``model`` offers, ``()`` for an unknown pair.
 
-    A Copilot model with no catalog row offers every level the CLI takes: the
-    row exists only where a probe narrowed it.
+    A model with no catalog row offers every level the CLI takes: the row
+    exists only where a probe narrowed it.
     """
-    specs = PRESET_AGENTS.get(agent, {})
-    if model in specs:
-        return tuple(specs[model].get("efforts", ()))
-    if agent in OPEN_MODEL_AGENTS and model:
-        return tuple(effort for effort in VALID_COPILOT_EFFORTS if effort)
-    return ()
+    if agent not in OPEN_MODEL_AGENTS or not model:
+        return ()
+    if model in COPILOT_MODEL_SPECS:
+        return tuple(COPILOT_MODEL_SPECS[model]["efforts"])
+    return tuple(effort for effort in VALID_COPILOT_EFFORTS if effort)
 
 
 def load_launch_presets(raw: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -120,20 +105,12 @@ def checked_launch_presets(value: Any) -> List[Dict[str, str]]:
 
 
 def _checked_model(name: str, agent: str, model: str, index: int) -> None:
-    if agent in OPEN_MODEL_AGENTS:
-        if not model or model == "default" or any(ch.isspace() or ch == ":" for ch in model):
-            raise PresetError(f"{name}: {agent} needs one model id, not {model!r}", "model", index)
-        return
-    if model not in available_values(PRESET_AGENTS[agent]):
-        raise PresetError(f"{name}: unsupported {agent} model {model!r}", "model", index)
+    if not model or model == "default" or any(ch.isspace() or ch == ":" for ch in model):
+        raise PresetError(f"{name}: {agent} needs one model id, not {model!r}", "model", index)
 
 
-def _checked_context(name: str, agent: str, context: str, index: int) -> str:
-    if not context:
-        return ""
-    if agent not in OPEN_MODEL_AGENTS:
-        raise PresetError(f"{name}: {agent} takes no context tier", "context", index)
-    if context not in PRESET_CONTEXTS:
+def _checked_context(name: str, context: str, index: int) -> str:
+    if context and context not in PRESET_CONTEXTS:
         raise PresetError(
             f"{name}: context {context!r} is not offered; allowed: {', '.join(PRESET_CONTEXTS)}",
             "context",
@@ -151,7 +128,7 @@ def _checked_preset(item: Dict[str, Any], index: int) -> Dict[str, str]:
             f"a launch preset name is at most {MAX_NAME_LENGTH} characters", "name", index
         )
     agent = str(item.get("agent") or "")
-    if agent not in PRESET_AGENTS:
+    if agent not in OPEN_MODEL_AGENTS:
         raise PresetError(f"{name}: {agent or 'no agent'!r} takes no per-launch model", "model", index)
     model = str(item.get("model") or "")
     _checked_model(name, agent, model, index)
@@ -163,7 +140,7 @@ def _checked_preset(item: Dict[str, Any], index: int) -> Dict[str, str]:
             "effort",
             index,
         )
-    context = _checked_context(name, agent, str(item.get("context") or ""), index)
+    context = _checked_context(name, str(item.get("context") or ""), index)
     row = {
         "id": str(item.get("id") or "") or uuid.uuid4().hex[:8],
         "name": name,

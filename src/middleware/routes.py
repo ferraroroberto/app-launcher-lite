@@ -68,52 +68,22 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         "Coding-tab transcript view (#953): the whole conversation, terminal-grade content.",
     ),
     (
-        lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/answer"),
-        "passkey",
-        "Chat question card (#1149): types an answer into a live PTY or console — "
-        "the same write power as /input.",
-    ),
-    (
-        lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/plan-picker"),
-        "passkey",
-        "Chat plan card (#1151): reads the plan picker, and the plan, off a live "
-        "terminal screen — terminal-grade content.",
-    ),
-    (
-        lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/plan-answer"),
-        "passkey",
-        "Chat plan card (#1151): types a plan answer into a live PTY — the same "
-        "write power as /input.",
-    ),
-    (
         lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/folder-trust"),
         "passkey",
         "Board folder-trust tap: types the digit that answers Copilot's trust "
         "dialog into a live PTY, the same write power as /input.",
     ),
     (
-        lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/resume-sessions"),
-        "passkey",
-        "Chat resume card (#1300): lists the project's conversations by title "
-        "and first prompt, read from the transcripts: terminal-grade content.",
-    ),
-    (
-        lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/resume"),
-        "passkey",
-        "Chat resume card (#1300): types `/resume <id>` into a live PTY, the "
-        "same write power as /input.",
-    ),
-    (
         lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/model"),
         "passkey",
-        "Chat model chip: types `/model <id>` into a live PTY and answers the "
-        "agent's switch dialog, the same write power as /input.",
+        "Chat model chip: types `/model <id>` into a live PTY, the same write "
+        "power as /input.",
     ),
     (
         lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/context"),
         "passkey",
-        "Overlay context ring (#1223): reads a live terminal screen (the same read "
-        "as /plan-picker) — terminal-grade content, however small the answer.",
+        "Overlay context ring: reads a live terminal screen: terminal-grade "
+        "content, however small the answer.",
     ),
     (
         lambda p: p.startswith("/api/claude-code/sessions/") and p.endswith("/transcript/entry"),
@@ -215,11 +185,6 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         "Voice dictation (#165/#168): the recording is as sensitive as terminal "
         "input — covers the single-shot proxy, the streamed/SSE session proxy and "
         "the takes kept on disk (/api/transcribe/recordings).",
-    ),
-    (
-        lambda p: p == "/api/ocr",
-        "passkey",
-        "Screenshot OCR (#171): extracted text drops straight into the terminal compose bar.",
     ),
     (
         lambda p: p in ("/api/tts/speak", "/api/tts/summarize"),

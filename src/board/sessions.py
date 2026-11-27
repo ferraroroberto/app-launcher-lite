@@ -18,14 +18,12 @@ resolves to the same state row, and therefore the same title, on both tabs.
 from __future__ import annotations
 
 import logging
-import os
 import re
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import AbstractSet, Any, Callable, Dict, FrozenSet, List, Optional, Tuple
+from typing import AbstractSet, Any, Dict, FrozenSet, List, Optional, Tuple
 
-from src import audit
 from src._log_once import log_once
 from src.agents import agent_of
 from src.board import card_status
@@ -38,10 +36,9 @@ from src.board.transcript import (
     _last_activity,
     _refine_waiting_status,
     _transcript_overlay,
-    last_transcript_model,
 )
 from src.session_model import session_model_label
-from src.session_view import copilot_session, folder_trust, plan_picker
+from src.session_view import copilot_session, folder_trust
 
 logger = logging.getLogger(__name__)
 
@@ -97,66 +94,6 @@ _EPOCH = datetime.min.replace(tzinfo=timezone.utc)
 # accumulate ids without limit.
 _LOGGED_SUPPRESSED_ROWS: set[str] = set()
 _SUPPRESSED_LOG_CAP = 512
-
-# Plan picker on screen. Claude Code can keep the pending
-# ``ExitPlanMode`` call off disk while its picker is up (measured at 31 s;
-# a later probe saw it still missing 90 s in), so the transcript tail reads
-# as "nothing pending" and the card lands in ``idle-finished`` /
-# ``awaiting-input``. The hook side is reliable: in both a plan-mode and a
-# skip-permissions session the picker fires a ``permission_prompt``
-# Notification ~6 s after it appears, which stamps ``needs-you``. So only the
-# outcomes of a ``needs-you`` split that found no pending decision
-# (:data:`src.board.card_status.SCREEN_CHECKED`) get the screen check — the
-# same read Chat's plan card does (``src.session_view.plan_picker``).
-
-# session id -> ((capture size, mtime_ns, rows, cols), picker showing). The
-# render is the cost (~55 ms for the 96 KB tail on the dev box, per card), and
-# a session sitting on a picker or at its prompt doesn't write to its capture
-# (probed: no change in 40 s and 60 s), so an unchanged file is answered from
-# this and a card renders once per change, not once per 5 s poll. Pruned to
-# the live list on each merge.
-_PICKER_SCREEN_CACHE: Dict[str, Tuple[Tuple[int, int, int, int], bool]] = {}
-
-
-def _plan_picker_on_screen(sess: Dict[str, Any]) -> bool:
-    """Whether a live launcher PTY running Claude shows the plan picker now.
-
-    ``False`` whenever it can't be read — a detached (``remote``) session has
-    no screen here, a dead one's last frame proves nothing, and an unreadable
-    capture is not a picker — so the caller keeps its transcript answer and
-    this check never forces one.
-    """
-    sid = str(sess.get("session_id") or "")
-    if (
-        not sid
-        or sess.get("kind") != "pty"
-        or agent_of(sess) != "claude"
-        or not sess.get("alive", True)
-    ):
-        return False
-    path = audit.transcript_path(sid)
-    rows = int(sess.get("rows") or 40)
-    cols = int(sess.get("cols") or 120)
-    try:
-        st = os.stat(path)
-    except OSError:
-        return False
-    key = (st.st_size, st.st_mtime_ns, rows, cols)
-    cached = _PICKER_SCREEN_CACHE.get(sid)
-    if cached is not None and cached[0] == key:
-        return cached[1]
-    text = plan_picker.read_capture_tail(path)
-    if text is None:
-        return False
-    showing = plan_picker.parse_picker(plan_picker.screen_lines(text, rows, cols)) is not None
-    if showing != (cached[1] if cached is not None else False):
-        logger.info(
-            "ℹ️ Board: plan picker %s on screen for %s",
-            "showing" if showing else "no longer", sid[:8],
-        )
-    _PICKER_SCREEN_CACHE[sid] = (key, showing)
-    return showing
-
 
 def _normalize_dir(raw: Any) -> str:
     """Forward slashes, lowercase, no trailing slash — the hook-side rule."""
@@ -394,33 +331,24 @@ def attach_last_turn(
     return out
 
 
-def attach_transcript_model(
-    live: List[Dict[str, Any]], state_rows: Dict[str, Dict[str, Any]]
-) -> List[Dict[str, Any]]:
+def attach_transcript_model(live: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Each live session plus ``transcript_model`` (the live source of the
     chat header's model pill, which :func:`src.session_model.attach_models`
-    reads): the model its Claude transcript last answered on or was last
-    switched to in-session, whichever is newer, or the model a Copilot
-    session's event log last put it on
+    reads): the model a Copilot session's event log last put it on
     (:func:`src.session_view.copilot_session.current_model`).
 
-    Same agent-aware claim walk as :func:`attach_shared_names`, so a session
-    resolves to the same state row on every tab. ``None`` when there is no
-    state row, no readable transcript or no assistant record yet. Returns new
+    ``None`` when there is no readable log or no model record yet. Returns new
     dicts; the input is never mutated. Blocking file IO (one bounded tail read
-    per Claude session) - callers wrap in ``asyncio.to_thread``. The Board
-    cards keep the flag-only model: their lazy shared tail read is pinned to
-    one per card, and the pill is the chat header's.
+    per session) - callers wrap in ``asyncio.to_thread``. The Board cards keep
+    the flag-only model: their lazy shared tail read is pinned to one per
+    card, and the pill is the chat header's.
     """
-    pairs, _ = _claim_walk(live, state_rows)
     out: List[Dict[str, Any]] = []
-    for sess, row, _sid in pairs:
-        agent = agent_of(sess)
-        if agent == "copilot":
-            model = copilot_session.current_model(copilot_session.event_log(sess))
-        else:
-            transcript = (row or {}).get("transcript_path")
-            model = last_transcript_model(transcript) if agent == "claude" and transcript else None
+    for sess in live:
+        model = (
+            copilot_session.current_model(copilot_session.event_log(sess))
+            if agent_of(sess) == "copilot" else None
+        )
         out.append({**sess, "transcript_model": model})
     return out
 
@@ -446,12 +374,7 @@ def merge_sessions(
     by :func:`src.board.transcript._refine_waiting_status`, so a caller
     never has to fetch the exchange to tell those five apart. The raw
     ``needs-you`` string itself never reaches a card's ``status`` field.
-    When that split finds no pending decision, a live launcher PTY running
-    Claude gets one more check: the plan picker on its screen
-    (:func:`_plan_picker_on_screen`, cached by the capture's size and mtime)
-    makes it ``awaiting-decision`` — Claude can keep the ``ExitPlanMode``
-    call off disk while the picker is up. Detached and state-only cards have
-    no screen and keep the transcript's answer. The
+    The
     live session's ``last_output_at`` rides along with ``live_title`` to the
     matched-pairs call site only — a busy title with a genuinely
     stale PTY (no more raw output at all) falls through to this same
@@ -480,19 +403,13 @@ def merge_sessions(
 
     Blocking file IO (a transcript stat plus up to two bounded tail reads per
     waiting card — the activity window and one shared
-    :class:`src.board.transcript._ExchangeTail` — and, for a screen-checked
-    card, a capture stat plus a render when the capture changed) — callers wrap in
+    :class:`src.board.transcript._ExchangeTail`) — callers wrap in
     ``asyncio.to_thread``.
     """
     now = now or utc_now()
     active_repos = active_issue_repos or frozenset()
     cards: List[Dict[str, Any]] = []
     pairs, unmatched = _claim_walk(live, state_rows)
-    # Two Board polls can merge at once (each on its own worker thread), so
-    # the prune snapshots the keys and tolerates the other having got there.
-    for gone in set(_PICKER_SCREEN_CACHE) - {str(s.get("session_id")) for s in live}:
-        _PICKER_SCREEN_CACHE.pop(gone, None)
-
     for sess, row, sid in pairs:
         cards.append(_live_card(sess, row, sid, now, active_repos))
 
@@ -521,7 +438,6 @@ def derive_card_status(
     process_confirmed: bool = True,
     live_title: Optional[str] = None,
     last_output_at: Optional[float] = None,
-    picker_on_screen: Optional[Callable[[], bool]] = None,
 ) -> Tuple[str, Optional[datetime]]:
     """A card's ``(status, age-anchor)`` from its claimed state row, if any.
 
@@ -535,14 +451,11 @@ def derive_card_status(
        ``needs-you`` into a card value, or for a Copilot row
        :func:`src.board.copilot_status.copilot_waiting_status`, which reads
        Copilot's own event log;
-    4. ``picker_on_screen`` (a live launcher PTY only; ``None`` means no
-       screen to read) turns a :data:`~src.board.card_status.SCREEN_CHECKED`
-       value into ``awaiting-decision``;
-    5. ``idle-finished`` in a repo with an open issue workflow reads
+    4. ``idle-finished`` in a repo with an open issue workflow reads
        ``awaiting-input``: a clean stop is only an absence of evidence.
 
     An external card passes ``process_confirmed=False`` (no process evidence,
-    so no ``stalled``) and no live title or screen.
+    so no ``stalled``) and no live title.
     """
     raw_status = (row or {}).get("status")
     status = raw_status if raw_status in card_status.HOOK_STAMPS else card_status.UNKNOWN
@@ -555,12 +468,6 @@ def derive_card_status(
         status = copilot_waiting_status(row.get("transcript_path"))
     else:
         status = _refine_waiting_status(status, tail)
-    if (
-        picker_on_screen is not None
-        and status in card_status.SCREEN_CHECKED
-        and picker_on_screen()
-    ):
-        status = card_status.AWAITING_DECISION
     if status == card_status.IDLE_FINISHED and normalize_repo_name(project) in active_repos:
         status = card_status.AWAITING_INPUT
     return status, anchor
@@ -580,7 +487,6 @@ def _live_card(
         row, anchor, now=now, project=project, active_repos=active_repos,
         live_title=sess.get("live_title"),
         last_output_at=sess.get("last_output_at"),
-        picker_on_screen=lambda: _plan_picker_on_screen(sess),
     )
     # Copilot's folder-trust dialog reads nothing until answered and fires no
     # hook, so the card would sit as ``unknown``: a human has to look, so it is

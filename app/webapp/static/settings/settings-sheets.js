@@ -517,8 +517,6 @@ function wireChiefDoorbell() {
   });
   wireConfigSwitch(els.chiefAutoDrainToggle, 'chief_auto_drain', { label: 'Auto-drain queue' });
   wireConfigSwitch(els.chiefJobFailuresToggle, 'chief_job_failures', { label: 'Chief job failures' });
-  wireConfigSwitch(els.chiefJobSelfHealToggle, 'chief_job_self_heal', { label: 'Job self-heal' });
-  wireConfigSwitch(els.chiefWeeklyProposalsToggle, 'chief_weekly_proposals', { label: 'Weekly proposals' });
 }
 
 // ------------------------------------------------------------------- wire

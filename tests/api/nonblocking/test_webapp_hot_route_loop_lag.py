@@ -35,7 +35,6 @@ _HOT_ROUTES = (
     "/api/claude-code/sessions",
     "/api/board",
     "/api/claude-code/sessions/s1/context",
-    "/api/claude-code/sessions/s1/plan-picker",
     "/api/version",
 )
 

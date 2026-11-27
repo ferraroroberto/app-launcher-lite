@@ -4,7 +4,6 @@
  * Owns its own markup so a second mount is one
  * call, not a second copy of the HTML:
  *
- *   ┌ OCR staging tray (hidden until a screenshot is staged) ┐
  *   │ tall predictive <textarea>            │ 🎤 mic    │ ⌨ keys │
  *   │                                       │ 📎 attach │ ➤ send │
  *
@@ -12,11 +11,9 @@
   * attach · send on row 2. The 📎 button
  * opens a menu — the same row-menu component
  * as the session ⚙️ gear — of everything that puts something into the
- * message: Photo, Extract text (OCR), Attach file (to context) and Attach
- * large file (not read). The OCR row hides with photo-ocr unconfigured; the
- * rest always show, so the button always opens the menu. Keys took the slot
- * OCR freed; the D-pad anchors above the composer where the thumb reaches it
- * (terminal-keys.js).
+ * message: Photo, Attach file (to context) and Attach large file (not read).
+ * The rows always show, so the button always opens the menu. The D-pad
+ * anchors above the composer where the thumb reaches it (terminal-keys.js).
  *
  * Surface-specific behaviour comes in through `opts`, so the module never
  * touches a WebSocket, a session id or the PTY:
@@ -53,21 +50,21 @@
  *                        tools column is mic over image.
  *     onChange:          optional — fires whenever the text changes, typed
  *                        or not (a dictated transcript, an appended path,
- *                        extracted OCR text), so a field host can re-gate.
+ *                        an appended path), so a field host can re-gate.
  *   }) → handle
  *
  * The handle: `root`, `textarea`, `attachFiles(files)` (the entry point the
  * attach menu, the composer's own paste and drop and the terminal
  * host's paste and drop all use), `restoreDraft(text)` (hand back a cleared
  * draft whose send went unanswered), `reset()` (leave-surface teardown), `closePopovers()`,
- * `setAvailability({ dictate, ocr })`, `setKeys(keysOpts | null, reason?)`,
+ * `setAvailability({ dictate })`, `setKeys(keysOpts | null, reason?)`,
  * `setPlaceholder(text)`, `setSendable(enabled, reason)`, `isBusy()` (a
  * stopped dictation is still finalizing — a field host's own send waits it
  * out, as ➤ does).
  *
  * `setSendable(false, reason)` gates ➤ Send alone (a detached session
- * whose agent the console-input probe never proved) — the textarea, mic,
- * image and OCR stay usable. The gate is `aria-disabled`, never `disabled`:
+ * whose agent the console-input probe never proved) — the textarea, mic
+ * and image stay usable. The gate is `aria-disabled`, never `disabled`:
  * a genuinely disabled button fires no tap event on iOS, so the reason could
  * only ever surface through a `title` hover a phone does not have, leaving a
  * dead button and no explanation. A tap still lands and toasts the
@@ -76,20 +73,13 @@
  *
  * An unavailable keys button renders DISABLED rather than hidden: a grid that
  * collapses to three buttons is a different shape (design.md button-disabled
- * — flat muted text, never opacity). The OCR *option* hides, as the issue
- * asks, since it lives inside a menu.
+ * — flat muted text, never opacity).
  *
  * Voice dictation: the mic drops the transcript
  * into the textarea for review — never straight into a PTY. Send refuses
  * while a stopped recording is still finalizing; reset() disposes the
  * instance so the mic and the app-wide dictation mutex release even
  * mid-permission-prompt.
- *
- * Screenshot OCR: the option *stages* screenshots into the tray;
- * Extract sends ALL of them to photo-ocr in one /api/ocr call so it collates
- * them into one deduplicated text (overlapping shots merged), which lands in
- * the textarea for review. photo-ocr may hold that call for ~15 min on a slow
- * hub, so a tap on the busy Extract button cancels it (as uploads do); the staged shots stay for a retry.
  *
  * Large file: a file for the agent to move, archive or process by
  * path, never to read. It goes through the same queue, uncapped by the
@@ -113,10 +103,8 @@
  * cancelled". A paste or drop mid-run still queues behind it.
  */
 
-import { apiFailToast, apiRawJson, toast } from './api.js';
-import { readTerminalToken } from './webauthn.js';
+import { toast } from './api.js';
 import { createDictation, voiceDictationAvailable } from './voice.js';
-import { startWorkTimer } from './work-timer.js';
 import { createRowMenu } from './_vendored/row-menu/row-menu.js';
 import { bindLongPressHint } from './long-press-hint.js';
 import { mountKeysPopover } from './terminal/terminal-keys.js';
@@ -143,9 +131,7 @@ const _TITLE_ATTACH = 'Attach';
 const _TITLE_SEND = 'Send';
 const _TITLE_SEND_MOD_ENTER = 'Send (Ctrl/Cmd+Enter)';
 const _TITLE_CANCEL_UPLOAD = 'Cancel upload';
-const _TITLE_CANCEL_EXTRACT = 'Cancel extraction';
 const _LABEL_PHOTO = 'Photo';
-const _LABEL_OCR = 'Extract text (OCR)';
 const _LABEL_ATTACH = 'Attach file (to context)';
 const _LABEL_LARGE = 'Attach large file (not read)';
 
@@ -164,10 +150,6 @@ export function growTextarea(ta) {
 function render(host, placeholder) {
   host.classList.add('composer');
   host.innerHTML =
-    '<div class="ocr-tray" hidden>' +
-      '<div class="ocr-thumbs"></div>' +
-      '<button type="button" class="ocr-extract" data-track="composer.extract-text">' + icon('scan-text') + ' Extract text</button>' +
-    '</div>' +
     '<div class="composer-upload-status" role="status" aria-live="polite" hidden></div>' +
     '<div class="compose-bar">' +
       '<textarea class="compose-input composer-input" rows="2" enterkeyhint="enter"></textarea>' +
@@ -188,14 +170,10 @@ function render(host, placeholder) {
     // input feeds the not-read path.
     '<input type="file" class="composer-attach-input" multiple hidden>' +
     '<input type="file" class="composer-photo-input" accept="image/*" multiple hidden>' +
-    '<input type="file" class="composer-large-input" multiple hidden>' +
-    '<input type="file" class="composer-ocr-input" accept="image/*" multiple hidden>';
+    '<input type="file" class="composer-large-input" multiple hidden>';
   const ta = host.querySelector('.composer-input');
   ta.placeholder = placeholder;
   return {
-    tray: host.querySelector('.ocr-tray'),
-    thumbs: host.querySelector('.ocr-thumbs'),
-    extract: host.querySelector('.ocr-extract'),
     uploadStatus: host.querySelector('.composer-upload-status'),
     micNotice: host.querySelector('.composer-mic-notice'),
     textarea: ta,
@@ -206,7 +184,6 @@ function render(host, placeholder) {
     attachInput: host.querySelector('.composer-attach-input'),
     photoInput: host.querySelector('.composer-photo-input'),
     largeInput: host.querySelector('.composer-large-input'),
-    ocrInput: host.querySelector('.composer-ocr-input'),
   };
 }
 
@@ -251,161 +228,12 @@ function newComposerState(host, opts, el) {
     keysPopover: null,
     attachQueue: null,
     imageMenu: null,
-    ocrStaged: [],      // File objects awaiting a collated extraction
-    ocrThumbUrls: [],   // object URLs to revoke when the tray re-renders
-    // The in-flight extraction's AbortController, or null at rest. photo-ocr may
-    // hold one call for ~15 min on a slow hub, so the busy Extract button
-    // stays tappable and a second tap cancels it, like the upload.
-    ocrCtrl: null,
-    // OCR is offered only while photo-ocr is configured (setAvailability).
-    ocrOffered: true,
   };
 }
 
 function composerGrow(c) {
   growTextarea(c.el.textarea);
   if (c.opts.onChange) c.opts.onChange();
-}
-
-// ---- OCR staging tray ----------------------------------------------------
-function renderOcrTray(c) {
-  const el = c.el;
-  el.thumbs.innerHTML = '';
-  c.ocrThumbUrls.forEach(function (u) { URL.revokeObjectURL(u); });
-  c.ocrThumbUrls = [];
-  if (!c.ocrStaged.length) {
-    el.tray.hidden = true;
-    return;
-  }
-  el.tray.hidden = false;
-  c.ocrStaged.forEach(function (file, idx) {
-    const cell = document.createElement('div');
-    cell.className = 'ocr-thumb';
-    const img = document.createElement('img');
-    const url = URL.createObjectURL(file);
-    c.ocrThumbUrls.push(url);
-    img.src = url;
-    img.alt = 'staged screenshot ' + (idx + 1);
-    const rm = document.createElement('button');
-    rm.dataset.track = 'composer.ocr-remove';
-    rm.type = 'button';
-    rm.className = 'ocr-thumb-x';
-    rm.innerHTML = icon('x');
-    rm.title = 'Remove';
-    rm.addEventListener('click', function () {
-      c.ocrStaged.splice(idx, 1);
-      renderOcrTray(c);
-    });
-    cell.appendChild(img);
-    cell.appendChild(rm);
-    el.thumbs.appendChild(cell);
-  });
-  el.extract.innerHTML =
-    icon('camera') + ' Extract text (' + c.ocrStaged.length + ')';
-}
-
-function clearOcrStaging(c) {
-  c.ocrStaged = [];
-  renderOcrTray(c);
-}
-
-// Run OCR over EVERY staged image in one call so photo-ocr deduplicates
-// the overlap. Same bearer + passkey terminal token as an upload. A tap while
-// one is running cancels it instead: staged images are kept for a retry.
-async function runOcrExtraction(c) {
-  const el = c.el;
-  if (c.ocrCtrl) {
-    c.ocrCtrl.abort();
-    return;
-  }
-  const list = c.ocrStaged.slice();
-  if (!list.length) return;
-  const fd = new FormData();
-  list.forEach(function (f, i) {
-    fd.append('files', f, f.name || ('screenshot-' + (i + 1) + '.png'));
-  });
-  const ctrl = new AbortController();
-  c.ocrCtrl = ctrl;
-  // `aria-busy`, never `disabled`: iOS fires no tap on a disabled button.
-  el.extract.setAttribute('aria-busy', 'true');
-  el.extract.title = _TITLE_CANCEL_EXTRACT;
-  el.extract.setAttribute('aria-label', _TITLE_CANCEL_EXTRACT);
-  el.image.disabled = true;
-  const stopTimer = startWorkTimer(
-    el.extract, icon('camera') + ' Extract text', icon('hourglass') + ' Reading '
-  );
-  try {
-    const body = await apiRawJson('/api/ocr', {
-      method: 'POST', terminalToken: readTerminalToken(), body: fd,
-      signal: ctrl.signal,
-    });
-    const text = body && body.text;
-    const plural = list.length > 1;
-    if (!text) {
-      toast('No text found in the image' + (plural ? 's' : ''), undefined, { icon: 'camera' });
-      return;
-    }
-    // Insert at the caret with a leading space when the textarea already
-    // has trailing content, so the OCR appends cleanly to typed text.
-    const ta = el.textarea;
-    const before = ta.value.slice(0, ta.selectionStart);
-    const sep = (before && !/\s$/.test(before)) ? ' ' : '';
-    ta.setRangeText(sep + text, ta.selectionStart, ta.selectionEnd, 'end');
-    composerGrow(c);
-    ta.focus();
-    clearOcrStaging(c);
-    trackFeature('feat.ocr');
-    // A partly read take is a 200 whose text already carries a
-    // `[missing: photo N …]` line per unread photo; say so
-    // up front rather than a plain success the owner might not look past.
-    const missed = (body.missing_photos || []).length;
-    if (missed) {
-      toast(
-        missed + ' of ' + list.length + ' screenshot' + (plural ? 's' : '') +
-          ' could not be read — see the [missing] lines.',
-        'error',
-        { icon: 'camera' }
-      );
-    } else {
-      toast(
-        'Text extracted from ' + list.length + ' image' +
-          (plural ? 's' : '') + ' — review, then tap Send.',
-        'good',
-        { icon: 'camera' }
-      );
-    }
-  } catch (exc) {
-    if (ctrl.signal.aborted) {
-      toast('Extraction cancelled', undefined, { icon: 'camera' });
-    } else {
-      apiFailToast('OCR failed', exc);
-    }
-  } finally {
-    c.ocrCtrl = null;
-    stopTimer();
-    // The timer restores the bare label; a kept (cancelled/failed) staging
-    // needs its "(N)" back.
-    if (c.ocrStaged.length) renderOcrTray(c);
-    el.extract.removeAttribute('aria-busy');
-    el.extract.removeAttribute('aria-label');
-    el.extract.removeAttribute('title');
-    el.image.disabled = false;
-  }
-}
-
-function wireOcr(c) {
-  const el = c.el;
-  el.ocrInput.addEventListener('change', function () {
-    const picked = el.ocrInput.files;
-    const list = picked && picked.length ? Array.prototype.slice.call(picked) : [];
-    el.ocrInput.value = '';
-    // Stage, don't send — accumulate across taps; Extract collates them all.
-    if (list.length) {
-      c.ocrStaged = c.ocrStaged.concat(list);
-      renderOcrTray(c);
-    }
-  });
-  el.extract.addEventListener('click', function () { runOcrExtraction(c); });
 }
 
 // ---- attach ------------------------------------------------------------
@@ -566,12 +394,6 @@ function mountImageMenu(c) {
       onTap: function () { el.photoInput.click(); },
     },
     {
-      glyph: 'scan-text', label: _LABEL_OCR,
-      dataset: { item: 'composer-menu-ocr' },
-      hidden: function () { return !c.ocrOffered; },
-      onTap: function () { el.ocrInput.click(); },
-    },
-    {
       glyph: 'file-text', label: _LABEL_ATTACH,
       dataset: { item: 'composer-menu-attach' },
       onTap: function () { el.attachInput.click(); },
@@ -688,7 +510,6 @@ function setAvailability(c, a) {
     // No dictation backend: the mic is absent, not a disabled lookalike.
     c.el.mic.hidden = !a.dictate;
   }
-  if (a && 'ocr' in a) c.ocrOffered = !!a.ocr;
 }
 
 function setSendable(c, enabled, reason) {
@@ -715,8 +536,7 @@ function closePopovers(c) {
   c.imageMenu.close();
 }
 
-// Leave-surface teardown: drop the draft, the staged screenshots and any
-// in-flight recording. dispose() (not stop()) so the mic and the app-wide
+// Leave-surface teardown: drop the draft and any in-flight recording. dispose() (not stop()) so the mic and the app-wide
 // dictation mutex release even mid-permission-prompt or mid-finalize, and
 // a late transcript is dropped rather than written into a bar about to be
 // hidden and cleared.
@@ -725,7 +545,6 @@ function resetComposer(c) {
   c.el.textarea.style.height = '';
   c.hasImage = false;
   c.dictated = false;
-  clearOcrStaging(c);
   c.dictation.dispose();
   closePopovers(c);
 }
@@ -764,13 +583,12 @@ export function mountComposer(host, opts) {
     onOpen: function () { if (c.keysOpts && c.keysOpts.onOpen) c.keysOpts.onOpen(); },
   });
 
-  wireOcr(c);
   c.attachQueue = createComposerAttachQueue(c);
   wireAttach(c);
   mountImageMenu(c);
   wireSend(c);
 
-  setAvailability(c, { dictate: voiceDictationAvailable(), ocr: false });
+  setAvailability(c, { dictate: voiceDictationAvailable() });
   setKeys(c, c.keysOpts, opts.keysOffReason);
   setSendable(c, true);
 

@@ -6,7 +6,7 @@
 import { icon } from './_vendored/icons/icons.js';
 
 // Tiny "working" indicator: swap a button's label for a ticking
-// elapsed-seconds timer so a blind background wait — OCR, single-shot
+// elapsed-seconds timer so a blind background wait — single-shot
 // transcribe, streamed finish — visibly shows progress instead of looking
 // stuck. ``workingLabel`` defaults to the hourglass glyph; pass a richer
 // label for wide buttons. Labels are HTML (the Lucide icon() markup rides

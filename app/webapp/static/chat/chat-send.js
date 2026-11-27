@@ -11,10 +11,8 @@ import { visiblePending } from './chat-pending.js';
 import { confirmDialog } from '../confirm-dialog.js';
 import { keyboardOverlayHeight } from '../terminal.js';
 import { uploadSessionFile } from '../terminal/terminal-compose.js';
-import { openResumeCard } from './chat-resume.js';
 import { isChiefSession } from '../shared/session-kinds.js';
 import { markLooked } from '../board/journal-look.js';
-import { pickerAllowed } from './transcript-decisions.js';
 import {
   SENT_REFRESH_MS, chatComposer, forwardRead, liveAllowed, scheduleLive, view,
 } from './session-transcript.js';
@@ -53,12 +51,6 @@ export function pinChatToKeyboard() {
 // but leaves that session's composer and list alone.
 export async function sendFromChat(text) {
   if (!view) return false;
-  // `/resume` opens the searchable resume card instead of Claude
-  // Code's scrolling picker, where Chat can read the terminal's screen.
-  if (text.trim() === '/resume' && pickerAllowed(view.session)) {
-    openResumeCard('composer');
-    return true;
-  }
   const target = view;
   // The same text already waiting is the double send the queued chip exists
   // to prevent: ask before it goes twice. A "no" keeps the draft.

@@ -70,26 +70,12 @@ class TestChiefSettings:
             "worker_cap": 3,
             "worker_cap_scope": "chief",
             "auto_drain": True,
-            "chief_job_self_heal": False,
-            "chief_weekly_proposals": False,
             "chief_fallback_minutes": 30,
             "chief_rering_seconds": 60,
             "chief_unread_alert_minutes": 15,
             "chief_reoffer_minutes": 15,
             "chief_hold_minutes": 10,
         }
-
-    @pytest.mark.parametrize("key", ["chief_job_self_heal", "chief_weekly_proposals"])
-    def test_automation_switches_follow_the_config_and_survive_a_put(
-        self, webapp_client, _bypass_gate, key,
-    ):
-        """fleet-config reads each Automations switch from this block, so a
-        Settings flip shows here at once and a chief PUT does not reset it."""
-        client, _, _ = webapp_client
-        assert client.post("/api/config", json={key: True}).status_code == 200
-        assert client.get("/api/board/chief/settings").json()["settings"][key] is True
-        resp = client.put("/api/board/chief/settings", json={"worker_cap": 4})
-        assert resp.json()["settings"][key] is True
 
     def test_a_saved_timing_reaches_the_chief(self, webapp_client, _bypass_gate):
         client, _, _ = webapp_client

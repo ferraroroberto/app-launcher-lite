@@ -1,6 +1,6 @@
 /* The live terminal's composer transport (split off terminal.js; the composer itself lives in composer.js).
  *
- * composer.js owns the surface — textarea, mic, keys, image menu, OCR tray,
+ * composer.js owns the surface — textarea, mic, keys, image menu,
  * send — and knows nothing about sessions. This module is the terminal's
  * binding of it: ➤ Send forwards the buffered text over the PTY WebSocket,
  * then a submitting \r as a SEPARATE WS frame (sendSubmit); attach
@@ -221,7 +221,7 @@ function snapToTail() {
 
 // Mount the shared composer into the terminal overlay, bound to the live
 // PTY session. Called once from wireTerminal(); the mirror rule and the
-// per-open availability sync (dictation / OCR) live in openTerminal.
+// per-open availability sync (dictation) live in openTerminal.
 export function mountTerminalComposer() {
   terminalComposer = mountComposer(els.terminalComposeBar, {
     placeholder: 'Type a prompt — predictive on.',

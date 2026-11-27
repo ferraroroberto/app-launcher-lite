@@ -47,13 +47,6 @@
         <div id="transcriptBody" class="transcript-body">
           <button data-track="session.older" id="transcriptOlder" type="button" class="transcript-older" hidden>Load older</button>
           <ol id="transcriptList" class="transcript-list" aria-label="Session transcript"></ol>
-          <!-- The plan picker read off the terminal (#1151), answerable from
-               here while it is up. Driven by session-transcript.js. -->
-          <div id="transcriptPlanLive" class="tr-plan-live" hidden></div>
-          <!-- The resume card (#1300): the project's sessions, searchable,
-               while the terminal shows the /resume picker or after /resume
-               is typed here. Driven by chat-resume.js. -->
-          <div id="transcriptResumeLive" class="tr-resume-live" hidden></div>
           <div id="transcriptState" class="empty" role="status" aria-live="polite" hidden></div>
         </div>
         <button data-track="session.chat-latest" id="chatLatest" type="button" class="latest-pill" title="Jump to the latest message" aria-label="Jump to the latest message" hidden><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow-down"></use></svg> Latest</button>
@@ -80,7 +73,7 @@
          phone and in the PC mirror window alike (terminal.js). Markup is
          rendered by composer.js, mounted from terminal-compose.js —
          textarea + 2x2 grid (mic · keys / image · send), the image button's
-         attach / OCR options menu, the OCR staging tray, the keys D-pad. -->
+         attach options menu, the keys D-pad. -->
     <div id="terminalComposeBar" class="composer" hidden></div>
     <!-- The bottom status strip (#1219): always laid out, in Terminal and
          Chat mode alike, so the controls above it clear the phone's rounded

@@ -30,7 +30,7 @@ import pyte
 from src.board.transcript import _read_tail_bytes, _tail_lines
 from src.board.transcript_exchange import last_exchange
 from src.session_host_scan import _cook_input_line
-from src.session_view import plan_picker, transcript_locate
+from src.session_view import capture_screen, transcript_locate
 from src.transcript_flavors.copilot import copilot_entries
 
 logger = logging.getLogger(__name__)
@@ -256,7 +256,7 @@ def launcher_last_exchange(
 ) -> Dict[str, Any]:
     """Extract the latest reply from an exact-id PTY capture tail.
 
-    The tail is read through :func:`plan_picker.read_capture_tail`, which undoes
+    The tail is read through :func:`capture_screen.read_capture_tail`, which undoes
     the session-host's text-mode CRLF expansion and starts the render after the
     first newline; only the scrollback-aware, colour-reading render below is
     local, because the shared ``screen_lines`` keeps neither history nor cells.
@@ -271,7 +271,7 @@ def launcher_last_exchange(
         fingerprint = None
     parsed_rows = _cached_rows(capture_path, fingerprint)
     if parsed_rows is None:
-        raw = plan_picker.read_capture_tail(capture_path, _CAPTURE_TAIL_BYTES)
+        raw = capture_screen.read_capture_tail(capture_path, _CAPTURE_TAIL_BYTES)
         if not raw:
             return unavailable("no_exchange")
         try:

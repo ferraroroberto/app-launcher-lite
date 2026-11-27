@@ -12,7 +12,7 @@
  * This module coordinates the xterm instance, its cache, sizing and the
  * keyboard-pan. The WebSocket lifecycle lives in terminal-connection.js and
  * theme resolution in terminal-theme.js. Five sibling concerns are split
- * out: the compose bar + dictation + OCR (terminal-compose.js) and the
+ * out: the compose bar + dictation (terminal-compose.js) and the
  * PC-mirror-window title/guard logic (terminal-mirror.js),
  * then the on-screen keys D-pad (terminal-keys.js) and image paste / drop /
  * attach (terminal-image.js). The bar's ⋮ session menu and
@@ -399,13 +399,10 @@ function syncPaneChrome(session, isMirror) {
   els.terminalComposeBar.hidden = false;
 
   // 🎤 dictation needs Settings > Speech to text on *and* MediaRecorder
-  // support; 📷 screenshot OCR needs photo-ocr configured. Re-synced per open
-  // because the config can land after the composer mounted at boot, and so a
-  // switch flipped in Settings shows here (composer.js).
-  terminalComposer.setAvailability({
-    dictate: voiceDictationAvailable(),
-    ocr: !!(state.status && state.status.screenshot_ocr),
-  });
+  // support. Re-synced per open because the config can land after the composer
+  // mounted at boot, and so a switch flipped in Settings shows here
+  // (composer.js).
+  terminalComposer.setAvailability({ dictate: voiceDictationAvailable() });
 
   // Mirror window uses a uniquely identifiable OS title so the launcher
   // can find this Edge --app window via EnumWindows and dismiss it

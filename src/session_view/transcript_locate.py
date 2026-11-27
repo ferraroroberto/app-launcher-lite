@@ -5,8 +5,7 @@ show* for the Board drawer's conversation preview, while this one answers a
 narrower, reusable question — *which file on disk belongs to this live
 session*. ``src.board.exchange`` and ``app/webapp/routers/session_transcript.py``
 both call into this module rather than duplicating the correlation logic;
-neither owns it. It also holds the two Claude project-folder readers the
-resume picker lists conversations with.
+neither owns it.
 
 The finder fails safe: anything short of exactly one unambiguous,
 safely-correlated candidate returns ``None`` rather than risk showing a
@@ -25,7 +24,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.board.transcript import _read_tail_bytes
 from src.chief.copilot_state import copilot_home
 from src.session_view import copilot_reopen
 
@@ -34,18 +32,6 @@ logger = logging.getLogger(__name__)
 # matter lands next to the request it slowed.
 slow_logger = logging.getLogger("launcher.slowreq")
 _SLOW_SCAN_S = 0.5
-
-# How far back to look for the naming records a scanned Claude conversation
-# declares about itself, read with the same bounded-tail discipline as
-# every other reader here. Claude Code re-emits `ai-title`/`custom-title`
-# periodically rather than once, so the newest one sits near the end of the
-# file — measured across the 8 newest conversations in three project folders
-# on this box, the last naming record sat at most 22.7 KB from EOF, including
-# in a 67.8 MB chief conversation. 256 KB is a ~11x margin on that worst case
-# and the same window `src.board.transcript._EXCHANGE_TAIL_BYTES` already uses for
-# this file. `_ACTIVITY_TAIL_BYTES` (8 KB) is deliberately *not* reused: it
-# would have missed the record in 6 of those 8 files.
-_TITLE_TAIL_BYTES = 256 * 1024
 
 _COPILOT_STATE_DIR = copilot_home() / "session-state"
 # Copilot's own session folder is created at launch, a little *after* the
@@ -106,15 +92,6 @@ _COPILOT_RESUME_CACHE: Dict[Path, Tuple[int, List[float]]] = {}
 # A cheap byte filter; the parsed record's own ``type`` decides.
 _COPILOT_RESUME_MARK = b'"session.resume"'
 _COPILOT_RESUME_CHUNK_BYTES = 1024 * 1024
-_CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
-# Claude Code names a project folder after its cwd with every non-alphanumeric
-# character replaced by `-`. Measured across the 107 folders on this box whose
-# own JSONL records a `cwd`: 103 match that transform exactly and 4 older ones
-# are additionally lowercased, so the folder is matched case-insensitively
-# rather than by building one name.
-_CLAUDE_SLUG_RE = re.compile(r"[^A-Za-z0-9]")
-
-
 def _started_epoch(session: Dict[str, Any]) -> Optional[float]:
     """A live session's ``started_at`` as epoch seconds, or None.
 
@@ -506,72 +483,5 @@ def _resume_instant(line: bytes) -> Optional[float]:
         return None
 
 
-def _claude_project_folders(project_dir: str) -> Optional[List[Path]]:
-    """The ``~/.claude/projects`` folders for a cwd, or None if unreadable.
-
-    Built from the *normalized* directory so the session's own spelling —
-    separator flavour, trailing slash, drive-letter case — cannot change the
-    folder it looks for; matched case-insensitively for the legacy
-    lowercased folders.
-    """
-    slug = _CLAUDE_SLUG_RE.sub("-", _normalize_dir(project_dir))
-    try:
-        return [
-            child
-            for child in _CLAUDE_PROJECTS_DIR.iterdir()
-            if child.name.lower() == slug and child.is_dir()
-        ]
-    except OSError:
-        return None
-
-
-def _claude_declared_titles(path: Path) -> Tuple[Optional[str], Optional[str]]:
-    """The newest ``custom-title`` and ``ai-title`` a conversation declares.
-
-    Claude Code names a conversation in two independent records and both are
-    in play: ``{"type": "ai-title", "aiTitle": ...}`` is the name it infers
-    for itself, and ``{"type": "custom-title", "customTitle": ...}`` is an
-    explicit one that overrides it in the window title. They are not
-    interchangeable and they do drift apart — the standing fleet chief on
-    this box carries ``customTitle: "chief"`` and
-    ``aiTitle: "Investigate and fix failed jobs"`` in the *same* file, the
-    ai-title frozen at what it inferred early (one distinct value across all
-    38,094 lines) while the PTY paints the custom one. Reading only
-    ``ai-title`` alone would have made the chief's own
-    drawer disagree with itself permanently.
-
-    Both are returned rather than resolved to one here, so the caller can
-    accept a match against *either* — the fail-safe direction, since it can
-    only ever refuse fewer answers.
-    """
-    custom: Optional[str] = None
-    ai: Optional[str] = None
-    for line in _read_tail(path, _TITLE_TAIL_BYTES).splitlines():
-        # Cheap reject first: these records are a few per thousand lines and
-        # the window is 256 KB of mostly message text.
-        if '-title"' not in line:
-            continue
-        try:
-            obj = json.loads(line)
-        except (TypeError, ValueError):
-            continue  # a torn first line from the tail cut, or not a record
-        if not isinstance(obj, dict):
-            continue
-        kind = obj.get("type")
-        if kind == "custom-title":
-            value = str(obj.get("customTitle") or "").strip()
-            if value:
-                custom = value
-        elif kind == "ai-title":
-            value = str(obj.get("aiTitle") or "").strip()
-            if value:
-                ai = value
-    return custom, ai
-
-
 def _normalize_dir(raw: Any) -> str:
     return str(raw or "").replace("\\", "/").rstrip("/").lower()
-
-
-def _read_tail(path: Path, n_bytes: int) -> str:
-    return _read_tail_bytes(path, n_bytes).decode("utf-8", errors="replace")

@@ -44,7 +44,6 @@ from src.board.dispatch_ids import (
     _notified_bash_dispatch_ids,
 )
 from src.board.state import parse_iso, utc_now
-from src.session_view.model_switch import set_model_id
 
 logger = logging.getLogger(__name__)
 
@@ -321,45 +320,6 @@ def _last_activity(transcript_path: Any) -> Optional[datetime]:
         stamp = parse_iso(obj.get("timestamp"))
         if stamp is not None:
             return stamp
-    return None
-
-
-def last_transcript_model(transcript_path: Any) -> Optional[str]:
-    """The Claude model the transcript tail says the session is on now.
-
-    Two records name it, and the newer wins: an assistant record's
-    ``model`` (the model that actually answered, so it follows a resume) and
-    the ``Set model to <name>`` line an in-session ``/model`` writes the
-    moment it applies (:func:`src.session_view.model_switch.set_model_id`), so
-    a switch shows before anything answers on the new model. Claude Code's
-    own local replies carry ``<synthetic>`` as their model; only a
-    ``claude-*`` id counts. Torn or unparseable lines are skipped; neither
-    record in the window, or an unreadable file, is ``None``.
-    """
-    lines, truncated = _tail_lines(transcript_path, _EXCHANGE_TAIL_BYTES)
-    if truncated and lines:
-        lines = lines[1:]
-    for raw in reversed(lines):
-        # Cheap pre-filter: most tail lines are tool results and user turns.
-        if '"assistant"' not in raw and "Set model to" not in raw:
-            continue
-        try:
-            obj = json.loads(raw)
-        except ValueError:
-            continue
-        if not isinstance(obj, dict):
-            continue
-        message = obj.get("message")
-        if not isinstance(message, dict):
-            continue
-        if obj.get("type") == "user":
-            switched = set_model_id(message.get("content"))
-            if switched:
-                return switched
-            continue
-        model = message.get("model") if obj.get("type") == "assistant" else None
-        if isinstance(model, str) and model.startswith("claude-"):
-            return model
     return None
 
 
@@ -730,45 +690,6 @@ def _pending_tool_use_names(tail: _ExchangeTail) -> Optional["set[str]"]:
     if not saw_message:
         return None
     return {name for tid, name in launched.items() if tid not in completed}
-
-
-def pending_decision_call(transcript_path: Any) -> Optional[Dict[str, Any]]:
-    """The newest :data:`_PENDING_DECISION_TOOL_NAMES` ``tool_use`` still
-    unresolved at the tail's end, as ``{"id", "name", "input"}`` — the same
-    "pending decision" :func:`_refine_waiting_status` sorts a card into
-    ``awaiting-decision`` by, handed back whole so the Chat pane can answer
-    it.
-
-    ``None`` means *not established*, and covers both "nothing pending" and
-    "couldn't read the tail" on purpose: the one caller is a send-time gate
-    that types keystrokes into a live agent, where either answer must stop
-    the send. Sub-agent (sidechain) traffic is skipped — a question the user
-    is being asked is always the main thread's.
-    """
-    if not transcript_path:
-        return None
-    launched: List[Dict[str, Any]] = []
-    completed: "set[str]" = set()
-    for obj in _ExchangeTail(transcript_path).objects():
-        if obj.get("isSidechain") or obj.get("type") not in ("assistant", "user"):
-            continue
-        msg = obj.get("message")
-        content = msg.get("content") if isinstance(msg, dict) else None
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if not isinstance(block, dict):
-                continue
-            if block.get("type") == "tool_use" and isinstance(block.get("id"), str):
-                launched.append(block)
-            elif block.get("type") == "tool_result" and isinstance(block.get("tool_use_id"), str):
-                completed.add(block["tool_use_id"])
-    for block in reversed(launched):
-        name = str(block.get("name") or "")
-        if name in _PENDING_DECISION_TOOL_NAMES and block["id"] not in completed:
-            raw = block.get("input")
-            return {"id": block["id"], "name": name, "input": raw if isinstance(raw, dict) else {}}
-    return None
 
 
 def _refine_waiting_status(status: str, tail: _ExchangeTail) -> str:

@@ -1,7 +1,5 @@
-/* The `.tr-ask-opt` option button every answer surface builds: the
-   transcript's question card and plan picker (transcript-decisions.js), the
-   Board answer sheet (board-answers.js) and the resume list (chat-resume.js)
-   share the `.tr-ask-*` styles, so they share this one builder too. */
+/* The `.tr-ask-opt` option button the Board's answer sheet builds
+   (answer-item.js), styled by the `.tr-ask-*` rows. */
 
 import { icon } from '../_vendored/icons/icons.js';
 

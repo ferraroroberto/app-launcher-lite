@@ -216,12 +216,9 @@
   font-size: var(--font-body-sm);
   line-height: 1.4;
 }
-/* AskUserQuestion card: the agent asking, so it sits in the list
-   like a turn (same card surface and 14px inset), never folded into a run.
-   Options are list rows on a hairline (design.md list-row), each a button:
-   number, bold label, muted description, a check once picked. Static cards
-   keep the same look; only a live one reacts to a tap. */
-.tr-ask-item { min-width: 0; }
+/* Question cards (the Board's answer sheet): the card surface and 14px
+   inset. Options are list rows on a hairline (design.md list-row), each a
+   button: number, bold label, muted description, a check once picked. */
 .tr-ask {
   border-radius: var(--radius);
   background: var(--card);
@@ -236,8 +233,6 @@
   color: var(--muted);
 }
 .tr-ask-head .icon { width: 16px; height: 16px; flex: none; }
-.tr-ask-q { padding-top: 12px; }
-.tr-ask-q + .tr-ask-q { margin-top: 12px; border-top: 1px solid var(--line-muted); }
 .tr-ask-header {
   display: inline-block;
   padding: 2px 8px;
@@ -254,16 +249,12 @@
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
-.tr-ask-hint,
-.tr-ask-typed,
-.tr-ask-status {
+.tr-ask-hint {
   margin: 4px 0 0;
   font-size: var(--font-body-sm);
   color: var(--muted);
   line-height: 1.45;
 }
-.tr-ask-typed { color: var(--fg); overflow-wrap: anywhere; }
-.tr-ask-status:empty { display: none; }
 .tr-ask-options { display: flex; flex-direction: column; margin-top: 8px; }
 .tr-ask-opt {
   display: flex;
@@ -300,17 +291,13 @@
 .tr-ask-desc { font-size: var(--font-body-sm); color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
 .tr-ask-mark { flex: none; visibility: hidden; color: var(--accent); }
 .tr-ask-mark .icon { width: 18px; height: 18px; }
-/* Selected (a live multi-part pick) and picked (the recorded answer) share
-   the accent tint the user's own turn wears — nothing new. */
-.tr-ask-opt[aria-pressed="true"],
-.tr-ask-opt--picked {
+/* A selected option wears the accent tint the user's own turn does. */
+.tr-ask-opt[aria-pressed="true"] {
   background: var(--accent-soft);
   border-color: var(--accent-border-soft);
   border-radius: var(--radius-md);
 }
-.tr-ask-opt[aria-pressed="true"] .tr-ask-mark,
-.tr-ask-opt--picked .tr-ask-mark { visibility: visible; }
-.tr-ask-opt--picked .tr-ask-num,
+.tr-ask-opt[aria-pressed="true"] .tr-ask-mark { visibility: visible; }
 .tr-ask-opt[aria-pressed="true"] .tr-ask-num { background: var(--accent-fill); color: var(--accent-fg); }
 .tr-ask-other { display: flex; gap: 8px; margin-top: 8px; }
 .tr-ask-other[hidden] { display: none; }
@@ -355,41 +342,6 @@
 }
 .tr-ask-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tr-ask-file-remove { --icon-btn-box: var(--hit-min); flex: none; }
-/* Row-sized: .button-tint stretches to width:100% for its full-width uses,
-   which squeezed the text field beside it to a sliver. */
-.tr-ask-send { flex: none; width: auto; min-height: 44px; padding: 0 16px; }
-.tr-ask-submit { width: 100%; margin-top: 12px; }
-/* ExitPlanMode card: the question card's frame around the plan,
-   which is markdown like a reply (the shared `.tr-md` rules style it). */
-.tr-plan-body {
-  margin-top: 8px;
-  font-size: var(--font-body);
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-.tr-plan > .tr-trunc { margin-top: 8px; }
-/* The plan panel: the plan card's frame below the transcript list,
-   at the list's own 12px rhythm, while the terminal shows the picker. The
-   feedback option is a list row like the others, its text field under it. */
-.tr-plan-live { margin-top: 12px; }
-.tr-plan-live[hidden] { display: none; }
-.tr-plan-live-card .tr-pre.tr-plan-body { margin-top: 8px; }
-.tr-plan-feedback-row > .tr-ask-opt { cursor: default; }
-/* The resume card (chat-resume.js): the AskUserQuestion card's parts,
-   a search field, and a list that scrolls inside the card past a screenful
-   so a project with many sessions never pushes the composer away. */
-.tr-resume-live { margin-top: 12px; }
-.tr-resume-live[hidden] { display: none; }
-/* The card takes the empty state's place while it is up: a `--resume` launch
-   has no transcript yet, and "No transcript found" under the very card that
-   resumes one reads as a failure. */
-.tr-resume-live:not([hidden]) + #transcriptState { display: none; }
-/* The card's ✕ is the vendored icon-button at the 44px floor. The negative
-   margin keeps the 44px box from growing the 24px head row. */
-.tr-resume-close { margin: -10px -8px -10px auto; --icon-btn-box: var(--hit-min); }
-.tr-resume-search { margin-top: 8px; }
-.tr-resume-list { max-height: 50vh; overflow-y: auto; }
-.tr-resume-opt[hidden] { display: none; }
 /* The transcript's preformatted surface for a tool result (`.tr-pre`). A
    chat fence has its own `.md-block` frame
    (above); it keeps the wrap-not-scroll choice below.

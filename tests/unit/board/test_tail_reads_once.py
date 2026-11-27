@@ -100,7 +100,7 @@ def test_concurrent_polls_open_each_transcript_once_with_bounded_latency(tmp_pat
 
     def sessions_poll() -> None:
         board.attach_last_turn(live, rows)
-        board.attach_transcript_model(live, rows)
+        board.attach_transcript_model(live)
         board.merge_sessions(live, rows, now=NOW)
 
     def board_poll() -> None:

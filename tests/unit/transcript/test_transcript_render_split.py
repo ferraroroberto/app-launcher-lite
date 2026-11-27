@@ -2,14 +2,13 @@
 
 `renderEntries` used to live in `session-transcript.js`, the Chat pane's
 controller, and read that module's `view` singleton for the open session's id
-and project folder. Other viewers import `renderEntries`, so it depended on the
-Chat pane's state. The renderer now lives in `transcript-render.js` and is
+and project folder, so the renderer depended on the Chat pane's state. The renderer now lives in `transcript-render.js` and is
 handed the session as a parameter.
 
 These tests pin that as a property: the renderer never imports the controller
 or names its `view`,
 and, like the markdown renderer it shares, it belongs to no single e2e
-surface, so a change to it is verified against both mounts.
+surface, so a change to it runs the full browser suite.
 """
 
 from __future__ import annotations
@@ -41,12 +40,12 @@ def test_the_renderer_never_reads_the_chat_panes_state():
     )
 
 
-def test_a_renderer_change_is_verified_against_both_mounts():
+def test_a_renderer_change_runs_the_full_suite():
     cfg = load_config()
     for surface in cfg.surfaces:
         assert RENDER_MODULE not in surface.paths, (
             f"transcript-render.js is claimed by the {surface.name!r} surface, which would "
-            "narrow verification away from its other mount"
+            "narrow verification to that surface alone"
         )
     result = classify([RENDER_MODULE], cfg)
     assert result.tier == "full", f"a renderer-only change must run the full suite, got {result.tier!r}"

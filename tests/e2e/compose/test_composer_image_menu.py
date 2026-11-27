@@ -3,15 +3,14 @@
 The attach button in the composer's 2×2 grid is a paperclip (#1430; it was a
 photo glyph) that opens a menu — the same row-menu component as the session
 ⚙️ gear — of everything that puts something into the message: **Photo**,
-**Extract text (OCR)**, **Attach file (to context)** and **Attach large file
-(not read)**. With photo-ocr unconfigured only the OCR row hides; the other
-three always show, so the button always opens the menu. The button never
+**Attach file (to context)** and **Attach large file (not read)**. All three
+always show, so the button always opens the menu. The button never
 carries a "has options" dot (#1418): it read as a stray artefact once the
 composer buttons became plain glyph icons.
 
 Each option opens a native file picker, which Playwright surfaces as a
 ``filechooser`` event — that is how the test proves which input each option
-reaches without depending on a live photo-ocr.
+reaches.
 
 The large-file row (#1430) uploads the raw file to ``/large-file`` and appends
 a line that names the path and tells the agent not to read it, round-tripped
@@ -39,7 +38,6 @@ IMAGE_BTN = f"{COMPOSER} .composer-image"
 # The open menu is mounted on <body>, not inside the composer (#1565).
 MENU = ".composer-menu"
 PHOTO_OPTION = f"{MENU} [data-item=composer-menu-photo]"
-OCR_OPTION = f"{MENU} [data-item=composer-menu-ocr]"
 ATTACH_OPTION = f"{MENU} [data-item=composer-menu-attach]"
 LARGE_OPTION = f"{MENU} [data-item=composer-menu-large]"
 
@@ -65,15 +63,6 @@ def _expect_no_dot(image) -> None:
     assert after in ("none", "normal"), f"attach button grew an ::after: {after!r}"
 
 
-def _status_with_ocr(enabled: bool):
-    def _route(route):
-        resp = route.fetch()
-        body = resp.json()
-        body["screenshot_ocr"] = enabled
-        route.fulfill(response=resp, json=body)
-    return _route
-
-
 def _pick(page: Page, option: str):
     """Open the menu, tap ``option``, return the file chooser it raised."""
     page.locator(IMAGE_BTN).click()
@@ -84,10 +73,9 @@ def _pick(page: Page, option: str):
     return fc.value
 
 
-def test_attach_button_menu_reaches_all_four_options_and_a_large_file_round_trips(
+def test_attach_button_menu_reaches_every_option_and_a_large_file_round_trips(
     authed_page: Page, base_url: str, launched_pty_session: str
 ) -> None:
-    authed_page.route(re.compile(r".*/api/status$"), _status_with_ocr(True))
     _open_composer(authed_page, base_url, launched_pty_session)
 
     image = authed_page.locator(IMAGE_BTN)
@@ -97,7 +85,7 @@ def test_attach_button_menu_reaches_all_four_options_and_a_large_file_round_trip
     expect(authed_page.locator(MENU)).to_be_hidden()
 
     image.click()
-    for option in (PHOTO_OPTION, OCR_OPTION, ATTACH_OPTION, LARGE_OPTION):
+    for option in (PHOTO_OPTION, ATTACH_OPTION, LARGE_OPTION):
         expect(authed_page.locator(option)).to_be_visible()
     surface(authed_page, "terminal.attach-menu")
     image.click()  # the anchor toggles its menu shut
@@ -108,11 +96,6 @@ def test_attach_button_menu_reaches_all_four_options_and_a_large_file_round_trip
     assert chooser.is_multiple()
     assert chooser.element.get_attribute("accept") == "image/*"
     assert "composer-photo-input" in chooser.element.get_attribute("class")
-
-    # OCR → the screenshot staging input (accept=image/*, multiple).
-    chooser = _pick(authed_page, OCR_OPTION)
-    assert chooser.element.get_attribute("accept") == "image/*"
-    assert "composer-ocr-input" in chooser.element.get_attribute("class")
 
     # Attach file → the general attach input (no accept filter, multiple).
     chooser = _pick(authed_page, ATTACH_OPTION)
@@ -126,26 +109,6 @@ def test_attach_button_menu_reaches_all_four_options_and_a_large_file_round_trip
     assert "composer-large-input" in chooser.element.get_attribute("class")
 
     _assert_large_file_round_trip_appends_a_not_read_line(authed_page)
-
-
-def test_attach_menu_without_ocr_keeps_three_options(
-    authed_page: Page, base_url: str, launched_pty_session: str
-) -> None:
-    authed_page.route(re.compile(r".*/api/status$"), _status_with_ocr(False))
-    # The menu reads photo-ocr's availability when it opens, so the status
-    # that turns OCR off must have landed before the tap.
-    with authed_page.expect_response(re.compile(r".*/api/status$")):
-        _open_composer(authed_page, base_url, launched_pty_session)
-
-    image = authed_page.locator(IMAGE_BTN)
-    _expect_no_dot(image)
-
-    image.click()
-    expect(authed_page.locator(MENU)).to_be_visible()
-    for option in (PHOTO_OPTION, ATTACH_OPTION, LARGE_OPTION):
-        expect(authed_page.locator(option)).to_be_visible()
-    # Left out of the menu, not drawn hidden inside it.
-    expect(authed_page.locator(OCR_OPTION)).to_have_count(0)
 
 
 def _assert_large_file_round_trip_appends_a_not_read_line(page: Page) -> None:

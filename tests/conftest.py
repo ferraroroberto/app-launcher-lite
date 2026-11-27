@@ -618,7 +618,7 @@ def webapp_client(tmp_path: Path, monkeypatch) -> Iterator[tuple]:
     # spawn + error-mapping head into _helpers.spawn_session_or_400 —
     # they reach the host only through the `spawn_claude_session` the
     # per-test fakes replace.
-    # The Chat question card's /answer route types into a session (#1149).
+    # The screen routes type into a session through the same client.
     from app.webapp.routers import session_screen as session_screen_router
     from app.webapp.routers import sessions as sessions_router
     from app.webapp.routers import team_os as team_os_router

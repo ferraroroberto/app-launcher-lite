@@ -83,7 +83,7 @@ function overlaySession(card) {
 let drawerKit = null;
 
 function composerAvailability() {
-  return { dictate: drawerKit.voiceDictationAvailable(), ocr: false };
+  return { dictate: drawerKit.voiceDictationAvailable() };
 }
 
 function buildDrawerComposer(card) {
@@ -393,7 +393,7 @@ export function syncDrawerLifecycle(openItem) {
     }
   } else if (drawerComposer) {
     // A kept drawer's composer outlives the render that built it, so its
-    // mic / OCR availability follows an /api/status that lands after it.
+    // mic availability follows an /api/status that lands after it.
     drawerComposer.setAvailability(composerAvailability());
   }
 }
