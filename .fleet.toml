@@ -1218,6 +1218,15 @@ detail = "editor-modal(s) with no max-height + internal scroll — a tall form j
 reason = "#screenView is the full-viewport Screen viewer (inset 0, 100dvh), not an editor modal: its one field is the hidden key-capture input, so no conditional rows can make it jump"
 record = "https://github.com/ferraroroberto/app-launcher/issues/1634"
 
+# The lint reads any button labelled Cancel in a dialog as a footer Cancel. The sheet's
+# header close and one Done footer are pinned by tests/e2e/settings/test_settings_sheets.py.
+[[design.accepted]]
+check  = "modal-header"
+target = "app/webapp/static/views/settings-sheets.html"
+detail = "editor-modal header contract violated (design.md modal wants a heading-lg title + square x close, never a footer Cancel): app/webapp/static/views/settings-sheets.html:8 footer Cancel button in its place"
+reason = "#copilotSheet carries the header close and one full-width Done; its only Cancel is #launchPresetCancel, an inline body button shown while a launch preset is being edited, which abandons that edit and leaves the sheet open"
+record = "https://github.com/ferraroroberto/app-launcher-lite/issues/697"
+
 # Declared state machines: the state rules never report a module listed here.
 [[state_machines]]
 name   = "self-restart run"
