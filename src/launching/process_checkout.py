@@ -59,27 +59,8 @@ def process_checkout(pid: int) -> Optional[Path]:
 
 
 def probe_listener_pids(port: int) -> Optional[List[int]]:
-    """The PIDs listening on ``port`` on a loopback or wildcard address; ``None`` when unreadable.
-
-    A socket table this process may not read falls back to every listener on the port, which can
-    only make an answer stricter (a non-loopback listener then reads as a foreign owner).
-    """
-    if psutil is None:
-        return None
-    try:
-        connections = psutil.net_connections(kind="inet")
-    except (psutil.AccessDenied, PermissionError, OSError) as exc:
-        logger.info(f"ℹ️  socket table unreadable ({exc}); counting every listener on :{port}")
-        return listener_pids(port)
-    return sorted({
-        int(c.pid)
-        for c in connections
-        if c.status == psutil.CONN_LISTEN
-        and c.laddr
-        and c.laddr.port == port
-        and c.laddr.ip in _PROBE_ADDRESSES
-        and c.pid
-    })
+    """The PIDs listening on ``port`` on a loopback or wildcard address; ``None`` when unreadable."""
+    return listener_pids(port, _PROBE_ADDRESSES)
 
 
 def same_checkout(a: Path, b: Path) -> bool:
