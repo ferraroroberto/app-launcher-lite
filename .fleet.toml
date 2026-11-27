@@ -144,6 +144,7 @@ installer_declaration = { src = "src/installer_declaration.py", sha = "87981135d
 installer_inplace = { src = "src/installer_inplace.py", sha = "87981135d4ea66f76621d9b2f400efc28b68d2d9", dest = "src/installer_inplace.py" }
 install_standard_ratchet = { src = "scripts/install_standard_ratchet.py", sha = "87981135d4ea66f76621d9b2f400efc28b68d2d9", dest = "scripts/install_standard_ratchet.py" }
 windows_only_ratchet = { src = "scripts/windows_only_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/windows_only_ratchet.py" }
+probe_fake_ratchet = { src = "scripts/probe_fake_ratchet.py", sha = "17bcbfc249abb63368f2d3113c4a18b54c26236e", dest = "scripts/probe_fake_ratchet.py" }
 port_host_ratchet = { src = "scripts/port_host_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/port_host_ratchet.py" }
 clean_tree_ratchet = { src = "scripts/clean_tree_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/clean_tree_ratchet.py" }
 icons = { src = "app/webapp/static/_vendored/icons", sha = "e14844faa70acbd89dc43011c5bc98025052c2c3", dest = "app/webapp/static/_vendored/icons" }
@@ -683,6 +684,35 @@ why        = "samples CPU and memory only while the header polled within the dem
 # clean. Mechanism: project-scaffolding docs/windows-only-ratchet.md.
 [windows_only_ratchet]
 enabled = true
+
+# ---------------------------------------------------------------------------
+# [probe_fake_ratchet] -- scripts/probe_fake_ratchet.py fails when a process, port or listener
+# probe module lacks a test that fakes each platform's probe output beyond
+# .ratchets/probe-fake.json (empty), or when the branch changes a probe with no change to a test
+# reaching it. A probe-touching diff prints `MAC_NIGHTLY: unverified`. Exit 3 is "not confirmed",
+# never clean. Not listed: the vendored copies (self_restart, installer_migrate, the tray's
+# watchdog and single_instance), which the scaffold tests; modules that only consume a listed
+# probe (restart_check, the listeners sampler, jobs reap); and single psutil calls that answer
+# the same way on every OS (copilot_reopen's pid_exists, the diagnostics bundle's start time).
+# Mechanism: project-scaffolding docs/probe-fake-ratchet.md.
+[probe_fake_ratchet]
+enabled   = true
+platforms = ["win32", "darwin", "linux"]
+probes    = [
+  "src/diagnostics.py",
+  "src/launching/process_checkout.py",
+  "src/launching/bat_running.py",
+  "src/app_runtime.py",
+  "src/system_load.py",
+  "src/health_snapshot.py",
+  "src/performance_health.py",
+  "app/cli/commands/run_job_supervision.py",
+  "app/webapp/manager.py",
+  "app/tray/registered_trays.py",
+  "copilot/skills/_lib/active_issue.py",
+  "copilot/skills/_lib/worktree/service_probe.py",
+  "copilot/skills/_lib/worktree/worktree_config.py",
+]
 
 # [port_host_ratchet] -- scripts/port_host_ratchet.py fails when a file's count of port or
 # machine-local host literals rises above .port-host-ratchet-baseline.json. A port or host

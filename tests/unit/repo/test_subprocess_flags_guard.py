@@ -73,6 +73,7 @@ _VENDORED_VERBATIM_EXEMPT = {
     "scripts/conventions_ratchet.py": "The scaffold's conventions ratchet, vendored byte-for-byte; git spawn uses a local _NO_WINDOW.",
     "scripts/request_budget_ratchet.py": "The scaffold's request budget ratchet, vendored byte-for-byte; git spawn uses a local _NO_WINDOW.",
     "scripts/windows_only_ratchet.py": "The scaffold's windows-only ratchet, vendored byte-for-byte; git spawn uses a local _NO_WINDOW.",
+    "scripts/probe_fake_ratchet.py": "The scaffold's probe fake ratchet, vendored byte-for-byte; git spawn uses a local _NO_WINDOW.",
     "scripts/port_host_ratchet.py": "The scaffold's port host ratchet, vendored byte-for-byte; git spawn uses a local _NO_WINDOW.",
     "scripts/clean_tree_ratchet.py": "The scaffold's clean tree ratchet, vendored byte-for-byte; its git and smoke spawns use a local _NO_WINDOW.",
     "scripts/runtime_write_ratchet.py": "The scaffold's runtime write ratchet, vendored byte-for-byte; git spawn uses a local _NO_WINDOW.",

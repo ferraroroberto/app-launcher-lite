@@ -1,4 +1,4 @@
-"""The gate's docs-, structure-, instruction-, doc-refs-, dead-code-, conventions-, runtime-write-, request-budget-, windows-only-, port-host-, install-standard- and clean-tree-ratchet stages fail on exit 3 and on a new finding, by name.
+"""The gate's docs-, structure-, instruction-, doc-refs-, dead-code-, conventions-, runtime-write-, request-budget-, windows-only-, probe-fake-, port-host-, install-standard- and clean-tree-ratchet stages fail on exit 3 and on a new finding, by name.
 
 The real stage text runs against a throwaway repo with `Fail` stubbed to exit 1; a bare
 `& $python scripts/<ratchet>.py` would let exit 3 ("not confirmed") pass."""
@@ -29,10 +29,12 @@ _EXTRA_KEYS = {
     "runtime_write": 'exclude = ["scripts/**"]\n',
     "request_budget": 'browser_paths = ["static/**"]\n',
     "clean_tree": 'smoke = ["{python}", "smoke.py"]\n',
+    "probe_fake": 'probes = ["src/a.py"]\nbase_ref = "HEAD"\n',
 }
 # Clean tree's baseline lists paths, not per-file counts.
 _BASELINES = {"clean_tree": '{"version": 1, "paths": []}\n',
-              "install_standard": '{"version": 1, "hits": []}\n'}
+              "install_standard": '{"version": 1, "hits": []}\n',
+              "probe_fake": '{"version": 1, "hits": []}\n'}
 # A throwaway repo that meets the install standard, bar the four installer modules copied in below.
 _INSTALLABLE = {
     "docs/install.md": "## Install\n\n## Update\n\n## Migrate\n",
@@ -88,6 +90,10 @@ def _stage(name: str) -> str:
     ("windows_only", {"tests/test_a.py": "import winreg\n\n\ndef test_a():\n    pass\n"}, 1,
      ["windows only ratchet failed", "tests/test_a.py", "win-module"]),
     ("windows_only", {"tests/test_a.py": "def test_a():\n    pass\n"}, 0, ["STAGE-PASSED"]),
+    ("probe_fake", {"tests/test_a.py": "def broken(:\n"}, 1, ["probe fake ratchet NOT CONFIRMED ("]),
+    ("probe_fake", {"src/a.py": "x = 1\n"}, 1, ["probe fake ratchet failed", "src/a.py", "probe-fake-missing"]),
+    ("probe_fake", {"src/a.py": "x = 1\n", "tests/test_a.py": "import src.a\n\nON = ['win32', 'darwin']\n"}, 0,
+     ["STAGE-PASSED"]),
     ("port_host", {"src/a.py": "def broken(:\n"}, 1, ["port host ratchet NOT CONFIRMED ("]),
     ("port_host", {"src/a.py": "PORT = 8501\n"}, 1, ["port host ratchet failed", "src/a.py", "port-literal"]),
     ("port_host", {"src/a.py": "x = 1\n"}, 0, ["STAGE-PASSED"]),
@@ -128,7 +134,12 @@ def test_stage_verdict(tmp_path, name: str, files: dict[str, str], code: int, ex
     for path, text in files.items():
         (tmp_path / path).parent.mkdir(exist_ok=True)
         (tmp_path / path).write_text(text, encoding="utf-8")
-    for argv in (["init", "-q"], ["add", "."]):
+    steps = [["init", "-q"], ["add", "."]]
+    if name == "probe_fake":  # it diffs against a merge base, so the repo needs a commit
+        # A throwaway repo: the machine's global hooks reject a test author.
+        steps.append(["-c", f"core.hooksPath={tmp_path / 'no-hooks'}", "-c", "user.name=t",
+                      "-c", "user.email=t@example.invalid", "commit", "-qm", "t"])
+    for argv in steps:
         subprocess.run(["git", *argv], cwd=tmp_path, check=True, creationflags=_NO_WINDOW)
     harness = tmp_path / "stage.ps1"
     harness.write_text(
