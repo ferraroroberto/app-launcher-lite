@@ -65,12 +65,12 @@ level  = "optional"
 blocks = "the Board's GitLab data"
 
 # ---------------------------------------------------------------------------
-# [install.endpoint] / [install.migrate] -- what `setup.bat -MigrateFrom` and
-# `-InPlace` verify and carry over (schema: project-scaffolding docs/installer.md,
-# playbook: docs/install.md). The webapp serves HTTPS with a certificate issued
-# for the tailnet name, so loopback accepts any certificate; without one it
-# serves HTTP, which verify also tries. Logs, caches, reports and the built JS
-# bundle are not copied: the new clone makes its own.
+# [install.endpoint] / [install.migrate] -- what `setup.bat -MigrateFrom`,
+# `-Replace` and `-InPlace` verify and carry over (schema: project-scaffolding
+# docs/installer.md, playbook: docs/install.md). The webapp serves HTTPS with a
+# certificate issued for the tailnet name, so loopback accepts any certificate;
+# without one it serves HTTP, which verify also tries. Logs, caches, reports and
+# the built JS bundle are not copied: the new clone makes its own.
 [install.endpoint]
 scheme       = "https"
 port         = 8465
@@ -139,10 +139,10 @@ extra_junctions = ["webapp/certificates"]
 
 [vendored]
 installer = { src = "src/installer.py", sha = "a40310fe47f82ed7af62835fbfb3ea7ba9e04f8d", dest = "src/installer.py" }
-installer_migrate = { src = "src/installer_migrate.py", sha = "a40310fe47f82ed7af62835fbfb3ea7ba9e04f8d", dest = "src/installer_migrate.py" }
-installer_declaration = { src = "src/installer_declaration.py", sha = "a40310fe47f82ed7af62835fbfb3ea7ba9e04f8d", dest = "src/installer_declaration.py" }
-installer_inplace = { src = "src/installer_inplace.py", sha = "a40310fe47f82ed7af62835fbfb3ea7ba9e04f8d", dest = "src/installer_inplace.py" }
-install_standard_ratchet = { src = "scripts/install_standard_ratchet.py", sha = "a40310fe47f82ed7af62835fbfb3ea7ba9e04f8d", dest = "scripts/install_standard_ratchet.py" }
+installer_migrate = { src = "src/installer_migrate.py", sha = "87981135d4ea66f76621d9b2f400efc28b68d2d9", dest = "src/installer_migrate.py" }
+installer_declaration = { src = "src/installer_declaration.py", sha = "87981135d4ea66f76621d9b2f400efc28b68d2d9", dest = "src/installer_declaration.py" }
+installer_inplace = { src = "src/installer_inplace.py", sha = "87981135d4ea66f76621d9b2f400efc28b68d2d9", dest = "src/installer_inplace.py" }
+install_standard_ratchet = { src = "scripts/install_standard_ratchet.py", sha = "87981135d4ea66f76621d9b2f400efc28b68d2d9", dest = "scripts/install_standard_ratchet.py" }
 windows_only_ratchet = { src = "scripts/windows_only_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/windows_only_ratchet.py" }
 port_host_ratchet = { src = "scripts/port_host_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/port_host_ratchet.py" }
 clean_tree_ratchet = { src = "scripts/clean_tree_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/clean_tree_ratchet.py" }
