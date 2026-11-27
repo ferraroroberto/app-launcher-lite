@@ -1,14 +1,15 @@
 """Read-only view of the per-repo visual-proof stores.
 
-``ui_proof`` (fleet-config) writes one private, self-contained HTML per merged
-UI PR to ``<repo>/.proof/<PR>/index.html`` in the repo's primary checkout and
-records it in ``<repo>/.proof/index.json`` under ``"<PR>"``. The Board's Done
-lane links those reports; this module only reads them and never writes, moves
-or deletes one.
+``copilot/skills/_lib/ui_proof`` writes one private, self-contained HTML per
+merged UI merge request to ``<repo>/.proof/<MR>/index.html`` in the repo's
+primary checkout and records it in ``<repo>/.proof/index.json`` under
+``"<MR>"``. The Board's Done lane links those reports; this module only reads
+them and never writes, moves or deletes one. ``pr`` in the names here is the
+merge request number.
 
-A report holds real screenshots, so it never goes to or from GitHub. The lookup
+A report holds real screenshots, so it never goes to or from a forge. The lookup
 is jailed to the repo's ``.proof`` folder: the file path is rebuilt from a
-validated repo name and an integer PR number, never taken from an index row.
+validated repo name and an integer number, never taken from an index row.
 """
 
 from __future__ import annotations

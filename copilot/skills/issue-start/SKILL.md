@@ -88,6 +88,11 @@ git checkout -b <type>/<N>-<slug>
 
 ### 5. Build
 
+For a change a person will see, take the "before" screenshots first, into a
+folder outside the checkout, and stage them:
+`python <base-dir>/../_lib/ui_proof capture-before <checkout> --image "<state>:<viewport>-<theme>=<png>"`.
+`/issue-finish` pairs them with the "after" ones in the report.
+
 Work the issue to a verified state: run the project's own checks (tests,
 lint, byte-compile — whatever the README declares). Report failures honestly.
 Don't run e2e per change — `/e2e` is available mid-session when a change

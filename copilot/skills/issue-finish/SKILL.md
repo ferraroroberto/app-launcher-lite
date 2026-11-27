@@ -40,6 +40,20 @@ the suite right-sized. If the gate above already ran that slice, `/e2e`
 carries the result. A red slice stops the finish like a red gate; the tier +
 reason go in the final report even when the answer is `skip` or `n/a`.
 
+### 2c. Visual proof: the after capture
+
+Only when the diff changes something a person sees (a screen, a page, a style,
+on-screen text). Screenshot each changed state of the running branch into a
+folder outside the checkout, then stage them:
+
+```
+python <base-dir>/../_lib/ui_proof capture-after . --image "<state>:<viewport>-<theme>=<png>"
+```
+
+Repeat `--image` per screenshot (`board.done:phone-light=<png>`), or pass
+`--manifest <path>` for a layout-lint capture manifest. Capture last: an edit
+after this step makes the proof `stale`.
+
 ### 3. Commit + push
 
 Conventional message (`<type>: <subject>`, ≤72-char first line, body bullets
@@ -53,8 +67,21 @@ git push -u origin HEAD
 
 ```
 python <base-dir>/../_lib/chief_ops.py mr-create <N>
+python <base-dir>/../_lib/ui_proof build . --mr <MR> --issue <N> --title "<subject>" --criterion "<state>=<what changed>"
 python <base-dir>/../_lib/chief_ops.py merge <repo>#<N> --branch <branch> [--ask]
 ```
+
+**`ui_proof build`** runs once `mr-create` has printed the request's URL; `<MR>`
+is the number at its end. It writes the report the Board's Done lane links and
+sets one `VISUAL_PROOF=<state>` line in the request's description. Give one
+`--criterion` per acceptance criterion that shows on screen, and
+`--no-visual "<criterion>"` for one that does not. A diff nobody can see takes
+`build . --mr <MR> --no-ui` instead. `fresh` and `n/a` are the clean states;
+for `stale`, `failing`, `missing` or `unknown`, fix what its output names and
+re-run when you can (a `stale` one needs a new capture), else report the state.
+It does not block the merge. Report its `VISUAL_PROOF=` and `MR_LINE=` lines.
+A report holds real screenshots: it stays on this PC, so keep it and its images
+out of the commit, the request and the issue.
 
 `mr-create` runs `glab mr create --fill --yes` with stdin closed and a kill
 timeout, so it cannot wait on a prompt nobody reads. It prints `MR=created
@@ -71,6 +98,13 @@ chief-dispatched session pass `--ask`, so a refusal also becomes a question on
 the chief's Board (`MERGE_ASKED=`).
 
 ### 5. Land
+
+If step 4 built a report, publish it first, while this checkout still holds it:
+`python <base-dir>/../_lib/ui_proof build . --mr <MR> --sha <sha>`, where `<sha>`
+is `squash_commit_sha` (or `merge_commit_sha`) from
+`glab mr view <MR> --output json`. It stamps the report and copies it into the
+primary checkout's `.proof/`, where the Board reads it. Report its `PUBLISHED=`
+line; `PUBLISHED=none` in a linked worktree means: keep the worktree and say why.
 
 First ask which checkout this is, from the checkout you are finishing:
 `python <base-dir>/../_lib/worktree_claim.py mode <repo>` prints `primary`, `worktree` or
