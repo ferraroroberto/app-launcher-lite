@@ -81,8 +81,8 @@ Migration stops App Launcher Lite and every session it hosts. Run it from a plai
 
 1. Finish or save your open sessions, and close any terminal or editor whose folder is inside the app.
 2. Finish or remove the app folder's git worktrees (`git worktree list`): they stay tied to the old folder's `.git`. Uncommitted changes and local branches stay in the old copy too.
-3. Choose **Quit** in the tray's menu. The installer finds a running copy by the folder path in its processes, so it can miss one started under another spelling of that path (a junction or a mapped drive). Quit stops the webapp and the session-host whichever way they were started.
-4. If Tailscale Serve publishes the webapp's port, turn that mapping off. `tailscale serve status` lists it with its target; note both. `tailscaled` listens on the same port number, and the installer counts it as the old copy still holding the port, so the run stops there.
+3. Choose **Quit** in the tray's menu. The installer finds a running copy by the folder path in its processes' command lines, so a copy started under another spelling of that path (a junction, a mapped drive) is only partly found: the tray is missed, and it restarts what the stop ended. Quit stops the whole copy however it was started.
+4. If Tailscale Serve publishes the webapp's port, turn that mapping off. `tailscale serve status` lists it with its target; note both. `tailscaled` listens on the same port number, and the installer counts it as the old copy still holding the port: the run fails after it has already stopped the app, with nothing renamed.
 
    ```powershell
    tailscale serve status
