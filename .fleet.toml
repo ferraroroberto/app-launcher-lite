@@ -709,7 +709,7 @@ time_budget_s         = 1200
 # the request-budget probe, whose page installs a clock and a writable
 # visibility state before boot and runs two fake minutes, so no other node
 # could share it.
-test_budget = 303
+test_budget = 300
 
 # --- static assets under the webapp's static dir -> Chromium smoke ----------
 [[e2e.rule]]
