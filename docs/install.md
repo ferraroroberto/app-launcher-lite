@@ -73,6 +73,8 @@ Moves this PC's install onto a fresh clone. What moves is declared in `[install.
 | Chat and dictation files | `webapp/outbox/`, `webapp/briefs/`, `webapp/recordings/` |
 | Chief, Board and other state | `webapp/chief-pointer.json`, `webapp/chief-answered.json`, `webapp/chief-journal-look.json`, `webapp/owner-check-marks.json`, `webapp/jobs-dismissed.json`, `webapp/spawned-apps.json`, `webapp/lid-keep-awake.json`, `webapp/progress-totals.json` |
 
+A verified migration then repoints app cards left on a trial copy: a card in `config/apps.json` whose `bat_path` lies in a `-new` or `-e2e` sibling of the app folder (`<root>\app-launcher-lite-new\tray.bat`) moves to the same file in the app folder, and each one is named. Every other card stays as it is. A card is left, and said so, when the app folder has no such file or another card already starts it. `-MigrateFrom -WhatIf` lists these; `-Replace -WhatIf` and `-InPlace -WhatIf` do not.
+
 Logs, caches and reports are not copied. Two things live outside the folder and stay where they are, shared by both copies: the chief's and the sessions' state in `~\.copilot\app-launcher-lite-state\`, and the Job index and usage log in the runtime data folder `app-launcher-lite` (`C:\sqlite\app-launcher-lite\` by default). A file that is already in the new clone is never overwritten, secrets are compared by hash and never printed, and nothing here or in `setup.bat` deletes the old copy.
 
 ### Before you start
