@@ -77,6 +77,10 @@ REM  imported before its requirements exist.
 "%PY_EXE%" %PY_ARGS% -I "%SCRIPT_DIR%src\installer.py" %*
 if errorlevel 1 exit /b %ERRORLEVEL%
 
+REM  A verified migration also moves app cards still pointing at a -new or -e2e copy beside this
+REM  folder (-InPlace and -Replace get here through their own -MigrateFrom).
+for %%A in (%*) do if /i "%%~A"=="-MigrateFrom" goto :repoint
+
 REM  -WhatIf changes nothing, -Json prints one report that nothing may follow, and
 REM  -MigrateFrom has already started the app: none of them asks or prints more.
 for %%A in (%*) do for %%S in (-WhatIf -Json -MigrateFrom) do if /i "%%~A"=="%%S" exit /b 0
@@ -108,6 +112,10 @@ echo  Setup complete. Start the tray with:  tray.bat
 echo  Or run the webapp standalone:        scripts\webapp.bat
 echo ============================================================================
 exit /b 0
+
+:repoint
+"%PY_EXE%" %PY_ARGS% -B -m src.launching.repoint_cards %*
+exit /b %ERRORLEVEL%
 
 :in_place
 REM  Windows will not rename a folder a process lives in, so the run moves out:

@@ -108,8 +108,11 @@ REM  read through the same resolver the Python code uses; the literal is the
 REM  fallback if the venv python cannot answer.
 set "OWNED_PORTS=8465"
 if exist "%TRAY_VENV%\Scripts\python.exe" for /f "usebackq delims=" %%P in (`"%TRAY_VENV%\Scripts\python.exe" -m scripts.webapp_port`) do set "OWNED_PORTS=%%P"
-REM Optional override. Leave blank to verify http://127.0.0.1:<first-owned-port>/api/version.
+REM  The build check's one URL when the webapp serves HTTPS (Serve over + the certificate pair), so
+REM  a failure names the HTTPS reason, not a later plain-HTTP attempt. Blank otherwise: the helper
+REM  then probes https and http on the first owned port.
 set "VERSION_URL="
+if exist "%TRAY_VENV%\Scripts\python.exe" for /f "usebackq delims=" %%U in (`"%TRAY_VENV%\Scripts\python.exe" -m scripts.webapp_port --version-url`) do set "VERSION_URL=%%U"
 
 set "RESTART_ARG="
 if defined WANT_RESTART set "RESTART_ARG=-Restart"

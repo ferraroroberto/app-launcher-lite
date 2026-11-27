@@ -6,7 +6,8 @@
       normalized to "--" per the ASCII-only rule below, and the example
       ports in comments updated to this fork's 8465/8466. Local code change:
       reclaim also owns a session-host started from this repo root without
-      .venv in its command line, fails when an owned holder survives, matches
+      .venv in its command line, and a web app without it whose TLS arguments
+      name this checkout's certificates, fails when an owned holder survives, matches
       this repo's paths under either drive spelling of a junctioned root,
       says so when a restart found nothing to stop, and claims processes
       started from this repo's own `-wt-<N>` git worktrees, ends a plain start
@@ -64,7 +65,8 @@ Git Bash/MSYS rewrites `cmd.exe /c` to `cmd.exe C:/`.
           detect -VenvDir "<repo>\.venv" -TrayMatch "(scripts[\\/]+)?launcher\.py\s+tray"
       reclaim -> kills the owning PID of each listed port whose CommandLine is
                  under this repo's .venv, or is this repo's
-                 `launcher.py session-host` (orphan-proof), printing each reclaim
+                 `launcher.py session-host` or its web app naming this checkout's
+                 certificates (orphan-proof), printing each reclaim
                  and exiting 1 when an owned holder survives the stop:
         powershell.exe -NoProfile -NonInteractive -File tray_lifecycle.ps1 `
           reclaim -VenvDir "<repo>\.venv" -Ports "8465,8466"
@@ -158,6 +160,15 @@ function Test-IsRepoSessionHost {
     return Test-CommandLineMatches $CommandLine (Get-PathPattern $Root '([\\/]+scripts)?[\\/]+launcher\.py["'']?\s+session-host(\s|$)')
 }
 
+# A web app on the base interpreter carries no .venv path either. What names its checkout is the
+# TLS pair on its command line; the role is required too, so another program that merely opens the
+# certificate is never claimed. A plain-HTTP web app names no path and stays unclaimed.
+function Test-IsRepoWebapp {
+    param([string] $CommandLine, [string] $Root = (Get-RepoRoot))
+    if ($CommandLine -notmatch '\s-m\s+app\.webapp\.serve(_modes)?\s') { return $false }
+    return Test-CommandLineMatches $CommandLine (Get-PathPattern $Root '[\\/]+webapp[\\/]+certificates[\\/]+(cert|key)\.pem(["''\s]|$)')
+}
+
 # This repo's own sibling worktrees (`<repo>-wt-<N>`), read from `git worktree list` so a directory
 # that merely looks like one is never claimed: a tray, webapp or session-host started from a
 # worktree runs under that worktree's .venv and never matches the primary's. The name pattern only
@@ -198,16 +209,17 @@ function Get-WorktreeRoots {
 }
 
 # Which checkout of this repo a command line belongs to: the primary (Kind 'primary') or one of its
-# worktrees (Kind 'worktree'); $null when it is neither. -VenvOnly drops the session-host form, which
-# tray detection never wants.
+# worktrees (Kind 'worktree'); $null when it is neither. -VenvOnly drops the session-host and web app
+# forms, which tray detection never wants.
 function Get-OwningCheckout {
     param([string] $CommandLine, [switch] $VenvOnly)
-    if ((Test-UnderVenv $CommandLine) -or (-not $VenvOnly -and (Test-IsRepoSessionHost $CommandLine))) {
+    if ((Test-UnderVenv $CommandLine) -or
+        (-not $VenvOnly -and ((Test-IsRepoSessionHost $CommandLine) -or (Test-IsRepoWebapp $CommandLine)))) {
         return [pscustomobject]@{ Kind = 'primary'; Root = (Get-RepoRoot) }
     }
     foreach ($wt in (Get-WorktreeRoots)) {
         if ((Test-UnderVenv $CommandLine (Join-Path $wt '.venv')) -or
-            (-not $VenvOnly -and (Test-IsRepoSessionHost $CommandLine $wt))) {
+            (-not $VenvOnly -and ((Test-IsRepoSessionHost $CommandLine $wt) -or (Test-IsRepoWebapp $CommandLine $wt)))) {
             return [pscustomobject]@{ Kind = 'worktree'; Root = $wt }
         }
     }

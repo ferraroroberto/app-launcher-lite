@@ -23,9 +23,11 @@ process is restarted.
    (mechanism: `CLAUDE.md`'s `## session-host`), so `--restart` preserves open
    Coding/PTY sessions — including one hosted on `:8466` itself — is safe to
    run from inside such a session, and never restarts `:8466`. A reclaim owns a
-   port holder whose command line is under this repo's `.venv` **or** is this
-   repo's `scripts/launcher.py session-host` (a host re-execed from the base interpreter
-   carries no `.venv` path), and it exits 1 when an owned holder is still alive
+   port holder whose command line is under this repo's `.venv`, is this
+   repo's `scripts/launcher.py session-host`, **or** is its web app naming this
+   checkout's `webapp\certificates\cert.pem` / `key.pem` (either process,
+   re-execed from the base interpreter, carries no `.venv` path; a plain-HTTP web
+   app in that state names no path and is not claimed), and it exits 1 when an owned holder is still alive
    after the stop, so a restart that did not replace the old process fails
    instead of reporting success. A tray, webapp or session-host started from one
    of this repo's own `-wt-<N>` worktrees counts as this repo's too: the helper
@@ -55,7 +57,10 @@ process is restarted.
    `/api/version` with the same `git_sha` on the same port, so both checks also
    ask which checkout the answering process runs from: `verify` reads the
    working directory of the reported `pid` (`src/launching/process_checkout.py`)
-   and `tray_lifecycle.ps1`'s build check reads its command line. Another
+   and `tray_lifecycle.ps1`'s build check reads its command line. When the
+   webapp serves HTTPS, `tray.bat` hands that build check the one HTTPS URL
+   (`python -m scripts.webapp_port --version-url`), so a failure names the HTTPS
+   reason; otherwise it probes https and http on the first owned port. Another
    checkout, or an owner that cannot be read, fails the check and names it. A
    restart that finds an owned port held by another checkout of this app stops
    with `restart refused` and that checkout's path; `restart_check restart
