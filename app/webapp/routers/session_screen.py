@@ -45,6 +45,7 @@ from app.webapp.routers._helpers import audit_off_loop, maybe_json
 from app.webapp.routers.board_spawn import SESSION_HOST_UNREACHABLE, read_live_sessions
 from app.webapp.routers.session_transcript import resolve_source
 from src import audit
+from src.agents import agent_of
 from src.ask_user_question import TOOL_NAME as ASK_TOOL_NAME
 from src.ask_user_question import answer_keystrokes
 from src.board.transcript import (
@@ -243,7 +244,7 @@ async def _read_screen(
     session = next((s for s in live if str(s.get("session_id")) == str(sid)), None)
     if session is None:
         return (SESSION_HOST_UNREACHABLE if host_error else "session_not_found"), None, None
-    if str(session.get("agent") or "claude").lower() != "claude":
+    if agent_of(session) != "claude":
         return "unsupported_agent", session, None
     if str(session.get("kind") or "pty") == "remote":
         return "detached", session, None
@@ -830,7 +831,7 @@ async def session_switch_model(sid: str, request: Request) -> Dict[str, Any]:
     cfg: WebappConfig = request.app.state.webapp_config
     body = await maybe_json(request)
     session = await _live_session(cfg, sid)
-    agent = str(session.get("agent") or "claude").lower()
+    agent = agent_of(session)
     value = body.get("model")
     try:
         keys, label = model_switch.switch_keys(agent, value, cfg.copilot_models)
@@ -893,7 +894,7 @@ async def session_context(sid: str, request: Request) -> Dict[str, Any]:
 
 async def _build_context(cfg: WebappConfig, sid: str, steps: BuildSteps) -> Dict[str, Any]:
     reason, session, lines = await _read_screen(cfg, sid, steps)
-    copilot = reason == "unsupported_agent" and str((session or {}).get("agent")).lower() == "copilot"
+    copilot = reason == "unsupported_agent" and agent_of(session or {}) == "copilot"
     if copilot and str(session.get("kind") or "pty") == "remote":
         reason = "detached"
     elif copilot:

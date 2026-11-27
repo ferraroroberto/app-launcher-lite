@@ -122,7 +122,7 @@ class TestReconcileChiefLabels:
         }]
         state_rows = {
             "hook-row-1": {
-                "launcher_session_id": "manual-chief", "agent": "claude",
+                "launcher_session_id": "manual-chief", "agent": "copilot",
                 "name": "chief", "updated_at": "2026-07-27T07:14:05Z",
             },
         }

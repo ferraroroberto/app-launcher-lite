@@ -17,6 +17,7 @@ from __future__ import annotations
 import shlex
 from typing import Any, Dict, List, Mapping, Optional
 
+from src.agents import agent_of
 from src.launching.model_catalog import (
     CLAUDE_SESSION_MODEL_SPECS,
     CODEX_MODEL_SPECS,
@@ -62,7 +63,7 @@ def _claude_id_label(model_id: str) -> Optional[str]:
 
 def session_model_label(session: Mapping[str, Any]) -> Optional[str]:
     """Display name ("Opus", "Sol") of the session's model, or ``None``."""
-    agent = str(session.get("agent") or "claude").lower()
+    agent = agent_of(session)
     flags = str(session.get("flags") or "")
     value = _flag_value(flags, "--model")
     if agent == "claude":

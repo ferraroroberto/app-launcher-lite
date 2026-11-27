@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Any, Dict, List, Mapping
 
 from src.env_path import effective_path
 
@@ -145,6 +145,15 @@ SESSION_HOST_AGENTS: Dict[str, Agent] = {
 }
 
 DEFAULT_AGENT = "copilot"
+
+
+def agent_of(row: Mapping[str, Any]) -> str:
+    """The agent id a session or state row names, lower-cased.
+
+    A row naming none is :data:`DEFAULT_AGENT`, so every reader agrees on what
+    an unlabelled session is.
+    """
+    return str(row.get("agent") or DEFAULT_AGENT).strip().lower()
 
 
 def command_for(agent_id: str) -> str:

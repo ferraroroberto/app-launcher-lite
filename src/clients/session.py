@@ -17,6 +17,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 import httpx
 import requests
 
+from src.agents import DEFAULT_AGENT
 from src.clients import _loopback_http
 from src.session_view import folder_trust
 
@@ -155,7 +156,7 @@ def create_session(
     name: str,
     flags: str,
     kind: str = "pty",
-    agent: str = "claude",
+    agent: str = DEFAULT_AGENT,
     rows: int = 40,
     cols: int = 120,
     history_lines: Optional[int] = None,

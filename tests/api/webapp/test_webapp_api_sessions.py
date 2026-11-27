@@ -247,7 +247,8 @@ class TestLastTurn:
              "project_dir": "C:/b", "last_output_at": time.time() - 5},
         ]
         monkeypatch.setattr(board, "read_sessions_state", lambda _p: {"rows": {
-            "ra": {"cwd": "C:/a", "project": "a", "status": "idle", "transcript_path": str(transcript)},
+            "ra": {"cwd": "C:/a", "project": "a", "agent": "claude", "status": "idle",
+                   "transcript_path": str(transcript)},
         }})
         monkeypatch.setattr(board, "session_board_columns", lambda *a, **k: {})
         by_id = {s["session_id"]: s for s in client.get("/api/claude-code/sessions").json()["sessions"]}

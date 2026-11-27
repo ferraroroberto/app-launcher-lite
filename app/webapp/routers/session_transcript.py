@@ -69,6 +69,7 @@ from app.webapp.routers import session_outbox_routes
 from app.webapp.routers._helpers import maybe_json
 from app.webapp.routers.board_spawn import SESSION_HOST_UNREACHABLE, read_live_sessions
 from src import board, instance_role
+from src.agents import agent_of
 from src.launching.vscode_workspace import is_vscode_installed, open_file
 from src.middleware import is_pc_itself
 from src.session_view import background_tasks as session_tasks
@@ -199,7 +200,7 @@ async def resolve_source(
     if session is None:
         reason = SESSION_HOST_UNREACHABLE if host_error else "session_not_found"
         return reason, None, None, "", "", None
-    agent = str(session.get("agent") or "claude").lower()
+    agent = agent_of(session)
     # A detached row resolves exactly like a full-control one: neither
     # source reads the launcher's PTY capture.
     if agent not in _FLAVOR_BY_AGENT:

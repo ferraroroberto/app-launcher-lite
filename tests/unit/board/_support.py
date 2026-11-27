@@ -39,6 +39,7 @@ def _state_row(cwd: str, status: str = "working", updated_min_ago: int = 5, **ex
     row = {
         "project": Path(cwd).name,
         "status": status,
+        "agent": "claude",
         "transcript_path": None,
         "cwd": cwd,
         "updated_at": _iso(NOW - timedelta(minutes=updated_min_ago)),

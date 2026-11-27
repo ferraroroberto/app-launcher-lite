@@ -68,6 +68,11 @@ class GuardTests(unittest.TestCase):
         self.lines["chief-sid"] = None
         self.assertFalse(chief_guard.is_chief({"cwd": CHIEF_CWD}, "chief-1"))
 
+    def test_a_folder_that_cannot_be_resolved_is_not_the_chiefs(self) -> None:
+        with mock.patch.object(chief_guard.os.path, "realpath", side_effect=OSError("unreadable")):
+            self.assertFalse(chief_guard.is_chief({"cwd": CHIEF_CWD}, "chief-1"))
+        self.assertEqual(self.calls, [])
+
     def test_the_chief_folder_follows_lites_fleet_config_dir_setting(self) -> None:
         self.webapp_config.write_text(json.dumps({"fleet_config_dir": ""}), encoding="utf-8")
         self.assertTrue(chief_guard.is_chief({"cwd": CHIEF_CWD}, "chief-1"))
