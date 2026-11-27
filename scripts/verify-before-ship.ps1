@@ -190,6 +190,10 @@ $ratchetStages = @(
     @{ Name = "windows only"; Argv = @("scripts/windows_only_ratchet.py")
        NotConfirmed = "git was unusable, or a test module cannot be read, is not UTF-8 or does not parse"
        Failed = "a test that needs Windows has no windows_only marker beyond .windows-only-ratchet-baseline.json; see the named test above and mark it @pytest.mark.windows_only." }
+    # Process, port and listener probes are pinned per platform by a fake: the gate runs on Windows only, so this is where a macOS shape is caught. A MAC_NIGHTLY: unverified line is a state to report, never a pass.
+    @{ Name = "probe fake"; Argv = @("scripts/probe_fake_ratchet.py")
+       NotConfirmed = "git was unusable or found no merge base with origin/main, or a test module cannot be read or does not parse"
+       Failed = "a probe module lacks a per-platform fake test beyond .ratchets/probe-fake.json, or changed with no change to a test reaching it; see the named module above and add the fake." }
     # A port or host belongs in ignored config read through src/app_config.py, so a clean `git pull --ff-only` plus the restart recipe is the whole update.
     @{ Name = "port host"; Argv = @("scripts/port_host_ratchet.py")
        NotConfirmed = "git was unusable, or a script or code file cannot be read, is not UTF-8 or does not parse"
