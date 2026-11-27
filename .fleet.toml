@@ -40,21 +40,81 @@ register = ["{python}", "-B", "-m", "src.launching.install_checks", "startup-ena
 name    = "Sign-in password"
 command = ["{python}", "-B", "-m", "src.launching.install_checks", "signin"]
 hint    = "set one with: .venv\\Scripts\\python.exe -m src.password set"
+level   = "optional"
+blocks  = "remote sign-in"
 
 [[install.check]]
 name  = "HTTPS certificate"
 paths = ["webapp/certificates/cert.pem", "webapp/certificates/key.pem"]
 hint  = "run: .venv\\Scripts\\python.exe scripts\\gen_tailscale_cert.py"
+level  = "optional"
+blocks = "phone access"
 
 [[install.check]]
-name  = "Copilot CLI"
-which = "copilot"
-hint  = "see docs/installing-agent-clis.md"
+name   = "Copilot CLI"
+which  = "copilot"
+hint   = "see docs/installing-agent-clis.md"
+level  = "optional"
+blocks = "Copilot sessions"
 
 [[install.check]]
-name  = "GitLab CLI (glab)"
-which = "glab"
-hint  = "see docs/installing-agent-clis.md"
+name   = "GitLab CLI (glab)"
+which  = "glab"
+hint   = "see docs/installing-agent-clis.md"
+level  = "optional"
+blocks = "the Board's GitLab data"
+
+# ---------------------------------------------------------------------------
+# [install.endpoint] / [install.migrate] -- what `setup.bat -MigrateFrom` and
+# `-InPlace` verify and carry over (schema: project-scaffolding docs/installer.md,
+# playbook: docs/install.md). The webapp serves HTTPS with a certificate issued
+# for the tailnet name, so loopback accepts any certificate; without one it
+# serves HTTP, which verify also tries. Logs, caches, reports and the built JS
+# bundle are not copied: the new clone makes its own.
+[install.endpoint]
+scheme       = "https"
+port         = 8465
+version_path = "/api/version"
+self_signed  = true
+port_config  = "config/config.json"
+port_key     = "webapp.port"
+
+[install.migrate]
+copy = [
+  # settings, registries and sign-in
+  "config/config.json",
+  "config/webapp_config.json",
+  "config/apps.json",
+  "config/jobs.json",
+  "config/app_password.json",
+  "config/webauthn_devices.json",
+  # certificates, tunnel and theme overrides
+  "webapp/certificates",
+  "webapp/cloudflared.yml",
+  "webapp/terminal-themes.json",
+  # history, and the files Chat and dictation keep
+  "webapp/jobs",
+  "webapp/sessions",
+  "webapp/outbox",
+  "webapp/briefs",
+  "webapp/recordings",
+  # chief, Board and other machine-written state
+  "webapp/chief-pointer.json",
+  "webapp/chief-answered.json",
+  "webapp/chief-journal-look.json",
+  "webapp/owner-check-marks.json",
+  "webapp/jobs-dismissed.json",
+  "webapp/spawned-apps.json",
+  "webapp/lid-keep-awake.json",
+  "webapp/progress-totals.json",
+]
+secrets = [
+  "config/webapp_config.json",
+  "config/app_password.json",
+  "config/webauthn_devices.json",
+  "webapp/certificates/key.pem",
+]
+shared = ["app-launcher-lite"]
 
 # ---------------------------------------------------------------------------
 # [worktree] -- gitignored paths fleet-config junctions from this primary
@@ -78,7 +138,11 @@ hint  = "see docs/installing-agent-clis.md"
 extra_junctions = ["webapp/certificates"]
 
 [vendored]
-installer = { src = "src/installer.py", sha = "bafa9446b907dcb7fc6d833c1edfb1a069b7ca38", dest = "src/installer.py" }
+installer = { src = "src/installer.py", sha = "a40310fe47f82ed7af62835fbfb3ea7ba9e04f8d", dest = "src/installer.py" }
+installer_migrate = { src = "src/installer_migrate.py", sha = "a40310fe47f82ed7af62835fbfb3ea7ba9e04f8d", dest = "src/installer_migrate.py" }
+installer_declaration = { src = "src/installer_declaration.py", sha = "a40310fe47f82ed7af62835fbfb3ea7ba9e04f8d", dest = "src/installer_declaration.py" }
+installer_inplace = { src = "src/installer_inplace.py", sha = "a40310fe47f82ed7af62835fbfb3ea7ba9e04f8d", dest = "src/installer_inplace.py" }
+install_standard_ratchet = { src = "scripts/install_standard_ratchet.py", sha = "a40310fe47f82ed7af62835fbfb3ea7ba9e04f8d", dest = "scripts/install_standard_ratchet.py" }
 windows_only_ratchet = { src = "scripts/windows_only_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/windows_only_ratchet.py" }
 port_host_ratchet = { src = "scripts/port_host_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/port_host_ratchet.py" }
 clean_tree_ratchet = { src = "scripts/clean_tree_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/clean_tree_ratchet.py" }
@@ -628,6 +692,15 @@ enabled = true
 [port_host_ratchet]
 enabled   = true
 resolvers = ["src/app_config.py"]
+
+# [install_standard_ratchet] -- scripts/install_standard_ratchet.py fails when a vendored
+# installer module is missing or behind the scaffold's, [install.migrate] / [install.endpoint]
+# is missing or does not parse, or docs/install.md lacks Install, Update or Migrate. The
+# baseline is empty. Mechanism: project-scaffolding docs/install-standard-ratchet.md.
+[install_standard_ratchet]
+enabled  = true
+baseline = ".ratchets/install-standard.json"
+playbook = "docs/install.md"
 
 # [clean_tree_ratchet] -- scripts/clean_tree_ratchet.py boots a disposable plain-HTTP
 # server on a free port with its runtime data in a scratch folder and fails when the boot

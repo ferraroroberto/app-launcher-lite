@@ -1,4 +1,4 @@
-"""The gate's docs-, structure-, instruction-, doc-refs-, dead-code-, conventions-, runtime-write-, request-budget-, windows-only-, port-host- and clean-tree-ratchet stages fail on exit 3 and on a new finding, by name.
+"""The gate's docs-, structure-, instruction-, doc-refs-, dead-code-, conventions-, runtime-write-, request-budget-, windows-only-, port-host-, install-standard- and clean-tree-ratchet stages fail on exit 3 and on a new finding, by name.
 
 The real stage text runs against a throwaway repo with `Fail` stubbed to exit 1; a bare
 `& $python scripts/<ratchet>.py` would let exit 3 ("not confirmed") pass."""
@@ -31,7 +31,14 @@ _EXTRA_KEYS = {
     "clean_tree": 'smoke = ["{python}", "smoke.py"]\n',
 }
 # Clean tree's baseline lists paths, not per-file counts.
-_BASELINES = {"clean_tree": '{"version": 1, "paths": []}\n'}
+_BASELINES = {"clean_tree": '{"version": 1, "paths": []}\n',
+              "install_standard": '{"version": 1, "hits": []}\n'}
+# A throwaway repo that meets the install standard, bar the four installer modules copied in below.
+_INSTALLABLE = {
+    "docs/install.md": "## Install\n\n## Update\n\n## Migrate\n",
+    ".fleet.toml": "port = 8099\n[install.migrate]\ncopy = []\n[install.endpoint]\n[vendored]\n" + "".join(
+        f"{key} = {{}}\n" for key in ("installer", "installer_migrate", "installer_declaration", "installer_inplace")),
+}
 
 
 def _stage(name: str) -> str:
@@ -84,6 +91,10 @@ def _stage(name: str) -> str:
     ("port_host", {"src/a.py": "def broken(:\n"}, 1, ["port host ratchet NOT CONFIRMED ("]),
     ("port_host", {"src/a.py": "PORT = 8501\n"}, 1, ["port host ratchet failed", "src/a.py", "port-literal"]),
     ("port_host", {"src/a.py": "x = 1\n"}, 0, ["STAGE-PASSED"]),
+    ("install_standard", {"src/installer_declaration.py": "", "src/installer_migrate.py": "def broken(:\n"}, 1,
+     ["install standard ratchet NOT CONFIRMED ("]),
+    ("install_standard", {}, 1, ["install standard ratchet failed", "installer-vendored", "src/installer.py"]),
+    ("install_standard", _INSTALLABLE, 0, ["STAGE-PASSED"]),
     ("clean_tree", {"smoke.py": "raise SystemExit(1)\n"}, 1, ["clean tree ratchet NOT CONFIRMED ("]),
     ("clean_tree", {"smoke.py": "open('new.txt', 'w').write('x')\n"}, 1,
      ["clean tree ratchet failed", "new.txt", "tree-write"]),
@@ -107,6 +118,10 @@ def test_stage_verdict(tmp_path, name: str, files: dict[str, str], code: int, ex
         shutil.copy2(REPO_ROOT / "scripts" / "runtime_write_resolve.py", tmp_path / "scripts")
     if name == "request_budget":
         shutil.copy2(REPO_ROOT / "scripts" / "request_budget_scan.py", tmp_path / "scripts")
+    if files is _INSTALLABLE:
+        (tmp_path / "src").mkdir()
+        for module in REPO_ROOT.glob("src/installer*.py"):
+            shutil.copy2(module, tmp_path / "src")
     baseline = _BASELINES.get(name, '{"version": 1, "entries": []}\n')
     files = {f".{name.replace('_', '-')}-ratchet-baseline.json": baseline, **files}
     files[".fleet.toml"] = files.get(".fleet.toml", "") + f"[{name}_ratchet]\nenabled = true\n{_EXTRA_KEYS.get(name, '')}"
