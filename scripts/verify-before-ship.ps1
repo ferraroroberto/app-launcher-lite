@@ -194,6 +194,10 @@ $ratchetStages = @(
     @{ Name = "port host"; Argv = @("scripts/port_host_ratchet.py")
        NotConfirmed = "git was unusable, or a script or code file cannot be read, is not UTF-8 or does not parse"
        Failed = "a file gained a port or machine-local host literal beyond .port-host-ratchet-baseline.json; read it through src/app_config.py or add a reasoned port-host-exempt marker (see the named line above)." }
+    # Install, update and migrate go through the scaffold installer: a missing or stale piece fails the ship.
+    @{ Name = "install standard"; Argv = @("scripts/install_standard_ratchet.py")
+       NotConfirmed = "an installer module or docs/install.md could not be read, or src/installer_migrate.py did not load"
+       Failed = "an installer module, the [install.migrate] table or a docs/install.md section is missing or stale beyond .ratchets/install-standard.json; see the named hit above." }
     # Boots a disposable plain-HTTP server on a free port with scratch runtime data; it never touches the tray or its ports.
     @{ Name = "clean tree"; Argv = @("scripts/clean_tree_ratchet.py")
        NotConfirmed = "the smoke server could not start, died, was not ready on /healthz in time, or did not stop, or git was unusable (see the smoke output above)"

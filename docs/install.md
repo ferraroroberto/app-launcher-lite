@@ -1,14 +1,10 @@
-# Install, update and move App Launcher Lite
+# Install, update and migrate App Launcher Lite
 
-App Launcher Lite moves to another Windows PC by cloning it and running one `setup.bat`. An update is a pull plus a restart. Neither resets or overwrites what a PC has configured.
+App Launcher Lite installs, updates and migrates with one `setup.bat`: clone it and run it. An update is a pull plus a restart. A migration, onto a fresh clone on the same PC, is one `setup.bat` call. None of them resets or overwrites what a PC has configured.
 
-## What you need
+## Install
 
-- Windows 10 or 11, `git`, and Python 3.11 or newer (the `py` launcher, or `python` on `PATH`).
-- The GitHub Copilot CLI and `glab`, each signed in: [installing-agent-clis.md](installing-agent-clis.md).
-- Optional: [Tailscale](https://tailscale.com/) for the phone-trusted HTTPS certificate.
-
-## Fresh PC
+You need Windows 10 or 11, `git`, and Python 3.11 or newer (the `py` launcher, or `python` on `PATH`), plus the GitHub Copilot CLI and `glab`, each signed in: [installing-agent-clis.md](installing-agent-clis.md). [Tailscale](https://tailscale.com/) is optional, for the phone-trusted HTTPS certificate.
 
 ```powershell
 git clone <this repository> app-launcher-lite
@@ -17,138 +13,109 @@ cd app-launcher-lite
 .\tray.bat
 ```
 
-`setup.bat` runs `src/installer.py`, which reads the `[install]` table of `.fleet.toml` and:
+`setup.bat` runs `src/installer.py`, which reads the `[install]` tables of `.fleet.toml` and:
 
 1. creates `.venv` when it is missing;
 2. installs `requirements.txt`, and later reinstalls only when that file changed (its hash is kept inside `.venv`);
 3. creates each ignored config (`config/config.json`, `config/webapp_config.json`, `config/apps.json`, `config/jobs.json`) from its tracked sample when it is missing;
-4. ends with a checklist that marks each item `ok`, `missing` or `unknown`.
+4. ends with two lists: the required items, each `ok`, `missing` or `unknown`, and the optional features, each `available`, `off` or `unknown` with what it unlocks.
 
 It then offers the Copilot hooks and skills ([copilot/docs/install.md](../copilot/docs/install.md)); answer `n` to skip them and install them later.
 
-The checklist names what still needs you:
+The optional features, each needed only for what it unlocks:
 
-- **Sign-in password:** `.venv\Scripts\python.exe -m src.password set`.
-- **HTTPS certificate:** `.venv\Scripts\python.exe scripts\gen_tailscale_cert.py` (see the README's HTTPS section).
-- **Copilot CLI** and **GitLab CLI (glab):** [installing-agent-clis.md](installing-agent-clis.md).
+- **Sign-in password** (remote sign-in): `.venv\Scripts\python.exe -m src.password set`.
+- **HTTPS certificate** (phone access): `.venv\Scripts\python.exe scripts\gen_tailscale_cert.py` (see the README's HTTPS section).
+- **Copilot CLI** and **GitLab CLI (glab)** (Copilot sessions, the Board's GitLab data): [installing-agent-clis.md](installing-agent-clis.md).
 - **Start at log on:** run `.\setup.bat -Startup`, or turn it on in Settings.
 
-The whole path from a machine with nothing on it to a first lane, with a proof for each step: [fresh-machine-checklist.md](fresh-machine-checklist.md).
+The whole path from a machine with nothing on it to a first lane, with a proof for each step: [fresh-machine-checklist.md](fresh-machine-checklist.md). `.\setup.bat -WhatIf` lists every change it would make, makes none and asks nothing.
 
-`.\setup.bat -WhatIf` lists every change it would make, makes none and asks nothing.
-
-## Update
-
-```powershell
-git pull --ff-only
-.\tray.bat --restart
-```
-
-Nothing else is needed. Every file the app writes while it runs (configs, state, logs, certificates, `.venv`) is gitignored or outside the folder, and no tracked file is rewritten at runtime, so `git status` stays clean and the pull fast-forwards. The ports come from this PC's `config/config.json`, so moving a port never means editing a tracked file.
-
-`tray.bat --restart` installs no packages and keeps the session-host (your live sessions) running. When a pull changed `requirements.txt`, run `.\setup.bat` before the restart.
-
-Running `setup.bat` on a configured PC is safe, and it is how a new setting arrives:
-
-- Settings files (`config/config.json`, `config/webapp_config.json`): an existing value is never changed. A key the sample has and the file lacks is added, after a timestamped backup beside it (`<name>.json.bak-<YYYYmmdd-HHMMSS>`), and the added key names are printed. The backup holds the same secrets as the config and is gitignored. A file that does not parse is left alone and reported, and the run exits 1.
-- Registries (`config/apps.json`, `config/jobs.json`) are your own lists: created when missing, never rewritten or reformatted.
-- A second run reports `unchanged` and writes nothing.
-
-## Migrate from an existing install
-
-Use this on a PC that already runs an older copy of App Launcher Lite: one that may not be a git clone, and may live at another path. The old copy stays on disk until you say otherwise.
-
-### 1. Clone fresh beside it
-
-```powershell
-git clone <this repository> <new folder>
-```
-
-Never clone over the old folder. A folder next to the old one keeps the defaults that look at sibling folders (the projects folder, `team-os`).
-
-### 2. Copy this PC's own files across
-
-Copy only these, each to the same relative path. All are gitignored, and any of them may be absent on a given PC. Do not copy `.venv`: `setup.bat` builds a new one.
-
-| Kind | From the old folder |
-|---|---|
-| Settings and registries | `config/config.json`, `config/webapp_config.json`, `config/apps.json`, `config/jobs.json` |
-| Sign-in | `config/app_password.json` (password hash), `config/webauthn_devices.json` (enrolled passkeys) |
-| Certificates and tunnel | `webapp/certificates/`, `webapp/cloudflared.yml` (the tunnel's credentials stay in your user profile) |
-| Your theme overrides | `webapp/terminal-themes.json` |
-| History | `webapp/jobs/` (Job runs), `webapp/sessions/` (session logs and transcripts) |
-| Chat and dictation files | `webapp/outbox/`, `webapp/briefs/`, `webapp/recordings/` |
-| Chief and Board state | `webapp/chief-pointer.json`, `webapp/chief-answered.json`, `webapp/chief-journal-look.json`, `webapp/owner-check-marks.json`, `webapp/jobs-dismissed.json` |
-| Other state | `webapp/spawned-apps.json`, `webapp/lid-keep-awake.json` (the power plan values the lid switch restores), `webapp/progress-totals.json` |
-
-The other files under `webapp/` are logs, caches and reports; leave them. Two things live outside the folder and stay where they are: the chief's and the sessions' state in `~\.copilot\app-launcher-lite-state\`, and the Job index and usage log in the machine's runtime data folder (`C:\sqlite\app-launcher-lite\` by default).
-
-Then open the copied configs and repoint any value that names a path **inside the old folder** (for example a Copilot or skills folder, or an app or Job script).
-
-### 3. Top them up
-
-```powershell
-cd <new folder>
-.\setup.bat -WhatIf
-.\setup.bat
-```
-
-Settings files gain only the keys they lack; the values you copied stay as they were. Answer `n` to the Copilot question: step 5 does it, after the old copy's hooks are gone.
-
-### 4. Stop the old copy
-
-1. Finish or save your open sessions: this step ends them all.
-2. Choose **Quit** in the old tray's menu. That stops its webapp, tunnel and session-host.
-3. Confirm both ports are free (the numbers are `webapp.port` and `webapp.session_host_port` in `config/config.json`); this prints nothing when they are:
-
-   ```powershell
-   Get-NetTCPConnection -State Listen -LocalPort 8465,8466 -ErrorAction SilentlyContinue
-   ```
-
-   A copy still listening there would be adopted by the new tray.
-4. Copy the history, chat, chief and other state rows of step 2 once more, so nothing written since the first copy is lost. Leave the configs: the new ones are already topped up.
-5. Delete `AppLauncherLite.bat` from your Startup folder (`shell:startup`). It starts the old folder, and while it is there the checklist reads `unknown` for **Start at log on** and `-Startup` leaves it alone.
-6. Remove the old copy's Copilot hooks and skills, run **from the old folder**: `.venv\Scripts\python.exe copilot\install.py --uninstall`. The new install keeps any hook that runs another folder's script, so skipping this leaves the old hooks in place. A copy that used fleet-config-lite follows [migrating-from-fleet-config-lite.md](migrating-from-fleet-config-lite.md) instead.
-
-### 5. Start the new one
-
-From the new folder:
-
-```powershell
-.\.venv\Scripts\python.exe copilot\install.py
-.\tray.bat
-.\setup.bat -Startup
-```
-
-Skip the last line if it should not start at log on.
-
-Task Scheduler entries under `\AppLauncherLite\` still run the old folder. In the Jobs tab, open each scheduled job and save it: saving deletes and registers its entries again. A job set to run elevated or without a logged-on user is registered by hand from an elevated shell, so register it there again.
-
-### 6. Verify it
-
-- `curl.exe -sk https://127.0.0.1:8465/api/version` (`http://` without a certificate) shows a `git_sha` equal to `git rev-parse --short HEAD` and `session_host.reachable` `true`.
-- Sign in from the phone, open a session, and run one Job.
-- Every scheduled entry names the new folder:
-
-  ```powershell
-  Get-ScheduledTask -TaskPath '\AppLauncherLite\' | ForEach-Object { "$($_.TaskName): $($_.Actions.Arguments)" }
-  ```
-
-If anything is wrong, quit the new tray, delete its Startup entry, and run `copilot\install.py --uninstall` from the new folder. Then in the old folder run `copilot\install.py`, `tray.bat`, and save the scheduled jobs again.
-
-### 7. Retire the old folder, only after you confirm
-
-Nothing in this playbook or in `setup.bat` deletes the old copy. When you are satisfied, rename it first (for example `app-launcher-lite.retired`) and run on the new copy for a while; delete it yourself once you are sure. An agent working through this playbook asks you before it deletes anything.
-
-## Execution policy
+### Execution policy
 
 Nothing here needs a signed script or overrides the PC's PowerShell execution policy, `AllSigned` included. `setup.bat`, `tray.bat` and `scripts/webapp.bat` are batch files, and both installers are Python. `tray.bat` starts its helper through `src/launching/ps_script.py`, as does the operator-only session-host restart (`.venv\Scripts\python.exe -m src.launching.ps_script scripts\restart-session-host.ps1 -Confirm`); it falls back to a ScriptBlock launch under `AllSigned` or `Restricted`. PowerShell jobs in the Jobs tab start the same way.
 
-## Uninstall
+### Uninstall
 
 1. Turn off the lid keep-awake switch if you use it, so your power plan is restored.
 2. Turn off **Start at log on** in Settings, or delete `AppLauncherLite.bat` from your Startup folder (`shell:startup`).
 3. Remove your job schedules in the Jobs tab: they are Task Scheduler tasks under the `\AppLauncherLite\` folder.
 4. Remove the Copilot hooks and skills: `.venv\Scripts\python.exe copilot\install.py --uninstall` ([copilot/docs/install.md](../copilot/docs/install.md)).
 5. Quit the tray from its menu.
-6. Delete the `app-launcher-lite` folder. Keep a copy of the files listed under "Migrate" first if you may want them back. `~\.copilot\app-launcher-lite-state\` and the runtime data folder stay; delete them yourself if you want nothing left.
+6. Delete the `app-launcher-lite` folder. Keep a copy of the files listed under [Migrate](#migrate) first if you may want them back. `~\.copilot\app-launcher-lite-state\` and the runtime data folder stay; delete them yourself if you want nothing left.
+
+## Update
+
+```powershell
+git pull --ff-only
+.\setup.bat
+.\tray.bat --restart
+```
+
+Every file the app writes while it runs (configs, state, logs, certificates, `.venv`) is gitignored or outside the folder, and no tracked file is rewritten at runtime, so `git status` stays clean and the pull fast-forwards. The ports come from this PC's `config/config.json`, so moving a port never means editing a tracked file. `tray.bat --restart` installs no packages and keeps the session-host (your live sessions) running.
+
+`setup.bat` on a configured PC is safe, and it is how a new setting or a new requirement arrives:
+
+- Settings files (`config/config.json`, `config/webapp_config.json`): an existing value is never changed. A key the sample has and the file lacks is added, after a timestamped backup beside it (`<name>.json.bak-<YYYYmmdd-HHMMSS>`), and the added key names are printed. The backup holds the same secrets as the config and is gitignored. A file that does not parse is left alone and reported, and the run exits 1.
+- Registries (`config/apps.json`, `config/jobs.json`) are your own lists: created when missing, never rewritten or reformatted.
+- A second run reports `unchanged` and writes nothing.
+
+## Migrate
+
+Moves this PC's install onto a fresh clone. What moves is declared in `[install.migrate]` of `.fleet.toml`:
+
+| Kind | Copied |
+|---|---|
+| Settings and registries | `config/config.json`, `config/webapp_config.json`, `config/apps.json`, `config/jobs.json` |
+| Sign-in | `config/app_password.json` (password hash), `config/webauthn_devices.json` (enrolled passkeys) |
+| Certificates, tunnel, themes | `webapp/certificates/`, `webapp/cloudflared.yml`, `webapp/terminal-themes.json` |
+| History | `webapp/jobs/` (Job runs), `webapp/sessions/` (session logs and transcripts) |
+| Chat and dictation files | `webapp/outbox/`, `webapp/briefs/`, `webapp/recordings/` |
+| Chief, Board and other state | `webapp/chief-pointer.json`, `webapp/chief-answered.json`, `webapp/chief-journal-look.json`, `webapp/owner-check-marks.json`, `webapp/jobs-dismissed.json`, `webapp/spawned-apps.json`, `webapp/lid-keep-awake.json`, `webapp/progress-totals.json` |
+
+Logs, caches and reports are not copied. Two things live outside the folder and stay where they are, shared by both copies: the chief's and the sessions' state in `~\.copilot\app-launcher-lite-state\`, and the Job index and usage log in the runtime data folder `app-launcher-lite` (`C:\sqlite\app-launcher-lite\` by default). A file that is already in the new clone is never overwritten, secrets are compared by hash and never printed, and nothing here or in `setup.bat` deletes the old copy.
+
+### Before you start
+
+Migration stops App Launcher Lite and every session it hosts. Run it from a plain terminal, never from a session the app hosts: the stop refuses when it would end its own run. From outside a session:
+
+1. Finish or save your open sessions, and close any terminal or editor whose folder is inside the app.
+2. Finish or remove the app folder's git worktrees (`git worktree list`): they stay tied to the old folder's `.git`. Uncommitted changes and local branches stay in the old copy too.
+3. Choose **Quit** in the tray's menu. The installer finds a running copy by the folder path in its processes, so it can miss one started under another spelling of that path (a junction or a mapped drive). Quit stops the webapp and the session-host whichever way they were started.
+4. If Tailscale Serve publishes the webapp's port, turn that mapping off. `tailscale serve status` lists it with its target; note both. `tailscaled` listens on the same port number, and the installer counts it as the old copy still holding the port, so the run stops there.
+
+   ```powershell
+   tailscale serve status
+   tailscale serve --https=<port> off
+   ```
+
+   After the migration, add it back with the target you noted: `tailscale serve --bg --https=<port> <target>`.
+
+### Reinstall in the same folder (the usual case)
+
+From the folder above the app:
+
+```powershell
+cd <parent folder>
+.\app-launcher-lite\setup.bat -InPlace -WhatIf    # the backup name, what it would stop, every file it would copy
+.\app-launcher-lite\setup.bat -InPlace
+```
+
+`-WhatIf` changes nothing. The real run stops what still runs from the folder, renames it to `app-launcher-lite.bak-YYYYMMDD-N`, clones the remote's default branch into the original path, copies the files above, runs the install, starts the tray, and passes only when the new clone answers `/api/version` with its own commit from a process in that folder. The path does not change, so the Startup link, the Copilot hooks and the scheduled Jobs need no edit.
+
+### Beside it (another folder, or an old copy that is not a git clone)
+
+```powershell
+git clone <this repository> <new folder>
+cd <new folder>
+.\setup.bat -MigrateFrom <old folder> -StopOld
+```
+
+`-StopOld` is needed on one PC, where both copies would use the same ports. The run ends with what still runs from or points at the old folder. A path inside the old folder in a copied JSON config is rewritten to the new one.
+
+### Only you can do these steps
+
+- **After a move to another folder, repoint what stored the old path.** Run `.venv\Scripts\python.exe copilot\install.py --uninstall` in the old folder, then `.venv\Scripts\python.exe copilot\install.py` in the new one (the new install keeps a hook that runs another folder's script). Delete `AppLauncherLite.bat` from your Startup folder and run `.\setup.bat -Startup` in the new one. In the Jobs tab, open each scheduled job and save it, which registers its Task Scheduler entry again; register one set to run elevated or without a logged-on user from an elevated shell. A copy that used fleet-config-lite follows [migrating-from-fleet-config-lite.md](migrating-from-fleet-config-lite.md) instead of the first of these.
+- **Check it from the phone:** sign in, open a session and run one Job.
+- **Fall back** if verify fails (the report names the step): stop the new copy, rename the new folder away and the backup to its original name, and start it; it is untouched.
+- **Retire the backup** once you are sure the new copy works, by deleting it yourself. An agent working through this playbook asks you before it deletes anything.

@@ -18,7 +18,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from src import boot_autostart, installer
+from src import boot_autostart, installer, installer_migrate
 from src.git_utils import run_git
 from src.launching import install_checks
 
@@ -79,9 +79,11 @@ def test_what_if_writes_nothing_then_a_fresh_checkout_installs_once(root: Path) 
     for name in ("apps", "config", "jobs", "webapp_config"):
         target = root / "config" / f"{name}.json"
         assert target.read_bytes() == (root / "config" / f"{name}.sample.json").read_bytes()
-    states = {item: state for state, item, _ in report.checklist}
-    assert states["Sign-in password"] == states["HTTPS certificate"] == states["Start at log on"] == "missing"
-    assert {"Copilot CLI", "GitLab CLI (glab)"} <= set(states)
+    assert {state for state, _, _ in report.required} == {"ok"}
+    features = {item: state for state, item, _ in report.optional}
+    assert features["Sign-in password"] == features["HTTPS certificate"] == features["Start at log on"] == "off"
+    assert {"Copilot CLI", "GitLab CLI (glab)"} <= set(features)
+    assert "does not name" not in installer.render(report)  # every declared check says what it unlocks
 
     installed = _snapshot(root)
     again = _run(root)
@@ -112,6 +114,19 @@ def test_an_existing_config_keeps_every_value_and_gains_only_missing_keys(root: 
         assert (root / "config" / f"{name}{BACKUP_SUFFIX}").read_bytes() == raw
     assert "keep-me" not in installer.render(report)
     assert registry.read_bytes() == b'{"jobs":[{"id":"mine"}]}'
+
+
+def test_the_migration_carries_only_this_pcs_own_files(root: Path) -> None:
+    mig = installer_migrate.parse_migration(installer_migrate.read_fleet_toml(root))
+    # Ignored, so a clone that has them is still a clean checkout and a rerun is accepted.
+    for item in mig.copy:
+        probe = item if Path(item).suffix else f"{item}/x"
+        assert run_git(root, ["check-ignore", "--no-index", probe]) is not None, item
+    for secret in mig.secrets:
+        assert any(secret == item or secret.startswith(f"{item}/") for item in mig.copy), secret
+    assert mig.endpoint is not None
+    (root / "config" / "config.json").write_text('{"webapp": {"port": 9001}}', encoding="utf-8")
+    assert installer_migrate.local_port(root, mig.endpoint)[0] == 9001
 
 
 def test_the_signin_probe_reads_the_hash_or_the_older_config_value(tmp_path: Path) -> None:
