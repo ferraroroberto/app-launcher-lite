@@ -8,11 +8,13 @@ row is not proven here: a Copilot that paints none reads ``None``."""
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any, Dict, List, Optional
 
 import pytest
 
 from app.webapp import session_credits
+from src.session_view import copilot_figures
 from src.session_view.copilot_credits import ai_credits_used
 from tests.unit.sessions.test_copilot_session import IDLE, NARROW, RULE
 
@@ -173,11 +175,13 @@ def reads(monkeypatch):
         return Reads.screen
 
     monkeypatch.setattr(session_credits, "read_vt_screen", fake)
-    session_credits._cache.clear()
+    session_credits._read_at.clear()
+    copilot_figures.reset()
     session_credits._inflight.clear()
     Reads.calls = calls
     yield Reads
-    session_credits._cache.clear()
+    session_credits._read_at.clear()
+    copilot_figures.reset()
 
 
 async def _settle() -> None:
@@ -270,6 +274,24 @@ def test_a_reading_without_the_figure_keeps_the_last_one(reads, monkeypatch):
     assert asyncio.run(run()) == 5.62
 
 
+def test_a_figure_nobody_has_re_read_for_minutes_is_not_served(reads, monkeypatch):
+    """The first poll after a hidden tab comes back reads unknown, not old news."""
+    real, later = time.monotonic, [0.0]
+    monkeypatch.setattr(time, "monotonic", lambda: real() + later[0])
+
+    async def run():
+        session_credits.attach_ai_credits(1, [_session()])
+        await _settle()
+        later[0] = 600.0
+        sessions = [_session()]
+        session_credits.attach_ai_credits(1, sessions)
+        stale = sessions[0]["ai_credits"]
+        await _settle()
+        return stale
+
+    assert asyncio.run(run()) is None
+
+
 def test_a_session_that_is_gone_leaves_no_cache_entry(reads):
     async def run():
         session_credits.attach_ai_credits(1, [_session()])
@@ -277,4 +299,5 @@ def test_a_session_that_is_gone_leaves_no_cache_entry(reads):
         session_credits.attach_ai_credits(1, [])
 
     asyncio.run(run())
-    assert session_credits._cache == {}
+    assert session_credits._read_at == {}
+    assert copilot_figures.recall("s1").ai_credits is None

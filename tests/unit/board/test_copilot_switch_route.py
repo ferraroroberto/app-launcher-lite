@@ -6,6 +6,8 @@ read and the PTY are replaced by recorders."""
 from __future__ import annotations
 
 import json
+import logging
+import time
 from typing import Any, Dict, List
 
 import pytest
@@ -29,7 +31,7 @@ def copilot_client(webapp_client, monkeypatch, tmp_path):
     while ``state["applies"]``."""
     from app.webapp.routers import session_screen as router
     from src import middleware
-    from src.session_view import copilot_session
+    from src.session_view import copilot_figures, copilot_session
 
     monkeypatch.setattr(middleware.trust, "LOOPBACK_HOSTS",
                         frozenset({"testclient", "127.0.0.1", "::1", "localhost"}))
@@ -37,7 +39,7 @@ def copilot_client(webapp_client, monkeypatch, tmp_path):
     session = overrides["session"]
     session.list_sessions.return_value = [_live()]
     typed: List[Any] = []
-    router._COPILOT_LAST.clear()
+    copilot_figures.reset()
     router._CONTEXT_SEEN.clear()
     monkeypatch.setattr(router, "_KEY_GAP_S", 0)
     state_session = session
@@ -127,8 +129,7 @@ def test_the_context_ring_reads_copilots_status_line(copilot_client, screen, bod
 
 
 def test_the_context_route_carries_the_footers_ai_credits(copilot_client):
-    from app.webapp.routers import session_screen as router
-    router._COPILOT_LAST.clear()
+    from src.session_view import copilot_figures
     client, _, state = copilot_client
     footer = IDLE[-3].replace("/ commands", "/ commands   Session: 5.62 AIC used")
     state["screen"] = IDLE[:-3] + [footer, "", ""]
@@ -136,7 +137,7 @@ def test_the_context_route_carries_the_footers_ai_credits(copilot_client):
     assert (got["percent"], got["ai_credits"]) == (3, 5.62)
     # The footer without the figure, and a narrow terminal, carry none.
     for screen in (IDLE, NARROW):
-        router._COPILOT_LAST.clear()
+        copilot_figures.reset()
         state["screen"] = screen
         assert client.get("/api/claude-code/sessions/s1/context").json()["ai_credits"] is None
 
@@ -144,8 +145,7 @@ def test_the_context_route_carries_the_footers_ai_credits(copilot_client):
 def test_a_screen_without_the_figures_keeps_the_ring_the_session_had(copilot_client):
     """A repaint caught mid-draw reads no footer: the ring and the credits it
     showed a moment ago stay, and only a session that is gone clears them."""
-    from app.webapp.routers import session_screen as router
-    router._COPILOT_LAST.clear()
+    from src.session_view import copilot_figures
     client, _, state = copilot_client
     footer = IDLE[-3].replace("/ commands", "/ commands   Session: 5.62 AIC used")
     state["screen"] = IDLE[:-3] + [footer, "", ""]
@@ -153,8 +153,23 @@ def test_a_screen_without_the_figures_keeps_the_ring_the_session_had(copilot_cli
     state["screen"] = NARROW
     got = client.get("/api/claude-code/sessions/s1/context").json()
     assert (got["available"], got["percent"], got["ai_credits"]) == (True, 3, 5.62)
-    router._COPILOT_LAST.clear()
+    copilot_figures.reset()
     assert client.get("/api/claude-code/sessions/s1/context").json()["percent"] is None
+
+
+def test_an_unrecognised_footer_turns_unknown_and_logs_what_was_seen(copilot_client, monkeypatch, caplog):
+    client, _, state = copilot_client
+    real, later = time.monotonic, [0.0]
+    monkeypatch.setattr(time, "monotonic", lambda: real() + later[0])
+    url = "/api/claude-code/sessions/s1/context"
+    assert client.get(url).json()["percent"] == 3
+    state["screen"] = IDLE[:-3] + [" ← sidebar  context 9 percent full", ""]
+    later[0] = 600.0
+    with caplog.at_level(logging.INFO):
+        got = [client.get(url).json() for _ in range(2)][-1]
+    assert (got["percent"], got["ai_credits"], got["reason"]) == (None, None, "not_showing")
+    seen = [r.getMessage() for r in caplog.records if "context 9 percent full" in r.getMessage()]
+    assert len(seen) == 1 and "context" in seen[0]
 
 
 def test_attached_sessions_name_copilots_logged_model(copilot_client):
