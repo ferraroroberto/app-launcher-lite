@@ -372,7 +372,9 @@ details:not([open]) > .collapse-summary:has(.board-lane-exception:not([hidden]))
   margin: 0;
 }
 .owner-answer .board-owner-run { margin-block: var(--space-sm); }
-.board-owner-run .md-block-head { min-height: var(--row-sm); }
+/* The right padding holds the Copy glyph's 44px target, which `.md-block`'s
+   overflow: hidden would otherwise cut. */
+.board-owner-run .md-block-head { min-height: var(--row-sm); padding-inline-end: var(--space-sm); }
 .board-owner-run pre.md-code { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .board-owner-try-list { margin: 0; padding-inline-start: 1.3em; }
 .board-owner-try-list li + li { margin-top: 2px; }
