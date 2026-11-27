@@ -7,8 +7,8 @@ window title and has stopped repainting, so a readiness check on the title
 alone calls the session ready and the first message is typed into the dialog
 and lost; a launch prompt (``-i``) waits behind the dialog until it is
 answered. The screen is the only place the dialog is visible, so the server
-renders the session's PTY capture and reads the dialog off it, exactly as
-``plan_picker`` does for Claude Code's picker.
+renders the session's PTY capture (:mod:`src.session_view.capture_screen`) and
+reads the dialog off it.
 
 What the dialog looks like (probed on Copilot CLI 1.0.114, 120 columns)::
 
@@ -42,7 +42,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from src import audit
-from src.session_view import plan_picker
+from src.session_view import capture_screen
 
 TITLE = "Confirm folder trust"
 # The option that makes Copilot record the folder, matched on its own label so
@@ -96,7 +96,7 @@ def parse_prompt(lines: List[str]) -> Optional[FolderTrustPrompt]:
 def read_prompt(path: Path, rows: int, cols: int) -> Optional[FolderTrustPrompt]:
     """The dialog on the capture at ``path`` rendered at the PTY's size, or
     ``None`` when it is not showing or the capture cannot be read."""
-    lines = plan_picker.read_screen(path, rows, cols)
+    lines = capture_screen.read_screen(path, rows, cols)
     return None if lines is None else parse_prompt(lines)
 
 

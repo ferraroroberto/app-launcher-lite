@@ -2,7 +2,7 @@
 
 // A plain element with a class and text content — the one element builder
 // this shape, was copied verbatim into board-answers.js,
-// chat-resume.js, launch-toolbar.js, system-load.js.
+// launch-toolbar.js, system-load.js.
 export function el(tag, cls, text) {
   const node = document.createElement(tag);
   if (cls) node.className = cls;

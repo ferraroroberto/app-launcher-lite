@@ -1,17 +1,21 @@
-"""The Copilot side of ``POST /api/claude-code/sessions/{sid}/model`` and
-``GET .../context``: the screen comes from the session-host's VT mirror and
-the switch is confirmed by the session's own ``events.jsonl``. Nothing here
-opens a socket: the screen read and the PTY are replaced by recorders."""
+"""``POST /api/claude-code/sessions/{sid}/model`` and ``GET .../context``: the
+screen comes from the session-host's VT mirror and the switch is confirmed by
+the session's own ``events.jsonl``. Nothing here opens a socket: the screen
+read and the PTY are replaced by recorders."""
 
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import pytest
 
-from tests.unit.board.test_plan_picker import _live, picker_client  # noqa: F401
 from tests.unit.sessions.test_copilot_session import IDLE, NARROW, TYPED, WORKING
+
+
+def _live(kind: str = "pty", agent: str = "copilot") -> Dict[str, Any]:
+    return {"session_id": "s1", "kind": kind, "agent": agent, "alive": True,
+            "rows": 40, "cols": 60, "project_dir": "E:/automation/proj"}
 
 
 def _event(kind: str, **data: Any) -> str:
@@ -19,21 +23,29 @@ def _event(kind: str, **data: Any) -> str:
 
 
 @pytest.fixture
-def copilot_client(picker_client, monkeypatch, tmp_path):
+def copilot_client(webapp_client, monkeypatch, tmp_path):
     """One live Copilot PTY on ``gpt-6-luna`` whose screen is
     ``state["screen"]``; a typed ``/model <id>`` lands in its event log
     while ``state["applies"]``."""
     from app.webapp.routers import session_screen as router
+    from src import middleware
     from src.session_view import copilot_session
 
-    client, session, _show, typed = picker_client
+    monkeypatch.setattr(middleware.trust, "LOOPBACK_HOSTS",
+                        frozenset({"testclient", "127.0.0.1", "::1", "localhost"}))
+    client, _, overrides = webapp_client
+    session = overrides["session"]
+    session.list_sessions.return_value = [_live()]
+    typed: List[Any] = []
     router._COPILOT_LAST.clear()
-    session.list_sessions.return_value = [_live(agent="copilot")]
+    router._CONTEXT_SEEN.clear()
+    monkeypatch.setattr(router, "_KEY_GAP_S", 0)
+    state_session = session
     monkeypatch.setattr(router, "_MODEL_CONFIRM_S", 0.4)
     monkeypatch.setattr(router, "_MODEL_POLL_S", 0.02)
     log = tmp_path / "events.jsonl"
     log.write_text(_event("session.start", selectedModel="gpt-6-luna"), encoding="utf-8")
-    state: Dict[str, Any] = {"screen": IDLE, "applies": True, "log": log}
+    state: Dict[str, Any] = {"screen": IDLE, "applies": True, "log": log, "session": state_session}
     monkeypatch.setattr(copilot_session, "event_log", lambda sess, fresh=False: state["log"])
 
     async def fake_screen(port, sid, rows, cols):
@@ -60,7 +72,7 @@ def test_a_copilot_switch_is_confirmed_by_its_event_log(copilot_client):
     r = _post(client)
     assert r.status_code == 200, r.text
     assert r.json() == {"ok": True, "outcome": "switched", "model": "mai-code-2-flash",
-                        "confirmed_dialog": False, "detail": None}
+                        "detail": None}
     assert typed == [[("/model mai-code-2-flash", True)]]
 
 
@@ -150,5 +162,44 @@ def test_attached_sessions_name_copilots_logged_model(copilot_client):
     _, _, state = copilot_client
     with state["log"].open("a", encoding="utf-8") as fh:
         fh.write(_event("session.model_change", newModel="gpt-5.6-sol"))
-    out = attach_transcript_model([_live(agent="copilot")], {})
+    out = attach_transcript_model([_live()])
     assert out[0]["transcript_model"] == "gpt-5.6-sol"
+
+
+def test_the_switch_route_is_passkey_gated():
+    from src.middleware import _terminal_guard_level
+    assert _terminal_guard_level("/api/claude-code/sessions/abc/model") == "passkey"
+
+
+@pytest.mark.parametrize("live,status,detail", [
+    (_live(agent="other"), 409, "can't switch model"),
+    (_live(kind="remote"), 409, "detached"),
+])
+def test_a_switch_that_cannot_be_driven_types_nothing(copilot_client, live, status, detail):
+    client, typed, state = copilot_client
+    state["session"].list_sessions.return_value = [live]
+    r = _post(client)
+    assert r.status_code == status and detail in r.json()["detail"]
+    assert typed == []
+
+
+def test_a_gone_session_and_an_unreachable_host_are_told_apart(copilot_client):
+    from src.clients.session import SessionHostError
+
+    client, typed, state = copilot_client
+    state["session"].list_sessions.return_value = []
+    assert _post(client).status_code == 409
+    state["session"].list_sessions.side_effect = SessionHostError("timed out")
+    assert _post(client).status_code == 503
+    assert typed == []
+
+
+def test_the_switch_is_audited_without_the_conversation(copilot_client, monkeypatch):
+    from src import audit
+
+    client, _, _ = copilot_client
+    logged: List[Any] = []
+    monkeypatch.setattr(audit, "session_log", lambda sid, event, **kw: logged.append((sid, event, kw)))
+    _post(client)
+    assert logged == [("s1", "model_switch", {"agent": "copilot", "model": "mai-code-2-flash",
+                                              "reason": "switched"})]

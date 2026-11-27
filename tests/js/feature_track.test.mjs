@@ -41,11 +41,11 @@ const { FEATURE_IDS, trackFeature } = await import(
 );
 const { usage, wireUsageLog } = await import('../../app/webapp/static/usage.js');
 
-assert.equal(FEATURE_IDS.length, 9);
+assert.equal(FEATURE_IDS.length, 8);
 assert.ok(FEATURE_IDS.every((id) => /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(id)));
 
 // Before the logger starts a use records nothing and breaks nothing.
-assert.doesNotThrow(() => trackFeature('feat.ocr'));
+assert.doesNotThrow(() => trackFeature('feat.dictation'));
 assert.doesNotThrow(() => usage.track('mic.no-click'));
 
 wireUsageLog();
@@ -53,7 +53,7 @@ FEATURE_IDS.forEach(trackFeature);
 usage.track('mic.no-click');
 
 // Anything off the list is dropped: a file name, a sentence, a non-string, a near miss.
-['photo.png', 'feat.ocr extra', 'mic.start', 'feat.', '', null, undefined, 42, {}].forEach(trackFeature);
+['photo.png', 'feat.dictation extra', 'mic.start', 'feat.', '', null, undefined, 42, {}].forEach(trackFeature);
 
 document.visibilityState = 'hidden';
 (listeners.visibilitychange || []).forEach((fn) => fn({}));
@@ -70,6 +70,6 @@ assert.deepEqual(created, [], 'a feature use built an element');
 
 // A logger that throws must not take the app down.
 const { usage: again } = await import('../../app/webapp/static/usage.js?again');
-assert.doesNotThrow(() => again.track('feat.ocr'));
+assert.doesNotThrow(() => again.track('feat.dictation'));
 
 console.log('OK feature-track');

@@ -2,25 +2,20 @@
  *
  * Turns a transcript's entries into list nodes: prompt bubbles, agent turns
  * with their replies, step lines and the items under them, sent-file cards,
- * per-step diffs and file chips. Two mounts use it: the session
- * overlay's Chat pane (session-transcript.js, which owns paging, live
- * refresh, the outbox cursor and the composer) and the Life OS conversation
- * viewer (life-os-viewer.js), which mounts a parsed capture through
- * `renderEntries`.
+ * per-step diffs and file chips. The session overlay's Chat pane
+ * (session-transcript.js, which owns paging, live refresh, the outbox cursor
+ * and the composer) mounts it through `appendEntries`.
  *
  * Stateless about the Chat pane: whatever a node needs from the open session
  * comes in as a parameter. `opts.session` is that session (its id asks the
- * image, file, diff and entry routes; its `project_dir` shortens paths), or
- * null in the viewer, which has no session to ask; `opts.live` is the step
- * in progress, if any.
+ * image, file, diff and entry routes; its `project_dir` shortens paths);
+ * `opts.live` is the step in progress, if any.
  *
  * This file draws the turns. Beside it: transcript-text.js (the small
  * building blocks every part shares), transcript-steps.js (step lines, the
  * items under them, an opened step's card), transcript-media.js (image
  * thumbnails and sent-file cards, and the media cache) and
- * transcript-chips.js (file chips in a reply). The question and plan cards
- * are transcript-decisions.js's; their entry points are what
- * `appendEntries` calls into.
+ * transcript-chips.js (file chips in a reply).
  */
 
 import { state } from '../state.js';
@@ -30,7 +25,6 @@ import { terminalJsonApi } from '../webauthn.js';
 import { icon } from '../_vendored/icons/icons.js';
 import { brandIcon } from '../dom-utils.js';
 import { TRANSCRIPT_AGENTS } from '../session-modes.js';
-import { isPlan, isQuestion, renderPlan, renderQuestion } from './transcript-decisions.js';
 import { chevron, firstLine, fmtTime, linkify } from './transcript-text.js';
 import { isSentFile, renderSentFiles, thumbs } from './transcript-media.js';
 import { renderItem, renderRun, syncRunSummary, tagKey } from './transcript-steps.js';
@@ -137,7 +131,7 @@ async function copyTurn(entries, kind, sid) {
 //
 // A turn reads as one piece: the user's prompt is a right-aligned bubble, and
 // everything the agent does until the next prompt (each reply fragment, the
-// step lines between them, a question or plan card) sits in ONE block under
+// step lines between them) sits in ONE block under
 // one header: the agent's mark and name, the time, copy for the whole turn,
 // and collapse — never one card per text fragment, each with its own
 // "Agent · time" and copy. The prompt is plain text
@@ -150,8 +144,8 @@ async function copyTurn(entries, kind, sid) {
 // the rest (a session, and the offset the ``/transcript/entry`` route
 // reads) the note is a "Show the rest" button that swaps the block's text for
 // the full one in place; otherwise it stays the plain note. One helper for
-// every capped block, so the prompt, the reply and the plan card (whose text
-// that route cannot serve) share their wording and their failure.
+// every capped block, so the prompt and the reply share their wording and
+// their failure.
 //
 // What was fetched is remembered, keyed by session and offset, so the live
 // tick that rebuilds the provisional tail and a Reload transcript draw the
@@ -206,7 +200,7 @@ async function fetchEntryText(sid, e) {
 // expanded in full). `opts` is `{ entry, sid, paint }`: `paint(fullText)`
 // redraws the block's text, and without it, a session or an offset the note
 // stays plain. No `opts` at all is the plain note.
-export function truncControl(opts) {
+function truncControl(opts) {
   const { entry, sid, paint } = opts || {};
   const hit = expandedHit(entry, sid);
   if (hit) return hit.truncated ? plainTruncNote() : null;
@@ -434,7 +428,7 @@ function renderAgentTurn(first, agent, edited, sid) {
 
 // The header, recomputed from the parts the turn now holds — after every
 // merge, a pending tail coming and going, or an older page joining it.
-// A turn with no reply and no decision card is "silent": with the steps
+// A turn with no reply is "silent": with the steps
 // hidden it would be a header over nothing, so it hides with them. Its step
 // lines are recomputed here too, since a run's duration ends at whatever
 // part follows it. `live` is the step in progress, if any.
@@ -453,12 +447,12 @@ export function syncTurnHead(li, live) {
   markSilent(li);
 }
 
-// With the steps hidden, a turn with no reply, no decision card and no Edited
+// With the steps hidden, a turn with no reply and no Edited
 // card would be a header over nothing, so it hides with them. The Edited card
 // keeps it: the work still has a trace.
 export function markSilent(li) {
   const quiet = !turnReplies(li).length && !li._trEdited &&
-    !li._trParts.querySelector(':scope > .tr-ask-item, :scope > .tr-plan-item, :scope > .tr-file-item');
+    !li._trParts.querySelector(':scope > .tr-file-item');
   li.classList.toggle('tr-turn-silent', quiet);
 }
 // The one place entries become list nodes: appends `entries` to
@@ -503,10 +497,6 @@ export function appendEntries(container, entries, opts) {
     touchedTurns.add(turn);
     if (isTurn(e)) {
       addPart(turn, renderReply(e, opts.session));
-    } else if (isQuestion(e)) {
-      addPart(turn, renderQuestion(e, opts.toolErrors, opts.answering));
-    } else if (isPlan(e)) {
-      addPart(turn, renderPlan(e, opts.toolErrors, opts.answering));
     } else if (isSentFile(e)) {
       addPart(turn, renderSentFiles(e, opts.session));
     } else {
@@ -526,21 +516,3 @@ export function appendEntries(container, entries, opts) {
   return created;
 }
 
-// The Life OS conversation viewer's mount: this same renderer over a
-// parsed capture rather than a second one. It has no session, so
-// nothing here asks a route: no thumbnails, no file bytes, no full diff, and
-// a truncated turn's copy upgrade has nowhere to go (a capture's turns are
-// never truncated).
-//
-// `answering` is the Chat pane's own marker that a question card may
-// go live; the viewer passes nothing, so its cards stay read-only history.
-// `agent` names whose turns these are (an agent id); without one they read
-// "Agent".
-export function renderEntries(entries, toolErrors, answering, agent) {
-  const frag = document.createDocumentFragment();
-  appendEntries(frag, entries, {
-    toolErrors: toolErrors, answering: answering,
-    agent: agent ? String(agent).toLowerCase() : null, pending: false,
-  });
-  return frag;
-}

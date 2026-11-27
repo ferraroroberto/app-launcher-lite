@@ -33,7 +33,7 @@ _POLLS = 4
 _DEFAULT_WORKERS = 2
 
 _LIVE = {
-    "session_id": "s1", "kind": "pty", "agent": "claude", "alive": True,
+    "session_id": "s1", "kind": "pty", "agent": "copilot", "alive": True,
     "rows": 40, "cols": 60, "project_dir": "C:/stub/proj",
 }
 
@@ -52,11 +52,21 @@ class _Stall:
         return self.answer
 
 
-def _stall_screen(monkeypatch, _tmp_path) -> _Stall:
-    from src.session_view import plan_picker
+def _no_vt_screen(monkeypatch) -> None:
+    from app.webapp.routers import session_screen
 
-    stall = _Stall(None)
-    monkeypatch.setattr(plan_picker, "read_capture_tail", stall)
+    async def no_frame(*_args: Any) -> None:
+        return None
+
+    monkeypatch.setattr(session_screen, "read_vt_screen", no_frame)
+
+
+def _stall_screen(monkeypatch, _tmp_path) -> _Stall:
+    from app.webapp.routers import session_screen
+
+    _no_vt_screen(monkeypatch)
+    stall = _Stall(([], None))
+    monkeypatch.setattr(session_screen, "read_live_sessions", stall)
     return stall
 
 
@@ -66,11 +76,7 @@ def _stall_transcript(monkeypatch, tmp_path) -> _Stall:
     native = tmp_path / "native.jsonl"
     native.write_text("", encoding="utf-8")
     monkeypatch.setattr(session_transcript, "_resolve_path", lambda *a: (native, "recorded"))
-    # The transcript reader only serves Copilot; the other endpoints here read a Claude row.
-    monkeypatch.setattr(
-        session_transcript, "read_live_sessions",
-        lambda _port: ([{**_LIVE, "agent": "copilot"}], None),
-    )
+    monkeypatch.setattr(session_transcript, "read_live_sessions", lambda _port: ([_LIVE], None))
     stall = _Stall({"entries": [], "reset": False, "size": 0})
     monkeypatch.setattr(session_transcript, "transcript_tail", stall)
     return stall
@@ -86,7 +92,6 @@ def _stall_exchange(monkeypatch, _tmp_path) -> _Stall:
 
 _ENDPOINTS: Dict[str, tuple] = {
     "context": ("/api/claude-code/sessions/s1/context", _stall_screen),
-    "plan-picker": ("/api/claude-code/sessions/s1/plan-picker", _stall_screen),
     "transcript": ("/api/claude-code/sessions/s1/transcript?after=0&size=0", _stall_transcript),
     "exchange": ("/api/board/sessions/s1/exchange", _stall_exchange),
 }
@@ -158,16 +163,17 @@ def test_a_stalled_context_poll_answers_stale_and_a_fresh_one_is_unchanged(
 ):
     """The first answer is the route's payload exactly; once the read hangs,
     the next poll gets that answer back within the bound, marked stale."""
-    from src.session_view import plan_picker
+    from app.webapp.routers import session_screen
 
+    _no_vt_screen(monkeypatch)
     calls = {"n": 0}
-    stall = _Stall(None)
+    stall = _Stall(([_LIVE], None))
 
-    def read_once_then_hang(path):
+    def read_once_then_hang(port):
         calls["n"] += 1
-        return None if calls["n"] == 1 else stall(path)
+        return ([_LIVE], None) if calls["n"] == 1 else stall(port)
 
-    monkeypatch.setattr(plan_picker, "read_capture_tail", read_once_then_hang)
+    monkeypatch.setattr(session_screen, "read_live_sessions", read_once_then_hang)
 
     async def run():
         transport = httpx.ASGITransport(app=chat_app)

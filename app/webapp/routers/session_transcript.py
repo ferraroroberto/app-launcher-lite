@@ -36,8 +36,8 @@ one ``user``/``assistant`` turn from the same source, uncapped — the Chat
 pane's copy button calls it only when the page's own copy of that
 entry came back ``truncated: true``. Same source resolution, same gate.
 
-The terminal-screen routes (answering a pending question, the plan picker,
-resuming a conversation, context use) live in ``session_screen.py``.
+The terminal-screen routes (the model switch, context use) live in
+``session_screen.py``.
 
 Unavailable sources are told apart on purpose (``reason``): a session the
 host doesn't know, an agent with no structured history, a history file that

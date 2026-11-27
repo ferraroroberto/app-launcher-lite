@@ -14,7 +14,7 @@ synthetic):
   remembered, the entry is not re-capped and not fetched again);
 * a failed fetch keeps the capped text, says so in place and leaves the button
   to try again;
-* with nothing to fetch (no offset, a plan card) the note stays the plain one.
+* with nothing to fetch (no offset) the note stays the plain one.
 
 Every boot fetch is stubbed before ``goto()`` (#510) and the poll runs on the
 fake clock (#1376).
@@ -33,7 +33,6 @@ from tests.e2e.chat._support import (
     _SID,
     _mock_sessions_list,
     _open_chat,
-    _plan,
     _tick,
     _Transcript,
     _turn,
@@ -166,20 +165,14 @@ def test_a_capped_block_with_nothing_to_fetch_keeps_the_plain_note(
     authed_page: Page, base_url: str
 ) -> None:
     page = authed_page
-    plan = _plan("call-plan-1745", 300)
-    plan["plan_truncated"] = True
     _boot(
         page, base_url,
-        [_capped("user", _PROMPT_CAPPED, None), _capped("assistant", _REPLY_CAPPED, 200), plan],
+        [_capped("user", _PROMPT_CAPPED, None), _capped("assistant", _REPLY_CAPPED, 200)],
         {},
     )
     # No offset: nothing to ask the server for.
     prompt = page.locator("#transcriptList .tr-prompt-item")
     expect(prompt.locator(".tr-trunc")).to_have_text(_CAPPED_NOTE)
     expect(prompt.locator(".tr-trunc-more")).to_have_count(0)
-    # A plan's text is not a turn the entry route serves.
-    card = page.locator("#transcriptList .tr-plan")
-    expect(card.locator(".tr-trunc")).to_have_text(_CAPPED_NOTE)
-    expect(card.locator(".tr-trunc-more")).to_have_count(0)
     # The reply beside them, which does have an offset, still offers it.
     expect(page.locator("#transcriptList .tr-reply .tr-trunc-more")).to_have_count(1)

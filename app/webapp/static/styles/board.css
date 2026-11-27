@@ -309,8 +309,7 @@ details:not([open]) > .collapse-summary:has(.board-lane-exception:not([hidden]))
    an attention heading, no bar or stripe; a chevron says a row opens the
    answer sheet. "N more" unfolds the rest in place. */
 .board-plan-group-waiting .board-plan-heading { color: var(--attention-text); }
-.board-plan-chevron,
-.lifeos-convo-chevron {
+.board-plan-chevron {
   width: var(--row-sm);
   height: var(--row-sm);
   display: inline-flex;
@@ -319,8 +318,7 @@ details:not([open]) > .collapse-summary:has(.board-lane-exception:not([hidden]))
   color: var(--muted);
   cursor: pointer;
 }
-.board-plan-chevron .icon,
-.lifeos-convo-chevron .icon { width: var(--icon-inline); height: var(--icon-inline); }
+.board-plan-chevron .icon { width: var(--icon-inline); height: var(--icon-inline); }
 .board-plan-answer,
 .board-clear {
   display: inline-flex;
@@ -731,41 +729,3 @@ span.chief-answer-ref { color: var(--muted); }
     flex: 0 0 calc((100% - (var(--board-lanes, 5) - 1) * var(--board-col-gap)) / var(--board-lanes, 5));
   }
 }
-.lifeos-file-btn {
-  flex: 1;
-  display: block;
-  text-align: left;
-  background: var(--card);
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
-  font-size: var(--font-label);
-  min-height: var(--row-sm);   /* the 44px touch floor */
-  cursor: pointer;
-}
-/* The document sheet's text, scrolling inside the reader sheet. */
-.lifeos-file-content {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-}
-.lifeos-file-content h1,
-.lifeos-file-content h2,
-.lifeos-file-content h3,
-.lifeos-file-content h4 { line-height: 1.3; }
-.lifeos-file-content p { line-height: 1.5; }
-.lifeos-file-content a { color: var(--accent); }
-.lifeos-file-content code {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 1px 5px;
-  font-size: var(--font-caption);
-}
-/* A fence here is the same `.md-block` frame as in Chat; the document
-   viewer keeps its scroll route, where Chat wraps. */
-.lifeos-file-content pre.md-code { overflow-x: auto; }
-

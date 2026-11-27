@@ -35,12 +35,12 @@ def test_chat_url_builds_path():
     )
 
 
-def test_payload_uses_haiku_and_driving_prompt():
-    p = llm_client.build_summary_payload("a long reply")
+def test_payload_uses_haiku_and_the_callers_prompt():
+    p = llm_client.build_summary_payload("a long reply", "name the cause")
     assert p["model"] == "claude-haiku-4-5"
     assert p["stream"] is False
     assert p["messages"][0]["role"] == "system"
-    assert "driving" in p["messages"][0]["content"].lower()
+    assert p["messages"][0]["content"] == "name the cause"
     assert p["messages"][1] == {"role": "user", "content": "a long reply"}
 
 
@@ -54,7 +54,7 @@ def test_summarize_returns_trimmed_content(monkeypatch):
         return _Resp(200, _completion("  Ship it. Decide: merge now?  "))
 
     monkeypatch.setattr(_loopback_http.SESSION, "request", fake_request)
-    out = llm_client.summarize("http://127.0.0.1:8000", "a long reply")
+    out = llm_client.summarize("http://127.0.0.1:8000", "a long reply", "why")
     assert out == "Ship it. Decide: merge now?"
     assert captured["url"] == "http://127.0.0.1:8000/v1/chat/completions"
     assert captured["json"]["messages"][1]["content"] == "a long reply"
@@ -69,7 +69,7 @@ def test_summarize_handles_list_content(monkeypatch):
             [{"type": "text", "text": "Gist here."}]
         )),
     )
-    assert llm_client.summarize("http://127.0.0.1:8000", "x") == "Gist here."
+    assert llm_client.summarize("http://127.0.0.1:8000", "x", "why") == "Gist here."
 
 
 def test_summarize_empty_completion_raises_502(monkeypatch):
@@ -78,7 +78,7 @@ def test_summarize_empty_completion_raises_502(monkeypatch):
         lambda *a, **k: _Resp(200, _completion("   ")),
     )
     with pytest.raises(llm_client.LlmError) as exc:
-        llm_client.summarize("http://127.0.0.1:8000", "x")
+        llm_client.summarize("http://127.0.0.1:8000", "x", "why")
     assert exc.value.status == 502
 
 
@@ -88,5 +88,5 @@ def test_summarize_connection_failure_raises_503(monkeypatch):
 
     monkeypatch.setattr(_loopback_http.SESSION, "request", fake_request)
     with pytest.raises(llm_client.LlmError) as exc:
-        llm_client.summarize("http://127.0.0.1:8000", "x")
+        llm_client.summarize("http://127.0.0.1:8000", "x", "why")
     assert exc.value.status == 503

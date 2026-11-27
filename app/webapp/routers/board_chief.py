@@ -505,8 +505,6 @@ def _chief_settings_payload(cfg: WebappConfig) -> Dict[str, Any]:
         "worker_cap": cfg.chief_worker_cap,
         "worker_cap_scope": cfg.chief_worker_cap_scope,
         "auto_drain": cfg.chief_auto_drain,
-        "chief_job_self_heal": cfg.chief_job_self_heal,
-        "chief_weekly_proposals": cfg.chief_weekly_proposals,
         "chief_fallback_minutes": cfg.chief_fallback_minutes,
         **chief_timings.values(cfg),
     }

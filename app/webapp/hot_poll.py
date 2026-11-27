@@ -29,7 +29,7 @@ Breadcrumbs go to ``webapp/slow-requests.log`` at INFO: a build step over
 :data:`SLOW_STEP_S` is named with its time, and the first stale answer of a
 build names the steps it is still in.
 
-The Chat pane's per-session polls (``/context``, ``/plan-picker``,
+The Chat pane's per-session polls (``/context``,
 ``/transcript``, the Board drawer's ``/exchange``) read the same files, so
 they go through a :class:`HotPoll` too, one per session and request
 shape (:func:`session_poll`). Theirs build on a pool of their own,

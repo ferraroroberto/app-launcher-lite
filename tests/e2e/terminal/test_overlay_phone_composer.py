@@ -331,8 +331,7 @@ def _leg_model_chip_switches_through_the_sheet(
     stubs.model, stubs.agent = "gpt-5.6-luna", "copilot"
     _open_by_row(page, base_url, sid)
     posted = []
-    answer = {"outcome": "switched", "model": "gpt-5.6-terra", "confirmed_dialog": False,
-              "detail": None}
+    answer = {"outcome": "switched", "model": "gpt-5.6-terra", "detail": None}
 
     def switch(route) -> None:
         posted.append(route.request.post_data_json)

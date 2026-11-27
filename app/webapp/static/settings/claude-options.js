@@ -68,12 +68,6 @@ export async function fetchConfig(shouldApply) {
   if (els.chiefJobFailuresToggle) {
     setSwitch(els.chiefJobFailuresToggle, body.chief_job_failures !== false);
   }
-  if (els.chiefJobSelfHealToggle) {
-    setSwitch(els.chiefJobSelfHealToggle, body.chief_job_self_heal === true);
-  }
-  if (els.chiefWeeklyProposalsToggle) {
-    setSwitch(els.chiefWeeklyProposalsToggle, body.chief_weekly_proposals === true);
-  }
   if (els.openSessionsInWindowToggle) {
     setSwitch(els.openSessionsInWindowToggle, body.open_sessions_in_window === true);
   }

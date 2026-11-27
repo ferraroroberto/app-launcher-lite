@@ -18,7 +18,6 @@ export const FEATURE_IDS = [
   'feat.attach.image',
   'feat.attach.file',
   'feat.attach.large',
-  'feat.ocr',
   'feat.paste-pc',
   'feat.attach.board',
 ];

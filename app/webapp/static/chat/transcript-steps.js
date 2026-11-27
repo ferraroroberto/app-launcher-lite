@@ -24,7 +24,7 @@ const TOOL_ERRORS_NOTE = {
   none: 'This agent doesn’t record whether a tool call failed.',
 };
 
-export function toolOutcomeNote(e, toolErrors) {
+function toolOutcomeNote(e, toolErrors) {
   if (e.error === true) return '';
   if (e.kind !== 'tool_call' && e.kind !== 'tool_result') return '';
   return TOOL_ERRORS_NOTE[toolErrors] || '';

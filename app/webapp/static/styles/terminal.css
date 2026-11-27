@@ -251,7 +251,7 @@ and ⋮, which always fit beside a shrinking title. Only the Life OS
   flex: 1;
   min-height: 0;
 }
-/* The shared composer (composer.js): a column of OCR tray + compose
+/* The shared composer (composer.js): a column holding the compose
    bar, always docked under the terminal (and, later, under Chat mode and
    in the Board drawer). Positioned so the keys D-pad can float above it. */
 .composer {
@@ -348,7 +348,7 @@ and ⋮, which always fit beside a shrinking title. Only the Life OS
   display: flex;
   /* flex-end, not stretch: the textarea auto-grows on every
      dictation partial, and its growth pushes the row's TOP edge up while
-     the bottom stays put. With align-items:stretch the mic/OCR/attach
+     the bottom stays put. With align-items:stretch the mic/attach
      column and the Send button stretched to match the taller row, moving
      their buttons up with it — measured 46px of drift on a realistic
      transcript, a moving-target race against a tap aimed at the pre-grow
@@ -409,7 +409,7 @@ and ⋮, which always fit beside a shrinking title. Only the Life OS
   border: 1px solid var(--control-border);
   border-radius: var(--radius-md);
 }
-/* Background work in progress (OCR / transcribe) — keep the ticking timer
+/* Background work in progress (transcribe) — keep the ticking timer
    legible despite the disabled dim, and tint it so it reads as "busy". */
 .compose-record.working { color: var(--accent); font-size: var(--font-label); }
 /* Arming: the tap landed and the mic is starting — an
@@ -424,62 +424,6 @@ and ⋮, which always fit beside a shrinking title. Only the Life OS
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
 }
-/* OCR staging tray: images accumulate here as the 📷 button is
-   tapped; one Extract call collates them all into deduplicated text. */
-.ocr-tray {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: var(--card);
-  border-top: 1px solid var(--line);
-  flex-shrink: 0;
-}
-.ocr-thumbs {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  flex: 1;
-  min-width: 0;
-}
-.ocr-thumb { position: relative; flex-shrink: 0; }
-.ocr-thumb img {
-  height: 44px;
-  width: 44px;
-  object-fit: cover;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  display: block;
-}
-.ocr-thumb-x {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: none;
-  background: var(--danger, #d9534f);
-  color: var(--accent-fg);
-  font-size: var(--font-caption);
-  line-height: 18px;
-  padding: 0;
-  cursor: pointer;
-}
-.ocr-extract {
-  flex-shrink: 0;
-  min-height: 44px;
-  padding: 0 14px;
-  font-size: var(--font-label);
-  font-weight: 600;
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  border: 1px solid var(--accent-border-soft);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-.ocr-extract:active { opacity: 0.85; }
-.ocr-extract.working { opacity: 1; }
 /* The session overlay's bottom status strip. Always laid out, in
    both modes, one status line tall — the height the old status line added
    when it appeared: 8px + one body-sm line + 8px. The controls above it

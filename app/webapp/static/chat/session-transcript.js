@@ -22,16 +22,9 @@
  * render disabled. A detached session whose agent was never probed for
  * console input keeps the composer but not ➤ Send.
  *
- * Claude Code's AskUserQuestion renders as a question card, never
- * folded. The pending one answers through its own route (/answer), not
- * /input: the picker needs raw keystrokes, and /input frames text as a
- * paste. That card, the ExitPlanMode card and the plan-picker panel
- * that answers a waiting plan from the terminal's own screen live in
- * transcript-decisions.js, which reads and mutates this module's
- * `view`. Entries become list nodes in transcript-render.js, the
- * renderer the Life OS viewer mounts too, which is handed the open session
- * rather than reading `view`; this module owns paging, live refresh, the
- * outbox cursor, the Edited N files card and the composer.
+ * Entries become list nodes in transcript-render.js, which is handed the
+ * open session rather than reading `view`; this module owns paging, live
+ * refresh, the outbox cursor, the Edited N files card and the composer.
  *
  * This is one pane of #terminalOverlay, not its own overlay:
  * session-overlay.js opens/closes it and flips the overlay's data-mode;
@@ -90,8 +83,6 @@ import { detachedSendRefused } from '../sessions.js';
 import { mountComposer } from '../composer.js';
 import { voiceDictationAvailable } from '../voice.js';
 import { mountScrollerPill, scrollerIsAway } from '../latest-pill.js';
-import { closeResumeCard, wireResumeCard } from './chat-resume.js';
-import { CHAT_ANSWERING, clearPicker, pollPicker, syncDecisionCards } from './transcript-decisions.js';
 import {
   appendEntries, isAgentTurn, isTurn, openLinksOnThePc, syncTurnHead,
 } from './transcript-render.js';
@@ -164,10 +155,10 @@ export let chatComposer = null;
 // for the next older page. `seq` guards a slow response from a previous
 // open/refresh landing in a newer view.
 //
-// Exported as a live binding so transcript-decisions.js's cards and
-// plan-picker panel — which read and mutate its fields, never reassign the
-// binding itself — see the same object this module does; only openChatPane
-// / closeChatPane ever assign `view =` a new value.
+// Exported as a live binding so the pane's other modules — which read and
+// mutate its fields, never reassign the binding itself — see the same object
+// this module does; only openChatPane / closeChatPane ever assign `view =` a
+// new value.
 export let view = null;
 // Whether the step lines (each run of tool calls, thinking and system
 // entries) are hidden from the list. Shown by default: one quiet
@@ -338,7 +329,6 @@ function chatOpts(toolErrors, pending) {
   return {
     sessionStart: sessionStartMs,
     toolErrors: toolErrors,
-    answering: CHAT_ANSWERING,
     agent: String((view && view.session.agent) || 'copilot').toLowerCase(),
     pending: !!pending,
     edited: true,
@@ -385,7 +375,7 @@ function clearPending() {
 // the reader has deliberately scrolled up into history, is left exactly where
 // they are, and the ↓ Latest pill is their one tap back — which puts
 // them inside it again, so sticking resumes.
-export function atBottom() {
+function atBottom() {
   return !scrollerIsAway(els.transcriptBody);
 }
 
@@ -406,7 +396,6 @@ function applyLive(settled, pending, toolErrors, files) {
   // The first read of a session nobody has prompted yet says "Nothing in the
   // transcript yet"; that line has to go once a turn lands on a live tick.
   if (view.entries.length) hideState();
-  syncDecisionCards();
   syncAuto();
   syncLiveStep();
   if (stick) els.transcriptBody.scrollTop = els.transcriptBody.scrollHeight;
@@ -525,9 +514,6 @@ async function readForward(target, manual) {
   window.clearTimeout(target.liveTimer);
   target.liveTimer = null;
   target.ticking = true;
-  // Not awaited: the screen read is independent of the transcript, and a
-  // session whose transcript is unavailable can still have a plan waiting.
-  pollPicker();
   const q = new URLSearchParams({ after: String(target.tail) });
   if (target.size != null) q.set('size', String(target.size));
   if (target.outboxRev != null) q.set('ob', String(target.outboxRev));
@@ -614,14 +600,11 @@ function fetchPage(before) {
 }
 
 // What a fresh read of the newest page starts from: no cursor, no live tail,
-// no plan panel, the live tick un-latched, the outbox read from the top.
+// the live tick un-latched, the outbox read from the top.
 function resetViewState() {
   view.cursor = null;
   view.logId = null;
   view.pendingNodes = [];
-  view.picker = null;
-  view.pickerSig = null;
-  view.pickerSent = null;
   view.ended = false;
   view.backoff = 0;
   view.reasonShown = false;
@@ -638,7 +621,6 @@ async function loadNewest() {
   els.transcriptOlder.hidden = true;
   els.transcriptOlder.textContent = OLDER_LABEL;
   newerNote(null);
-  clearPicker();
   resetViewState();
   showState('Loading…');
   let body;
@@ -652,12 +634,8 @@ async function loadNewest() {
   }
   if (!view || view.seq !== seq) return;
   if (!body.available) {
-    // Only an ending ends the view, as on a live tick. A `claude --resume`
-    // launch sits here from the start, with no transcript yet and the resume
-    // picker on its screen, so the screen is asked about now rather than
-    // after the first backed-off tick.
+    // Only an ending ends the view, as on a live tick.
     liveUnavailable(body.reason, body.missing);
-    pollPicker();
     return;
   }
   view.activity = body.activity || null;
@@ -699,7 +677,6 @@ async function loadNewest() {
   view.pendingNodes = pending.length
     ? renderPending(pending, view.toolErrors, null)
     : [];
-  syncDecisionCards();
   syncAuto();
   syncLiveStep();
   view.cursor = body.next_cursor;
@@ -777,11 +754,9 @@ export async function loadOlder() {
     appendEntries(frag, mergeFiles(older, files), chatOpts(toolErrors || view.toolErrors || 'reported', false));
     joinOlderTurn(frag);
     els.transcriptList.insertBefore(frag, els.transcriptList.firstChild);
-    // Older entries join `view.entries` too, so a question on an older page
-    // can find its result and never reads as the pending one.
+    // Older entries join `view.entries` too.
     view.settled = older.concat(view.settled || []);
     view.entries = view.settled.concat(view.pending || []);
-    syncDecisionCards();
     syncAuto();
   }
   const foundTurn = older.some(isTurn);
@@ -832,10 +807,7 @@ function bindComposer(s) {
   } else {
     chatComposer.setSendable(true);
   }
-  chatComposer.setAvailability({
-    dictate: voiceDictationAvailable(),
-    ocr: !!(state.status && state.status.screenshot_ocr),
-  });
+  chatComposer.setAvailability({ dictate: voiceDictationAvailable() });
 }
 
 export function closeChatComposerPopovers() {
@@ -848,7 +820,6 @@ export function closeChatComposerPopovers() {
 // the disabled Terminal segment (mockup screen 6).
 export function openChatPane(s) {
   if (!els.chatPane) return;
-  closeResumeCard();
   if (view) {
     window.clearTimeout(view.refreshTimer);
     window.clearTimeout(view.watchTimer);
@@ -872,9 +843,6 @@ export function openChatPane(s) {
     // when the session does not track them.
     pendingInput: null,
     settled: [], pending: [], pendingNodes: [],
-    // The plan panel: the last screen read, its render signature,
-    // and when an answer was sent from it.
-    picker: null, pickerSig: null, pickerSent: null, pickerBusy: false,
   };
   groupsHidden = false;
   syncGroups();
@@ -901,8 +869,6 @@ export function closeChatPane() {
   renderStripLine();
   if (!els.chatPane) return;
   els.transcriptList.innerHTML = '';
-  clearPicker();
-  closeResumeCard();
   els.chatNote.hidden = true;
   closePendingSheet();
   if (chatComposer) chatComposer.reset();
@@ -912,11 +878,6 @@ export function closeChatPane() {
 
 export function wireChatPane() {
   if (!els.chatPane) return;
-  wireResumeCard({
-    session: function () { return view ? view.session : null; },
-    // A resume swaps the conversation under the pane: load it afresh.
-    onResumed: function () { if (view) openChatPane(view.session); },
-  });
   syncGroups();
   openLinksOnThePc(els.transcriptList);
   els.transcriptOlder.addEventListener('click', function () { loadOlder(); });

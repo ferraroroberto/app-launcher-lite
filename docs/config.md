@@ -112,7 +112,6 @@ Settings > Chief, plus the chief's state files. The behaviour behind each switch
 | `chief_auto_drain` | `true` | Let the chief queue unattended audit fixes and start them when a worker slot frees. |
 | `chief_auto_compact_threshold` | `30` | Context-use percent at which the chief compacts itself, 10–90; `0` off. |
 | `chief_job_failures` | `true` | Leave the chief a mailbox event when a Job run fails or its script is missing, while a chief is live. |
-| `chief_job_self_heal`, `chief_weekly_proposals` | `false` | Opt-in switches served to the chief on `GET /api/board/chief/settings`. The app starts nothing for them, and nothing in this repo's `copilot/` reads them. |
 | `chief_plan_file`, `chief_managed_file`, `chief_inbox_dir` | `chief-plan.json`, `chief-managed.json`, `chief-inbox` under `~/.copilot/app-launcher-lite-state/` | The chief's plan, the register of sessions it started and its mailbox folder. |
 
 ### Speech to text

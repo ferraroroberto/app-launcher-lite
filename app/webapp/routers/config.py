@@ -104,8 +104,6 @@ def _chief_config_payload(cfg: WebappConfig) -> Dict[str, Any]:
         "chief_fixed_timings": chief_timings.fixed_payload(),
         "chief_auto_drain": cfg.chief_auto_drain,
         "chief_job_failures": cfg.chief_job_failures,
-        "chief_job_self_heal": cfg.chief_job_self_heal,
-        "chief_weekly_proposals": cfg.chief_weekly_proposals,
         # The chief's model, context, effort and worker cap, read-only here so
         # the Settings > Chief row can show them without a passkey prompt.
         # Writes stay on the passkey-gated PUT /api/board/chief/settings.
@@ -268,8 +266,6 @@ _SWITCH_KEYS = (
     "chief_doorbell",
     "chief_auto_drain",
     "chief_job_failures",
-    "chief_job_self_heal",
-    "chief_weekly_proposals",
     "copilot_skip_permissions",
     "copilot_autopilot",
     "copilot_remote_session",
@@ -314,8 +310,6 @@ _PATCH_KEYS = frozenset({
     "chief_doorbell",
     "chief_auto_drain",
     "chief_job_failures",
-    "chief_job_self_heal",
-    "chief_weekly_proposals",
     "copilot_skip_permissions",
     "copilot_models",
     "copilot_model",

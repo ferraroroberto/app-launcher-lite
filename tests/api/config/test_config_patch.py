@@ -215,30 +215,6 @@ class TestPatchConfig:
         assert getattr(load_webapp_config(cfg_path), key) is False
         assert client.get("/api/config").json()[key] is False
 
-    @pytest.mark.parametrize("key", ["chief_job_self_heal", "chief_weekly_proposals"])
-    def test_new_chief_automations_default_off_and_round_trip(self, webapp_client, key):
-        """The two Automations switches fleet-config reads: off until the
-        owner opts in, and the save reaches disk."""
-        from src.webapp_config import load_webapp_config
-
-        client, app, overrides = webapp_client
-        assert client.get("/api/config").json()[key] is False
-
-        assert client.post("/api/config", json={key: True}).status_code == 200
-        assert getattr(app.state.webapp_config, key) is True
-        assert load_webapp_config(overrides["tmp_webapp_cfg_path"]).__dict__[key] is True
-        assert client.get("/api/config").json()[key] is True
-
-        assert client.post("/api/config", json={key: False}).status_code == 200
-        assert load_webapp_config(overrides["tmp_webapp_cfg_path"]).__dict__[key] is False
-
-    @pytest.mark.parametrize("key", ["chief_job_self_heal", "chief_weekly_proposals"])
-    @pytest.mark.parametrize("junk", ["true", "false", 0, 1, None])
-    def test_new_chief_automations_reject_non_booleans(self, webapp_client, key, junk):
-        client, app, _ = webapp_client
-        assert client.post("/api/config", json={key: junk}).status_code == 400
-        assert getattr(app.state.webapp_config, key) is False
-
     def test_chief_fallback_minutes_defaults_to_30_and_round_trips(self, webapp_client):
         """The fallback wake's window: 30 until changed, 0 turns it off, and
         the chief reads the saved value from its settings block."""

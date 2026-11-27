@@ -45,16 +45,10 @@ PUSHOVER_URL = "https://api.pushover.net/1/messages.json"
 
 # Local LLM hub — see global CLAUDE.md "`local-llm-hub` local LLM hub".
 # The model id lives once on :mod:`src.clients.llm`
-# (:data:`llm_client.DEFAULT_MODEL`) — both hub callers route through the
-# same client.
-# port-host-exempt: the documented default of the local LLM hub, a service this repo does not own
-LOCAL_LLM_BASE_URL = "http://127.0.0.1:8000"
+# (:data:`llm_client.DEFAULT_MODEL`).
 LOCAL_LLM_TIMEOUT_SECONDS = 8.0
 SUMMARY_TAIL_CHARS = 500
 
-# Root-cause-focused system prompt for the failure-tail summary — distinct
-# from llm_client's driving-mode reply summary, but asked through the same
-# hub client instead of a second hand-rolled one.
 _FAILURE_SUMMARY_SYSTEM_PROMPT = (
     "You are reviewing the tail of a failed job's stdout/stderr. Reply with "
     "ONE sentence (<= 25 words) describing the most likely root cause. No "

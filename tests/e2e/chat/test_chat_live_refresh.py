@@ -12,17 +12,13 @@ from playwright.sync_api import Page, expect
 from tests.e2e import _fake_clock
 from tests.e2e.chat._support import (
     _BACKOFF_MAX_MS,
-    _BYPASS,
     _OTHER_SID,
     _SID,
     _boot,
     _menu_item,
     _mock_sessions_list,
     _open_chat,
-    _Picker,
-    _plan,
     _pull,
-    _question,
     _tick,
     _tool,
     _Transcript,
@@ -77,197 +73,6 @@ def _check_pull_up_forces_a_read(page: Page, tr) -> None:
     assert tr.tail_calls() == calls
 
 
-def _check_question_cards_arrive_and_answer(page: Page, tr):
-    """Cover question cards arriving live, a one-tap answer and the later result; return the live card."""
-    # #1149 — a question the agent asks arrives the same way, as its own
-    # card: visible with tool calls hidden (the default), never folded. An
-    # earlier, answered question is history; the newest unanswered one is the
-    # only card a tap can answer.
-    answers: list = []
-    page.route(
-        re.compile(r".*/api/claude-code/sessions/" + _SID + r"/answer$"),
-        lambda route: (
-            answers.append(route.request.post_data_json),
-            route.fulfill(status=200, content_type="application/json",
-                          body=_json.dumps({"ok": True, "delivered": "unconfirmed", "steps": 1})),
-        )[-1],
-    )
-    tr.append(
-        _question("toolu_old", 400, answer="Retry it"),
-        _turn("assistant", "retrying did not help", 450),
-        _question("toolu_live", 500),
-    )
-    _tick(page, tr)
-    cards = page.locator("#transcriptList .tr-ask-item")
-    expect(cards).to_have_count(2, timeout=OVERLAY_OPEN_MS)
-    old, live = cards.nth(0), cards.nth(1)
-    expect(old).to_be_visible()
-    expect(old).to_have_attribute("data-mode", "answered")
-    expect(old.locator(".tr-ask-opt--picked .tr-ask-label")).to_have_text("Retry it")
-    expect(old.locator(".tr-ask-opt:enabled")).to_have_count(0)
-    expect(live).to_have_attribute("data-mode", "live")
-    expect(live.locator(".tr-ask-opt:enabled")).to_have_count(2)
-    expect(live.locator(".tr-ask-input")).to_be_visible()
-
-    # One tap answers a single-select question: the pick goes to the /answer
-    # route by number, with the call it answers, and the card locks until the
-    # agent's result lands.
-    live.locator(".tr-ask-opt").first.click()
-    expect(live).to_have_attribute("data-mode", "sent")
-    expect(live.locator(".tr-ask-opt:enabled")).to_have_count(0)
-    assert answers == [{"tool_use_id": "toolu_live", "answers": [{"option": 1}]}], answers
-
-    # The result arrives on a later tick as a standalone tool_result (the
-    # call had already settled), and the card still closes, marked answered.
-    tr.append({
-        "kind": "tool_result", "timestamp": "2026-09-19T10:01:09Z",
-        "text": "answered", "truncated": False, "tool_use_id": "toolu_live",
-        "answers": {"Which fix?": "Await it"}, "sidechain": False, "offset": 600,
-    }, _turn("assistant", "adding the await", 700))
-    _tick(page, tr)
-    expect(live).to_have_attribute("data-mode", "answered", timeout=OVERLAY_OPEN_MS)
-    expect(live.locator(".tr-ask-opt--picked .tr-ask-label")).to_have_text("Await it")
-    expect(live.locator(".tr-ask-opt:enabled")).to_have_count(0)
-    _check_multi_select_takes_typed_text(page, tr, answers)
-    return live
-
-
-_FRUIT = {
-    "question": "Which fruits?", "header": "Fruits", "multiSelect": True,
-    "options": [{"label": lab, "description": ""} for lab in ("Apple", "Banana", "Cherry")],
-}
-
-
-def _check_multi_select_takes_typed_text(page: Page, tr, answers: list) -> None:
-    """Cover a multi-select card taking typed text alone or beside ticked options."""
-    # #2068 — a multi-select question has the typed-answer row too, and the
-    # text goes beside the ticked options, as the terminal picker takes them.
-    tr.append(dict(_question("toolu_multi", 720), questions=[_FRUIT]))
-    _tick(page, tr)
-    card = page.locator('#transcriptList .tr-ask-item[data-call-id="toolu_multi"]')
-    expect(card).to_have_attribute("data-mode", "live", timeout=OVERLAY_OPEN_MS)
-    submit = card.locator(".tr-ask-submit")
-    expect(submit).to_be_disabled()
-    field = card.locator(".tr-ask-input")
-    field.fill("Teal blue")
-    expect(submit).to_be_enabled()        # typed text alone is an answer
-    card.locator(".tr-ask-opt").nth(1).click()
-    expect(field).to_have_value("Teal blue")  # a tick keeps the text
-    submit.click()
-    expect(card).to_have_attribute("data-mode", "sent")
-    assert answers[-1] == {
-        "tool_use_id": "toolu_multi", "answers": [{"options": [2], "text": "Teal blue"}],
-    }, answers
-    # The agent receives the labels and the text joined, and the answered
-    # card shows each where it belongs.
-    tr.append({
-        "kind": "tool_result", "timestamp": "2026-09-19T10:01:10Z",
-        "text": "answered", "truncated": False, "tool_use_id": "toolu_multi",
-        "answers": {"Which fruits?": "Banana, Teal blue"}, "sidechain": False, "offset": 740,
-    }, _turn("assistant", "noted", 760))
-    _tick(page, tr)
-    expect(card).to_have_attribute("data-mode", "answered", timeout=OVERLAY_OPEN_MS)
-    expect(card.locator(".tr-ask-opt--picked .tr-ask-label")).to_have_text("Banana")
-    expect(card.locator(".tr-ask-typed")).to_have_text("Typed answer: “Teal blue”")
-
-
-def _check_plan_cards_arrive(page: Page, tr, live):
-    """Cover plan cards arriving live in each outcome; return the picker stub and the waiting plan card."""
-    # #1151 — a plan the agent asks you to approve arrives as its own card
-    # too: the plan through the markdown renderer, and how it was answered.
-    # The card never offers a control itself; while Chat can't see the
-    # picker on the terminal, a waiting plan says to answer it there.
-    picker = _Picker(page)
-    tr.append(
-        _plan("plan_back", 800, error=True, plan_outcome="sent_back",
-              plan_feedback="keep the retry as well"),
-        _turn("assistant", "revised", 850),
-        _plan("plan_ok", 900, plan_outcome="approved", plan_edited=True),
-        _turn("assistant", "on it", 950),
-        _plan("plan_wait", 1000),
-    )
-    _tick(page, tr)
-    plans = page.locator("#transcriptList .tr-plan-item")
-    expect(plans).to_have_count(3, timeout=OVERLAY_OPEN_MS)
-    back, ok, wait = plans.nth(0), plans.nth(1), plans.nth(2)
-    expect(back.locator(".tr-plan-body h2")).to_have_text("Add the await")
-    expect(back.locator(".tr-plan-body li")).to_have_count(2)
-    expect(back).to_have_attribute("data-mode", "sent_back")
-    expect(back.locator(".tr-plan-feedback")).to_have_text("Your feedback: “keep the retry as well”")
-    # A sent-back plan is the user's answer, not a failed call.
-    expect(back.locator(".tr-fail-chip")).to_have_count(0)
-    expect(ok.locator(".tr-ask-status")).to_have_text("Approved after your edits")
-    expect(wait).to_have_attribute("data-mode", "waiting")
-    expect(wait.locator(".tr-ask-status")).to_have_text(
-        "Waiting for your answer: Chat can’t see the plan picker on the terminal, so answer it there"
-    )
-    expect(wait.locator("button")).to_have_count(0)
-    # The question card above is history now that the agent moved on.
-    expect(live).to_have_attribute("data-mode", "answered")
-    return picker, wait
-
-
-def _check_terminal_picker_panel(page: Page, tr, picker, wait):
-    """Cover the terminal plan picker panel offering, sending and closing its options; return the panel."""
-    # The terminal shows the picker: the panel below the list offers its
-    # options exactly as the screen lists them — the BYPASS wording
-    # included — and leaves out the plan the pending card already shows.
-    panel = page.locator("#transcriptPlanLive")
-    expect(panel).to_be_hidden()
-    picker.show(plan="## Add the await\n\n- wrap the call")
-    _tick(page, tr)
-    expect(panel).to_be_visible(timeout=OVERLAY_OPEN_MS)
-    expect(panel.locator(".tr-ask-opt .tr-ask-label")).to_have_text(
-        [_BYPASS, "Yes, manually approve edits", "Tell Claude what to change"]
-    )
-    expect(panel.locator(".tr-plan-body")).to_have_count(0)
-    expect(wait.locator(".tr-ask-status")).to_have_text("Waiting for your answer: answer it below")
-    # A tap sends the digit with the label it showed, for the server to
-    # check against the screen, and locks the panel.
-    panel.locator("button.tr-ask-opt").first.click()
-    expect(panel.locator(".tr-ask-status")).to_have_text("Sent: waiting for Claude")
-    expect(panel.locator("button:enabled")).to_have_count(0)
-    assert picker.answers == [{"option": 1, "label": _BYPASS, "feedback": None}], picker.answers
-    # The picker closes on the terminal and the approval reaches the card.
-    picker.showing = None
-    _tick(page, tr)
-    expect(panel).to_be_hidden(timeout=OVERLAY_OPEN_MS)
-    tr.append({
-        "kind": "tool_result", "timestamp": "2026-09-19T10:01:12Z", "text": "ok",
-        "truncated": False, "tool_use_id": "plan_wait", "plan_outcome": "approved",
-        "sidechain": False, "offset": 1100,
-    }, _turn("assistant", "editing now", 1150))
-    _tick(page, tr)
-    expect(wait).to_have_attribute("data-mode", "approved", timeout=OVERLAY_OPEN_MS)
-    return panel
-
-
-def _check_plan_panel_sends_feedback(page: Page, tr, picker, panel) -> None:
-    """Cover a picker without a transcript call carrying its own plan and sending it back with feedback."""
-    # A picker whose call never reached the transcript: the panel carries
-    # the plan itself (from the plan file the screen names), and sends it
-    # back with the reader's feedback.
-    picker.show(plan="## Revised plan\n\n- keep the retry")
-    _tick(page, tr)
-    expect(panel.locator(".tr-plan-body h2")).to_have_text("Revised plan", timeout=OVERLAY_OPEN_MS)
-    send_back = panel.locator(".tr-ask-send")
-    expect(send_back).to_be_disabled()
-    # The field gets the row, not the button: .button-tint's width:100%
-    # once squeezed it to a sliver and pushed Send back out of the card.
-    def widths():
-        boxes = [panel.locator(sel).bounding_box() for sel in (".tr-ask-input", ".tr-ask-send")]
-        return None if None in boxes else [b["width"] for b in boxes]
-
-    field_w, send_w = stable_read(widths)
-    assert field_w > send_w, (field_w, send_w)
-    panel.locator(".tr-ask-input").fill("keep it smaller")
-    send_back.click()
-    expect(panel.locator(".tr-ask-status")).to_have_text("Sent back: waiting for Claude to revise the plan")
-    assert picker.answers[-1] == {
-        "option": 3, "label": "Tell Claude what to change", "feedback": "keep it smaller",
-    }, picker.answers
-
-
 def _check_a_moved_log_reloads_its_whole_history(page: Page, tr) -> None:
     """#713: the forward cursor belongs to one log. When a resume moves the
     session to another, its history sits below that offset, so a tick that only
@@ -318,14 +123,6 @@ def test_new_turns_appear_with_no_user_action(authed_page: Page, base_url: str) 
     _check_forced_read_via_load_new(page, tr, open_turn)
 
     _check_pull_up_forces_a_read(page, tr)
-
-    live = _check_question_cards_arrive_and_answer(page, tr)
-
-    picker, wait = _check_plan_cards_arrive(page, tr, live)
-
-    panel = _check_terminal_picker_panel(page, tr, picker, wait)
-
-    _check_plan_panel_sends_feedback(page, tr, picker, panel)
 
     _check_a_moved_log_reloads_its_whole_history(page, tr)
 
@@ -525,9 +322,14 @@ def test_a_reply_arriving_after_tool_calls_is_unfolded_and_a_user_fold_stays(
     expect(turns.nth(1)).to_have_attribute("open", "")
 
 
-# session-transcript.js SENT_REFRESH_MS: how long after an answer the pane
+# session-transcript.js SENT_REFRESH_MS: how long after a send the pane
 # nudges the live poll.
 _SENT_REFRESH_MS = 3_000
+
+_CONFIRMED_SEND = {
+    "ok": True, "submit": True, "delivered": True, "ingested": True,
+    "submitted": True, "submit_confirmed": True, "submit_state": "confirmed",
+}
 
 
 def test_overlapping_reads_append_once_a_transient_source_recovers_and_an_ended_one_stops(
@@ -536,38 +338,37 @@ def test_overlapping_reads_append_once_a_transient_source_recovers_and_an_ended_
     """A refresh nudge that lands while a read is in flight waits for it, so
     no turn is appended twice.
 
-    Only an *ended session* is terminal. A live Claude session reports
-    `no_transcript` for as long as its hook row is deleted and the filesystem
-    fallback can't name the file (#1023) — a condition that clears by itself,
+    Only an *ended session* is terminal. A live session reports
+    `no_transcript` for as long as no log can be named for it — a condition that clears by itself,
     so refresh must back off and recover rather than latch off and make the
     reader tap Reload. A session that ends stops refreshing and says so.
     """
     page = authed_page
     tr = _boot(page, base_url)
     page.route(
-        re.compile(r".*/api/claude-code/sessions/" + _SID + r"/answer$"),
+        re.compile(r".*/api/claude-code/sessions/" + _SID + r"/input$"),
         lambda route: route.fulfill(
-            status=200, content_type="application/json",
-            body=_json.dumps({"ok": True, "delivered": "unconfirmed", "steps": 1}),
+            status=200, content_type="application/json", body=_json.dumps(_CONFIRMED_SEND),
         ),
     )
     _open_chat(page)
     expect(page.locator("#transcriptList .tr-turn")).to_have_count(2)
 
-    tr.append(_turn("assistant", "one question first", 250), _question("toolu_q", 300))
+    tr.append(_turn("assistant", "one thing first", 250))
     _tick(page, tr)
-    card = page.locator('#transcriptList .tr-ask-item[data-call-id="toolu_q"]')
-    expect(card).to_have_attribute("data-mode", "live", timeout=OVERLAY_OPEN_MS)
+    expect(page.locator("#transcriptList")).to_contain_text("one thing first", timeout=OVERLAY_OPEN_MS)
 
-    # One read is held open; the answer's refresh nudge fires while it is.
+    # One read is held open; the send's refresh nudge fires while it is.
     # Against a real phone this is a slow tick that is still on the wire when
     # the nudge lands.
     tr.append(_turn("assistant", "only once please", 400), _turn("assistant", "tail", 450))
     tr.hold = True
     _tick(page, tr)
-    with page.expect_response(re.compile(r".*/answer$")):
-        card.locator(".tr-ask-opt").first.click()
-    expect(page.locator(".toast", has_text="Answer sent")).to_be_visible()
+    composer = page.locator("#chatComposeBar")
+    composer.locator(".composer-input").fill("go on")
+    with page.expect_response(re.compile(r".*/input$")):
+        composer.locator(".composer-send").click()
+    expect(page.locator(".toast", has_text="Sent")).to_be_visible()
     _fake_clock.advance(page, _SENT_REFRESH_MS + 1)
     # The nudge has not started a second read from the same cursor.
     assert len(tr.held) == 1, tr.calls[-3:]
@@ -580,7 +381,6 @@ def test_overlapping_reads_append_once_a_transient_source_recovers_and_an_ended_
 
     expect(page.locator("#transcriptList")).to_contain_text("only once please")
     expect(page.locator("#transcriptList .tr-reply", has_text="only once please")).to_have_count(1)
-    expect(card).to_have_count(1)
 
     tr.unavailable = "no_transcript"
     _tick(page, tr)

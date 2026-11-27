@@ -62,7 +62,7 @@ app-launcher-lite/
 │   ├── launching/              # agent launch: Copilot flags (flags.py), spawn helpers (launcher.py), the tray-restart check and which checkout a process runs from (process_checkout.py), the PowerShell script launcher (ps_script.py), setup.bat's app-side probes (install_checks.py)
 │   ├── board/                  # Board backend: column assembly, session-state join, drawer exchange, proof reports, owner checks, the viewed Board's single-flight forge refresh (view_refresh.py)
 │   ├── chief/                  # the chief's plan, journal, answers and dispatch briefs
-│   ├── session_view/           # a live session's views: transcript pages, changed files, the Chat outbox, plan and resume pickers
+│   ├── session_view/           # a live session's views: transcript pages, changed files, the Chat outbox, the screen renderer
 │   ├── transcript_flavors/     # the Copilot transcript-line grammar (copilot.py, apply_patch.py) and its turn-end reader (copilot_turn.py)
 │   ├── desktop/                # the Screen view's PC side: capture, input, cursor, clipboard, the Prevent lock nudge (prevent_lock.py)
 │   ├── notify/                 # vendored provider package behind notifications.py (failure alerts)

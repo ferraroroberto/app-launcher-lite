@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-PRESET = {"name": "Opus deep", "agent": "claude", "model": "opus", "effort": "xhigh"}
+PRESET = {"name": "Luna deep", "agent": "copilot", "model": "gpt-6-luna", "effort": "xhigh"}
 
 
 class TestPresetConfig:
@@ -18,24 +18,24 @@ class TestPresetConfig:
         assert resp.status_code == 200, resp.text
         saved = client.get("/api/config").json()["launch_presets"]
         assert len(saved) == 1
-        assert saved[0]["id"] and saved[0]["name"] == "Opus deep"
+        assert saved[0]["id"] and saved[0]["name"] == "Luna deep"
         assert app.state.webapp_config.launch_presets == saved
 
     def test_rename_and_remove_keep_the_id(self, webapp_client):
         client, _, _ = webapp_client
         client.post("/api/config", json={"launch_presets": [PRESET]})
         saved = client.get("/api/config").json()["launch_presets"]
-        renamed = [dict(saved[0], name="  Opus   max ")]
+        renamed = [dict(saved[0], name="  Luna   max ")]
         assert client.post("/api/config", json={"launch_presets": renamed}).status_code == 200
         after = client.get("/api/config").json()["launch_presets"]
-        assert after[0]["id"] == saved[0]["id"] and after[0]["name"] == "Opus max"
+        assert after[0]["id"] == saved[0]["id"] and after[0]["name"] == "Luna max"
         client.post("/api/config", json={"launch_presets": []})
         assert client.get("/api/config").json()["launch_presets"] == []
 
     @pytest.mark.parametrize("bad, fragment", [
         (dict(PRESET, effort="turbo"), "not offered"),
-        (dict(PRESET, model="retired-alias"), "unsupported"),
-        (dict(PRESET, agent="pi"), "per-launch model"),
+        (dict(PRESET, model="two words"), "needs one model id"),
+        (dict(PRESET, agent="other"), "per-launch model"),
         (dict(PRESET, name="  "), "needs a name"),
         (dict(PRESET, name="x" * 41), "at most 40"),
     ])
@@ -48,7 +48,7 @@ class TestPresetConfig:
 
     def test_refuses_a_duplicate_name_and_a_non_list(self, webapp_client):
         client, _, _ = webapp_client
-        twin = dict(PRESET, name="OPUS DEEP")
+        twin = dict(PRESET, name="LUNA DEEP")
         assert client.post("/api/config", json={"launch_presets": [PRESET, twin]}).status_code == 400
         assert client.post("/api/config", json={"launch_presets": "opus"}).status_code == 400
 
@@ -110,7 +110,6 @@ class TestCopilotPresets:
         (dict(FLASH, context="huge"), "context 'huge' is not offered"),
         (dict(FLASH, model="default"), "needs one model id"),
         (dict(FLASH, model="copilot:mai-code-2-flash"), "needs one model id"),
-        (dict(PRESET, context="long_context"), "takes no context tier"),
     ])
     def test_refuses_a_bad_model_or_context(self, webapp_client, bad, fragment):
         client, _, _ = webapp_client

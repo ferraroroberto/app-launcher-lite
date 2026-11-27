@@ -96,7 +96,7 @@ The newest turns load first in bounded pages; **Load older** (or scrolling to th
 
 ## Answering a question the agent asks
 
-Copilot's ask tool is `ask_user`. Chat's one-tap question card and typed-answer path were built for the full app's agent; whether they drive `ask_user`, and whether `ask_user` blocks under autopilot, are **unknown** until probed (see [Not ported yet](#not-ported-yet)). Until then answer in the Terminal.
+Copilot's ask tool is `ask_user`. Chat draws no question card for it: answer in the Terminal. Whether `ask_user` blocks under autopilot is **unknown** until probed (see [Not ported yet](#not-ported-yet)).
 
 ## Resuming a session
 
@@ -144,4 +144,4 @@ An opened card whose call is unmarked says the outcome was never recorded. A ses
 
 ## Not ported yet
 
-These are **unknown** or planned, not working: `/compact` with a focus argument, a remote-control link captured and copied from the launcher, plan approval and question cards driving Copilot's `ask_user`, and a writer for the Board's `.proof/` reports (the Chat view's context ring is shipped). The `unknown` items were last probed on 1.0.105; the installed CLI is 1.0.114, on which the doorbell's composer keys are verified ([docs/board.md](board.md#the-chief)). Verified on CLI 1.0.105: interactive and `-p` sessions fire the four hooks (`sessionStart`, `userPromptSubmitted`, `agentStop`, `sessionEnd`), and `events.jsonl`'s `session.usage_record` carries `inputTokens` and `maxPromptTokens`.
+These are **unknown** or planned, not working: `/compact` with a focus argument, a remote-control link captured and copied from the launcher, plan approval and question cards in Chat, and a writer for the Board's `.proof/` reports (the Chat view's context ring is shipped). The `unknown` items were last probed on 1.0.105; the installed CLI is 1.0.114, on which the doorbell's composer keys are verified ([docs/board.md](board.md#the-chief)). Verified on CLI 1.0.105: interactive and `-p` sessions fire the four hooks (`sessionStart`, `userPromptSubmitted`, `agentStop`, `sessionEnd`), and `events.jsonl`'s `session.usage_record` carries `inputTokens` and `maxPromptTokens`.

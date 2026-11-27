@@ -1,7 +1,7 @@
 """Golden table: (raw hook stamp, evidence) -> Board card ``status`` and age.
 
 Every branch of the card derivation (raw-stamp gate, transcript overlay,
-needs-you split, plan-picker screen check, open-issue downgrade) is driven
+needs-you split, open-issue downgrade) is driven
 through :func:`src.board.merge_sessions` for both a live and an external card,
 with each piece of evidence stubbed at the function that reads it. The
 expected table, ``tests/fixtures/golden_card_status.json``, was recorded from the derivation
@@ -54,7 +54,6 @@ _TOOLS = {
     "ordinary": {"Bash"},
     "nothing": set(),
 }
-_SCREENS = {"no-picker": False, "picker": True}
 _REPOS = {"no-issue": frozenset(), "open-issue": frozenset({"golden"})}
 
 
@@ -70,14 +69,13 @@ def _row(raw: str) -> Dict[str, object]:
 
 
 def _one_card(setattr_: Callable[..., None], *, kind: str, raw: str, title: str,
-              resume: str, dispatch: str, tools: str, screen: str, repo: str) -> str:
+              resume: str, dispatch: str, tools: str, repo: str) -> str:
     mtime, activity = _RESUMES[resume]
     setattr_(board_transcript, "_transcript_mtime", lambda _p: mtime)
     setattr_(board_transcript, "_last_activity", lambda _p: activity)
     setattr_(board_transcript, "_pending_background_dispatch_launched_at",
              lambda _t: _DISPATCHES[dispatch])
     setattr_(board_transcript, "_pending_tool_use_names", lambda _t: _TOOLS[tools])
-    setattr_(board_sessions, "_plan_picker_on_screen", lambda _s: _SCREENS[screen])
     setattr_(board_sessions, "_external_row_liveness", lambda *_a, **_k: (True, "golden"))
     if kind == "live":
         live_title, last_output_at = _TITLES[title]
@@ -99,22 +97,21 @@ def _one_card(setattr_: Callable[..., None], *, kind: str, raw: str, title: str,
 
 
 def build_table(setattr_: Callable[..., None]) -> Dict[str, str]:
-    """Every combination, keyed ``kind|raw|title|resume|dispatch|tools|screen|repo``.
+    """Every combination, keyed ``kind|raw|title|resume|dispatch|tools|repo``.
 
-    External cards have no live title or screen, so those axes are fixed for
+    External cards have no live title, so that axis is fixed for
     them; ``<no-row>`` exists only for a live session.
     """
     table: Dict[str, str] = {}
     for kind in ("live", "external"):
         raws = _RAWS if kind == "live" else _RAWS[:-1]
         titles = list(_TITLES) if kind == "live" else ["plain"]
-        screens = list(_SCREENS) if kind == "live" else ["no-picker"]
-        for combo in itertools.product(raws, titles, _RESUMES, _DISPATCHES, _TOOLS, screens, _REPOS):
-            raw, title, resume, dispatch, tools, screen, repo = combo
+        for combo in itertools.product(raws, titles, _RESUMES, _DISPATCHES, _TOOLS, _REPOS):
+            raw, title, resume, dispatch, tools, repo = combo
             key = "|".join((kind, *combo))
             table[key] = _one_card(
                 setattr_, kind=kind, raw=raw, title=title, resume=resume,
-                dispatch=dispatch, tools=tools, screen=screen, repo=repo,
+                dispatch=dispatch, tools=tools, repo=repo,
             )
     return table
 

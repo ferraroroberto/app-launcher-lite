@@ -116,7 +116,7 @@ The hooks flip status only on a few events. Two resume paths fire no hook: answe
 
 | Status | Meaning | Routes to |
 | --- | --- | --- |
-| `stalled` | A background dispatch has been outstanding past 30 minutes, a real anomaly. A live launcher PTY's screen is read first, so a picker on screen makes the card `awaiting-decision` instead. | Your turn |
+| `stalled` | A background dispatch has been outstanding past 30 minutes, a real anomaly. | Your turn |
 | `waiting-on-task` | The turn ended while its own background task is still running. A notification wakes the session when the task finishes, so no human is awaited. Not counted in "N needs you". | Bot's turn |
 | `awaiting-decision` | A pending question or plan-approval tool call with no result yet: the agent is blocked on a human picking an option. | Your turn |
 | `tool-pending` | An ordinary tool call is unresolved at the tail's end. Genuinely ambiguous (still running, or permission-gated), so reported as its own state rather than folded into either side. | Bot's turn |

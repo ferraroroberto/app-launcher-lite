@@ -511,24 +511,6 @@ why        = "bounded wait inside the owner's folder-trust request for the dialo
 
 [[request_budget.loops]]
 path       = "app/webapp/routers/session_screen.py"
-function   = "_wait_for_screen"
-interval_s = 0.5
-why        = "bounded re-read of a terminal inside the owner's request until the expected screen shows or the timeout passes"
-
-[[request_budget.loops]]
-path       = "app/webapp/routers/session_screen.py"
-function   = "_switch_claude"
-interval_s = 0.5
-why        = "bounded wait inside a model-switch request for the agent to confirm the new model; ends after 10 s"
-
-[[request_budget.loops]]
-path       = "app/webapp/routers/session_screen.py"
-function   = "_switch_codex"
-interval_s = 0.5
-why        = "bounded wait inside a model-switch request for the agent to confirm the new model; ends after 10 s"
-
-[[request_budget.loops]]
-path       = "app/webapp/routers/session_screen.py"
 function   = "_switch_copilot"
 interval_s = 0.5
 why        = "bounded wait inside a model-switch request for Copilot's log to confirm the new model; ends after 10 s"
@@ -727,7 +709,7 @@ time_budget_s         = 1200
 # the request-budget probe, whose page installs a clock and a writable
 # visibility state before boot and runs two fake minutes, so no other node
 # could share it.
-test_budget = 303
+test_budget = 300
 
 # --- static assets under the webapp's static dir -> Chromium smoke ----------
 [[e2e.rule]]

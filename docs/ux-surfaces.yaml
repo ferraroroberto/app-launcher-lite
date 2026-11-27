@@ -666,7 +666,7 @@ surfaces:
     reach:
       - the attach button on a composer
     holds:
-      - Photo, Extract text (OCR), Attach file (to context) and Attach large file (not read)
+      - Photo, Attach file (to context) and Attach large file (not read)
     does:
       - an upload stores the file on the PC and puts its path in the message
       - several picks queue behind each other and show N of M
@@ -697,24 +697,8 @@ surfaces:
         via: image thumbnail
       - to: chat.html-viewer
         via: HTML document card
-      - to: chat.decision-cards
-        via: the agent asks
       - to: chat.turn-cards
         via: a finished turn
-
-  - id: chat.decision-cards
-    area: chat
-    title: Question and plan cards
-    root:
-      none: drawn inside the transcript list, which carries no id of its own for a card.
-    reach:
-      - while the agent asks a question or waits on a plan
-    holds:
-      - the question card with numbered options, an Other field and Done
-      - the plan card, answered from the terminal's own screen
-      - the resume card, a searchable list of the project's conversations, shown while the terminal's picker is open
-    does:
-      - an option sends its answer into the session
 
   - id: chat.turn-cards
     area: chat
@@ -1618,7 +1602,7 @@ surfaces:
       - a line naming a saved chief model the Copilot list no longer offers
       - a switch for counting only chief-dispatched sessions
       - a Skills folder field, with a line saying whether each issue skill is found, missing or unknown
-      - Automations - Doorbell, Fallback check in minutes, Auto-drain queue, Auto-compact with its threshold, Job failures, Job self-heal and Weekly proposals
+      - Automations - Doorbell, Fallback check in minutes, Auto-drain queue, Auto-compact with its threshold and Job failures
       - Timings - Doorbell re-ring in seconds, Unread mail alert, Re-offer claimed mail and Turn-end hold in minutes
       - How the chief works - the fixed timings, each with its value and reason, and the fixed rules, read-only
       - a one-line explanation under every control

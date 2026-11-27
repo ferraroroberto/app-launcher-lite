@@ -40,7 +40,7 @@ LOOP_FACTORY = "app.webapp.event_loop:selector_loop_factory"
 
 # GIL hand-off latency. The webapp renders terminals with pure-
 # Python ``pyte`` in worker threads (``src.board.exchange._terminal_rows`` is
-# ~0.85 s of CPU per call, ``plan_picker.screen_lines`` ~0.06 s), and each
+# ~0.85 s of CPU per call, ``capture_screen.screen_lines`` ~0.06 s), and each
 # such thread holds the GIL for as long as it runs. Every time the loop thread
 # (or a request's other worker hops) needs the GIL back it waits out one
 # switch interval *per competing thread*; at CPython's default 5 ms, a

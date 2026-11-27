@@ -1,15 +1,14 @@
-"""The model a live session runs, as a short display name.
+"""The model a live session runs, as the id Copilot knows it by.
 
-Derived on the webapp side from fields the session-host already reports --
-the spawn ``flags`` and, for Codex, its OSC ``live_title`` -- plus, for Claude
-and Copilot, the ``transcript_model`` the webapp reads from the session's
-transcript (:func:`src.board.sessions.attach_transcript_model`). Never from a new
-session-host field: a change to the session-host's import closure is not live
-until ``:8466`` restarts, and that restart kills every live session.
+Derived on the webapp side from the spawn ``flags`` the session-host already
+reports, plus the ``transcript_model`` the webapp reads from the session's
+event log (:func:`src.board.sessions.attach_transcript_model`). Never from a
+new session-host field: a change to the session-host's import closure is not
+live until ``:8466`` restarts, and that restart kills every live session.
 
 Never guesses. A session launched on the agent's default model carries no
-``--model`` flag and no model in its title, so until it has answered it gets
-``None`` (no pill), not a plausible-looking wrong name.
+``--model`` flag, so until it has logged one it gets ``None`` (no pill), not a
+plausible-looking wrong name.
 """
 
 from __future__ import annotations
@@ -18,11 +17,6 @@ import shlex
 from typing import Any, Dict, List, Mapping, Optional
 
 from src.agents import agent_of
-from src.launching.model_catalog import (
-    CLAUDE_SESSION_MODEL_SPECS,
-    CODEX_MODEL_SPECS,
-    PI_MODEL_SPECS,
-)
 
 
 def _flag_value(flags: str, name: str) -> Optional[str]:
@@ -37,61 +31,17 @@ def _flag_value(flags: str, name: str) -> Optional[str]:
     return None
 
 
-def _catalog_label(specs: Mapping[str, Mapping[str, Any]], value: str) -> Optional[str]:
-    spec = specs.get(value.strip().lower())
-    return str(spec["label"]) if spec else None
-
-
-def _codex_title_label(live_title: str) -> Optional[str]:
-    """Codex titles its window ``<folder> | <model>``; the model is the live
-    truth (an in-session ``/model`` switch lands here, the spawn flags don't)."""
-    if "|" not in (live_title or ""):
-        return None
-    tokens = live_title.rsplit("|", 1)[1].split()
-    return _catalog_label(CODEX_MODEL_SPECS, tokens[0]) if tokens else None
-
-
-def _claude_id_label(model_id: str) -> Optional[str]:
-    """Display name for a full Claude model id (``claude-opus-5-5``): the
-    catalog family named as a whole hyphen-delimited segment, else ``None``."""
-    segments = model_id.strip().lower().split("-")
-    for family, spec in CLAUDE_SESSION_MODEL_SPECS.items():
-        if family in segments:
-            return str(spec["label"])
-    return None
-
-
 def session_model_label(session: Mapping[str, Any]) -> Optional[str]:
-    """Display name ("Opus", "Sol") of the session's model, or ``None``."""
-    agent = agent_of(session)
-    flags = str(session.get("flags") or "")
-    value = _flag_value(flags, "--model")
-    if agent == "claude":
-        answered = str(session.get("transcript_model") or "")
-        if answered:
-            # The model that last answered is the truth, so an id the catalog
-            # lacks is not covered for by the spawn flag, which may be stale.
-            return _claude_id_label(answered)
-        return _catalog_label(CLAUDE_SESSION_MODEL_SPECS, value) if value else None
-    if agent == "codex":
-        from_title = _codex_title_label(str(session.get("live_title") or ""))
-        if from_title:
-            return from_title
-        return _catalog_label(CODEX_MODEL_SPECS, value) if value else None
-    if agent == "copilot":
-        # Copilot logs the id it runs, and the Settings and Switch model
-        # lists name models by that same id.
-        answered = str(session.get("transcript_model") or "")
-        return answered or value or None
-    if agent == "pi" and value:
-        for spec in PI_MODEL_SPECS.values():
-            if spec["model_arg"] == value:
-                return str(spec["label"])
-    return None
+    """The id of the session's model, or ``None``. Copilot logs the id it
+    runs, and the Settings and Switch model lists name models by that same id."""
+    if agent_of(session) != "copilot":
+        return None
+    answered = str(session.get("transcript_model") or "")
+    return answered or _flag_value(str(session.get("flags") or ""), "--model") or None
 
 
 def attach_models(sessions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Each session plus a ``model`` field (a display name or ``None``).
+    """Each session plus a ``model`` field (a model id or ``None``).
 
     Returns new dicts; the inputs are never mutated.
     """

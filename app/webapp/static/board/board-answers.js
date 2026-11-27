@@ -459,7 +459,7 @@ function openSheet(mode, plan, run, indices, owner, startKey, ownerKind) {
   const chief = mode === 'chief';
   also.textarea.value = sheet.also;
   growTextarea(also.textarea);
-  also.setAvailability({ dictate: voiceDictationAvailable(), ocr: false });
+  also.setAvailability({ dictate: voiceDictationAvailable() });
   disposeOtherDictations();
   disposeAnswerFiles();
   const blocks = indices.map(function (i) { return renderItem(items[i], i); });
