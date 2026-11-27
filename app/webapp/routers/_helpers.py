@@ -23,9 +23,11 @@ from src.clients.session import SessionHostError
 from src.jobs.config import get_by_id, load_jobs
 from src.launching import copilot_remote
 from src.launching.presets import OPEN_MODEL_AGENTS, PRESET_CONTEXTS, efforts_for
+from src.session_hosting.body_fields import (
+    safe_int as safe_int,  # the routers import it from here
+)
 from src.session_view.copilot_host import copilot_signed_in_host
 from src.session_view.transcript_locate import copilot_task_id
-from src.session_hosting.body_fields import safe_int as safe_int  # the routers import it from here
 from src.webapp_config import (
     WebappConfig,
     append_auth_token,
