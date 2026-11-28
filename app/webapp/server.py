@@ -58,6 +58,7 @@ from app.webapp.routers import (
     session_transcript,
     sessions,
     speech,
+    team_mirror,
     team_os,
     tokens,
     webauthn,
@@ -623,11 +624,7 @@ def create_app() -> FastAPI:
     app.state.asset_hashes = asset_hashes
     app.state.asset_fleet_hash = fleet_hash_of(asset_hashes)
     if asset_hashes:
-        _log.info(
-            "ℹ️ Static assets stamped at fleet hash %s (%d files)",
-            app.state.asset_fleet_hash,
-            len(asset_hashes),
-        )
+        _log.info("ℹ️ Static assets stamped at fleet hash %s (%d files)", app.state.asset_fleet_hash, len(asset_hashes))
 
     _load_bundles(app, asset_hashes)
 
@@ -655,6 +652,7 @@ def create_app() -> FastAPI:
     app.include_router(desktop_screen.router)
     app.include_router(board.router)
     app.include_router(progress.router)
+    app.include_router(team_mirror.router)
     app.include_router(team_os.router)
     app.include_router(speech.router)
     app.include_router(webauthn.router)
