@@ -23,6 +23,7 @@ import { icon } from '../_vendored/icons/icons.js';
 import { fetchApps, launchApp, renderApps } from '../apps.js';
 import { openSettingsAt } from '../tabs.js';
 import { canPull, fetchAll, pullProject, syncAll, wireGitSync } from './git-sync.js';
+import { wireTeamMirror } from './team-mirror.js';
 
 const ISSUES_LABEL = 'GitLab issues';
 const VSCODE_BUTTON_LABEL = 'Visual Studio Code';
@@ -365,6 +366,7 @@ export function wireCoding() {
     });
   }
   wireGitSync();
+  wireTeamMirror();
   if (els.favFilterBtn) {
     els.favFilterBtn.addEventListener('click', function (event) {
       // The trailing star inside the filter field. The field is a

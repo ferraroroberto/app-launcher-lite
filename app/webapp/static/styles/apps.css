@@ -184,6 +184,28 @@
 .git-sync-summary .git-sync-name { flex: 1; }
 .git-sync-reasons { flex-basis: 100%; padding-bottom: 8px; color: var(--muted); font-size: var(--font-caption); }
 
+/* Team mirrors: the card's toolbar, and the Link and Publish sheets. */
+.team-mirror-toolbar { display: flex; justify-content: flex-end; gap: 8px; }
+.team-mirror-access { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.team-mirror-access-result { min-width: 0; font-size: var(--font-label); color: var(--muted); }
+.team-mirror-access-result[data-tone="danger"] { color: var(--danger-text); }
+.team-mirror-summary { margin: 0 0 8px; font-weight: 600; }
+.team-mirror-scan { margin-bottom: 8px; }
+.team-mirror-scan-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 4px; font-size: var(--font-label); }
+.team-mirror-scan[data-state="clear"] .team-mirror-scan-head { color: var(--muted); }
+.team-mirror-findings li { justify-content: flex-start; overflow-wrap: anywhere; }
+.team-mirror-files { max-height: 30vh; }
+.team-mirror-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--hit-min);
+  font-size: var(--font-label);
+}
+.team-mirror-pr-body { font-family: inherit; resize: vertical; }
+.team-mirror-result { margin: 8px 0 0; font-size: var(--font-label); }
+
 /* The launch toolbar (launch-toolbar.js): the switch pair, each switch with
    its word, a trailing control pinned right. The word is the switch's
    <label>, so word + track is one 44px tap target. */
