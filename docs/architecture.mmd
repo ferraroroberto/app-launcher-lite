@@ -48,6 +48,7 @@ flowchart TB
       R_CONFIG["config.py — /api/config, /api/status\nCopilot, GitLab and Team OS settings"]
       R_COPILOTUSAGE["copilot_usage.py — /api/copilot-usage\nUsage card, answered from memory; src/copilot_usage.py reads the Copilot CLI log in a worker thread"]
       R_DOCUMENTS["documents.py —/api/documents\nallowlisted repo files, read-only"]
+      R_TEAMMIRROR["team_mirror.py — /api/team-mirror/*\nsrc/team_mirror/: one snapshot commit per publish to a team repo"]
       R_DIAGNOSTICS["diagnostics.py — /api/diagnostics, /api/request-stats\nSave diagnostics: src/diagnostics_bundle.py merges the recent logs, redacted; request stats: src/request_timing.py"]
       R_TOKENS["tokens.py — /api/tokens\nscoped-token mint/list/revoke"]
       R_APPS["apps.py — /api/apps (Apps tab, Coding launches)"]

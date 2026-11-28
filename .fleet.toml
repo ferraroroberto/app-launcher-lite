@@ -232,6 +232,7 @@ webkit_budget_check = { src = "scripts/tools/webkit_budget_check.py", sha = "48d
 # e2e suite boots a disposable webapp + session-host from; ready_path and
 # data_dir_env are the generator defaults (/healthz, APP_LAUNCHER_DATA_DIR).
 ratchet_baseline = { src = "scripts/ratchet_baseline.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/ratchet_baseline.py" }
+personal_data_ratchet = { src = "scripts/personal_data_ratchet.py", sha = "fd3133aafcfe4b839b6feaaafb8aa80941bb599e", dest = "scripts/personal_data_ratchet.py" }
 
 [verify]
 boot           = "tests/e2e/conftest.py::_autoboot_server"

@@ -88,6 +88,9 @@
     "%TEMP%/claude"
   ],
   "documents": [],
+  "_comment_team_mirrors": "Team Mirror links: each {project, team_url, branch, leave_out} publishes a folder under projects_dir to a team repo as one snapshot commit. team_url is https, ssh or a local path; leave_out lists repo paths that never reach the team repo. mirror_scan_terms adds words the privacy scan blocks on, on top of the personal-data term list. Machine-local, never committed.",
+  "team_mirrors": [],
+  "mirror_scan_terms": [],
   "claude_show_local_window": true,
   "desktop_browser": "chrome",
   "mirror_browser": "chrome",
