@@ -361,9 +361,8 @@ async function publishAll() {
   load(true);
 }
 
-export function wireTeamMirror() {
-  const card = document.getElementById('teamMirrorCard');
-  if (!card) return;
+// Called once, on the card's first open (apps-coding.js loads this module then).
+export function wireTeamMirror(card) {
   pub.mergeSwitch = switchEl(true, {
     label: 'Merge after opening the PR',
     onToggle: function (next, btn) { pub.merge = next; setSwitch(btn, next); syncPublishButton(); },
@@ -389,7 +388,7 @@ export function wireTeamMirror() {
   document.getElementById('teamMirrorPublishAll').addEventListener('click', publishAll);
 
   let poll = null;
-  card.addEventListener('toggle', function () {
+  function follow() {
     if (card.open && !poll) {
       load(false);
       poll = startPoll(function () { return load(false); }, POLL_MS, { activeWhile: function () { return card.open; } });
@@ -397,5 +396,7 @@ export function wireTeamMirror() {
       poll.stop();
       poll = null;
     }
-  });
+  }
+  card.addEventListener('toggle', follow);
+  follow();
 }

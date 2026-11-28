@@ -23,7 +23,6 @@ import { icon } from '../_vendored/icons/icons.js';
 import { fetchApps, launchApp, renderApps } from '../apps.js';
 import { openSettingsAt } from '../tabs.js';
 import { canPull, fetchAll, pullProject, syncAll, wireGitSync } from './git-sync.js';
-import { wireTeamMirror } from './team-mirror.js';
 
 const ISSUES_LABEL = 'GitLab issues';
 const VSCODE_BUTTON_LABEL = 'Visual Studio Code';
@@ -366,7 +365,18 @@ export function wireCoding() {
     });
   }
   wireGitSync();
-  wireTeamMirror();
+  // The Team mirrors card's code loads on its first open: most visits never open it.
+  const mirrorCard = document.getElementById('teamMirrorCard');
+  if (mirrorCard) {
+    const loadMirror = function () {
+      if (!mirrorCard.open) return;
+      mirrorCard.removeEventListener('toggle', loadMirror);
+      import('./team-mirror.js').then(function (m) { m.wireTeamMirror(mirrorCard); }, function (exc) {
+        apiFailToast('Could not load Team mirrors', exc);
+      });
+    };
+    mirrorCard.addEventListener('toggle', loadMirror);
+  }
   if (els.favFilterBtn) {
     els.favFilterBtn.addEventListener('click', function (event) {
       // The trailing star inside the filter field. The field is a

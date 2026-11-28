@@ -812,8 +812,10 @@ time_budget_s         = 1200
 # and the failed-run report all ride that one node. The count today is 303 with
 # the request-budget probe, whose page installs a clock and a writable
 # visibility state before boot and runs two fake minutes, so no other node
-# could share it.
-test_budget = 300
+# could share it. 301: the Team mirrors card and its Link and Publish sheets
+# share one node; it route-mocks /api/team-mirror and its POSTs before boot,
+# a setup no existing Code-tab node shares.
+test_budget = 301
 
 # --- static assets under the webapp's static dir -> Chromium smoke ----------
 [[e2e.rule]]

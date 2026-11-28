@@ -96,68 +96,60 @@ def _row_loc(page: Page, project: str):
     return page.locator(f'#teamMirrorList .team-mirror-item[data-id="{project}"]')
 
 
-def test_rows_say_each_state_and_publish_all_counts_only_safe_apps(authed_page: Page, base_url: str) -> None:
-    _install(authed_page)
-    _open_card(authed_page, base_url)
-    expect(_row_loc(authed_page, "alpha")).to_contain_text("Not linked")
-    expect(_row_loc(authed_page, "beta")).to_contain_text("3 commits behind")
-    expect(_row_loc(authed_page, "beta")).to_contain_text("team changed")
-    expect(_row_loc(authed_page, "gamma")).to_contain_text("Up to date")
-    expect(_row_loc(authed_page, "delta")).to_contain_text("blocked")
-    # beta needs a confirmation and delta is blocked, so nothing is safe to publish in bulk.
-    expect(authed_page.locator("#teamMirrorPublishAll")).to_be_disabled()
-    expect(authed_page.locator("#teamMirrorFooter")).to_contain_text("refreshes every 30 min")
+def test_the_card_lists_states_previews_publishes_and_links(authed_page: Page, base_url: str) -> None:
+    """One boot for the card and both sheets: the e2e suite's node budget is fixed."""
+    page = authed_page
+    sent = _install(page)
+    _open_card(page, base_url)
 
+    # The rows: each state in words; beta needs a confirmation and delta is
+    # blocked, so nothing is safe to publish in bulk.
+    expect(_row_loc(page, "alpha")).to_contain_text("Not linked")
+    expect(_row_loc(page, "beta")).to_contain_text("3 commits behind")
+    expect(_row_loc(page, "beta")).to_contain_text("team changed")
+    expect(_row_loc(page, "gamma")).to_contain_text("Up to date")
+    expect(_row_loc(page, "delta")).to_contain_text("blocked")
+    expect(page.locator("#teamMirrorPublishAll")).to_be_disabled()
+    expect(page.locator("#teamMirrorFooter")).to_contain_text("refreshes every 30 min")
 
-def test_publish_needs_the_second_confirmation_and_stops_at_an_open_pr(authed_page: Page, base_url: str) -> None:
-    sent = _install(authed_page)
-    _open_card(authed_page, base_url)
-    _row_loc(authed_page, "beta").locator(".action-row-main").click()
+    # A blocked preview names file, line and rule and cannot publish.
+    sheet = page.locator("#teamMirrorPreviewSheet")
+    _row_loc(page, "delta").locator(".action-row-main").click()
+    expect(sheet.locator("#teamMirrorScan")).to_contain_text("docs/guide.md:3 · term-app")
+    expect(sheet.locator("#teamMirrorPublish")).to_be_disabled()
+    sheet.locator("#teamMirrorPreviewClose").click()
+    expect(sheet).to_be_hidden()
 
-    sheet = authed_page.locator("#teamMirrorPreviewSheet")
-    expect(sheet).to_be_visible()
+    # A team-changed app needs the replace switch; the merge switch turns the
+    # button into Open PR only, and a refused merge ends at the PR's link.
+    _row_loc(page, "beta").locator(".action-row-main").click()
     expect(sheet.locator("#teamMirrorFiles li")).to_have_count(3)
     expect(sheet.locator("#teamMirrorTeamList")).to_contain_text("docs: team note")
     publish = sheet.locator("#teamMirrorPublish")
     expect(publish).to_have_text("Publish and merge")
     expect(publish).to_be_disabled()
-
     sheet.locator('[data-track="team-mirror-preview.confirm-team"]').click()
     expect(publish).to_be_enabled()
     sheet.locator('[data-track="team-mirror-preview.merge"]').click()
     expect(publish).to_have_text("Open PR only")
     sheet.locator("#teamMirrorPrBody").fill("Edited text")
     publish.click()
-
     expect(sheet.locator("#teamMirrorResult")).to_contain_text("PR opened, not merged")
     expect(sheet.locator("#teamMirrorResult a.reference-pill")).to_have_attribute(
         "href", "https://github.com/team-org/beta/pull/7")
     assert sent["publish"] == [{"mode": "pr_only", "confirm_team_changes": True, "pr_body": "Edited text"}]
+    sheet.locator("#teamMirrorPreviewClose").click()
 
-
-def test_a_blocked_preview_names_file_and_line_and_cannot_publish(authed_page: Page, base_url: str) -> None:
-    _install(authed_page)
-    _open_card(authed_page, base_url)
-    _row_loc(authed_page, "delta").locator(".action-row-main").click()
-    sheet = authed_page.locator("#teamMirrorPreviewSheet")
-    expect(sheet.locator("#teamMirrorScan")).to_contain_text("docs/guide.md:3 · term-app")
-    expect(sheet.locator("#teamMirrorPublish")).to_be_disabled()
-
-
-def test_linking_tests_access_and_saves_the_fields(authed_page: Page, base_url: str) -> None:
-    sent = _install(authed_page)
-    _open_card(authed_page, base_url)
-    _row_loc(authed_page, "alpha").locator(".action-row-main").click()
-
-    sheet = authed_page.locator("#teamMirrorLinkSheet")
-    expect(sheet).to_be_visible()
-    expect(sheet.locator("#teamMirrorAuthor")).to_contain_text("Work Robot")
-    sheet.locator("#teamMirrorUrlInput").fill("https://github.com/team-org/alpha.git")
-    sheet.locator("#teamMirrorLeaveOutInput").fill("private\nlocal.cfg\n")
-    sheet.locator("#teamMirrorTestAccess").click()
-    expect(sheet.locator("#teamMirrorAccessResult")).to_contain_text("no repository at that URL")
-
-    sheet.locator('[data-track="team-mirror-link.save"]').click()
-    expect(sheet).to_be_hidden()
+    # Linking: Test access shows the server's sentence; Save sends the fields.
+    link = page.locator("#teamMirrorLinkSheet")
+    _row_loc(page, "alpha").locator(".action-row-main").click()
+    expect(link).to_be_visible()
+    expect(link.locator("#teamMirrorAuthor")).to_contain_text("Work Robot")
+    link.locator("#teamMirrorUrlInput").fill("https://github.com/team-org/alpha.git")
+    link.locator("#teamMirrorLeaveOutInput").fill("private\nlocal.cfg\n")
+    link.locator("#teamMirrorTestAccess").click()
+    expect(link.locator("#teamMirrorAccessResult")).to_contain_text("no repository at that URL")
+    link.locator('[data-track="team-mirror-link.save"]').click()
+    expect(link).to_be_hidden()
     assert sent["link"] == [("PUT", {"team_url": "https://github.com/team-org/alpha.git", "branch": "main",
                                      "leave_out": ["private", "local.cfg"]})]
