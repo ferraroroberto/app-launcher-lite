@@ -2,6 +2,10 @@
 
 Team Mirror publishes an app from its personal repo to a team repo as one clean snapshot commit, whenever the owner presses Publish. Ten personal commits in a day become one team commit. The team repo never sees a personal commit, name or address, and nothing flows back from the team repo.
 
+## The card
+
+The **Team mirrors** card on the Code tab, after Projects and closed by default, lists every git project under the projects folder with its state and reads only while it is open. A row with no link opens **Link team repo**: the team URL, the branch, leave-out paths one per line, the commit author read from this computer's git config, and **Test access**. A linked row opens **Publish**: the files that change, the scan result, any team-side commits with a switch to replace them, the editable PR text and a **Merge after opening the PR** switch that turns the button into **Open PR only**. A linked row's kebab reopens the link to edit or remove it. **Publish all** publishes and merges, one at a time, every app that is behind with nothing to confirm.
+
 ## What a publish does
 
 1. Lite fetches the personal main and the team main into a scratch repo it owns under the runtime data root. The live app folder is only read: a fetch from it writes nothing there. The personal main is the remote-tracking `origin/main` when there is one, so an unpushed local commit is never published.

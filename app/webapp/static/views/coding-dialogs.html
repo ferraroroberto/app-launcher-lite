@@ -212,6 +212,80 @@
       </div>
     </dialog>
 
+    <dialog id="teamMirrorLinkSheet" data-surface="code.team-mirror-link" class="detail-dialog" data-track-view="sheet.team-mirror-link" aria-labelledby="teamMirrorLinkTitle">
+      <form id="teamMirrorLinkForm" class="detail-card">
+        <div class="detail-header">
+          <h2 id="teamMirrorLinkTitle" tabindex="-1" autofocus><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-link"></use></svg> Link team repo</h2>
+          <button data-track="team-mirror-link.close" type="button" id="teamMirrorLinkClose" class="icon-button detail-close" aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <p id="teamMirrorLinkApp" class="dialog-section-hint"></p>
+        <label class="row">
+          <span>Team repo URL</span>
+          <input id="teamMirrorUrlInput" type="text" class="input-native" required autocomplete="off" spellcheck="false"
+                 placeholder="https://github.com/team-org/app.git">
+        </label>
+        <label class="row">
+          <span>Branch</span>
+          <input id="teamMirrorBranchInput" type="text" class="input-native" autocomplete="off" spellcheck="false" placeholder="main">
+        </label>
+        <label class="row">
+          <span>Leave out</span>
+          <textarea id="teamMirrorLeaveOutInput" class="input-native" rows="3" spellcheck="false"
+                    placeholder="One path per line; a folder leaves out everything under it"></textarea>
+        </label>
+        <p id="teamMirrorAuthor" class="dialog-section-hint"></p>
+        <p class="dialog-section-hint">Saved on this computer only, never in either repo. Sign-in is git's own credential manager.</p>
+        <div class="team-mirror-access">
+          <button data-track="team-mirror-link.test-access" type="button" id="teamMirrorTestAccess" class="button-surface">Test access</button>
+          <button data-track="team-mirror-link.remove" type="button" id="teamMirrorRemove" class="button-surface" hidden>Remove link</button>
+          <span id="teamMirrorAccessResult" class="team-mirror-access-result" role="status" aria-live="polite"></span>
+        </div>
+        
+        <div class="detail-actions">
+          <button data-track="team-mirror-link.save" type="submit" class="button-primary detail-save-btn">Save link</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="teamMirrorPreviewSheet" data-surface="code.team-mirror-preview" class="detail-dialog" data-track-view="sheet.team-mirror-preview" aria-labelledby="teamMirrorPreviewTitle">
+      <div class="detail-card">
+        <div class="detail-header">
+          <h2 id="teamMirrorPreviewTitle" tabindex="-1" autofocus><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-send-horizontal"></use></svg> Publish</h2>
+          <button data-track="team-mirror-preview.close" type="button" id="teamMirrorPreviewClose" class="icon-button detail-close" aria-label="Close">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <div id="teamMirrorPreviewState" class="empty-state" role="status" aria-live="polite" hidden></div>
+        <div id="teamMirrorPreviewBody" class="team-mirror-preview" hidden>
+          <p id="teamMirrorPreviewSummary" class="team-mirror-summary"></p>
+          <div id="teamMirrorScan" class="team-mirror-scan"></div>
+          <ul id="teamMirrorFiles" class="git-sync-body team-mirror-files" aria-label="Files that change"></ul>
+          <div id="teamMirrorTeamChanges" class="team-mirror-team" hidden>
+            <p class="dialog-section-hint">The team repo has commits that did not come from this mirror. Publishing makes the team copy identical to this app's main again, so they are replaced.</p>
+            <ul id="teamMirrorTeamList" class="git-sync-body"></ul>
+            <label class="team-mirror-switch-row">
+              <span>Replace the team's changes</span>
+              <span id="teamMirrorConfirmSlot"></span>
+            </label>
+          </div>
+          <label class="row">
+            <span>PR text</span>
+            <textarea id="teamMirrorPrBody" class="input-native team-mirror-pr-body" rows="6"></textarea>
+          </label>
+          <label class="team-mirror-switch-row">
+            <span>Merge after opening the PR</span>
+            <span id="teamMirrorMergeSlot"></span>
+          </label>
+          <p id="teamMirrorResult" class="team-mirror-result" role="status" aria-live="polite" hidden></p>
+        </div>
+        <div class="detail-actions">
+          <button data-track="team-mirror-preview.publish" type="button" id="teamMirrorPublish" class="button-primary detail-save-btn" disabled>Publish and merge</button>
+        </div>
+      </div>
+    </dialog>
+
     <dialog id="sessionRenameDialog" data-surface="terminal.rename-dialog" class="detail-dialog" data-track-view="sheet.session-rename">
       <form id="sessionRenameForm" class="detail-card">
         <div class="detail-header">
