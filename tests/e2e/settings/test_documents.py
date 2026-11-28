@@ -315,7 +315,7 @@ def test_changed_files_preview_draws_the_same_diagrams(authed_page: Page, base_u
     def _content(route):
         route.fulfill(status=200, content_type="application/json", body=json.dumps({
             "session_id": "x", "available": True, "reason": None,
-            "path": "E:\\work\\proj\\docs\\notes.md", "text": _DOC,
+            "path": "E:\\stub\\proj\\docs\\notes.md", "text": _DOC,
         }))
 
     page.route(re.compile(r".*/changed-files/content\?.*"), _content)

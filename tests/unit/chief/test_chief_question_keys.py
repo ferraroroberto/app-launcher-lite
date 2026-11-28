@@ -34,7 +34,7 @@ def _cases():
 def test_python_keys_and_counts_the_shared_fixture(case):
     keys = [chief_answers.item_key(item, i) for i, item in enumerate(case["waiting"])]
     assert keys == case["keys"]
-    plan = {"state": "ok", "waiting_on_roberto": case["waiting"], "answered": case["answered"]}
+    plan = {"state": "ok", "waiting_on_owner": case["waiting"], "answered": case["answered"]}
     assert chief_answers.unanswered_count(plan) == case["unanswered"]
 
 
@@ -65,7 +65,7 @@ def _write_plan(path: Path, waiting) -> None:
     path.write_text(json.dumps({
         "version": 1, "updated_at": "2026-10-11T08:00:00Z", "lanes": [],
         "queue": [{"repo": "demo-repo", "ref": "#7", "title": "a thing", "status": "building"}],
-        "waiting_on_roberto": waiting,
+        "waiting_on_owner": waiting,
     }), encoding="utf-8")
 
 
@@ -90,7 +90,7 @@ def test_sessions_poll_counts_questions_while_the_queue_is_empty(webapp_client):
     overrides["session"].list_sessions.return_value = []
     Path(app.state.webapp_config.chief_plan_file).write_text(json.dumps({
         "version": 1, "updated_at": "2026-10-11T08:00:00Z", "lanes": [], "queue": [],
-        "waiting_on_roberto": [{"id": "q-one", "text": "What next?"}],
+        "waiting_on_owner": [{"id": "q-one", "text": "What next?"}],
     }), encoding="utf-8")
     assert client.get("/api/claude-code/sessions").json()["chief_questions"] == 1
 

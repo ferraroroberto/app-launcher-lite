@@ -3,8 +3,8 @@
 #   python -m venv .venv
 #   .venv\Scripts\python.exe -m pip install -r requirements.txt
 #
-# Sister project to photo-ocr and voice-transcriber — same FastAPI + pystray
-# stack so the auth, tunnel, and cert plumbing is shared.
+# Same FastAPI + pystray stack as the sister projects,
+# so the auth, tunnel, and cert plumbing is shared.
 
 # HTTP client (healthz polling) + YAML (cloudflared config)
 requests>=2.31

@@ -52,8 +52,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # touching the real sidecar (the pattern src.jobs.history already uses).
 CHIEF_POINTER_FILE = PROJECT_ROOT / "webapp" / "chief-pointer.json"
 
-# Roberto's call: long enough to survive a weekend or a session-host
-# outage, short enough that a chief he moved on from weeks ago can't be
+# The owner's call: long enough to survive a weekend or a session-host
+# outage, short enough that a chief they moved on from weeks ago can't be
 # resurrected. Deliberately far longer than src.board.state.STATE_STALE_AFTER's
 # 24h — outliving that prune horizon is the entire point of persisting this.
 POINTER_STALE_AFTER = timedelta(days=7)

@@ -541,7 +541,7 @@ def cmd_drain(args: argparse.Namespace, fetch: Optional[Callable] = None) -> int
 
 def covering_ask(doc: Dict[str, Any]) -> Optional[str]:
     """The id of the open `plan ask` that answers for idle slots (`--id slots-idle`), else None."""
-    for row in doc["waiting_on_roberto"]:
+    for row in doc["waiting_on_owner"]:
         if row.get("question") and row.get("id") == IDLE_ASK_ID:
             return IDLE_ASK_ID
     return None

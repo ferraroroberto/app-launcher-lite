@@ -43,7 +43,7 @@ _PLAN = {
         {"repo": "b", "ref": "#4", "title": "later", "status": "queued"},
         {"repo": "b", "ref": "#5", "title": "set aside", "status": "parked"},
     ],
-    "waiting_on_roberto": [{"id": "q1", "text": "Approve?"}],
+    "waiting_on_owner": [{"id": "q1", "text": "Approve?"}],
 }
 
 
@@ -129,7 +129,7 @@ class TestApi:
         kept = json.loads(plan.read_text())
         assert [r["ref"] for r in kept["queue"]] == ["#2", "#4", "#5"]
         assert kept["lanes"] == _PLAN["lanes"]
-        assert kept["waiting_on_roberto"] == _PLAN["waiting_on_roberto"]
+        assert kept["waiting_on_owner"] == _PLAN["waiting_on_owner"]
 
     def test_nothing_merged_prunes_zero(self, prune):
         client, _ = prune

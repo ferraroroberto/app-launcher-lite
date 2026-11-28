@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ctypes
 import importlib.util
+import socket
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -115,6 +116,13 @@ def test_the_listener_table_by_platform(monkeypatch, platform: str) -> None:
 
 
 # ---------------------------------------------------------------- port probe
+
+
+def test_a_port_with_a_real_listener_is_not_free() -> None:
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        assert worktree_config._port_is_free(listener.getsockname()[1]) is False
 
 
 @pytest.mark.parametrize("platform", PLATFORMS)

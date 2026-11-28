@@ -31,9 +31,9 @@ def _narrow_commit_and_clear(page: Page) -> None:
 
     field.click()
     expect(_options(page)).to_have_count(5)  # "All projects" + 4
-    page.keyboard.type("PHO")
+    page.keyboard.type("PO-A")
     # Case-insensitive substring; "All projects" stays first.
-    expect(_options(page)).to_have_text(["All projects", "photo-ocr"])
+    expect(_options(page)).to_have_text(["All projects", "repo-a"])
     expect(clear).to_be_visible()
     # Typing alone commits nothing.
     expect(page.locator(_HIDDEN)).to_have_value("")
@@ -41,8 +41,8 @@ def _narrow_commit_and_clear(page: Page) -> None:
 
     page.keyboard.press("Enter")
     expect(page.locator(_LIST)).to_be_hidden()
-    expect(page.locator(_HIDDEN)).to_have_value("photo-ocr")
-    expect(field).to_have_value("photo-ocr")
+    expect(page.locator(_HIDDEN)).to_have_value("repo-a")
+    expect(field).to_have_value("repo-a")
     expect(page.locator("#boardColBacklog .board-count")).to_have_text("0")
     expect(page.locator("#boardColYours .board-count")).to_have_text("1")
     expect(clear).to_be_visible()
@@ -65,7 +65,7 @@ def _narrow_commit_and_clear(page: Page) -> None:
 def _clear_drops_typed_text(page: Page) -> None:
     field = page.locator(_INPUT)
     field.click()
-    page.keyboard.type("voi")
+    page.keyboard.type("po-b")
     expect(_options(page)).to_have_count(2)
     page.locator(_CLEAR).click()
     expect(field).to_have_value("")
@@ -88,9 +88,9 @@ def _arrow_keys_enter_and_escape(page: Page) -> None:
     # Typing picks the first match, so Enter alone takes it.
     field.click()
     page.keyboard.press("Control+a")
-    page.keyboard.type("vo")
+    page.keyboard.type("po-b")
     page.keyboard.press("Enter")
-    expect(page.locator(_HIDDEN)).to_have_value("voice-transcriber")
+    expect(page.locator(_HIDDEN)).to_have_value("repo-b")
 
     # Escape closes the list and drops what was typed, keeping the committed pick.
     field.click()
@@ -100,8 +100,8 @@ def _arrow_keys_enter_and_escape(page: Page) -> None:
     expect(page.locator(f"{_LIST} .board-repo-empty")).to_be_visible()
     page.keyboard.press("Escape")
     expect(page.locator(_LIST)).to_be_hidden()
-    expect(field).to_have_value("voice-transcriber")
-    expect(page.locator(_HIDDEN)).to_have_value("voice-transcriber")
+    expect(field).to_have_value("repo-b")
+    expect(page.locator(_HIDDEN)).to_have_value("repo-b")
 
     # Back to All projects so the caller's later steps see the whole board.
     page.locator(_CLEAR).click()

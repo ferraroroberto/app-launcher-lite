@@ -141,7 +141,7 @@ class TestGetRunningApps:
         client, app, _ = webapp_client
         app.state.app_config.tailnet_host = "pc.example-tailnet.ts.net"
         inst = app_runtime.record_spawn(
-            "voice-transcriber-webapp", "Voice Transcriber", "webapp", 12345
+            "repo-b-webapp", "Repo B", "webapp", 12345
         )
         _alive_proc(fake_psutil, inst)  # alive, but binds no port
 
@@ -150,8 +150,8 @@ class TestGetRunningApps:
         running = resp.json()["running"]
         assert len(running) == 1
         row = running[0]
-        assert row["app_id"] == "voice-transcriber-webapp"
-        assert row["name"] == "Voice Transcriber"
+        assert row["app_id"] == "repo-b-webapp"
+        assert row["name"] == "Repo B"
         assert row["kind"] == "webapp"
         assert row["pid"] == 12345
         assert row["alive"] is True
@@ -168,7 +168,7 @@ class TestGetRunningApps:
         # An HTTPS sibling — the scheme probe sees a TLS handshake.
         monkeypatch.setattr(apps_router, "detect_local_scheme", lambda _p: "https")
         app.state.app_config.tailnet_host = "pc.example-tailnet.ts.net"
-        inst = app_runtime.record_spawn("vt", "Voice Transcriber", "webapp", 100)
+        inst = app_runtime.record_spawn("vt", "Repo B", "webapp", 100)
         # The bat's python descendant owns the socket, not the root cmd.
         child = FakeProc(200, listen_port=8501)
         _alive_proc(fake_psutil, inst, children=[child])
@@ -198,7 +198,7 @@ class TestGetRunningApps:
     def test_url_null_when_tailnet_host_unset(self, webapp_client, fake_psutil):
         client, app, _ = webapp_client
         app.state.app_config.tailnet_host = ""
-        inst = app_runtime.record_spawn("vt", "Voice Transcriber", "webapp", 100)
+        inst = app_runtime.record_spawn("vt", "Repo B", "webapp", 100)
         child = FakeProc(200, listen_port=8501)
         _alive_proc(fake_psutil, inst, children=[child])
 
@@ -209,7 +209,7 @@ class TestGetRunningApps:
 
     def test_prune_removes_dead_pid(self, webapp_client, fake_psutil):
         client, _, _ = webapp_client
-        inst = app_runtime.record_spawn("vt", "Voice Transcriber", "webapp", 100)
+        inst = app_runtime.record_spawn("vt", "Repo B", "webapp", 100)
         # PID no longer exists — register nothing / mark not-exists.
         fake_psutil.register(
             FakeProc(100, create_time=inst.started_at), exists=False
@@ -219,7 +219,7 @@ class TestGetRunningApps:
 
     def test_prune_removes_pid_reuse(self, webapp_client, fake_psutil):
         client, _, _ = webapp_client
-        inst = app_runtime.record_spawn("vt", "Voice Transcriber", "webapp", 100)
+        inst = app_runtime.record_spawn("vt", "Repo B", "webapp", 100)
         # PID exists but create_time is far from started_at → reused PID.
         fake_psutil.register(
             FakeProc(100, create_time=inst.started_at - 500.0)
@@ -240,7 +240,7 @@ class TestStopAppInstance:
         monkeypatch.setattr(
             apps_router, "kill_process_tree", lambda pid: called.append(pid)
         )
-        app_runtime.record_spawn("vt", "Voice Transcriber", "webapp", 4242)
+        app_runtime.record_spawn("vt", "Repo B", "webapp", 4242)
 
         resp = client.post("/api/apps/vt/instances/4242/stop")
         assert resp.status_code == 200

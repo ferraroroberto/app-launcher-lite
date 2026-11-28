@@ -2,7 +2,7 @@
 
 The Board's "Chief's plan" card renders what the chief
 intends to do next: the live lanes, the ordered queue and what is waiting on
-Roberto. The handover log (`chief-handover.md`) carries the same intent as
+the owner. The handover log (`chief-handover.md`) carries the same intent as
 prose for the chief itself; this file carries it as data for a parser. The
 format is one contract, documented in `docs/chief-plan.md` -- this module is
 its only writer, and `chief_ops.py plan ...` is the only way the chief calls it.
@@ -51,11 +51,11 @@ class QueueStatus(enum.StrEnum):
     GATE = "gate"                        # a lane holds the verification gate
     MERGED = "merged"                    # shipped; prune_items drops it
     PARKED = "parked"                    # deliberately not dispatched; needs a kind
-    WAITING_ROBERTO = "waiting-roberto"  # blocked on a plan ask answer
+    WAITING_OWNER = "waiting-owner"      # blocked on a plan ask answer
 
 
 QUEUE_STATUSES = tuple(status.value for status in QueueStatus)
-# Why a row is `parked`. Only `owner` rows are Roberto's to act on, and they
+# Why a row is `parked`. Only `owner` rows are the owner's to act on, and they
 # ride the `needs-owner` label into the Board's "Waiting for start".
 PARKED_KINDS = ("owner", "umbrella", "blocked-by")
 # The model a lane or build item runs on, picked per task by docs/model-tiers.md.
@@ -69,7 +69,7 @@ MAX_PROSE = 1000
 MAX_LABEL = 80
 MAX_OPTIONS = 4
 
-TOP_FIELDS = {"version", "updated_at", "lanes", "queue", "waiting_on_roberto"}
+TOP_FIELDS = {"version", "updated_at", "lanes", "queue", "waiting_on_owner"}
 LANE_FIELDS = {"repo", "session", "item", "status", "model"}
 QUEUE_FIELDS = {"repo", "ref", "title", "status", "note", "model", "kind", "blocked_by", "brief", "after"}
 WAITING_FIELDS = {"text", "ref", "id", "repo", "question", "detail", "recommendation",
@@ -98,7 +98,7 @@ def plan_file() -> Path:
 
 def empty_plan() -> Dict[str, Any]:
     return {"version": VERSION, "updated_at": "", "lanes": [], "queue": [],
-            "waiting_on_roberto": []}
+            "waiting_on_owner": []}
 
 
 # ---- validation --------------------------------------------------------------
@@ -149,7 +149,7 @@ def validate(doc: Any) -> List[str]:
     stamp = doc.get("updated_at")
     if not isinstance(stamp, str) or not _ISO_Z.fullmatch(stamp):
         errors.append("updated_at: must be a UTC timestamp like 2026-09-26T14:40:00Z")
-    for key in ("lanes", "queue", "waiting_on_roberto"):
+    for key in ("lanes", "queue", "waiting_on_owner"):
         if key in doc and not isinstance(doc[key], list):
             errors.append(f"{key}: must be a list")
     if errors:
@@ -197,8 +197,8 @@ def validate(doc: Any) -> List[str]:
         _check_dispatch_fields(errors, where, row)
 
     ids: set = set()
-    for i, row in enumerate(doc["waiting_on_roberto"]):
-        where = f"waiting_on_roberto[{i}]"
+    for i, row in enumerate(doc["waiting_on_owner"]):
+        where = f"waiting_on_owner[{i}]"
         if not _check_fields(errors, where, row, WAITING_FIELDS, {"text"}):
             continue
         _check_waiting(errors, where, row, ids)
@@ -298,6 +298,28 @@ def _check_waiting(errors: List[str], where: str, row: Dict[str, Any], ids: set)
 
 # ---- load / write ------------------------------------------------------------
 
+# An older plan file spells these two with the owner's own name: the key `waiting_on_<name>`
+# and the queue status `waiting-<name>`. Matching the shape reads such a file without a name
+# living here, and the next write saves the current spellings.
+_OLD_WAITING_KEY = re.compile(r"waiting_on_[a-z]+")
+_OLD_WAITING_STATUS = re.compile(r"waiting-[a-z]+")
+
+
+def upgrade_names(doc: Any) -> Any:
+    """`doc` with an older file's waiting key and status renamed in place."""
+    if not isinstance(doc, dict):
+        return doc
+    if "waiting_on_owner" not in doc:
+        old = [key for key in doc if _OLD_WAITING_KEY.fullmatch(key)]
+        if len(old) == 1:
+            doc["waiting_on_owner"] = doc.pop(old[0])
+    queue = doc.get("queue")
+    for row in queue if isinstance(queue, list) else []:
+        if isinstance(row, dict) and _OLD_WAITING_STATUS.fullmatch(str(row.get("status"))):
+            row["status"] = QueueStatus.WAITING_OWNER.value
+    return doc
+
+
 def load(path: Path) -> Dict[str, Any]:
     """The current plan; a missing file is the empty plan.
 
@@ -309,7 +331,7 @@ def load(path: Path) -> Dict[str, Any]:
     except FileNotFoundError:
         return empty_plan()
     try:
-        doc = json.loads(raw)
+        doc = upgrade_names(json.loads(raw))
     except json.JSONDecodeError as exc:
         raise ValueError(f"{path.name} is not valid JSON ({exc}); `plan clear` resets it") from exc
     problems = validate(doc)
@@ -404,19 +426,19 @@ def drop_lane(doc: Dict[str, Any], repo: str) -> None:
 
 
 def _require_question(doc: Dict[str, Any], ref: str) -> None:
-    """A row may wait on Roberto only while an open `plan ask` question names it.
+    """A row may wait on the owner only while an open `plan ask` question names it.
 
-    A bare `waiting-roberto` status renders on the Board as "waiting on you" with
+    A bare `waiting-owner` status renders on the Board as "waiting on you" with
     nothing to answer. Enforced by the mutations, not `validate()`, so a plan file
     written before the rule still loads.
     """
     repo, local = split_ref(ref)
     qualified = f"{repo}{local}"
-    if not any(row.get("question") and row.get("ref") == qualified for row in doc["waiting_on_roberto"]):
+    if not any(row.get("question") and row.get("ref") == qualified for row in doc["waiting_on_owner"]):
         raise ValueError(
-            f"{qualified} can wait on Roberto only behind an answerable question: run "
+            f"{qualified} can wait on the owner only behind an answerable question: run "
             f'`plan ask "<question>" --ref {qualified} --detail "..." --recommend "..." '
-            f'[--option "Label::description" ...]` first, then set waiting-roberto')
+            f'[--option "Label::description" ...]` first, then set waiting-owner')
 
 
 def parse_after(spec: str) -> str:
@@ -494,7 +516,7 @@ def _apply_kind(row: Dict[str, Any], status: str, kind: Optional[str]) -> None:
         row.pop("blocked_by", None)
         return
     if not kind and not row.get("kind"):
-        raise ValueError("parked needs a kind: --kind owner (Roberto's step; the issue must carry "
+        raise ValueError("parked needs a kind: --kind owner (the owner's step; the issue must carry "
                          "needs-owner via owner_check mark), --kind umbrella (kept open on purpose) "
                          "or --kind 'blocked-by <repo>#<N>'")
     if not kind:
@@ -550,7 +572,7 @@ def add_item(doc: Dict[str, Any], ref: str, title: str, status: str = QueueStatu
     and model. Then `chief_ops.py drain` finds the next item with no judgment of its own.
     """
     repo, local = split_ref(ref)
-    if status == QueueStatus.WAITING_ROBERTO:
+    if status == QueueStatus.WAITING_OWNER:
         _require_question(doc, ref)
     child_refs = _child_refs(doc, f"{repo}{local}", children) if children is not None else []
     row: Dict[str, Any] = {"repo": repo, "ref": local, "title": title, "status": status}
@@ -584,7 +606,7 @@ def set_item(doc: Dict[str, Any], ref: str, status: Optional[str] = None,
     if all(value is None for value in (status, note, title, model, kind, brief, after)):
         raise ValueError("nothing to set: pass --status, --note, --title, --model, --kind, --brief or --after")
     row = doc["queue"][_index(doc, ref)]
-    if status == QueueStatus.WAITING_ROBERTO:
+    if status == QueueStatus.WAITING_OWNER:
         _require_question(doc, ref)
     if status == QueueStatus.PARKED or kind or (status is not None and row["status"] == QueueStatus.PARKED):
         _apply_kind(row, status or row["status"], kind)
@@ -646,7 +668,7 @@ def prune_plan_file(path: Path, statuses: Sequence[str] = (QueueStatus.MERGED,))
 def _next_id(doc: Dict[str, Any]) -> str:
     """`q<N>`, one past the highest auto id in use, so a cleared id is not reissued
     while a later one is still waiting (an answer for it can't land on a new item)."""
-    taken = [int(m.group(1)) for row in doc["waiting_on_roberto"]
+    taken = [int(m.group(1)) for row in doc["waiting_on_owner"]
              if (m := _AUTO_ID.fullmatch(str(row.get("id", ""))))]
     return f"q{max(taken, default=0) + 1}"
 
@@ -654,7 +676,7 @@ def _next_id(doc: Dict[str, Any]) -> str:
 def add_waiting(doc: Dict[str, Any], text: str, ref: Optional[str] = None) -> str:
     """`plan wait`: the text becomes an answerable question; returns its id.
 
-    A plain waiting line had nothing for Roberto to answer on the Board's sheet,
+    A plain waiting line had nothing for the owner to answer on the Board's sheet,
     so `wait` is now the shortest `plan ask`. Prefer `ask` with
     `--detail` and `--recommend` for a real decision.
     """
@@ -723,7 +745,7 @@ def add_question(
         row["options"] = parsed
     if multi:
         row["multi"] = True
-    doc["waiting_on_roberto"].append(row)
+    doc["waiting_on_owner"].append(row)
     return row["id"]
 
 
@@ -734,11 +756,11 @@ class NothingWaiting(ValueError):
 
 def clear_waiting(doc: Dict[str, Any], key: str) -> None:
     """Drop a waiting item by 1-based index, by its id, by its `repo#N` ref, or by exact text."""
-    rows = doc["waiting_on_roberto"]
+    rows = doc["waiting_on_owner"]
     if key.isdigit():
         rows.pop(_position(int(key), len(rows)))
         return
     kept = [row for row in rows if key not in (row.get("id"), row.get("ref"), row["text"])]
     if len(kept) == len(rows):
         raise NothingWaiting(f"nothing waiting matches {key!r}")
-    doc["waiting_on_roberto"] = kept
+    doc["waiting_on_owner"] = kept

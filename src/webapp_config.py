@@ -160,7 +160,7 @@ class WebappConfig:
     # The sessions-state file written by fleet-config's session_state hook. The board
     # reads it defensively: absent/corrupt/stale degrades to unknown, never an error.
     sessions_state_file: str = field(default_factory=_default_sessions_state_file)
-    # The fleet chief's plan: lanes, queue, what waits on Roberto.
+    # The fleet chief's plan: lanes, queue, what waits on the owner.
     # Read defensively like sessions_state_file: absent/corrupt/unsupported
     # leaves the Board's "Chief's plan" card blank, never an error.
     chief_plan_file: str = field(default_factory=_default_chief_plan_file)
@@ -296,6 +296,13 @@ class WebappConfig:
     # src.documents checks a row's fields when it is used and drops a bad one,
     # so a hand edit never stops the config from loading.
     documents: list = field(default_factory=list)
+    # Team Mirror links, {project, team_url, branch, leave_out} rows
+    # (`src.team_mirror.links`), checked when used so a bad row drops alone.
+    # Saved on this computer only, never in either repo.
+    team_mirrors: list = field(default_factory=list)
+    # Extra words the Team Mirror privacy scan blocks on, on top of the
+    # personal-data ratchet's machine-local term list. Never committed.
+    mirror_scan_terms: list = field(default_factory=list)
     # When true, launching a session from the phone also opens an
     # interactive terminal window for it on the PC (over loopback, so it
     # bypasses the Tailscale + passkey gate). Input works from both sides.
@@ -503,6 +510,11 @@ def _load_documents(raw: dict) -> list:
     ]
 
 
+def _load_team_mirrors(raw: dict) -> list:
+    """``team_mirrors`` — a list of records, like ``documents``; ``src.team_mirror.links`` checks each one."""
+    return [dict(entry) for entry in (raw.get("team_mirrors") or []) if isinstance(entry, dict)]
+
+
 def _load_request_budgets(raw: dict) -> Dict[str, List[float]]:
     """``request_budgets`` — only the usable classes; a dropped one is logged, never fatal."""
     kept, dropped = request_timing.clean_overrides(raw.get("request_budgets"))
@@ -519,6 +531,7 @@ _CUSTOM_LOADERS: Dict[str, Callable[[dict], Any]] = {
     "secrets": _load_secrets,
     "api_tokens": _load_api_tokens,
     "documents": _load_documents,
+    "team_mirrors": _load_team_mirrors,
     "launch_presets": load_launch_presets,
     "request_budgets": _load_request_budgets,
 }

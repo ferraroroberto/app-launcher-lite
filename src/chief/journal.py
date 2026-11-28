@@ -9,7 +9,7 @@ is ``chief_ops.py``). This module is the app's reader and, like
 dropped and an unknown ``kind`` passes through for the card's neutral chip.
 Never an exception.
 
-"Last look" is the moment Roberto last sent the chief a message from the Board
+"Last look" is the moment the owner last sent the chief a message from the Board
 or submitted the answer sheet. It is kept here, once per machine, so every
 device counts the same entries as new: ``webapp/chief-journal-look.json``,
 gitignored, atomically replaced. Unlike the journal, the app writes it.
@@ -67,7 +67,7 @@ def _entry(raw: Any, owner: str) -> Optional[Dict[str, Any]]:
 
 
 def read_last_look(path: Optional[Path] = None) -> str:
-    """When Roberto last looked (``YYYY-MM-DDTHH:MM:SSZ``), or ``""`` for never
+    """When the owner last looked (``YYYY-MM-DDTHH:MM:SSZ``), or ``""`` for never
     or an unreadable record."""
     raw = read_json_or(Path(path or CHIEF_JOURNAL_LOOK_FILE), {}, "chief journal look", expect=dict)
     at = raw.get("at")
@@ -75,7 +75,7 @@ def read_last_look(path: Optional[Path] = None) -> str:
 
 
 def record_look(now: Optional[datetime] = None, path: Optional[Path] = None) -> str:
-    """Stamp "Roberto looked just now" and return the stamp.
+    """Stamp "the owner looked just now" and return the stamp.
 
     Raises :class:`OSError` when the file can't be written.
     """

@@ -47,7 +47,7 @@ _SESSION_FILES = {
     "partial": False, "project_exists": True,
     "counts": {"additions": 5, "deletions": 0},
     "files": [
-        {"path": "docs/notes.md", "key": "E:/work/proj/docs/notes.md", "status": "A",
+        {"path": "docs/notes.md", "key": "E:/stub/proj/docs/notes.md", "status": "A",
          "additions": 5, "deletions": 0, "steps": 1},
     ],
 }
@@ -90,7 +90,7 @@ def _mock_both_ways_in(page: Page) -> None:
         "**/api/apps",
         lambda route: route.fulfill(
             status=200, content_type="application/json",
-            body=_json.dumps({"scan_root": "E:/automation", "apps": [_app("alpha")]}),
+            body=_json.dumps({"scan_root": "E:/stubfolder", "apps": [_app("alpha")]}),
         ),
     )
     page.route(

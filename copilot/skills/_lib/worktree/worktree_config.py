@@ -8,7 +8,7 @@ primary-landing guard that module owns, and are exercised by their own tests.
 
 `git worktree add` populates tracked files only, so a repo's own gitignored
 runtime config (`config/*.json`, root-level `*.json` such as
-`accounting-quarterly`'s `config.json`, and `.env`) never makes it into a
+one repo's `config.json`, and `.env`) never makes it into a
 fresh worktree. Left unfixed, an e2e suite that boots a disposable
 webapp+session-host hits its own missing-config guard for nearly every test
 and mass-skips silently -- the pre-ship gate still reports green.
@@ -602,7 +602,7 @@ def worktree_primary_instance_ok(repo: Path) -> bool:
 
     The repo-owned half of the side-instance refusal (`worktree_claim`'s
     `side_instance_state`). Some repos' operational lanes
-    genuinely must run in the primary -- `life-os`, whose gitignored identity,
+    genuinely must run in the primary -- one whose gitignored identity,
     context and state exist only in the primary clone -- and until now that
     exception was expressed solely as a `WORKTREE_CLAIM_ALLOW_PRIMARY=1`
     environment variable set by hand, i.e. as knowledge living in whichever
@@ -937,7 +937,7 @@ def copy_root_config(repo: Path, wt: Path, assigned: Optional["set"] = None) -> 
     """Copy the primary's gitignored root-level `*.json` into a fresh worktree.
 
     Some repos keep their runtime config at the repo root instead of under
-    `config/` (`accounting-quarterly`'s `config.json`, `home-automation`'s
+    `config/` (one repo's `config.json`, another's
     `devices.json`) -- `copy_runtime_config` doesn't reach those, so a
     worktree for one of these repos was missing its config entirely.
     Which root-level `*.json` files matter is asked of

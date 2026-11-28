@@ -254,12 +254,12 @@ def test_idle_finished_downgraded_when_repo_has_active_issue(tmp_path: Path):
     fetched every poll for the Backlog column), that ``idle-finished`` claim
     is downgraded to the safe ``awaiting-input`` rather than asserted from
     silence alone."""
-    row = _state_row("E:/automation/app-launcher", status="needs-you", updated_min_ago=10)
+    row = _state_row("E:/stubfolder/app-launcher", status="needs-you", updated_min_ago=10)
     row["transcript_path"] = _transcript_file(
         tmp_path, NOW - timedelta(minutes=10) + timedelta(seconds=5)
     )
     cards = board.merge_sessions(
-        [_live("aaa", "E:/automation/app-launcher", 30)],
+        [_live("aaa", "E:/stubfolder/app-launcher", 30)],
         {"t": row},
         now=NOW,
         active_issue_repos={"app-launcher"},
@@ -271,12 +271,12 @@ def test_idle_finished_stays_finished_without_matching_active_issue(tmp_path: Pa
     """The downgrade is repo-scoped, not a blanket suppression — a session in
     a repo with no open issue workflow (or none at all) still reports
     ``idle-finished`` as before."""
-    row = _state_row("E:/automation/app-launcher", status="needs-you", updated_min_ago=10)
+    row = _state_row("E:/stubfolder/app-launcher", status="needs-you", updated_min_ago=10)
     row["transcript_path"] = _transcript_file(
         tmp_path, NOW - timedelta(minutes=10) + timedelta(seconds=5)
     )
     cards = board.merge_sessions(
-        [_live("aaa", "E:/automation/app-launcher", 30)],
+        [_live("aaa", "E:/stubfolder/app-launcher", 30)],
         {"t": row},
         now=NOW,
         active_issue_repos={"some-other-repo"},
@@ -284,7 +284,7 @@ def test_idle_finished_stays_finished_without_matching_active_issue(tmp_path: Pa
     assert cards[0]["status"] == "idle-finished"
 
     cards_no_repos = board.merge_sessions(
-        [_live("aaa", "E:/automation/app-launcher", 30)], {"t": row}, now=NOW,
+        [_live("aaa", "E:/stubfolder/app-launcher", 30)], {"t": row}, now=NOW,
     )
     assert cards_no_repos[0]["status"] == "idle-finished"
 
@@ -294,13 +294,13 @@ def test_idle_finished_downgrade_matches_worktree_sibling(tmp_path: Path):
     ``skills/_lib/worktree_claim.py``) must resolve to the same repo as its
     primary checkout, or its own still-open issue marker would never match."""
     row = _state_row(
-        "E:/automation/app-launcher-wt-627", status="needs-you", updated_min_ago=10
+        "E:/stubfolder/app-launcher-wt-627", status="needs-you", updated_min_ago=10
     )
     row["transcript_path"] = _transcript_file(
         tmp_path, NOW - timedelta(minutes=10) + timedelta(seconds=5)
     )
     cards = board.merge_sessions(
-        [_live("aaa", "E:/automation/app-launcher-wt-627", 30)],
+        [_live("aaa", "E:/stubfolder/app-launcher-wt-627", 30)],
         {"t": row},
         now=NOW,
         active_issue_repos={"app-launcher"},
@@ -315,7 +315,7 @@ def test_idle_finished_downgrade_applies_to_external_cards(tmp_path: Path):
     transcript mtime inside both the #305 resume epsilon (so the status
     doesn't flip to ``working``) and #613's 5-minute external-liveness
     freshness window (so the row still renders as a card at all)."""
-    row = _state_row("E:/automation/reporting", status="needs-you", updated_min_ago=2)
+    row = _state_row("E:/stubfolder/reporting", status="needs-you", updated_min_ago=2)
     row["transcript_path"] = _transcript_file(
         tmp_path, NOW - timedelta(minutes=2) + timedelta(seconds=3)
     )
@@ -411,11 +411,11 @@ def test_active_issue_repos_drops_only_dead_claims():
 def test_dead_claim_no_longer_holds_finished_session_awaiting_input(tmp_path: Path):
     """#948 on #627's downgrade: a repo whose only claim is dead lets a
     genuinely finished session read idle-finished again."""
-    row = _state_row("E:/automation/app-launcher", status="needs-you", updated_min_ago=10)
+    row = _state_row("E:/stubfolder/app-launcher", status="needs-you", updated_min_ago=10)
     row["transcript_path"] = _transcript_file(
         tmp_path, NOW - timedelta(minutes=10) + timedelta(seconds=5)
     )
-    live = [_live("aaa", "E:/automation/app-launcher", 30)]
+    live = [_live("aaa", "E:/stubfolder/app-launcher", 30)]
     claims = {"app-launcher#9": {"repo": "app-launcher", "number": 9}}
 
     held = board.merge_sessions(
@@ -441,7 +441,7 @@ def test_overlay_missing_transcript_keeps_hook_status(tmp_path: Path):
 
 
 def test_overlay_applies_to_external_cards(tmp_path: Path):
-    row = _state_row("E:/automation/reporting", status="needs-you", updated_min_ago=10)
+    row = _state_row("E:/stubfolder/reporting", status="needs-you", updated_min_ago=10)
     row["transcript_path"] = _transcript_file(tmp_path, NOW - timedelta(minutes=1))
     cards = board.merge_sessions([], {"t": row}, now=NOW)
     assert cards[0]["kind"] == "external"

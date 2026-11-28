@@ -31,7 +31,7 @@ class QueueStatus(StrEnum):
     #: Held back; the row's ``kind`` says why (``owner``, ``umbrella``, ``blocked-by``).
     PARKED = "parked"
     #: Waits on an open question to the owner.
-    WAITING_ROBERTO = "waiting-roberto"
+    WAITING_OWNER = "waiting-owner"
 
 
 def queue_status(row: Optional[Mapping[str, Any]]) -> Optional[QueueStatus]:

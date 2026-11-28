@@ -8,9 +8,8 @@ combination lives, so a call site imports it instead of re-deriving its own
 module-level constant or inlining ``subprocess.CREATE_NO_WINDOW`` /
 ``getattr(subprocess, "CREATE_NO_WINDOW", 0)`` directly — the fleet-wide
 convention in the global CLAUDE.md "Subprocess spawns must suppress the
-console window" gotcha, with sibling implementations in
-``local-llm-hub/scripts/_lib.py`` and
-``whatsapp-radar/src/subprocess_flags.py``.
+console window" gotcha, with a sibling implementation in
+``local-llm-hub/scripts/_lib.py``.
 
 Safe to pass even when the parent *does* have a console, as long as the
 child's output is captured (piped/redirected) rather than read from a console

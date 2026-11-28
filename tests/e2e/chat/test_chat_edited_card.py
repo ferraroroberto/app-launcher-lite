@@ -43,7 +43,7 @@ from tests.e2e.session.test_session_mode_toggle import (
 pytestmark = pytest.mark.smoke
 
 _SID = "sid-edited-card-1477"
-_ROOT = "E:/automation/modeproj"   # _session_row's project_dir
+_ROOT = "E:/stubfolder/modeproj"   # _session_row's project_dir
 _POLL_MS = 3_000                    # session-transcript.js livePollMs() default
 
 
@@ -227,7 +227,7 @@ def _check_a_row_opens_changed_files(page: Page, card, stub: _Stub) -> None:
     expect(focus).to_have_js_property("open", True)
     expect(focus.locator(".chg-step")).to_have_text([re.compile(r"^Edit 1 of 3")])
     assert any(u.endswith("/changed-files") for u in stub.changes), stub.changes
-    assert any("path=E%3A%2Fautomation%2Fmodeproj%2Fsrc%2Fui%2Fb.ts" in u for u in stub.changes), stub.changes
+    assert any("path=E%3A%2Fstubfolder%2Fmodeproj%2Fsrc%2Fui%2Fb.ts" in u for u in stub.changes), stub.changes
 
     scope.first.click()
     expect(files).to_have_count(5)

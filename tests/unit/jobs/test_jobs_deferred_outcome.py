@@ -1,6 +1,6 @@
 """A job-declared ``deferred`` exit code (issue #1316).
 
-life-os's nightly email sweep exits 3 when it has mail to sweep but runs in
+repo-f's nightly email sweep exits 3 when it has mail to sweep but runs in
 session 0, where starting Outlook would strand a hidden ``OUTLOOK.EXE``. That
 deferral is by design, yet the Jobs card drew it as a red failure and alerted
 every night. A job now declares what its own codes mean

@@ -438,7 +438,7 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument("--related", action="append", default=[])
     m.set_defaults(func=cmd_mark)
 
-    cl = sub.add_parser("clear", help="Roberto answered on the Board: drop the label, post the cleared block")
+    cl = sub.add_parser("clear", help="the owner answered on the Board: drop the label, post the cleared block")
     cl.add_argument("ref", type=_ref)
     cl.add_argument("--answer", required=True)
     cl.set_defaults(func=cmd_clear)

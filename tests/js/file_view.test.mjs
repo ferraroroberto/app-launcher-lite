@@ -14,7 +14,7 @@ const noRawTags = (html) => !/<script|<img|<b>/i.test(html);
   assert.equal(fileKind('README.md'), 'markdown');
   assert.equal(fileKind('docs/Notes.MARKDOWN'), 'markdown');
   assert.equal(fileKind('config/apps.json'), 'json');
-  assert.equal(fileKind('E:\\work\\proj\\src\\main.py'), 'code');
+  assert.equal(fileKind('E:\\stub\\proj\\src\\main.py'), 'code');
   assert.equal(fileKind('static/app.js'), 'code');
   assert.equal(fileKind('scripts/run.ps1'), 'code');
   assert.equal(fileKind('Dockerfile'), 'code');
@@ -35,7 +35,7 @@ const noRawTags = (html) => !/<script|<img|<b>/i.test(html);
 // Preview exists for HTML and Markdown files only.
 {
   assert.equal(previewKind('page.html'), 'html');
-  assert.equal(previewKind('E:\\work\\Page.HTM'), 'html');
+  assert.equal(previewKind('E:\\stub\\Page.HTM'), 'html');
   assert.equal(previewKind('docs/notes.md'), 'markdown');
   assert.equal(previewKind('a.markdown'), 'markdown');
   assert.equal(previewKind('a.mdx'), 'markdown');
@@ -102,10 +102,10 @@ const noRawTags = (html) => !/<script|<img|<b>/i.test(html);
 
 // The Windows path Copy path hands out.
 {
-  assert.equal(windowsPath('E:/work/proj/src/a.py'), 'E:\\work\\proj\\src\\a.py');
-  assert.equal(windowsPath('E:\\work\\proj\\a.py', 'C:/other'), 'E:\\work\\proj\\a.py');
-  assert.equal(windowsPath('src/a.py', 'E:/work/proj/'), 'E:\\work\\proj\\src\\a.py');
-  assert.equal(windowsPath('./src/../b.md', 'E:\\work\\proj'), 'E:\\work\\proj\\b.md');
+  assert.equal(windowsPath('E:/stub/proj/src/a.py'), 'E:\\stub\\proj\\src\\a.py');
+  assert.equal(windowsPath('E:\\stub\\proj\\a.py', 'C:/other'), 'E:\\stub\\proj\\a.py');
+  assert.equal(windowsPath('src/a.py', 'E:/stub/proj/'), 'E:\\stub\\proj\\src\\a.py');
+  assert.equal(windowsPath('./src/../b.md', 'E:\\stub\\proj'), 'E:\\stub\\proj\\b.md');
   assert.equal(windowsPath('..\\..\\..\\x', 'E:\\a'), 'E:\\x');
   assert.equal(windowsPath('//server/share/a.txt'), '\\\\server\\share\\a.txt');
   assert.equal(windowsPath('src/a.py', ''), null);

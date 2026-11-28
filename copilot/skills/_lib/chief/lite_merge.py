@@ -13,7 +13,7 @@ GitLab's state and not the command's exit code:
   MERGE=unknown  glab is missing, signed out, or its answer could not be read.
 
 With `--ask`, a refusal also becomes a question on the chief's plan (`plan ask`,
-id `merge-<repo>-<N>`), so it reaches Roberto's Board instead of dying in a
+id `merge-<repo>-<N>`), so it reaches the owner's Board instead of dying in a
 lane's terminal. The chief and chief-managed lanes pass `--ask`. A repeat
 refusal for the same item reuses the open question.
 """
@@ -121,7 +121,7 @@ def ask_on_refusal(plan_path: Path, repo: str, number: int, iid: Any, reason: st
     question = f"GitLab refused to merge {ref} (merge request !{iid or '?'}): {reason}"
 
     def mutate(doc: Dict[str, Any]) -> None:
-        if any(item.get("id") == qid for item in doc.get("waiting_on_roberto") or []):
+        if any(item.get("id") == qid for item in doc.get("waiting_on_owner") or []):
             return
         chief_plan.add_question(
             doc, question, ref=ref, item_id=qid,

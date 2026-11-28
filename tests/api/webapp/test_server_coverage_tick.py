@@ -50,7 +50,7 @@ def _primary_checkout(tmp_path):
 def _linked_worktree(tmp_path):
     """A directory shaped like a linked worktree: ``.git`` is a *file*."""
     (tmp_path / ".git").write_text(
-        "gitdir: E:/automation/app-launcher/.git/worktrees/app-launcher-wt-727\n",
+        "gitdir: E:/stubfolder/app-launcher/.git/worktrees/app-launcher-wt-727\n",
         encoding="utf-8",
     )
     return tmp_path

@@ -58,7 +58,7 @@ class GuardTests(unittest.TestCase):
         return {"session_id": "cop-1", "cwd": CHIEF_CWD, **extra}
 
     def test_only_a_session_in_the_chief_folder_pays_for_the_chief_read(self) -> None:
-        self.assertFalse(chief_guard.is_chief({"cwd": "E:/automation/other-repo"}, "chief-1"))
+        self.assertFalse(chief_guard.is_chief({"cwd": "E:/stubfolder/other-repo"}, "chief-1"))
         self.assertFalse(chief_guard.is_chief({"cwd": str(REPO.parent)}, "chief-1"))
         self.assertFalse(chief_guard.is_chief({"cwd": CHIEF_CWD}, ""))
         self.assertEqual(self.calls, [])
@@ -136,7 +136,7 @@ class GuardTests(unittest.TestCase):
         self.assertIsNone(chief_guard.on_agent_stop(self.chief_payload(), "chief-1"))
 
     def test_ask_user_denied_for_the_chief_and_managed_lanes_only(self) -> None:
-        ask = {"tool_name": "ask_user", "cwd": "E:/automation/demo"}
+        ask = {"tool_name": "ask_user", "cwd": "E:/stubfolder/demo"}
         self.assertIsNone(chief_guard.on_pre_tool_use({"tool_name": "powershell", "cwd": CHIEF_CWD}, "chief-1"))
         self.assertIsNone(chief_guard.on_pre_tool_use(ask, "lane-1"))
         (self.state / "chief-managed.json").write_text(json.dumps({"lane-1": {}}), encoding="utf-8")
@@ -147,15 +147,15 @@ class GuardTests(unittest.TestCase):
 
 
     def _shell(self, command: str, tool: str = "powershell") -> dict:
-        return {"tool_name": tool, "tool_args": json.dumps({"command": command}), "cwd": "E:/automation/demo"}
+        return {"tool_name": tool, "tool_args": json.dumps({"command": command}), "cwd": "E:/stubfolder/demo"}
 
     def test_a_managed_lane_cannot_reach_the_full_fleet(self) -> None:
         (self.state / "chief-managed.json").write_text(json.dumps({"lane-1": {}}), encoding="utf-8")
         skills = (chief_guard.REPO / "skills").as_posix()
         for command in ("gh issue view 5", "& gh.exe pr list", "git status; gh api repos/x/y",
-                        "python C:/Users/u/.claude/skills/_lib/worktree_claim.py acquire .",
-                        "python E:/dev/fleet-config/skills/_lib/active_issue.py add . 5 b",
-                        r"python C:\Users\u\.claude\hooks\notify_complete.py --kind start", "python notify_complete.py"):
+                        "python C:/Users/me/.claude/skills/_lib/worktree_claim.py acquire .",
+                        "python E:/tmp/fleet-config/skills/_lib/active_issue.py add . 5 b",
+                        r"python C:\Users\me\.claude\hooks\notify_complete.py --kind start", "python notify_complete.py"):
             denied = chief_guard.on_pre_tool_use(self._shell(command), "lane-1")
             self.assertEqual(denied["permissionDecision"], "deny", command)
             self.assertIn(f"{skills}/issue-start/SKILL.md", denied["permissionDecisionReason"])
@@ -178,14 +178,14 @@ class GuardTests(unittest.TestCase):
         for command in ("python skills/_lib/chief_ops.py open team-os-mock --lane --message-file m.txt",
                         f"Invoke-RestMethod {base}/api/board"):
             self.assertIsNone(chief_guard.on_pre_tool_use({**self._shell(command), "cwd": CHIEF_CWD}, "chief-1"))
-        # A session that is not the chief (Roberto's own, or a lane) keeps the route.
+        # A session that is not the chief (the owner's own, or a lane) keeps the route.
         raw = self._shell(f"Invoke-RestMethod -Method Post -Uri {base}/api/apps/x/launch")
         self.assertIsNone(chief_guard.on_pre_tool_use(raw, "lane-1"))
 
     def test_lite_commands_and_other_sessions_are_left_alone(self) -> None:
         (self.state / "chief-managed.json").write_text(json.dumps({"lane-1": {}}), encoding="utf-8")
-        for command in ("glab issue view 5", "git commit -m 'use gh later'", "ls E:/automation/fleet-config-lite/skills",
-                        "python E:/automation/fleet-config-lite/skills/_lib/worktree_claim.py acquire .",
+        for command in ("glab issue view 5", "git commit -m 'use gh later'", "ls E:/stubfolder/fleet-config-lite/skills",
+                        "python E:/stubfolder/fleet-config-lite/skills/_lib/worktree_claim.py acquire .",
                         "echo ghost; ghost.exe run", "git checkout -b fix/gh-5"):
             self.assertIsNone(chief_guard.on_pre_tool_use(self._shell(command), "lane-1"), command)
         # A view tool reading a path is not a command, and a session that no chief dispatched is not a lane.
@@ -200,7 +200,7 @@ class GuardTests(unittest.TestCase):
 
         def wrapped(command: str) -> str:
             encoded = base64.b64encode(command.encode("utf-8")).decode("ascii")
-            return ("& 'C:/py/python.exe' 'E:/automation/fleet-config/hooks/context_filter_cli.py' run "
+            return ("& 'C:/py/python.exe' 'E:/stubfolder/fleet-config/hooks/context_filter_cli.py' run "
                     f"--tool PowerShell --mode rewrite --encoded {encoded} --cwd 'E:/x' --agent copilot")
 
         self.assertIsNone(chief_guard.on_pre_tool_use(self._shell(wrapped("git status --short")), "lane-1"))
@@ -218,7 +218,7 @@ class GuardTests(unittest.TestCase):
 
 def foreign_skill_prompt(name: str = "issue-start", args: str = "135 --brief C:/briefs/b.md") -> str:
     """A prompt shaped as Copilot CLI 1.0.114 hands userPromptSubmitted a skill another tree expanded."""
-    base = "C:/Users/u/.copilot/skills/" + name
+    base = "C:/Users/me/.copilot/skills/" + name
     return (f'The user explicitly invoked the "/{name}" skill. Follow its instructions now.\n\n'
             f'<skill-context name="{name}">\nBase directory for this skill: {base}\n\n'
             f"Additional skill files available if needed (use as directed by SKILL.md):\n  - {base}/evals/x.md\n\n"
@@ -255,7 +255,7 @@ class SkillSwapTests(unittest.TestCase):
 
     def test_with_skills_dir_set_its_own_copy_is_left_alone_and_other_skills_stay_bundled(self) -> None:
         own = self._own_skills()
-        invoked = foreign_skill_prompt().replace("C:/Users/u/.copilot/skills/issue-start", str(own / "issue-start"))
+        invoked = foreign_skill_prompt().replace("C:/Users/me/.copilot/skills/issue-start", str(own / "issue-start"))
         self.assertIsNone(chief_guard.on_user_prompt({"prompt": invoked}, "lane-1"))
         self.assertEqual(chief_guard.skill_dir_for("e2e"), chief_guard.REPO / "skills" / "e2e")
         self.assertEqual(chief_guard.skill_dir_for("issue-finish"), own / "issue-finish")
@@ -280,7 +280,7 @@ class SkillSwapTests(unittest.TestCase):
         self.assertIn(str(chief_guard.REPO / "skills" / "issue-finish"), swapped)
 
     def test_prompts_lite_already_owns_or_does_not_ship_are_left_alone(self) -> None:
-        own = foreign_skill_prompt().replace("C:/Users/u/.copilot/skills/issue-start",
+        own = foreign_skill_prompt().replace("C:/Users/me/.copilot/skills/issue-start",
                                              str(chief_guard.REPO / "skills" / "issue-start"))
         for prompt in (own, foreign_skill_prompt("design-review"), "/issue-start 5", "fix the button", ""):
             self.assertIsNone(chief_guard.on_user_prompt({"prompt": prompt}, "lane-1"), prompt[:60])

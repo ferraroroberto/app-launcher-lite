@@ -171,7 +171,7 @@ def test_busy_agent_pins_the_image_chip_for_the_watcher(clock, monkeypatch):
     [
         ("hello\n\n" + _IMAGE_PATH, True),
         (_IMAGE_PATH.upper().replace(".PNG", ".JPEG"), True),
-        ("see /home/stub/.launcher-tmp/pic.webp", False),  # not its own line
+        ("see /home/me/.launcher-tmp/pic.webp", False),  # not its own line
         ("hello\n\n/home/stub/.launcher-tmp/pic.webp", True),
         ("hello\n\n" + r"C:\stub\.launcher-tmp\notes.pdf", False),
         ("rename shot.png to final.png", False),

@@ -205,7 +205,7 @@ def test_a_refresh_already_running_is_a_plain_snapshot(tmp_path, projects):
 
 @pytest.mark.parametrize("url,host,expected", [
     ("https://gitlab.com/grp/tool.git", "", "grp/tool"),
-    ("https://user@gitlab.com/grp/sub/tool", "", "grp/sub/tool"),
+    ("https://git@gitlab.com/grp/sub/tool", "", "grp/sub/tool"),
     ("git@gitlab.com:grp/tool.git", "", "grp/tool"),
     ("ssh://git@gitlab.com/grp/tool.git", "", "grp/tool"),
     ("https://github.com/me/tool.git", "", None),

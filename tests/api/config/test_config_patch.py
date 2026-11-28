@@ -353,15 +353,15 @@ class TestPatchConfig:
         it patches through and surfaces on the next GET."""
         client, app, _ = webapp_client
         resp = client.post(
-            "/api/config", json={"fleet_config_dir": "E:\\automation\\fleet-config"}
+            "/api/config", json={"fleet_config_dir": "E:\\stubfolder\\fleet-config"}
         )
         assert resp.status_code == 200
         assert (
             app.state.webapp_config.fleet_config_dir
-            == "E:\\automation\\fleet-config"
+            == "E:\\stubfolder\\fleet-config"
         )
         body = client.get("/api/config").json()
-        assert body["fleet_config_dir"] == "E:\\automation\\fleet-config"
+        assert body["fleet_config_dir"] == "E:\\stubfolder\\fleet-config"
 
 
     def test_copilot_toggle_round_trips(self, webapp_client):

@@ -47,7 +47,7 @@ def test_plan_rows_show_the_model_only_when_the_chief_named_one(
             {"repo": "app-launcher", "session": "s-a", "item": "#1352", "status": "building",
              "model": "opus"},
             {"repo": "fleet-config", "session": "s-f", "item": "#959", "status": "gate"},
-            {"repo": "task-os", "session": "s-t", "item": "skill:upstream-sync", "status": "building"},
+            {"repo": "repo-g", "session": "s-t", "item": "skill:upstream-sync", "status": "building"},
         ],
         "queue": [
             {"repo": "app-launcher", "ref": "#1199", "title": "pin the model", "status": "queued",
@@ -89,7 +89,7 @@ def test_answer_button_shows_only_with_questions(
     authed_page: Page, base_url: str, tmp_path
 ) -> None:
     """#1295: the Chief's-plan card offers "Answer N questions" only when
-    something waits on Roberto; with nothing waiting there is no button."""
+    something waits on the owner; with nothing waiting there is no button."""
     _mock_board(authed_page, _board_payload(with_chief=True))
     current = {"plan": _plan_with(tmp_path, [])}
     _route_plan_from(authed_page, current)
@@ -113,7 +113,7 @@ def test_answer_button_shows_only_with_questions(
     f = tmp_path / "chief-plan.json"
     f.write_text(_json.dumps({
         "version": 1, "updated_at": "2026-09-27T09:00:00Z", "lanes": [], "queue": [],
-        "waiting_on_roberto": [{
+        "waiting_on_owner": [{
             "id": "t1", "text": "What next?", "question": "What should I work on?",
             "options": [{"label": "alpha", "value": "alpha"}, {"label": "beta", "value": "beta"}],
         }],
@@ -139,8 +139,8 @@ def _mock_repo_filter_board(page: Page, tmp_path) -> list:
             status=200, content_type="application/json",
             body=_json.dumps({"scan_root": "", "apps": [
                 {"id": "cc-" + name, "kind": "claude-code", "name": name,
-                 "project_dir": "E:/automation/" + name}
-                for name in ("app-launcher", "fleet-config", "life-os")
+                 "project_dir": "E:/stubfolder/" + name}
+                for name in ("app-launcher", "fleet-config", "repo-f")
             ]}),
         ),
     )
@@ -156,9 +156,9 @@ def _mock_repo_filter_board(page: Page, tmp_path) -> list:
             {"repo": "app-launcher", "ref": "#1295", "title": "answer sheet", "status": "building"},
             {"ref": "fleet-config#900", "title": "hooks sweep", "status": "someday"},
         ],
-        # fleet-config (repo + ref), life-os (repo only), app-launcher (ref
+        # fleet-config (repo + ref), repo-f (repo only), app-launcher (ref
         # only), then one with no repo at all.
-        "waiting_on_roberto": _QUESTIONS + [
+        "waiting_on_owner": _QUESTIONS + [
             {"id": "q-pause", "text": "Pause every lane tonight?"},
         ],
     }), encoding="utf-8")
@@ -209,8 +209,8 @@ def test_repo_filter_narrows_the_plan_and_its_questions(
     expect(plan_body.locator(".board-plan-group").nth(2).locator("li")).to_have_count(1)
     expect(plan_body.locator(".board-plan-group").nth(2)).to_contain_text("answer sheet")
 
-    # No lane or queue row is life-os's, so both groups go, not left empty.
-    pick("life-os")
+    # No lane or queue row is repo-f's, so both groups go, not left empty.
+    pick("repo-f")
     expect(waiting).to_have_count(2)
     expect(waiting.nth(0)).to_contain_text("Which days?")
     expect(headings).to_have_text(["Questions"])
@@ -399,7 +399,7 @@ def test_plan_sections_split_queue_from_parked_and_rows_open_their_issue(
     authed_page: Page, base_url: str, tmp_path
 ) -> None:
     """#1578: Lanes, Queue and Parked each carry a count; a `parked` or
-    `waiting-roberto` item leaves the Queue for Parked, which starts folded on
+    `waiting-owner` item leaves the Queue for Parked, which starts folded on
     a phone. A row is two lines (title, then `repo#N · Model` with the status
     chip at that line's right end) and the title is readable on its own line;
     a row with a `repo#N` ref opens its issue on a tap of the row or the
@@ -421,7 +421,7 @@ def test_plan_sections_split_queue_from_parked_and_rows_open_their_issue(
             {"repo": "fleet-config", "ref": "#12", "title": "Second in line", "status": "building"},
             {"repo": "app-launcher", "ref": "#1400", "title": "Parked with a ref", "status": "parked"},
             {"repo": "automation", "ref": "", "title": "Parked without a ref",
-             "status": "waiting-roberto"},
+             "status": "waiting-owner"},
         ],
     }), encoding="utf-8")
     _route_plan_from(authed_page, {"plan": chief_plan.read_chief_plan(f, "octo")})
@@ -450,7 +450,7 @@ def test_plan_sections_split_queue_from_parked_and_rows_open_their_issue(
         summary.click()
     expect(parked_rows).to_have_count(2)
     expect(parked_rows.first).to_be_visible()
-    expect(parked_rows.locator(".board-plan-chip")).to_have_text(["parked", "waiting-roberto"])
+    expect(parked_rows.locator(".board-plan-chip")).to_have_text(["parked", "waiting-owner"])
 
     # Two lines: the title over the meta, the chip at the meta line's right
     # end, the chevron after the title's column, the whole row a 44px target.
@@ -513,7 +513,7 @@ def test_clear_merged_button_clears_only_merged_rows(
     f.write_text(_json.dumps({
         "version": 1, "updated_at": "2026-10-25T09:00:00Z",
         "lanes": [{"repo": "app-launcher", "session": "s-a", "item": "#2", "status": "building"}],
-        "queue": rows, "waiting_on_roberto": _QUESTIONS,
+        "queue": rows, "waiting_on_owner": _QUESTIONS,
     }), encoding="utf-8")
     current = {"plan": chief_plan.read_chief_plan(f, "octo")}
     _route_plan_from(authed_page, current)
@@ -525,7 +525,7 @@ def test_clear_merged_button_clears_only_merged_rows(
         f.write_text(_json.dumps({
             "version": 1, "updated_at": "2026-10-25T09:05:00Z",
             "lanes": [{"repo": "app-launcher", "session": "s-a", "item": "#2", "status": "building"}],
-            "queue": rows, "waiting_on_roberto": _QUESTIONS,
+            "queue": rows, "waiting_on_owner": _QUESTIONS,
         }), encoding="utf-8")
         current["plan"] = chief_plan.read_chief_plan(f, "octo")
         route.fulfill(json={"pruned": 2})
@@ -747,7 +747,7 @@ def test_a_noted_plan_row_opens_its_note_sheet(
             {"repo": "app-launcher", "ref": "#1400", "title": "Parked with a note",
              "status": "parked", "note": "parked until the hub ships"},
             {"repo": "automation", "ref": "", "title": "Noted, no link",
-             "status": "waiting-roberto", "note": "a note on a row with no issue"},
+             "status": "waiting-owner", "note": "a note on a row with no issue"},
         ],
     }), encoding="utf-8")
     _route_plan_from(authed_page, {"plan": chief_plan.read_chief_plan(f, "octo")})

@@ -73,7 +73,7 @@ class TestReadChiefPointer:
         assert chief_pointer.read_chief_pointer(pointer_file) == {}
 
     def test_expired_pointer_reads_empty(self, pointer_file, transcript):
-        """Roberto's call (#675): 7 days. A chief he moved on from a fortnight
+        """The owner's call (#675): 7 days. A chief they moved on from a fortnight
         ago must not come back just because nothing fresher exists."""
         stale = datetime.now(timezone.utc) - timedelta(days=8)
         _write_raw(

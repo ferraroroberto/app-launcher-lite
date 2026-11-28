@@ -23,7 +23,7 @@ _COPILOT_ID = "0f3c2a51-7d7e-4c55-9a0e-2b8c4ad1e001"
 
 def _live(**extra: Any) -> Dict[str, Any]:
     row = {"session_id": "s1", "agent": "copilot", "alive": True,
-           "project_dir": r"E:\work\project", "started_at": _STARTED}
+           "project_dir": r"E:\stub\project", "started_at": _STARTED}
     row.update(extra)
     return row
 
@@ -33,7 +33,7 @@ def _folder(root: Path, folder: str, created: str, events: Optional[str] = "") -
     session = root / folder
     session.mkdir(parents=True)
     (session / "workspace.yaml").write_text(
-        f"id: {folder}\ncwd: E:\\work\\project\ncreated_at: {created}\nupdated_at: {created}\n",
+        f"id: {folder}\ncwd: E:\\stub\\project\ncreated_at: {created}\nupdated_at: {created}\n",
         encoding="utf-8",
     )
     path = session / "events.jsonl"
@@ -56,7 +56,7 @@ def _resolve(monkeypatch, tmp_path: Path, rows: Dict[str, Dict[str, Any]]):
 
 
 def _row(transcript: Optional[str]) -> Dict[str, Any]:
-    return {"status": "working", "transcript_path": transcript, "cwd": r"E:\work\project",
+    return {"status": "working", "transcript_path": transcript, "cwd": r"E:\stub\project",
             "agent": "copilot", "launcher_session_id": "s1",
             "updated_at": "2026-11-20T10:40:00Z"}
 

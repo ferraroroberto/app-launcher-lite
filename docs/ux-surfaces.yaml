@@ -456,6 +456,69 @@ surfaces:
     does:
       - Done closes the sheet; closed mid-run, the same count stays in a toast and the totals replace it when the run ends, with Report to reopen the sheet
 
+  - id: code.team-mirror
+    area: code
+    title: Team mirrors
+    root: data-surface
+    reach:
+      - the card after Projects on the Code tab, closed by default
+    holds:
+      - Publish all, counting the apps it would publish, and Refresh
+      - one row per git project folder, saying Not linked, Up to date, N commits behind or Blocked
+      - when the team repos were last checked, and that the check repeats every 30 minutes
+    does:
+      - it reads only while open; Refresh checks every linked team repo now
+      - a linked row opens the Publish sheet, a row with no link opens the Link sheet
+      - a linked row's kebab reopens the Link sheet to edit or remove the link
+      - Publish all publishes and merges every app that is behind with nothing to confirm, one at a time
+    states:
+      - loading - Checking the team repos
+      - empty - No git projects in the projects folder
+      - error - Could not check the team repos, with Retry
+      - a row whose check failed says Could not check the team repo with an unknown chip
+    links:
+      - to: code.team-mirror-link
+        via: an unlinked row, or a linked row's kebab
+      - to: code.team-mirror-preview
+        via: a linked row
+
+  - id: code.team-mirror-link
+    area: code
+    title: Link team repo sheet
+    root: data-surface
+    reach:
+      - an unlinked row in Team mirrors, or a linked row's kebab
+    holds:
+      - the team repo URL, the branch, and the leave-out paths, one per line
+      - the commit author, read from this computer's git config
+      - Test access and its result, Remove link for a saved link, Save link
+    does:
+      - Test access reads the team repo without writing and names a wrong URL, a refused sign-in, an unreachable host or a missing branch
+      - Save link keeps the link on this computer only, never in either repo
+      - Remove link drops it
+
+  - id: code.team-mirror-preview
+    area: code
+    title: Publish sheet
+    root: data-surface
+    reach:
+      - a linked row in Team mirrors
+    holds:
+      - how many files change, each marked added, changed or deleted
+      - the privacy scan result, with file, line and rule for each finding
+      - the team repo's own commits, when it has some, and a switch to replace them
+      - the PR text drafted from the commit subjects, editable
+      - a Merge after opening the PR switch, on by default
+      - the publish button, Publish and merge or Open PR only
+    does:
+      - the publish button makes one commit on the team repo whose files equal the app's main minus its leave-out paths
+      - where the host refuses the merge, the result says PR opened and links to it
+    states:
+      - loading - Comparing with the team repo
+      - up to date - The team repo already matches this app, nothing to publish
+      - blocked - the scan found personal data or could not run; publishing stays off
+      - team changed - publishing stays off until the replace switch is on
+
   - id: code.history-sheet
     area: code
     title: History sheet

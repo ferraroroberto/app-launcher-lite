@@ -22,7 +22,7 @@ from src.session_host import (
 def _make_pty_session(manager: SessionManager, agent: str = "copilot") -> PtySession:
     session = PtySession(
         session_id="sid-test",
-        project_dir=r"C:\code\app-launcher",
+        project_dir=r"C:\stub\app-launcher",
         name="app-launcher",
         flags="",
         started_at=time.time(),

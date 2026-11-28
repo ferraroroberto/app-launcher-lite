@@ -33,7 +33,7 @@ def test_board_copilot_card_drawer_shows_agent_native_exchange(
     payload = _board_payload()
     payload["columns"]["claude_turn"].append({
         "session_id": "s-copilot", "kind": "pty", "agent": "copilot",
-        "project_dir": "E:/automation/app-launcher", "name": "app-launcher",
+        "project_dir": "E:/stubfolder/app-launcher", "name": "app-launcher",
         "alive": True, "started_at": "2026-07-02T11:57:00Z",
         "live_title": "app-launcher | fix/457", "prompt_title": "fix the drawer",
         "project": "app-launcher", "status": "unknown", "age_seconds": None,
@@ -120,10 +120,10 @@ def _detached_board_payload() -> dict:
     payload = _board_payload()
     payload["columns"]["your_turn"] = [{
         "session_id": "s-remote", "kind": "remote", "agent": "copilot",
-        "project_dir": "E:/automation/whatsapp-radar", "name": "whatsapp-radar",
+        "project_dir": "E:/stubfolder/repo-d", "name": "repo-d",
         "alive": True, "started_at": "2026-07-02T11:30:00Z",
         "live_title": "detached console", "prompt_title": "",
-        "project": "whatsapp-radar", "status": "awaiting-input", "age_seconds": 660,
+        "project": "repo-d", "status": "awaiting-input", "age_seconds": 660,
     }]
     return payload
 

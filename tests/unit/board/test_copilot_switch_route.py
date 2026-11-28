@@ -17,7 +17,7 @@ from tests.unit.sessions.test_copilot_session import IDLE, NARROW, TYPED, WORKIN
 
 def _live(kind: str = "pty", agent: str = "copilot") -> Dict[str, Any]:
     return {"session_id": "s1", "kind": kind, "agent": agent, "alive": True,
-            "rows": 40, "cols": 60, "project_dir": "E:/automation/proj"}
+            "rows": 40, "cols": 60, "project_dir": "E:/stubfolder/proj"}
 
 
 def _event(kind: str, **data: Any) -> str:

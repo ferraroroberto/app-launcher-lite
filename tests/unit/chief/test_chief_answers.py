@@ -23,7 +23,7 @@ def _write_plan(path: Path, updated_at: str) -> str:
     text = json.dumps({
         "version": 1, "updated_at": updated_at, "lanes": [],
         "queue": [{"repo": "app-launcher", "ref": "#1487", "title": "marks", "status": "building"}],
-        "waiting_on_roberto": [
+        "waiting_on_owner": [
             {"id": "q-plans", "text": "Approve the plans?"},
             {"text": "Remember the last tab?"},
         ],

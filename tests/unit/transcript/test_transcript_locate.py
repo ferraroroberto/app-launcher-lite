@@ -27,7 +27,7 @@ def _copilot_session_dir(root: Path, folder: str, cwd: str, created: str,
 def _copilot_session(**extra: Any) -> Dict[str, Any]:
     # 2026-09-17T21:57:30.465Z, the capture's own launch instant.
     row = {"session_id": "s1", "agent": "copilot", "alive": True,
-           "project_dir": r"E:\work\project", "started_at": 1_789_682_250.465}
+           "project_dir": r"E:\stub\project", "started_at": 1_789_682_250.465}
     row.update(extra)
     return row
 
@@ -42,18 +42,18 @@ def test_find_copilot_transcript_matches_cwd_and_launch_window(tmp_path: Path, m
 
     wanted = _copilot_session_dir(
         tmp_path, "79c18133-52bd-4f8f-9260-b33c853158be",
-        r"E:\work\project", "2026-09-17T21:57:34.176Z",
+        r"E:\stub\project", "2026-09-17T21:57:34.176Z",
     )
     monkeypatch.setattr(transcript_locate, "_COPILOT_STATE_DIR", tmp_path)
     assert transcript_locate.find_copilot_transcript(_copilot_session()) == wanted
     # Neither the separator nor the case of the harness's own spelling has
     # to match the session's.
     assert transcript_locate.find_copilot_transcript(
-        _copilot_session(project_dir="e:/work/project/")
+        _copilot_session(project_dir="e:/stub/project/")
     ) == wanted
     # A different folder is not this session's conversation.
     assert transcript_locate.find_copilot_transcript(
-        _copilot_session(project_dir=r"E:\work\other")
+        _copilot_session(project_dir=r"E:\stub\other")
     ) is None
     # A session launched long before this folder existed is not its owner.
     assert transcript_locate.find_copilot_transcript(
@@ -76,7 +76,7 @@ def test_find_copilot_transcript_allows_a_detached_sessions_launch_delay(
 
     wanted = _copilot_session_dir(
         tmp_path, "79c18133-52bd-4f8f-9260-b33c853158be",
-        r"E:\work\project", "2026-09-17T21:57:30.465Z",
+        r"E:\stub\project", "2026-09-17T21:57:30.465Z",
     )
     monkeypatch.setattr(transcript_locate, "_COPILOT_STATE_DIR", tmp_path)
     slow = 1_789_682_250.465 + 12.0   # the folder is 12 s older than the stamp
@@ -100,7 +100,7 @@ def test_find_copilot_transcript_refuses_two_candidates_in_one_window(
     from src.session_view import transcript_locate
 
     _copilot_session_dir(tmp_path, "aaaaaaaa-0000-0000-0000-000000000001",
-                       r"E:\work\project", "2026-09-17T21:57:34.176Z")
+                       r"E:\stub\project", "2026-09-17T21:57:34.176Z")
     monkeypatch.setattr(transcript_locate, "_COPILOT_STATE_DIR", tmp_path)
     # Inside the launch window, where a second launch can still appear.
     monkeypatch.setattr(time, "time", lambda: _copilot_session()["started_at"] + 30)
@@ -108,14 +108,14 @@ def test_find_copilot_transcript_refuses_two_candidates_in_one_window(
     # A second launch in the same folder, 20 s later — still inside the
     # window, so neither folder can be claimed.
     _copilot_session_dir(tmp_path, "aaaaaaaa-0000-0000-0000-000000000002",
-                       r"E:\work\project", "2026-09-17T21:57:54.176Z")
+                       r"E:\stub\project", "2026-09-17T21:57:54.176Z")
     assert transcript_locate.find_copilot_transcript(_copilot_session()) is None
     # A same-folder session outside the window does not make the first
     # ambiguous — which is what keeps the ordinary case answerable.
     for stale in tmp_path.glob("aaaaaaaa-0000-0000-0000-000000000002/*"):
         stale.unlink()
     _copilot_session_dir(tmp_path, "aaaaaaaa-0000-0000-0000-000000000003",
-                       r"E:\work\project", "2026-09-17T22:05:00.000Z")
+                       r"E:\stub\project", "2026-09-17T22:05:00.000Z")
     assert transcript_locate.find_copilot_transcript(_copilot_session()) is not None
 
 
@@ -129,7 +129,7 @@ def test_find_copilot_transcript_needs_an_events_file(tmp_path: Path, monkeypatc
     monkeypatch.setattr(transcript_locate, "_COPILOT_STATE_DIR", tmp_path)
     events = _copilot_session_dir(
         tmp_path, "79c18133-52bd-4f8f-9260-b33c853158be",
-        r"E:\work\project", "2026-09-17T21:57:34.176Z", events=False,
+        r"E:\stub\project", "2026-09-17T21:57:34.176Z", events=False,
     )
     assert transcript_locate.find_copilot_transcript(_copilot_session()) is None
     events.write_text("{}\n", encoding="utf-8")
@@ -145,14 +145,14 @@ def test_find_copilot_transcript_survives_a_damaged_sidecar(tmp_path: Path, monk
     monkeypatch.setattr(transcript_locate, "_COPILOT_STATE_DIR", tmp_path)
     (tmp_path / "broken").mkdir()
     (tmp_path / "broken" / "workspace.yaml").write_text(
-        "cwd: E:\\work\\project\ncreated_at: not-a-timestamp\n", encoding="utf-8"
+        "cwd: E:\\stub\\project\ncreated_at: not-a-timestamp\n", encoding="utf-8"
     )
     (tmp_path / "keyless").mkdir()
     (tmp_path / "keyless" / "workspace.yaml").write_text("id: x\n", encoding="utf-8")
     assert transcript_locate.find_copilot_transcript(_copilot_session()) is None
     wanted = _copilot_session_dir(
         tmp_path, "79c18133-52bd-4f8f-9260-b33c853158be",
-        r"E:\work\project", "2026-09-17T21:57:34.176Z",
+        r"E:\stub\project", "2026-09-17T21:57:34.176Z",
     )
     assert transcript_locate.find_copilot_transcript(_copilot_session()) == wanted
 
@@ -164,7 +164,7 @@ def test_find_copilot_transcript_needs_a_dir_and_a_start(tmp_path: Path, monkeyp
 
     monkeypatch.setattr(transcript_locate, "_COPILOT_STATE_DIR", tmp_path)
     _copilot_session_dir(tmp_path, "79c18133-52bd-4f8f-9260-b33c853158be",
-                       r"E:\work\project", "2026-09-17T21:57:34.176Z")
+                       r"E:\stub\project", "2026-09-17T21:57:34.176Z")
     assert transcript_locate.find_copilot_transcript(_copilot_session(project_dir="")) is None
     assert transcript_locate.find_copilot_transcript(_copilot_session(started_at=None)) is None
     # An ISO `started_at` (a row read back from JSON state) works too.

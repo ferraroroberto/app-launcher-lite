@@ -22,7 +22,7 @@ from src.jobs.script_missing import script_missing
 
 
 def _job(script: Path, **over) -> Job:
-    return Job(id=over.pop("id", "li-scrape"), name=over.pop("name", "LI scrape"),
+    return Job(id=over.pop("id", "demo-scrape"), name=over.pop("name", "LI scrape"),
                script_path=str(script), **over)
 
 
@@ -80,7 +80,7 @@ class TestCheck:
 class TestJobsList:
     def _seed(self, overrides, script: Path) -> None:
         overrides["tmp_jobs_path"].write_text(json.dumps({"jobs": [
-            {"id": "li-scrape", "name": "LI scrape", "script_path": str(script)},
+            {"id": "demo-scrape", "name": "LI scrape", "script_path": str(script)},
         ]}), encoding="utf-8")
 
     def _row(self, client) -> dict:
@@ -100,7 +100,7 @@ class TestJobsList:
 class TestChiefEvent:
     def test_one_event_per_job_per_day(self, tmp_path, armed):
         cfg, seen = _cfg(tmp_path), tmp_path / "seen.json"
-        jobs = [_job(tmp_path / "projects" / "content-management" / "gone.py")]
+        jobs = [_job(tmp_path / "projects" / "repo-e" / "gone.py")]
         morning, evening = datetime(2026, 11, 14, 6, 0), datetime(2026, 11, 14, 22, 0)
 
         assert len(chief_script_missing.observe(cfg, jobs, now=morning, path=seen)) == 1
@@ -112,11 +112,11 @@ class TestChiefEvent:
 
     def test_event_names_the_job_and_the_outcome(self, tmp_path, armed):
         cfg = _cfg(tmp_path)
-        job = _job(tmp_path / "projects" / "content-management" / "gone.py")
+        job = _job(tmp_path / "projects" / "repo-e" / "gone.py")
         chief_script_missing.observe(cfg, [job], now=datetime(2026, 11, 14, 6, 0), path=tmp_path / "s.json")
         (event,) = _events(cfg)
         assert (event["kind"], event["v"], event["outcome"]) == ("job-failed", 2, "script-missing")
-        assert (event["job_id"], event["repo"], event["exit_code"]) == ("li-scrape", "content-management", None)
+        assert (event["job_id"], event["repo"], event["exit_code"]) == ("demo-scrape", "repo-e", None)
         assert event["script_path"] == job.script_path and event["run_id"]
 
     def test_valid_and_paused_jobs_emit_nothing(self, tmp_path, armed):

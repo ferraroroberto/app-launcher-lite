@@ -29,17 +29,17 @@ _FAKE_BOARD = {
         ],
         "claude_turn": [
             {"session_id": "s-work", "kind": "pty", "agent": "copilot",
-             "project_dir": "E:/automation/life-os", "name": "life-os",
+             "project_dir": "E:/stubfolder/repo-f", "name": "repo-f",
              "alive": True, "started_at": "2026-07-02T11:56:00Z",
              "live_title": "weekly recap", "prompt_title": "",
-             "project": "life-os", "status": "working", "age_seconds": 240},
+             "project": "repo-f", "status": "working", "age_seconds": 240},
         ],
         "your_turn": [
             {"session_id": "s-wait", "kind": "pty", "agent": "copilot",
-             "project_dir": "E:/automation/photo-ocr", "name": "photo-ocr",
+             "project_dir": "E:/stubfolder/repo-a", "name": "repo-a",
              "alive": True, "started_at": "2026-07-02T11:30:00Z",
              "live_title": "chunk merge fix", "prompt_title": "",
-             "project": "photo-ocr", "status": "awaiting-input", "age_seconds": 720},
+             "project": "repo-a", "status": "awaiting-input", "age_seconds": 720},
         ],
         "other": [
             {"kind": "pr", "repo": "app-launcher", "number": 158,
@@ -51,9 +51,9 @@ _FAKE_BOARD = {
              "finished_at": "2026-07-02T09:02:00", "age_seconds": 10680},
         ],
         "done": [
-            {"kind": "issue", "repo": "voice-transcriber", "number": 87,
+            {"kind": "issue", "repo": "repo-b", "number": 87,
              "title": "read-aloud segmentation",
-             "url": "https://gitlab.com/ferraroroberto/voice-transcriber/-/issues/87",
+             "url": "https://gitlab.com/ferraroroberto/repo-b/-/issues/87",
              "updated_at": "2026-07-02T08:00:00Z", "state": "closed", "labels": []},
         ],
     },
@@ -87,7 +87,7 @@ _PLAN_FILE_V1 = {
                   "October permits and the fallback plan if the city portal is down again",
          "status": "someday", "note": "before Thu 1 Oct 16:00"},
     ],
-    "waiting_on_roberto": [{"text": "Remember the last tab?", "ref": "app-launcher#1131"}],
+    "waiting_on_owner": [{"text": "Remember the last tab?", "ref": "app-launcher#1131"}],
 }
 
 

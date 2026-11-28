@@ -1,13 +1,13 @@
 """The markdown renderer is shared, and verified against both consumers (#1006).
 
-`renderMarkdown` used to live in `app/webapp/static/life-os.js` while the
+`renderMarkdown` used to live in `app/webapp/static/repo-f.js` while the
 Coding tab's Chat pane (`session-transcript.js`, whose renderer is
 `transcript-render.js` since #1629) imported it from there. (The Life OS
 content browser that actually calls it moved on again, to
-`life-os-content.js`, when #1793 split the module — the import stayed on
+`repo-f-content.js`, when #1793 split the module — the import stayed on
 `./markdown.js` throughout, which is the property this file pins.)
 That was not only a naming problem. `.fleet.toml`'s `lifeos` e2e surface
-narrows a `life-os.js`-only diff to the Life OS tests, and those do **not**
+narrows a `repo-f.js`-only diff to the Life OS tests, and those do **not**
 include `tests/e2e/session/test_session_transcript.py` — so a change to the shared
 renderer was routed away from its other consumer and never exercised
 against it.

@@ -27,7 +27,7 @@ _NOW = int(time.time())
 
 def _session(sid: str, label: str, name: str, column: str, status: str) -> dict:
     return {"session_id": sid, "kind": "pty", "agent": "copilot", "label": label,
-            "project_dir": "E:/work/" + name, "name": name, "flags": "",
+            "project_dir": "E:/stub/" + name, "name": name, "flags": "",
             "started_at": _NOW - 600, "alive": True, "rows": 40, "cols": 120,
             "live_title": "", "prompt_title": name + " title", "manual_title": "",
             "output_chars": 10, "board_column": column, "board_status": status}
@@ -37,7 +37,7 @@ def _session(sid: str, label: str, name: str, column: str, status: str) -> dict:
 # still hand the client one in Your turn: the filter must not rely on the lane.
 _SESSIONS = [
     _session("s-chief", "chief", "chief", "your_turn", "awaiting-input"),
-    _session("s-work", "", "life-os", "claude_turn", "working"),
+    _session("s-work", "", "repo-f", "claude_turn", "working"),
 ]
 
 
@@ -50,7 +50,7 @@ def _mock(page: Page) -> None:
 
 def _external_card(name: str, *, job_run: bool) -> dict:
     return {"session_id": None, "kind": "external", "agent": "copilot",
-            "project_dir": "E:/work/" + name, "name": name, "alive": None,
+            "project_dir": "E:/stub/" + name, "name": name, "alive": None,
             "started_at": None, "live_title": "", "prompt_title": "", "manual_title": "",
             "project": name, "status": "awaiting-input", "age_seconds": 120,
             "job_run": job_run}
@@ -65,7 +65,7 @@ def test_chief_and_job_runs_leave_the_lanes(
     _open_board(authed_page, base_url)
 
     expect(authed_page.locator('.board-list[data-col="claude_turn"] li.board-item')
-           .filter(has_text="life-os")).to_have_count(1)
+           .filter(has_text="repo-f")).to_have_count(1)
     expect(authed_page.locator("li.board-item-chief")).to_have_count(0)
     # One worker: the header counts it, not the chief; nothing waits on the owner.
     expect(authed_page.locator("#boardHeadStatus")).to_contain_text("1 session")

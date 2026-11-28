@@ -24,13 +24,13 @@ def _mock_sessions_list(page: Page, *, alive: bool = True) -> None:
             body=_json.dumps({"sessions": [
                 {
                     "session_id": _SID, "kind": "pty", "agent": "copilot",
-                    "project_dir": "E:/automation/liveproj", "name": "liveproj",
+                    "project_dir": "E:/stubfolder/liveproj", "name": "liveproj",
                     "alive": alive, "started_at": "2026-09-19T10:00:00Z",
                     "live_title": "", "prompt_title": "", "manual_title": "Live demo",
                 },
                 {
                     "session_id": _OTHER_SID, "kind": "pty", "agent": "copilot",
-                    "project_dir": "E:/automation/otherproj", "name": "otherproj",
+                    "project_dir": "E:/stubfolder/otherproj", "name": "otherproj",
                     "alive": True, "started_at": "2026-09-19T10:00:00Z",
                     "live_title": "", "prompt_title": "", "manual_title": "Other demo",
                 },

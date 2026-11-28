@@ -74,7 +74,7 @@ def _mock_sessions_list(page: Page, *, sid: str = _SID, kind: str = "remote", ag
                 "session_id": sid,
                 "kind": kind,
                 "agent": agent,
-                "project_dir": "E:/automation/sendproj",
+                "project_dir": "E:/stubfolder/sendproj",
                 "name": "sendproj",
                 "alive": True,
                 "started_at": "2026-09-14T12:00:00Z",
@@ -217,7 +217,7 @@ def test_session_menu_is_a_vertical_list_with_no_send_item_for_either_kind(
     # Terminal then Chat mode, the detached one in Chat.
     def _row_body(sid: str, kind: str) -> dict:
         return {"session_id": sid, "kind": kind, "agent": "copilot",
-                "project_dir": "E:/automation/sendproj", "name": "sendproj", "alive": True,
+                "project_dir": "E:/stubfolder/sendproj", "name": "sendproj", "alive": True,
                 "started_at": "2026-09-14T12:00:00Z", "live_title": "", "prompt_title": "",
                 "manual_title": "Send demo", "web_url": ""}
 

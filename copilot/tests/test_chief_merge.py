@@ -77,7 +77,7 @@ class MergeTests(unittest.TestCase):
         self.assertIn("reason=ERROR: pipeline failed", out)
         self.assertIn("MERGE_ASKED=merge-demo-12", out)
         self.run_merge(fake_glab(1, "opened", stderr="ERROR: pipeline failed"), ask=True)
-        waiting = self.plan()["waiting_on_roberto"]
+        waiting = self.plan()["waiting_on_owner"]
         self.assertEqual([w["id"] for w in waiting], ["merge-demo-12"])
         self.assertEqual(waiting[0]["ref"], "demo#12")
         self.assertIn("pipeline failed", waiting[0]["question"])
@@ -91,7 +91,7 @@ class MergeTests(unittest.TestCase):
         code, out = self.run_merge(fake_glab(1, "closed", stderr=boxed), ask=True)
         self.assertEqual(code, 1)
         self.assertIn('reason=no open merge request available for "feat/12-x".\n', out)
-        question = self.plan()["waiting_on_roberto"][0]["question"]
+        question = self.plan()["waiting_on_owner"][0]["question"]
         self.assertTrue(question.endswith('available for "feat/12-x".'), question)
 
     def test_a_retry_lead_in_is_completed_with_gitlabs_merge_status(self) -> None:
@@ -100,7 +100,7 @@ class MergeTests(unittest.TestCase):
                  "  405 Method Not Allowed}.\n")
         out = self.run_merge(fake_glab(1, "opened", stderr=retry, status="conflict"), ask=True)[1]
         self.assertIn("reason=All attempts fail (merge status: conflict)\n", out)
-        self.assertIn("(merge status: conflict)", self.plan()["waiting_on_roberto"][0]["question"])
+        self.assertIn("(merge status: conflict)", self.plan()["waiting_on_owner"][0]["question"])
 
     def test_a_mergeable_status_adds_nothing(self) -> None:
         out = self.run_merge(fake_glab(1, "opened", stderr="ERROR: boom", status="mergeable"))[1]

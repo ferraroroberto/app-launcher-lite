@@ -30,7 +30,7 @@ from owner_check import github as forge  # noqa: E402
 
 def setUpModule() -> None:
     """The namespace comes from the live launcher; pin it so no test reads the real one."""
-    for patcher in (mock.patch.object(gitlab_namespace, "from_config", return_value=("ferraroroberto", "")),
+    for patcher in (mock.patch.object(gitlab_namespace, "from_config", return_value=("example-org", "")),
                     mock.patch.object(gitlab_namespace, "resolve_host", return_value="gitlab.com")):
         patcher.start()
         unittest.addModuleCleanup(patcher.stop)
@@ -55,7 +55,7 @@ class FakeGlab:
 
 def _issue(labels) -> dict:
     return {"iid": 5, "title": "T", "description": "body", "state": "opened",
-            "web_url": "https://gitlab.com/ferraroroberto/demo/-/issues/5", "labels": labels}
+            "web_url": "https://gitlab.com/example-org/demo/-/issues/5", "labels": labels}
 
 
 BLOCK = "\n".join([block.MARKER, "**Owner check: before start**", "", "- kind: before-start",
@@ -82,8 +82,8 @@ class ForgeTests(unittest.TestCase):
 
     def test_fetch_issue_maps_gitlab_to_the_callers_shape(self) -> None:
         fake = FakeGlab({"issue view": _issue(["owner::needs-owner", "bug"]),
-                         "api projects/ferraroroberto%2Fdemo/issues/5/closed_by": [{"web_url": "mr-url"}],
-                         "api projects/ferraroroberto%2Fdemo/issues/5/notes": [
+                         "api projects/example-org%2Fdemo/issues/5/closed_by": [{"web_url": "mr-url"}],
+                         "api projects/example-org%2Fdemo/issues/5/notes": [
                              {"body": "hi", "system": False}, {"body": "label added", "system": True}]})
         with mock.patch.object(forge, "_glab", fake):
             issue = forge.fetch_issue("demo", 5)
@@ -98,8 +98,8 @@ class ForgeTests(unittest.TestCase):
         self.assertEqual(fake.calls[2][-2:], ["--label", "owner::needs-owner"])
 
     def test_cli_gate_blocks_and_unknowns(self) -> None:
-        fake = FakeGlab({"issue view": _issue(["needs-owner"]), "api projects/ferraroroberto%2Fdemo/issues/5/closed_by": [],
-                         "api projects/ferraroroberto%2Fdemo/issues/5/notes": [{"body": BLOCK}]})
+        fake = FakeGlab({"issue view": _issue(["needs-owner"]), "api projects/example-org%2Fdemo/issues/5/closed_by": [],
+                         "api projects/example-org%2Fdemo/issues/5/notes": [{"body": BLOCK}]})
         out = io.StringIO()
         with mock.patch.object(forge, "_glab", fake), contextlib.redirect_stdout(out):
             code = cli.main(["gate", "demo#5"])
@@ -132,7 +132,7 @@ class ForgeTests(unittest.TestCase):
 
     def test_merge_requests_are_never_issues_on_gitlab(self) -> None:
         self.assertFalse(forge.is_pull_request("demo", 5))
-        self.assertEqual(forge.pr_url("demo", 7), "https://gitlab.com/ferraroroberto/demo/-/merge_requests/7")
+        self.assertEqual(forge.pr_url("demo", 7), "https://gitlab.com/example-org/demo/-/merge_requests/7")
 
 
 class DrainIntakeTests(unittest.TestCase):
@@ -143,7 +143,7 @@ class DrainIntakeTests(unittest.TestCase):
                 {"iid": 6, "title": "plain", "description": "no marker", "labels": []}]
         with mock.patch.object(forge, "_glab", FakeGlab({"issue list": rows})):
             issues = drain._repo_issues("demo")
-        adds, skips = drain.select_intake(issues, {"lanes": [], "queue": [], "waiting_on_roberto": []}, set(), set())
+        adds, skips = drain.select_intake(issues, {"lanes": [], "queue": [], "waiting_on_owner": []}, set(), set())
         self.assertEqual([a["ref"] for a in adds], ["demo#3"])
         self.assertEqual(skips, [("demo#4", "label-needs-owner")])
 

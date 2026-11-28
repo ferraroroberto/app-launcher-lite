@@ -49,6 +49,11 @@ _VISIBLE_CONSOLE_EXEMPT: Dict[str, str] = {
 #: under this name; ``test_vendored_verbatim_spawns_still_suppress_the_console``
 #: holds each to that, so the exemption can't hide a real regression.
 _VENDORED_VERBATIM_EXEMPT = {
+    "scripts/personal_data_ratchet.py": (
+        "The scaffold's personal-data ratchet, vendored byte-for-byte and declared in "
+        ".fleet.toml [vendored] for the Team Mirror scan; it spawns git with a locally "
+        "derived _NO_WINDOW."
+    ),
     "scripts/classify_e2e.py": (
         "The scaffold's e2e classifier (#955), hash-verified by fleet-config's "
         "e2e_route.py bootstrap; it spawns git with creationflags=_NO_WINDOW."

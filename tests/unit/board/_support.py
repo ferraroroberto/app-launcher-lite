@@ -132,12 +132,12 @@ def _tool_result_line(ts: datetime, result: dict) -> str:
 _CANNED_ISSUE = {
     "iid": 164, "title": "Board tab", "web_url": "https://gitlab.com/x/app-launcher/-/issues/164",
     "updated_at": "2026-07-01T10:00:00Z", "labels": ["enhancement"],
-    "references": {"full": "ferraroroberto/app-launcher#164"},
+    "references": {"full": "example-org/app-launcher#164"},
 }
 _CANNED_PR = {
-    "iid": 67, "title": "fix chunk merge", "web_url": "https://gitlab.com/x/photo-ocr/-/merge_requests/67",
+    "iid": 67, "title": "fix chunk merge", "web_url": "https://gitlab.com/x/repo-a/-/merge_requests/67",
     "updated_at": "2026-07-02T08:00:00Z", "draft": False, "labels": [],
-    "references": {"full": "ferraroroberto/photo-ocr!67"},
+    "references": {"full": "example-org/repo-a!67"},
 }
 
 

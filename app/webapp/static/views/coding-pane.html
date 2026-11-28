@@ -118,4 +118,29 @@
         <p id="gitCheckedFooter" class="group-footer git-checked-footer" hidden></p>
         </div>
       </details>
+
+      <!-- Team mirrors: each project's team repo and how far it lags. It reads
+           only while open (apps/team-mirror.js), since each check fetches
+           every linked team repo. Closed by default. -->
+      <details id="teamMirrorCard" data-surface="code.team-mirror" class="card card--collapsible action-list team-mirror-card">
+        <summary data-track="coding.fold-team-mirror" class="collapse-summary">
+          <span class="collapse-main">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-git-pull-request"></use></svg>
+            <h3 class="collapse-title">Team mirrors</h3>
+            <span id="teamMirrorSummaryMeta" class="collapse-count" hidden></span>
+          </span>
+          <span class="collapse-chevron" aria-hidden="true">›</span>
+        </summary>
+        <div class="collapse-body">
+        <div class="card-toolbar team-mirror-toolbar">
+          <button id="teamMirrorPublishAll" data-track="team-mirror.publish-all" type="button" class="button-surface" disabled>Publish all</button>
+          <button id="teamMirrorRefresh" data-track="team-mirror.refresh" type="button" class="button-surface git-refresh-btn"
+                  title="Fetch every linked team repo and compare it with the app's main"
+                  aria-label="Check the team repos now"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-refresh-cw"></use></svg> Refresh</button>
+        </div>
+        <div id="teamMirrorState" class="empty-state" role="status" aria-live="polite" hidden></div>
+        <ul id="teamMirrorList" class="card-list action-rows" aria-label="Team mirrors"></ul>
+        <p id="teamMirrorFooter" class="group-footer" hidden></p>
+        </div>
+      </details>
     </section>

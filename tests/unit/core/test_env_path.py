@@ -95,7 +95,7 @@ class TestEffectivePath:
         an unexpanded literal would never resolve a binary."""
         import winreg
 
-        monkeypatch.setenv("USERPROFILE", "C:\\Users\\probe")
+        monkeypatch.setenv("USERPROFILE", "C:\\Users\\sample")
 
         class _FakeKey:
             def __enter__(self):
@@ -110,7 +110,7 @@ class TestEffectivePath:
             lambda key, name: ("%USERPROFILE%\\.grok\\bin", winreg.REG_EXPAND_SZ),
         )
         value = env_path._read_registry_path(winreg.HKEY_CURRENT_USER, "Environment")
-        assert value == "C:\\Users\\probe\\.grok\\bin"
+        assert value == "C:\\Users\\sample\\.grok\\bin"
 
 
 class TestDetectionUsesEffectivePath:

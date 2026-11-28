@@ -60,7 +60,7 @@
   --diff-del-fg: #cf222e;
   --diff-hunk-fg: #0969da;
   /* Terminal screen: dark in both themes by default (ANSI output is
-     authored against dark), same model as home-automation's --video-matte
+     authored against dark), same model as a sibling app's --video-matte
 . terminal.js reads these. The opt-in override after the dark
      block flips them light when the user asks the terminal
      to follow the app theme. */
@@ -86,7 +86,7 @@
   /* Brand-colour alpha overlays derive from the tokens above (color-mix
      against transparent, the spec's form) so a tint never forks from its
      base colour. */
-  /* Accent-ghost button recipe (home-automation's Net-tab .big-btn):
+  /* Accent-ghost button recipe (a sibling app's Net-tab .big-btn):
      soft accent tint + accent text + soft accent border — no solid fills.
      Derived from --accent so both themes ride. */
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -167,7 +167,7 @@
   /* --bottom-tabs-* geometry (height/margin/pill-height/padding/gap/label)
      is intentionally undefined here — nav-tabs.css's own canonical
      var(..., fallback) defaults (61/21/53/4/4/11px) are the fleet-standard
-     floating-bar geometry, phone-validated on home-automation. Define one
+     floating-bar geometry, phone-validated on a sibling app. Define one
      here only to deliberately diverge. The icon size is the exception: the
      vendored action-row avatar reads it too, so it is declared at the
      icons.size.nav-tab step rather than left to a fallback. */

@@ -83,7 +83,7 @@ def _mock_apps(page: Page) -> None:
             status=200, content_type="application/json",
             body=_json.dumps({"scan_root": "", "apps": [
                 {"id": "cc-" + name, "kind": "claude-code", "name": name,
-                 "project_dir": "E:/automation/" + name}
+                 "project_dir": "E:/stubfolder/" + name}
                 for name in (_MINE, _OTHER)
             ]}),
         ),

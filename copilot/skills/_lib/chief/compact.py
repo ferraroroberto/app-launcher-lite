@@ -21,7 +21,7 @@ COMPACT_NUDGE_SECONDS = 600
 COMPACT_QUEUED_MARKER = "chief-compact-queued"
 DEFAULT_COMPACT_FOCUS = (
     "Keep the in-flight lanes (sid, repo#N, state), steers still awaiting "
-    "verification, the waiting-on-Roberto items, and anything parked with its "
+    "verification, the waiting-on-owner items, and anything parked with its "
     "reason. The handover log and the plan hold the rest."
 )
 

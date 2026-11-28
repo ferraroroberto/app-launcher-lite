@@ -33,7 +33,7 @@ _RANKER_CASES = [
         None, "", "new", id="newest-of-two-unknown",
     ),
     pytest.param(
-        {"x": _chief(hours=1, cwd="E:/automation/app-launcher")},
+        {"x": _chief(hours=1, cwd="E:/stubfolder/app-launcher")},
         None, "", "", id="wrong-project-excluded",
     ),
     pytest.param(
@@ -48,7 +48,7 @@ _RANKER_CASES = [
         {"x": _chief(hours=30)}, None, "", "", id="row-past-24h-excluded",
     ),
     pytest.param(
-        {"x": _chief(hours=1, cwd="E:/automation/app-launcher-wt-42",
+        {"x": _chief(hours=1, cwd="E:/stubfolder/app-launcher-wt-42",
                      project="copilot")},
         None, "", "", id="project-field-does-not-make-a-chief-folder",
     ),
@@ -89,7 +89,7 @@ _RANKER_CASES = [
     ),
     pytest.param(
         {"x": _chief(minutes=1, transcript="typed", name="app-launcher-11",
-                     cwd="E:/automation/app-launcher")},
+                     cwd="E:/stubfolder/app-launcher")},
         None, "x", "", id="preferred-outside-fleet-config-ignored",
     ),
     pytest.param(

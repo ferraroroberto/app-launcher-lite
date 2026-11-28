@@ -30,7 +30,7 @@ _UP = 99_000  # 1d 3h
 
 def _session(sid: str, folder: str, status, age, **extra) -> dict:
     s = {"session_id": sid, "kind": "pty", "agent": "copilot", "label": "",
-         "project_dir": "E:/work/" + folder, "name": sid, "flags": "",
+         "project_dir": "E:/stub/" + folder, "name": sid, "flags": "",
          "started_at": None, "alive": True, "rows": 40, "cols": 120,
          "live_title": "", "prompt_title": sid + " title", "manual_title": "",
          "output_chars": 10,
@@ -42,7 +42,7 @@ def _session(sid: str, folder: str, status, age, **extra) -> dict:
 
 def _card(sid: str, folder: str, status: str, age: int) -> dict:
     return {"session_id": sid, "kind": "pty", "agent": "copilot", "alive": True,
-            "project_dir": "E:/work/" + folder, "name": sid, "live_title": "",
+            "project_dir": "E:/stub/" + folder, "name": sid, "live_title": "",
             "prompt_title": sid + " title", "project": folder, "status": status,
             "age_seconds": age, "started_at": "2026-09-10T11:00:00Z"}
 

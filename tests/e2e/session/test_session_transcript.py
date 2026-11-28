@@ -53,7 +53,7 @@ def _mock_sessions_list(page: Page, *, kind: str = "pty", agent: str = "copilot"
                 "session_id": _SID,
                 "kind": kind,
                 "agent": agent,
-                "project_dir": "E:/automation/transcriptproj",
+                "project_dir": "E:/stubfolder/transcriptproj",
                 "name": "transcriptproj",
                 "alive": True,
                 "started_at": "2026-09-14T10:00:00Z",

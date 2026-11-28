@@ -1,4 +1,4 @@
-"""The deterministic owner-check rule: does this work need Roberto, and why.
+"""The deterministic owner-check rule: does this work need the owner, and why.
 
 Pure: no `gh`, no git, no clock. The inputs are the issue's type labels, its title,
 its body (only for the explicit `Owner validation:` line), the PR's changed files
@@ -7,11 +7,11 @@ reasons; an explicit `none` in the issue cannot suppress one, so a drafting slip
 never hides real owner work.
 
 Self-verification comes first. Whatever the lane proved in its own session needs
-nobody. What it could not prove needs Roberto only through a named criterion and
+nobody. What it could not prove needs the owner only through a named criterion and
 one owner-only class (`OWNER_CLASSES`); a generic "could not verify" is no reason.
-A live-only title word asks him only while no in-session proof exists, and a
+A live-only title word asks the owner only while no in-session proof exists, and a
 live-input path in the diff always does. A new page or view is browser-provable, so
-it is never his: `unproven_surface` names one no visual proof covered, for the
+it is never the owner's: `unproven_surface` names one no visual proof covered, for the
 lane to prove.
 An account clause fires only for a third party's account (sign-up, OAuth,
 subscription): the app's own password sign-in is drivable with test credentials. Words are matched in the title only: issue bodies quote viewports
@@ -49,7 +49,7 @@ OWNER_CLASSES = {
     "device": "real phone hardware or a physical sensor no emulation reaches",
     "owner-account": "an action in an account only the owner holds, with real side effects",
     "physical": "a physical action no automation can perform",
-    "third-party": "a person other than the owner, or an external service he must sign up for",
+    "third-party": "a person other than the owner, or an external service they must sign up for",
 }
 # Class descriptions recorded before the classes were narrowed, so a re-check can
 # still read an older gap back to its class.

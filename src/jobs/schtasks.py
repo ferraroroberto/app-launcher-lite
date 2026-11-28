@@ -138,7 +138,7 @@ def _apply_power_policy(
     APC Smart-UPS, which Windows' ``Win32_Battery`` reports as a battery, so
     those defaults mean a mains loss *would* let Task Scheduler terminate
     every running job and skip every slot that elapses on battery, with no
-    catch-up. The hazard is real and standing — ``home-automation``'s UPS
+    catch-up. The hazard is real and standing — a UPS
     monitor logs a genuine mains loss to its ``logs/power.jsonl`` roughly
     monthly — which is why this guard stays.
 

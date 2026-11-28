@@ -129,4 +129,4 @@ def test_slugify_matches_github_for_the_headings_the_docs_link_to():
     assert slugify("HTTPS certificate (Tailscale)") == "https-certificate-tailscale"
     assert slugify("Terminal ⇄ Chat") == "terminal--chat"
     assert slugify("Installing the `Codex` CLI") == "installing-the-codex-cli"
-    assert slugify("Screen time to task-os (#1678)") == "screen-time-to-task-os-1678"
+    assert slugify("Screen time to repo-g (#1678)") == "screen-time-to-repo-g-1678"

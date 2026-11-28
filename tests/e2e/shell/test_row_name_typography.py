@@ -1,7 +1,7 @@
 """Regression pin for #1126 — row names, helper copy and label casing.
 
 A rendered UX audit found project, skill and app names breaking *inside*
-words on the phone ("gitlab-to-github-migrato / r"): eight rules carried
+words on the phone ("example-to-sample-conver / r"): eight rules carried
 ``word-break: break-all``, which breaks anywhere even when a space is
 available. Names now render on one line, truncated with an ellipsis and
 never broken, and the full on-disk name rides ``title``. Paths, output tails
@@ -27,10 +27,10 @@ from tests.e2e.fixtures.waits import stable_read
 
 pytestmark = [pytest.mark.smoke, pytest.mark.iphone]
 
-_PROJECT = "gitlab-to-github-migrator-for-the-closed-company-accounting-archive"
+_PROJECT = "example-to-sample-converter-for-the-longest-imaginary-project-store"
 _BRANCH = "feat/1126-a-rather-long-branch-name-for-the-tag"
 _APP = "Closed company account reconciliation dashboard with a long title"
-_SKILL = "closed-company-accounting-archive-weekly-reconciliation"
+_SKILL = "longest-imaginary-project-archive-weekly-reconciliation"
 
 # Line boxes of the first non-empty text node under `sel`, plus the title the
 # name carries. Null while the element isn't laid out yet (`stable_read`).

@@ -86,13 +86,15 @@ def _assert_options_card_is_gone_and_toggles_live_on_projects_card(
     """#496 item 2, retargeted by #1435. Formerly
     ``test_home_head.py::test_options_card_is_last_and_toggles_live_on_projects_card``."""
     # The Options card is gone from the Coding tab: its controls moved into
-    # Settings › Launch defaults (#1435), and the tab ends on the Projects card.
+    # Settings › Launch defaults (#1435), and the tab ends on the Projects card
+    # followed by the Team mirrors card.
     expect(page.locator("#codingOptions")).to_have_count(0)
-    last_class = page.evaluate(
-        "document.getElementById('paneClaude').lastElementChild.className"
+    tail = page.evaluate(
+        "(() => { const last = document.getElementById('paneClaude').lastElementChild;"
+        " return [last.previousElementSibling.className, last.className]; })()"
     )
-    assert "projects-card" in last_class.split(), (
-        f"the Code tab must end on the Projects card, got {last_class!r}"
+    assert "projects-card" in tail[0].split() and "team-mirror-card" in tail[1].split(), (
+        f"the Code tab must end on Projects, then Team mirrors, got {tail!r}"
     )
 
     # Detached + Resume live on the Projects card — the surface sessions are

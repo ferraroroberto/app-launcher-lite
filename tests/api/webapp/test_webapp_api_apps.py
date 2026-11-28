@@ -609,10 +609,10 @@ class TestLaunchAppTracksSpawn:
             overrides["tmp_registry_path"],
             [
                 AppEntry(
-                    id="home-automation-tray",
-                    name="Home Automation",
+                    id="repo-c-tray",
+                    name="Repo C",
                     kind="tray",
-                    bat_path="C:\\stub\\home-automation\\tray.bat",
+                    bat_path="C:\\stub\\repo-c\\tray.bat",
                     added_at=datetime.now().isoformat(),
                 ),
             ],
@@ -627,7 +627,7 @@ class TestLaunchAppTracksSpawn:
             lambda *a: recorded.append(a),
         )
 
-        resp = client.post("/api/apps/home-automation-tray/launch")
+        resp = client.post("/api/apps/repo-c-tray/launch")
         assert resp.status_code == 200
         assert recorded == []
 

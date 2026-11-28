@@ -232,6 +232,7 @@ webkit_budget_check = { src = "scripts/tools/webkit_budget_check.py", sha = "48d
 # e2e suite boots a disposable webapp + session-host from; ready_path and
 # data_dir_env are the generator defaults (/healthz, APP_LAUNCHER_DATA_DIR).
 ratchet_baseline = { src = "scripts/ratchet_baseline.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/ratchet_baseline.py" }
+personal_data_ratchet = { src = "scripts/personal_data_ratchet.py", sha = "fd3133aafcfe4b839b6feaaafb8aa80941bb599e", dest = "scripts/personal_data_ratchet.py" }
 
 [verify]
 boot           = "tests/e2e/conftest.py::_autoboot_server"
@@ -354,13 +355,13 @@ baseline   = ".ratchets/doc-refs.json"
 trees      = true
 allow_refs = [
   # Other services' loopback ports the docs name on purpose: the hub, the
-  # sibling voice-transcriber and photo-ocr apps, the session-host this repo
-  # spawns, task-os, and the Chrome DevTools port the iPhone debugging doc uses.
+  # sibling apps, the session-host this repo spawns, and the Chrome DevTools
+  # port the iPhone debugging doc uses.
   ":8000", ":8443", ":8444", ":8466", ":8448", ":9221",
   # `:12` is the example line reference in a file chip's description, not a port.
   ":12",
-  # Another repo's files, named as pointers (fleet-config's chief skill, life-os's
-  # Claude settings).
+  # Another repo's files, named as pointers (fleet-config's chief skill and a
+  # sibling repo's Claude settings).
   ".claude/skills/chief/SKILL.md", ".claude/settings.json",
 ]
 
@@ -811,8 +812,10 @@ time_budget_s         = 1200
 # and the failed-run report all ride that one node. The count today is 303 with
 # the request-budget probe, whose page installs a clock and a writable
 # visibility state before boot and runs two fake minutes, so no other node
-# could share it.
-test_budget = 300
+# could share it. 301: the Team mirrors card and its Link and Publish sheets
+# share one node; it route-mocks /api/team-mirror and its POSTs before boot,
+# a setup no existing Code-tab node shares.
+test_budget = 301
 
 # --- static assets under the webapp's static dir -> Chromium smoke ----------
 [[e2e.rule]]
@@ -1292,16 +1295,13 @@ synthetic = true
 # for this repo (fleet-config#974; schema in fleet-config's
 # architecture/README.md). Each suppresses one rule in the managed
 # design-review issue, listed under "## Accepted" instead of "## Findings".
-# Roberto's #1238 decisions, 2026-09-25.
 [[design.accepted]]
 rule   = "LAYOUT-02"
 reason = "the Board's repo filter in the dispatch bar covers the long list, and Backlog starts folded on the phone"
-record = "https://github.com/ferraroroberto/app-launcher/issues/1238#issuecomment-5837905876"
 
 [[design.accepted]]
 rule   = "LAYOUT-05"
 reason = "the Chat turn header's copy button stops propagation, and moving it into the body would force opening a turn to copy it"
-record = "https://github.com/ferraroroberto/app-launcher/issues/1238#issuecomment-5837905876"
 
 # design-lint contract findings (/design-sync, #1634) examined and accepted: neither
 # dialog is an editor modal, and the look stays as it is. The lint ignores the line
@@ -1312,14 +1312,12 @@ check  = "modal-footer"
 target = "app/webapp/static/views/shared-dialogs.html"
 detail = "editor-modal footer contract violated (design.md modal wants exactly one full-width solid-accent primary): app/webapp/static/views/shared-dialogs.html:15 primary not the solid-accent primary recipe"
 reason = "#confirmDialog is the Stop/Remove confirm, a destructive action: its sole action deliberately uses the danger tint, not the solid-accent primary"
-record = "https://github.com/ferraroroberto/app-launcher/issues/1634"
 
 [[design.accepted]]
 check  = "modal-top-anchor"
 target = "app/webapp/static/views/coding-dialogs.html"
 detail = "editor-modal(s) with no max-height + internal scroll — a tall form jumps as conditional rows toggle (design.md modal: top-anchored on mobile): app/webapp/static/views/coding-dialogs.html:4"
 reason = "#screenView is the full-viewport Screen viewer (inset 0, 100dvh), not an editor modal: its one field is the hidden key-capture input, so no conditional rows can make it jump"
-record = "https://github.com/ferraroroberto/app-launcher/issues/1634"
 
 # The lint reads any button labelled Cancel in a dialog as a footer Cancel. The sheet's
 # header close and one Done footer are pinned by tests/e2e/settings/test_settings_sheets.py.
@@ -1328,7 +1326,6 @@ check  = "modal-header"
 target = "app/webapp/static/views/settings-sheets.html"
 detail = "editor-modal header contract violated (design.md modal wants a heading-lg title + square x close, never a footer Cancel): app/webapp/static/views/settings-sheets.html:8 footer Cancel button in its place"
 reason = "#copilotSheet carries the header close and one full-width Done; its only Cancel is #launchPresetCancel, an inline body button shown while a launch preset is being edited, which abandons that edit and leaves the sheet open"
-record = "https://github.com/ferraroroberto/app-launcher-lite/issues/697"
 
 # Declared state machines: the state rules never report a module listed here.
 [[state_machines]]

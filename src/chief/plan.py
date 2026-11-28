@@ -1,6 +1,6 @@
 """Read the fleet chief's plan file for the Board's "Chief's plan" card.
 
-The chief records its lanes, its queue and what waits on Roberto in
+The chief records its lanes, its queue and what waits on the owner in
 ``~/.claude/hooks/state/chief-plan.json`` (format v1, written only through
 fleet-config's ``chief_ops.py plan`` helper). This module is the app's reader,
 and it is tolerant by contract: unknown fields are dropped, a missing file or
@@ -8,7 +8,7 @@ a plan with no queue rows, lanes or questions is ``empty``, and anything it cann
 never an exception, never an error toast. Status values pass through
 unvalidated; the card shows an unknown one as a neutral chip.
 
-A ``waiting_on_roberto`` item is one of the chief's questions for the Board's
+A ``waiting_on_owner`` item is one of the chief's questions for the Board's
 answer sheet. Beyond v1's ``text`` and ``ref`` it may carry the
 additive fields ``id``, ``repo``, ``question``, ``detail``, ``recommendation``,
 ``options``, ``multi`` and ``asked_at`` (a ``YYYY-MM-DD`` date, blank when
@@ -29,6 +29,8 @@ import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
+
+from src.chief.queue_status import QueueStatus
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +102,7 @@ def ref_url(ref: str, repo: str, owner: str) -> str:
 
 
 def _waiting(value: Any, owner: str) -> List[Dict[str, Any]]:
-    """The questions waiting on Roberto, each read field by field.
+    """The questions waiting on the owner, each read field by field.
 
     ``question`` falls back to ``text``, so an old item still has a line to
     ask. A missing ``id`` stays blank: the sheet keys that item on its
@@ -122,6 +124,19 @@ def _waiting(value: Any, owner: str) -> List[Dict[str, Any]]:
         item["ref_url"] = ref_url(item["ref"], item["repo"], owner)
         items.append(item)
     return items
+
+
+def _current_names(data: Dict[str, Any]) -> Dict[str, Any]:
+    """An older file names the waiting list and status after the owner
+    (``waiting_on_<name>``, ``waiting-<name>``): read both under today's names."""
+    if "waiting_on_owner" not in data:
+        for key in [k for k in data if re.fullmatch(r"waiting_on_[a-z]+", k)][:1]:
+            data["waiting_on_owner"] = data[key]
+    queue = data.get("queue")
+    for row in queue if isinstance(queue, list) else []:
+        if isinstance(row, dict) and re.fullmatch(r"waiting-[a-z]+", str(row.get("status"))):
+            row["status"] = QueueStatus.WAITING_OWNER.value
+    return data
 
 
 def _load_plan(path: Path) -> Dict[str, Any] | str:
@@ -146,7 +161,7 @@ def _load_plan(path: Path) -> Dict[str, Any] | str:
     if not isinstance(data, dict) or data.get("version") != SUPPORTED_VERSION:
         logger.warning("⚠️ chief plan has an unsupported shape or version")
         return "unreadable"
-    return data
+    return _current_names(data)
 
 
 def read_chief_plan(path: Path, github_owner: str = "") -> Dict[str, Any]:
@@ -162,7 +177,7 @@ def read_chief_plan(path: Path, github_owner: str = "") -> Dict[str, Any]:
         return {"state": data}
     queue = _rows(data.get("queue"), _QUEUE_FIELDS)
     lanes = _rows(data.get("lanes"), _LANE_FIELDS)
-    waiting = _waiting(data.get("waiting_on_roberto"), github_owner)
+    waiting = _waiting(data.get("waiting_on_owner"), github_owner)
     # A chief with nothing queued is exactly when it asks what to work on, so
     # a question or a lane alone keeps the plan readable.
     if not (queue or lanes or waiting):
@@ -176,7 +191,7 @@ def read_chief_plan(path: Path, github_owner: str = "") -> Dict[str, Any]:
         "updated_at": _text(data.get("updated_at")),
         "lanes": lanes,
         "queue": queue,
-        "waiting_on_roberto": waiting,
+        "waiting_on_owner": waiting,
     }
 
 
@@ -197,5 +212,5 @@ def read_plan_index(path: Path) -> Dict[str, Any]:
         "state": "ok",
         "lanes": _rows(data.get("lanes"), _LANE_FIELDS),
         "queue": _rows(data.get("queue"), _INDEX_QUEUE_FIELDS),
-        "waiting": _rows(data.get("waiting_on_roberto"), ("ref", "repo")),
+        "waiting": _rows(data.get("waiting_on_owner"), ("ref", "repo")),
     }

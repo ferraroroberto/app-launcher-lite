@@ -508,7 +508,7 @@ class TestChiefManagedMarking:
         assert cmd[1].endswith("chief_managed.py")
         # #1283: `chief_ops.py dispatch` lands here, and opens no PC window.
         assert _mirror_asked == []
-        # Roberto's own ▶ from a browser still gets the usual rule.
+        # The owner's own ▶ from a browser still gets the usual rule.
         resp = client.post(
             "/api/board/issues/start",
             json={"repo": "myrepo", "number": 43, "mode": "start", "in_page": True},

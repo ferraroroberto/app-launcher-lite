@@ -2,7 +2,7 @@
   "_comment": "Copy this file to webapp_config.json (gitignored) or let the webapp create it on the first 'Save defaults' tap. All keys are optional — missing keys fall back to the defaults in src/webapp_config.py.",
   "_comment_auth_token": "Empty string = auth gate OFF (the default). Run scripts/gen_token.py to generate a strong token; the webapp will then require Authorization: Bearer <token> on every API call from non-loopback callers.",
   "_comment_auth_password": "Optional companion to auth_token: when set, a fresh device with no token shows a sign-in sheet; entering the password swaps it for the bearer token. Set it with `python -m src.password set`; the salted hash is stored in config/app_password.json, and this key is only the legacy plaintext fallback, checked while no hash is stored. Failed attempts are logged to webapp/auth.log.",
-  "_comment_projects_dir": "Master folder whose direct child directories the Coding tab lists as launchable projects. Defaults to the parent of this repo (E:\\automation\\... by default).",
+  "_comment_projects_dir": "Master folder whose direct child directories the Coding tab lists as launchable projects. Defaults to the parent of this repo.",
   "_comment_projects_ignore": "gitignore-style patterns: directory names under projects_dir to hide from the Coding tab. Matched case-insensitively against the bare folder name; * and ? globs are honoured (e.g. 'archive', '*-old'). VCS/build dirs (.git, .venv, node_modules, ...) are always skipped regardless.",
   "_comment_coding_favorites": "Project ids (scanner slugs of the folder name) starred as favorites in the Coding tab (issue #250). Favorites sort to the top of the project list, and the '★ Favorites' header toggle filters the list to only these. Managed by tapping the per-tile star — you don't normally hand-edit this. Stored here, like projects_ignore, so the feature needs no extra file.",
   "_comment_coding_hidden_agents": "Coding-row launch buttons to hide: agent ids from src/agents.py (only 'copilot' here) plus the pseudo-id 'github' for the repo-issues button.",
@@ -88,6 +88,9 @@
     "%TEMP%/claude"
   ],
   "documents": [],
+  "_comment_team_mirrors": "Team Mirror links: each {project, team_url, branch, leave_out} publishes a folder under projects_dir to a team repo as one snapshot commit. team_url is https, ssh or a local path; leave_out lists repo paths that never reach the team repo. mirror_scan_terms adds words the privacy scan blocks on, on top of the personal-data term list. Machine-local, never committed.",
+  "team_mirrors": [],
+  "mirror_scan_terms": [],
   "claude_show_local_window": true,
   "desktop_browser": "chrome",
   "mirror_browser": "chrome",

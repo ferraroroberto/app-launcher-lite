@@ -63,8 +63,8 @@ startup path reads a secret or setting from `.env` (e.g. `local-llm-hub`'s
 unrelated timeout trips the e2e stage red.
 
 Some repos keep their runtime config at the repo **root** instead of under
-`config/` (`accounting-quarterly`'s `config.json` and
-`classification_rules.json`, `home-automation`'s `devices.json`). Neither
+`config/` (one repo's `config.json` and
+`classification_rules.json`, another's `devices.json`). Neither
 `copy_runtime_config` nor `copy_env_file` covers that shape, so a worktree for
 one of these repos would crash on startup with no config at all.
 `copy_root_config` closes it right after `.env`: rather than hardcode which
@@ -93,7 +93,7 @@ reads `extra_junctions`. A repo that declares nothing (no `.fleet.toml`, no
 to a conservative built-in default: any string value, anywhere in the config,
 that looks machine-bound -- an `{onedrive}`-style placeholder, or an absolute
 Windows path -- is blanked, list entries filtered the same way. An empty
-string is what the app already treats as "feature off" (task-os's mirror does
+string is what the app already treats as "feature off" (one repo's mirror does
 today); a repo whose own gate needs to keep a value opts out per key by
 declaring `blank_config_keys` explicitly (an empty list disables the default
 heuristic entirely). Independently of either mode, keys declared in
@@ -125,7 +125,7 @@ Subcommands:
       `--force-worktree` skips the claim attempt entirely and always prints
       `MODE=worktree`. The claim only protects against a
       second *claiming session*; a live production process sitting in the same
-      directory — the launcher webapp, home-automation's tray, or fleet-config's
+      directory — the launcher webapp, a sibling app's tray, or fleet-config's
       own hooks/ + skills/ junctioned into every live `~/.claude` — is not a
       claim holder, so a first-and-only unattended agent legitimately wins
       `MODE=primary` and edits files that a running app is serving. Unattended
@@ -439,7 +439,7 @@ def side_instance_decision(is_primary: Optional[bool], env: "Mapping[str, str]",
       - `WORKTREE_CLAIM_ALLOW_PRIMARY=1`, the same environment hatch
         `worktree_forced` honours -- one spelling of "this session means it".
       - a repo's own `[worktree] primary_instance_ok = true`, for a repo whose
-        operational lanes genuinely belong in the primary clone (`life-os`,
+        operational lanes genuinely belong in the primary clone (one
         whose gitignored identity/context/state exist nowhere else). That
         exception previously lived only in whichever session remembered to
         export the variable.

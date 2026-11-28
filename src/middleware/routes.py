@@ -208,6 +208,14 @@ _TERMINAL_GUARD_RULES: Tuple[_TerminalGuardRule, ...] = (
         "which carries session lifecycle and chief mailbox traffic.",
     ),
     (
+        lambda p: p.startswith("/api/team-mirror/"),
+        "passkey",
+        "Team Mirror: saving a link, testing access, the preview and the "
+        "publish, which pushes to a team repo with this computer's git "
+        "sign-in. The list at /api/team-mirror stays token-gated so the "
+        "Coding card can draw its rows without a passkey.",
+    ),
+    (
         lambda p: p == "/api/team-os/file" or p.startswith("/api/team-os/file/"),
         "passkey",
         "Team OS private-content browser: file read, delete and rename surface "

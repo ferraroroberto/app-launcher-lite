@@ -4,8 +4,8 @@ cmd's ``setlocal`` only scopes a variable away from the *calling* console;
 every process tray.bat launches still inherits it. The tray -> webapp ->
 session-host chain then handed ``APP_NAME=AppLauncherLite`` to every Coding
 session and launched app, where other projects legitimately read
-``APP_NAME`` as their own config key (website-analytics'
-``os.getenv("APP_NAME", "Website Analytics")``).
+``APP_NAME`` as their own config key (one app's
+``os.getenv("APP_NAME", "Example App")``).
 
 The test runs a throwaway copy of the real tray.bat beside a stub
 ``scripts/tray_lifecycle.ps1``. The stub

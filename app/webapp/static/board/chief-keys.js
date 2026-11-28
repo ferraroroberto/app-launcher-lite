@@ -50,5 +50,5 @@ export function openQuestionCount(plan) {
   if (!plan) return null;
   if (plan.state === 'empty') return 0;
   if (plan.state !== 'ok') return null;
-  return unansweredCount(plan.waiting_on_roberto, answeredKeys(plan));
+  return unansweredCount(plan.waiting_on_owner, answeredKeys(plan));
 }
