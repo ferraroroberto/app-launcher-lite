@@ -31,7 +31,7 @@ def _narrow_commit_and_clear(page: Page) -> None:
 
     field.click()
     expect(_options(page)).to_have_count(5)  # "All projects" + 4
-    page.keyboard.type("PHO")
+    page.keyboard.type("PO-A")
     # Case-insensitive substring; "All projects" stays first.
     expect(_options(page)).to_have_text(["All projects", "repo-a"])
     expect(clear).to_be_visible()
@@ -65,7 +65,7 @@ def _narrow_commit_and_clear(page: Page) -> None:
 def _clear_drops_typed_text(page: Page) -> None:
     field = page.locator(_INPUT)
     field.click()
-    page.keyboard.type("voi")
+    page.keyboard.type("po-b")
     expect(_options(page)).to_have_count(2)
     page.locator(_CLEAR).click()
     expect(field).to_have_value("")
@@ -88,7 +88,7 @@ def _arrow_keys_enter_and_escape(page: Page) -> None:
     # Typing picks the first match, so Enter alone takes it.
     field.click()
     page.keyboard.press("Control+a")
-    page.keyboard.type("vo")
+    page.keyboard.type("po-b")
     page.keyboard.press("Enter")
     expect(page.locator(_HIDDEN)).to_have_value("repo-b")
 

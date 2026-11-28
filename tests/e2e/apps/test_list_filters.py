@@ -86,7 +86,7 @@ def test_projects_and_apps_filters_narrow_restore_and_empty(
     rows = "#claudeList > li"
     expect(page.locator(rows)).to_have_count(len(_PROJECTS), timeout=5_000)
     box = page.locator("#claudeFilterInput")
-    box.fill("oto")
+    box.fill("po-a")
     expect(page.locator(f"{rows}:visible")).to_have_count(1)
     assert _visible_titles(page, rows) == ["repo-a"]
     box.fill("zzz")
@@ -109,7 +109,7 @@ def test_projects_and_apps_filters_narrow_restore_and_empty(
     _open_all(page)
     apps = "#appsList > li"
     expect(page.locator(apps)).to_have_count(len(_APPS), timeout=5_000)
-    page.locator("#appsFilterInput").fill("voi")
+    page.locator("#appsFilterInput").fill("po b")
     expect(page.locator(f"{apps}:visible")).to_have_count(1)
     assert _visible_titles(page, apps) == ["Repo B"]
     page.locator("#appsFilterInput").fill("qqq")

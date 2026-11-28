@@ -172,7 +172,7 @@ def test_changed_files_lists_the_sessions_edits_and_opens_one(
     expect(diffs_shown).to_have_count(2)
     expect(diffs_shown.nth(1).locator(".d-add .d-ln").first).to_have_text("4")
     expect(diffs_shown.nth(0).locator(".d-add").first).not_to_have_css("background-color", "rgba(0, 0, 0, 0)")
-    assert len(diffs) == 1 and "path=E%3A%2Fwork%2Fproj%2Fdocs%2Fnotes.md" in diffs[0], diffs
+    assert len(diffs) == 1 and "path=E%3A%2Fstub%2Fproj%2Fdocs%2Fnotes.md" in diffs[0], diffs
 
     _assert_long_list_filters_by_name_and_folder(authed_page)
     _assert_empty_and_unreadable_say_so(authed_page)
