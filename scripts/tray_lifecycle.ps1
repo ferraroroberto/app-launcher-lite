@@ -123,7 +123,7 @@ param(
 # carries the .venv path; an image-path guard never matches the real process and
 # the operation silently no-ops. (scaffold docs/windows-tray.md)
 # A path is compared by its segments, never as a literal string: the same tree is reachable under
-# two spellings (a drive-letter junction, `C:\automation\x` and `E:\automation\x`, either slash
+# two spellings (a drive-letter junction, `C:\<root>\x` and `E:\<root>\x`, either slash
 # style) and a live process keeps the spelling it was started from, while -VenvDir carries the
 # spelling of the tray.bat that is running now. The drive letter is dropped, and the match starts
 # at a path boundary and ends at a separator or the end of the token, so a sibling checkout

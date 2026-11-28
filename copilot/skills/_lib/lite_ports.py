@@ -38,15 +38,21 @@ def config_path() -> Path:
     return Path(override) if override else LITE_CONFIG
 
 
-def _webapp_section(path: Path) -> Dict[str, Any]:
+def read_config(path: Optional[Path] = None) -> Dict[str, Any]:
+    """Lite's `config.json` as a dict; `{}` for a missing, unreadable or non-object file."""
+    path = path or config_path()
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))
     except FileNotFoundError:
         return {}
     except (OSError, ValueError) as exc:
-        logger.warning("⚠️ could not read %s (%s); using the default lite ports", path, exc)
+        logger.warning("⚠️ could not read %s (%s); using the defaults", path, exc)
         return {}
-    section = raw.get("webapp") if isinstance(raw, dict) else None
+    return raw if isinstance(raw, dict) else {}
+
+
+def _webapp_section(path: Path) -> Dict[str, Any]:
+    section = read_config(path).get("webapp")
     return section if isinstance(section, dict) else {}
 
 

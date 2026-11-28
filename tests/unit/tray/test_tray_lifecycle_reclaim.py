@@ -97,41 +97,41 @@ def _owns(tmp_path: Path, repo: str, lines: List[str], worktrees: Optional[List[
 
 class TestOwnership:
     def test_session_host_without_venv_is_owned_by_its_repo_root(self, tmp_path: Path) -> None:
-        repo = "C:" + "\\automation\\app-launcher-lite"
+        repo = "C:" + "\\stubfolder\\app-launcher-lite"
         owned = _owns(tmp_path, repo, [
             # the re-execed form from the report: base interpreter, no .venv in it
-            '"C:\\Python314\\pythonw.exe" C:\\automation\\app-launcher-lite\\launcher.py session-host --port 8466',
+            '"C:\\Python314\\pythonw.exe" C:\\stubfolder\\app-launcher-lite\\launcher.py session-host --port 8466',
             # the same tree under its other drive spelling (a junction)
-            '"E:\\Python314\\pythonw.exe" E:\\automation\\app-launcher-lite\\launcher.py session-host --port 8466',
+            '"E:\\Python314\\pythonw.exe" E:\\stubfolder\\app-launcher-lite\\launcher.py session-host --port 8466',
             # forward slashes and a quoted launcher path
-            'python.exe "C:/automation/app-launcher-lite/launcher.py" session-host',
+            'python.exe "C:/stubfolder/app-launcher-lite/launcher.py" session-host',
             # the venv form keeps matching
-            "C:\\automation\\app-launcher-lite\\.venv\\Scripts\\pythonw.exe -m something",
+            "C:\\stubfolder\\app-launcher-lite\\.venv\\Scripts\\pythonw.exe -m something",
         ])
         assert owned == [True, True, True, True]
 
     def test_session_host_started_from_scripts_is_owned_like_the_old_root_spelling(self, tmp_path: Path) -> None:
-        repo = "C:" + "\\automation\\app-launcher-lite"
+        repo = "C:" + "\\stubfolder\\app-launcher-lite"
         owned = _owns(tmp_path, repo, [
-            '"C:\\Python314\\pythonw.exe" C:\\automation\\app-launcher-lite\\scripts\\launcher.py session-host --port 8466',
-            'python.exe "C:/automation/app-launcher-lite/scripts/launcher.py" session-host',
+            '"C:\\Python314\\pythonw.exe" C:\\stubfolder\\app-launcher-lite\\scripts\\launcher.py session-host --port 8466',
+            'python.exe "C:/stubfolder/app-launcher-lite/scripts/launcher.py" session-host',
             # the old root spelling is still found, so a restart replaces a host started before the move
-            '"C:\\Python314\\pythonw.exe" C:\\automation\\app-launcher-lite\\launcher.py session-host --port 8466',
+            '"C:\\Python314\\pythonw.exe" C:\\stubfolder\\app-launcher-lite\\launcher.py session-host --port 8466',
             # a sibling checkout's moved launcher is still another tree
-            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher-lite-wt-371\\scripts\\launcher.py session-host",
+            "C:\\Python314\\pythonw.exe C:\\stubfolder\\app-launcher-lite-wt-371\\scripts\\launcher.py session-host",
         ])
         assert owned == [True, True, True, False]
 
     def test_same_command_line_from_another_repo_is_not_owned(self, tmp_path: Path) -> None:
-        repo = "C:" + "\\automation\\app-launcher-lite"
+        repo = "C:" + "\\stubfolder\\app-launcher-lite"
         owned = _owns(tmp_path, repo, [
-            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher\\launcher.py session-host --port 8466",
+            "C:\\Python314\\pythonw.exe C:\\stubfolder\\app-launcher\\launcher.py session-host --port 8466",
             # a sibling checkout git does not list for this repo is a different tree
-            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher-lite-wt-371\\launcher.py session-host",
+            "C:\\Python314\\pythonw.exe C:\\stubfolder\\app-launcher-lite-wt-371\\launcher.py session-host",
             # a longer parent path that merely ends in the root's segments
-            "C:\\Python314\\pythonw.exe C:\\other\\automation\\app-launcher-lite\\launcher.py session-host",
+            "C:\\Python314\\pythonw.exe C:\\other\\stubfolder\\app-launcher-lite\\launcher.py session-host",
             # this repo, but not the session-host role
-            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher-lite\\launcher.py tray",
+            "C:\\Python314\\pythonw.exe C:\\stubfolder\\app-launcher-lite\\launcher.py tray",
             "",
         ])
         assert owned == [False, False, False, False, False]
@@ -140,24 +140,24 @@ class TestOwnership:
 class TestVenvSpelling:
     """The tray is found whichever spelling of the junctioned repo root started it."""
 
-    REPO = "C:" + "\\automation\\app-launcher-lite"
+    REPO = "C:" + "\\stubfolder\\app-launcher-lite"
 
     def test_venv_command_line_matches_under_either_spelling_and_slash_style(self, tmp_path: Path) -> None:
         owned = _owns(tmp_path, self.REPO, [
-            "C:\\automation\\app-launcher-lite\\.venv\\Scripts\\pythonw.exe launcher.py tray",
-            "E:\\automation\\app-launcher-lite\\.venv\\Scripts\\pythonw.exe launcher.py tray",
-            "C:/automation/app-launcher-lite/.venv/Scripts/pythonw.exe launcher.py tray",
-            "E:/automation/app-launcher-lite/.venv/Scripts/pythonw.exe launcher.py tray",
-            '"e:\\AUTOMATION\\App-Launcher-Lite\\.venv\\Scripts\\python.exe" -m src.launching.ps_script',
+            "C:\\stubfolder\\app-launcher-lite\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "E:\\stubfolder\\app-launcher-lite\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "C:/stubfolder/app-launcher-lite/.venv/Scripts/pythonw.exe launcher.py tray",
+            "E:/stubfolder/app-launcher-lite/.venv/Scripts/pythonw.exe launcher.py tray",
+            '"e:\\STUBFOLDER\\App-Launcher-Lite\\.venv\\Scripts\\python.exe" -m src.launching.ps_script',
         ])
         assert owned == [True, True, True, True, True]
 
     def test_venv_of_a_sibling_checkout_or_another_repo_is_not_owned(self, tmp_path: Path) -> None:
         owned = _owns(tmp_path, self.REPO, [
-            "E:\\automation\\app-launcher-lite-wt-416\\.venv\\Scripts\\pythonw.exe launcher.py tray",
-            "E:\\automation\\app-launcher\\.venv\\Scripts\\pythonw.exe launcher.py tray",
-            "E:\\other\\automation\\app-launcher-lite\\.venv\\Scripts\\pythonw.exe launcher.py tray",
-            "E:\\automation\\app-launcher-lite\\.venv-old\\Scripts\\pythonw.exe launcher.py tray",
+            "E:\\stubfolder\\app-launcher-lite-wt-416\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "E:\\stubfolder\\app-launcher\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "E:\\other\\stubfolder\\app-launcher-lite\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "E:\\stubfolder\\app-launcher-lite\\.venv-old\\Scripts\\pythonw.exe launcher.py tray",
             "C:\\Python314\\pythonw.exe launcher.py tray",
         ])
         assert owned == [False, False, False, False, False]
@@ -166,37 +166,37 @@ class TestVenvSpelling:
 class TestOwnWorktrees:
     """A tray, webapp or session-host started from this repo's own worktree is claimed."""
 
-    REPO = "C:" + "\\automation\\app-launcher-lite"
+    REPO = "C:" + "\\stubfolder\\app-launcher-lite"
     # what `git worktree list --porcelain` prints: forward slashes
-    WORKTREES = ["C:/automation/app-launcher-lite-wt-478"]
+    WORKTREES = ["C:/stubfolder/app-launcher-lite-wt-478"]
 
     def test_tray_webapp_and_session_host_of_a_worktree_are_claimed(self, tmp_path: Path) -> None:
         owned = _owns(tmp_path, self.REPO, [
-            "C:\\automation\\app-launcher-lite-wt-478\\.venv\\Scripts\\pythonw.exe launcher.py tray",
-            '"C:\\automation\\app-launcher-lite-wt-478\\.venv\\Scripts\\python.exe" -m uvicorn app.webapp.server:app --port 8978',
+            "C:\\stubfolder\\app-launcher-lite-wt-478\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            '"C:\\stubfolder\\app-launcher-lite-wt-478\\.venv\\Scripts\\python.exe" -m uvicorn app.webapp.server:app --port 8978',
             # the session-host re-execs from the base interpreter: no .venv in its command line
-            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher-lite-wt-478\\launcher.py session-host --port 8466",
+            "C:\\Python314\\pythonw.exe C:\\stubfolder\\app-launcher-lite-wt-478\\launcher.py session-host --port 8466",
             # the same worktree under its other drive spelling
-            "E:\\automation\\app-launcher-lite-wt-478\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "E:\\stubfolder\\app-launcher-lite-wt-478\\.venv\\Scripts\\pythonw.exe launcher.py tray",
         ], self.WORKTREES)
         assert owned == [True, True, True, True]
 
     def test_other_processes_are_not_claimed(self, tmp_path: Path) -> None:
         owned = _owns(tmp_path, self.REPO, [
             # app-launcher's own tray, session-host and worktree
-            "C:\\automation\\app-launcher\\.venv\\Scripts\\pythonw.exe launcher.py tray",
-            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher\\launcher.py session-host --port 8446",
-            "C:\\automation\\app-launcher-wt-12\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "C:\\stubfolder\\app-launcher\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "C:\\Python314\\pythonw.exe C:\\stubfolder\\app-launcher\\launcher.py session-host --port 8446",
+            "C:\\stubfolder\\app-launcher-wt-12\\.venv\\Scripts\\pythonw.exe launcher.py tray",
             # a lookalike directory git does not list as this repo's worktree
-            "C:\\automation\\app-launcher-lite-wt-999\\.venv\\Scripts\\pythonw.exe launcher.py tray",
-            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher-lite-wt-999\\launcher.py session-host",
+            "C:\\stubfolder\\app-launcher-lite-wt-999\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "C:\\Python314\\pythonw.exe C:\\stubfolder\\app-launcher-lite-wt-999\\launcher.py session-host",
             # unrelated python under another .venv, and the bare interpreter
-            "C:\\projects\\other\\.venv\\Scripts\\python.exe -m http.server",
+            "C:\\fixtures\\other\\.venv\\Scripts\\python.exe -m http.server",
             "C:\\Python314\\python.exe -m http.server",
             # a worktree process that is neither under its .venv nor its session-host
-            "C:\\Python314\\pythonw.exe C:\\automation\\app-launcher-lite-wt-478\\launcher.py tray",
+            "C:\\Python314\\pythonw.exe C:\\stubfolder\\app-launcher-lite-wt-478\\launcher.py tray",
             # a longer name that merely starts with the worktree's
-            "C:\\automation\\app-launcher-lite-wt-4781\\.venv\\Scripts\\pythonw.exe launcher.py tray",
+            "C:\\stubfolder\\app-launcher-lite-wt-4781\\.venv\\Scripts\\pythonw.exe launcher.py tray",
         ], self.WORKTREES)
         assert owned == [False] * 9
 

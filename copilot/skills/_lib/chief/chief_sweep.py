@@ -1,7 +1,7 @@
 """The fleet chief's worktree sweep.
 
 Every `<repo>-wt-<N>` folder beside the fleet repos is a leftover of a
-chief-dispatched lane: the owner does not use worktrees himself, and has
+chief-dispatched lane: the owner does not use worktrees by hand, and has
 authorised the chief to remove finished ones on its own judgment, including
 those whose issue is still open (umbrella issues, issues waiting on a live
 check, plan-only lanes). The judgment is mechanical, so it lives here rather than being re-typed as

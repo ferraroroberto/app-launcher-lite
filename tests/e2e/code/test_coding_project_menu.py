@@ -38,7 +38,7 @@ def _app(app_id: str) -> dict:
         "id": app_id,
         "name": app_id,
         "kind": "claude-code",
-        "project_dir": f"E:/automation/{app_id}",
+        "project_dir": f"E:/stubfolder/{app_id}",
         "added_at": "",
         "is_favorite": False,
         "repo_url": f"https://gitlab.example.com/team/{app_id}",
@@ -59,7 +59,7 @@ def _install_routes(page: Page, *, vscode_available: bool) -> dict:
         "**/api/apps",
         lambda route: route.fulfill(
             status=200, content_type="application/json",
-            body=json.dumps({"scan_root": "E:/automation", "apps": [_app("alpha"), _app("plain")]}),
+            body=json.dumps({"scan_root": "E:/stubfolder", "apps": [_app("alpha"), _app("plain")]}),
         ),
     )
     page.route(
@@ -86,7 +86,7 @@ def _install_routes(page: Page, *, vscode_available: bool) -> dict:
         posted["vscode"].append(route.request.url)
         route.fulfill(
             status=200, content_type="application/json",
-            body=json.dumps({"ok": True, "workspace": "E:/automation/alpha.code-workspace",
+            body=json.dumps({"ok": True, "workspace": "E:/stubfolder/alpha.code-workspace",
                              "created": True, "pid": 4321}),
         )
 
@@ -94,7 +94,7 @@ def _install_routes(page: Page, *, vscode_available: bool) -> dict:
         posted["folder"].append(route.request.url)
         route.fulfill(
             status=200, content_type="application/json",
-            body=json.dumps({"ok": True, "path": "E:/automation/alpha", "pid": 99}),
+            body=json.dumps({"ok": True, "path": "E:/stubfolder/alpha", "pid": 99}),
         )
 
     page.route("**/api/claude-code/vscode/**", _vscode)

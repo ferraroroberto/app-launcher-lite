@@ -159,7 +159,7 @@ def _mock_git_status(page: Page) -> None:
 def _session_row(sid: str, *, kind: str, agent: str, title: str) -> dict:
     return {
         "session_id": sid, "kind": kind, "agent": agent,
-        "project_dir": "E:/automation/modeproj", "name": "modeproj",
+        "project_dir": "E:/stubfolder/modeproj", "name": "modeproj",
         "alive": True, "started_at": "2026-09-16T08:00:00Z",
         "live_title": "", "prompt_title": "", "manual_title": title,
     }

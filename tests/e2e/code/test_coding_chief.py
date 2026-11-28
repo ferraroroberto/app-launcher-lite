@@ -35,7 +35,7 @@ pytestmark = pytest.mark.smoke
 
 _CHIEF_SESSION = {
     "session_id": "s-chief", "kind": "pty", "agent": "copilot",
-    "label": "chief", "project_dir": "E:/automation/fleet-config",
+    "label": "chief", "project_dir": "E:/stubfolder/fleet-config",
     "name": "chief", "flags": "", "started_at": "2026-07-19T06:00:00Z",
     "alive": True, "rows": 40, "cols": 120,
     "live_title": "", "prompt_title": "", "manual_title": "chief",
@@ -44,8 +44,8 @@ _CHIEF_SESSION = {
 
 _WORKER_SESSION = {
     "session_id": "s-work", "kind": "pty", "agent": "copilot",
-    "label": "", "project_dir": "E:/automation/life-os",
-    "name": "life-os", "flags": "", "started_at": "2026-07-19T06:30:00Z",
+    "label": "", "project_dir": "E:/stubfolder/repo-f",
+    "name": "repo-f", "flags": "", "started_at": "2026-07-19T06:30:00Z",
     "alive": True, "rows": 40, "cols": 120,
     "live_title": "weekly recap", "prompt_title": "", "manual_title": "",
     "output_chars": 900,

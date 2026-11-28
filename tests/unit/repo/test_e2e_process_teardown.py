@@ -96,11 +96,11 @@ def test_reap_stub_children_kills_only_its_own_scope(tmp_path: Path) -> None:
 
 
 def test_stub_match_is_a_whole_argv_element() -> None:
-    checkout = Path("E:/work/repo-wt-7")
+    checkout = Path("E:/stub/repo-wt-7")
     stub = f"C:/Temp/pytest-of-u/pytest-3/popen-gw1/claude-shim0/{STUB_SCRIPT_NAME}"
     interpreter = str(checkout / ".venv/Scripts/python.exe")
     assert _is_stub_under([interpreter, "-X", "utf8", stub], checkout)
     assert _is_stub_under([interpreter, stub], Path(stub).parent)
     # A shell that only mentions both paths is not a stub child.
     assert not _is_stub_under(["bash", "-c", f"grep x {stub} {interpreter}"], checkout)
-    assert not _is_stub_under([interpreter, "-X", "utf8", stub], Path("E:/work/repo"))
+    assert not _is_stub_under([interpreter, "-X", "utf8", stub], Path("E:/stub/repo"))

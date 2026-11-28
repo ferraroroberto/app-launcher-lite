@@ -43,7 +43,7 @@ def _job(tmp_path, **over):
     base = dict(
         id="snapshot",
         name="Snapshot freshness",
-        script_path=str(tmp_path / "projects" / "life-os" / "scripts" / "snap.py"),
+        script_path=str(tmp_path / "projects" / "repo-f" / "scripts" / "snap.py"),
         exit_outcomes={},
     )
     base.update(over)
@@ -100,7 +100,7 @@ class TestEventShape:
             "v": 2, "kind": "job-failed", "event": "JobFailed", "job_id": "snapshot",
             "job_name": "Snapshot freshness", "run_id": "20261022-040000", "exit_code": 3,
             "outcome": "failed", "trigger": "schedule", "script_path": job.script_path,
-            "repo": "life-os", "excerpt": "boom", "excerpt_source": "job-output",
+            "repo": "repo-f", "excerpt": "boom", "excerpt_source": "job-output",
         }
         for null_field in ("launcher_sid", "number", "dispatch_id"):
             assert event[null_field] is None
@@ -132,7 +132,7 @@ class TestEventShape:
 
     def test_repo_is_the_projects_child_holding_the_script(self, tmp_path):
         projects = str(tmp_path / "projects")
-        assert cjf.owning_repo(str(tmp_path / "projects" / "Life-OS" / "a.py"), projects) == "Life-OS"
+        assert cjf.owning_repo(str(tmp_path / "projects" / "Repo-F" / "a.py"), projects) == "Repo-F"
         assert cjf.owning_repo(str(tmp_path / "elsewhere" / "a.py"), projects) is None
         assert cjf.owning_repo("a.py", projects) is None
         assert cjf.owning_repo(str(tmp_path / "projects" / "a.py"), projects) is None

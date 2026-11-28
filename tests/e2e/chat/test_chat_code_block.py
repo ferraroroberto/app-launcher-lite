@@ -1,6 +1,6 @@
 """Regression pin for #1100 — a fenced code block inside a Chat-mode turn.
 
-Roberto reported from the phone a monospace heading line missing its first
+The owner reported from the phone a monospace heading line missing its first
 character. ``markdown.js`` emits ``<pre class="md-code"><code>`` for a fence,
 and inside a chat bubble the only rule that reached it was
 ``.tr-md pre { overflow-x: auto; }``. Everything else was UA default: no

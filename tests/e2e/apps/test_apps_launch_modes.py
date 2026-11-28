@@ -33,19 +33,19 @@ def _apps_payload() -> dict:
         "scan_root": "C:\\stub",
         "apps": [
             {
-                "id": "photo-ocr-app",
-                "name": "Photo OCR",
+                "id": "repo-a-app",
+                "name": "Repo A",
                 "kind": "streamlit",
                 "refreshable": True,
-                "bat_path": "C:\\stub\\photo-ocr\\run.bat",
+                "bat_path": "C:\\stub\\repo-a\\run.bat",
                 "added_at": "2026-01-01T00:00:00",
                 "autostart": False,
             },
             {
                 "id": "vt-tunnel",
-                "name": "Voice Transcriber",
+                "name": "Repo B",
                 "kind": "tunnel",
-                "bat_path": "C:\\stub\\voice-transcriber\\webapp_tunnel.bat",
+                "bat_path": "C:\\stub\\repo-b\\webapp_tunnel.bat",
                 "tunnel_url": "https://whisper.example.com/?token=abc123",
                 "health": "up",
                 "added_at": "2026-01-01T00:00:00",
@@ -53,18 +53,18 @@ def _apps_payload() -> dict:
             },
             {
                 "id": "dead-tunnel",
-                "name": "Photo OCR Tunnel",
+                "name": "Repo A Tunnel",
                 "kind": "tunnel",
-                "bat_path": "C:\\stub\\photo-ocr\\webapp_tunnel.bat",
+                "bat_path": "C:\\stub\\repo-a\\webapp_tunnel.bat",
                 "added_at": "2026-01-01T00:00:00",
                 "autostart": False,
             },
             {
-                "id": "home-automation-tray",
-                "name": "Home Automation",
+                "id": "repo-c-tray",
+                "name": "Repo C",
                 "kind": "tray",
                 "refreshable": True,
-                "bat_path": "C:\\stub\\home-automation\\tray.bat",
+                "bat_path": "C:\\stub\\repo-c\\tray.bat",
                 "added_at": "2026-01-01T00:00:00",
                 "autostart": False,
             },
@@ -168,7 +168,7 @@ def test_rows_hide_path_and_url_and_launch_both_modes(
     expect(row).to_be_visible(timeout=5_000)
     # One title line and nothing else (#1505): the avatar says the kind, so
     # an idle app row has no context line, and never the path.
-    expect(row.locator(".action-row-title")).to_have_text("Photo OCR")
+    expect(row.locator(".action-row-title")).to_have_text("Repo A")
     expect(row.locator(".action-row-meta")).to_have_count(0)
 
     menu = _assert_tunnel_url_lives_in_the_menu(authed_page)
@@ -178,7 +178,7 @@ def test_rows_hide_path_and_url_and_launch_both_modes(
     # 🚫👁) the unattended PC wants; Launch visible is in the ⋯ menu.
     expect(row).to_be_visible(timeout=5_000)
     expect(row.locator(".action-row-main")).to_have_attribute(
-        "aria-label", "Launch Photo OCR hidden, with no window")
+        "aria-label", "Launch Repo A hidden, with no window")
 
     # Hidden: the row tap opts in to the windowless spawn.
     row.locator(".action-row-main").click()
@@ -220,7 +220,7 @@ def test_rows_hide_path_and_url_and_launch_both_modes(
     # say what it does.
     toggle = tray.locator(":scope > button.toggle")
     expect(toggle).to_have_count(1)
-    expect(toggle).to_have_attribute("aria-label", "Autostart Home Automation at boot")
+    expect(toggle).to_have_attribute("aria-label", "Autostart Repo C at boot")
 
     _assert_trays_panel_and_autostart(authed_page, toggle)
 
@@ -233,9 +233,9 @@ def _assert_refresh_stops_and_relaunches(page: Page, row, tray, launches: list[d
     """
     refreshes: list[str] = []
     replies = iter([
-        (200, {"refreshed": "photo-ocr-app", "stops": [{"pid": 11, "stopped": True}]}),
-        (409, {"detail": "Photo OCR: pid 11 did not stop, so it was not relaunched"}),
-        (200, {"refreshed": "home-automation-tray", "stops": [], "restart": {"exit_code": 0}}),
+        (200, {"refreshed": "repo-a-app", "stops": [{"pid": 11, "stopped": True}]}),
+        (409, {"detail": "Repo A: pid 11 did not stop, so it was not relaunched"}),
+        (200, {"refreshed": "repo-c-tray", "stops": [], "restart": {"exit_code": 0}}),
     ])
 
     def _refresh_handler(route):
@@ -248,9 +248,9 @@ def _assert_refresh_stops_and_relaunches(page: Page, row, tray, launches: list[d
     toast = page.locator("#toast")
 
     button = row.locator("[data-item=app-refresh-btn]")
-    expect(button).to_have_accessible_name(re.compile(r"^Refresh Photo OCR"))
+    expect(button).to_have_accessible_name(re.compile(r"^Refresh Repo A"))
     button.click()
-    expect(toast).to_contain_text("Refreshed Photo OCR")
+    expect(toast).to_contain_text("Refreshed Repo A")
 
     # A stop that did not take is shown, and says nothing was relaunched.
     button.click()
@@ -259,11 +259,11 @@ def _assert_refresh_stops_and_relaunches(page: Page, row, tray, launches: list[d
 
     # A tray row has the same verb; a row the server marks not refreshable has none.
     tray.locator("[data-item=app-refresh-btn]").click()
-    expect(toast).to_contain_text("Refreshed Home Automation")
+    expect(toast).to_contain_text("Refreshed Repo C")
     expect(page.locator('#appsList li[data-id="dead-tunnel"] [data-item=app-refresh-btn]')).to_have_count(0)
 
     assert refreshes == [
-        "photo-ocr-app/refresh", "photo-ocr-app/refresh", "home-automation-tray/refresh",
+        "repo-a-app/refresh", "repo-a-app/refresh", "repo-c-tray/refresh",
     ], f"refresh posts {refreshes}"
     assert len(launches) == launched, "a Refresh tap must never launch the row"
 
@@ -276,9 +276,9 @@ def _assert_trays_panel_and_autostart(page: Page, toggle) -> None:
     """
     tray_rows = page.locator("#registeredTraysList li.action-row")
     expect(tray_rows).to_have_count(1)
-    expect(tray_rows.first).to_contain_text("Home Automation")
-    expect(page.locator("#appsList")).not_to_contain_text("Home Automation")
-    expect(page.locator("#registeredTraysList")).not_to_contain_text("Photo OCR")
+    expect(tray_rows.first).to_contain_text("Repo C")
+    expect(page.locator("#appsList")).not_to_contain_text("Repo C")
+    expect(page.locator("#registeredTraysList")).not_to_contain_text("Repo A")
 
     # The registry answers with the flag the last PATCH set, as the server does.
     patches: list[dict] = []
@@ -296,11 +296,11 @@ def _assert_trays_panel_and_autostart(page: Page, toggle) -> None:
         route.fulfill(
             status=200,
             content_type="application/json",
-            body=json.dumps({"app": {"id": "home-automation-tray", "autostart": state["autostart"]}}),
+            body=json.dumps({"app": {"id": "repo-c-tray", "autostart": state["autostart"]}}),
         )
 
     page.route("**/api/apps", _apps_handler)
-    page.route("**/api/apps/home-automation-tray", _patch_handler)
+    page.route("**/api/apps/repo-c-tray", _patch_handler)
 
     # #790 dropped the switch's visible label — the panel is called Trays
     # and it is the row's only toggle; since #1128 it is the action-row's
@@ -333,9 +333,9 @@ def test_path_and_rename_remove_live_in_the_menu(
             return
         deletes.append(route.request.url)
         route.fulfill(status=200, content_type="application/json",
-                      body=json.dumps({"removed": "photo-ocr-app"}))
+                      body=json.dumps({"removed": "repo-a-app"}))
 
-    authed_page.route(re.compile(r".*/api/apps/photo-ocr-app$"), _delete)
+    authed_page.route(re.compile(r".*/api/apps/repo-a-app$"), _delete)
     native: list = []
     authed_page.on("dialog", lambda d: (native.append(d.message), d.dismiss()))
     _navigate(authed_page, base_url, edit=edit)
@@ -352,7 +352,7 @@ def test_path_and_rename_remove_live_in_the_menu(
         " t => { window.__copied.push(t); return Promise.resolve(); }; }")
     menu.locator("[data-item=app-copy-path-btn]").click()
     expect(authed_page.locator("#toast")).to_contain_text("Path copied")
-    assert authed_page.evaluate("() => window.__copied") == ["C:\\stub\\photo-ocr\\run.bat"]
+    assert authed_page.evaluate("() => window.__copied") == ["C:\\stub\\repo-a\\run.bat"]
     row.locator(".action-row-kebab").click()
     # Remove is the danger item, last.
     expect(menu.locator(":scope > *").last).to_have_attribute("data-item", "app-remove-btn")
@@ -363,7 +363,7 @@ def test_path_and_rename_remove_live_in_the_menu(
     menu.locator("[data-item=app-remove-btn]").click()
     confirm = authed_page.locator("#confirmDialog")
     expect(confirm).to_be_visible()
-    expect(confirm.locator("#confirmDialogTitle")).to_have_text("Remove Photo OCR?")
+    expect(confirm.locator("#confirmDialogTitle")).to_have_text("Remove Repo A?")
     authed_page.keyboard.press("Escape")
     expect(confirm).to_be_hidden()
     flush_requests(authed_page)

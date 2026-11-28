@@ -100,7 +100,7 @@ class ChiefOpsTests(unittest.TestCase):
         self.assertEqual(plan["version"], 1)
         self.assertEqual(plan["queue"], [])
         self.assertEqual(plan["lanes"][0]["repo"], "fleet-config-lite")
-        self.assertEqual(plan["waiting_on_roberto"][0]["id"], "q1")
+        self.assertEqual(plan["waiting_on_owner"][0]["id"], "q1")
         kinds = [json.loads(line)["kind"] for line in
                  (self.state / "chief-journal.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertEqual(kinds, ["filed", "dispatched", "asked", "merged"])
@@ -126,6 +126,19 @@ class ChiefOpsTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("ERROR:", err)
 
+    def test_a_plan_saved_under_the_old_names_loads_and_the_next_write_renames_them(self) -> None:
+        plan_path = self.state / "chief-plan.json"
+        plan_path.write_text(json.dumps({
+            "version": 1, "updated_at": "2026-09-26T14:40:00Z", "lanes": [],
+            "queue": [{"repo": "demo", "ref": "#1", "title": "t", "status": "waiting-someone"}],
+            "waiting_on_someone": [{"id": "q1", "text": "Pick one?", "ref": "demo#1"}],
+        }), encoding="utf-8")
+        self.assertEqual(_run("plan", "ask", "Another?", "--id", "q2")[0], 0)
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        self.assertNotIn("waiting_on_someone", plan)
+        self.assertEqual([row["id"] for row in plan["waiting_on_owner"]], ["q1", "q2"])
+        self.assertEqual(plan["queue"][0]["status"], "waiting-owner")
+
     def test_unwait_with_no_match_is_a_no_op_not_a_failure(self) -> None:
         self.assertEqual(_run("plan", "ask", "Pick one?", "--id", "pick")[0], 0)
         plan_path = self.state / "chief-plan.json"
@@ -138,16 +151,16 @@ class ChiefOpsTests(unittest.TestCase):
         self.assertNotIn("UNWAIT=none", out)
 
     def test_a_lane_can_carry_a_skill_run(self) -> None:
-        code, out, _ = _run("plan", "lane", "task-os", "building", "--item", "skill:upstream-sync")
+        code, out, _ = _run("plan", "lane", "repo-g", "building", "--item", "skill:upstream-sync")
         self.assertEqual(code, 0, out)
         plan = json.loads((self.state / "chief-plan.json").read_text(encoding="utf-8"))
-        self.assertEqual(plan["lanes"], [{"repo": "task-os", "status": "building",
+        self.assertEqual(plan["lanes"], [{"repo": "repo-g", "status": "building",
                                           "item": "skill:upstream-sync"}])
         entry = json.loads((self.state / "chief-journal.jsonl").read_text(encoding="utf-8").splitlines()[-1])
         self.assertEqual(entry["kind"], "dispatched")
         self.assertIn("running upstream-sync", entry["text"])
-        for bad in ("upstream-sync task-os", "skill:", "skill:Upstream Sync"):
-            code, _out, err = _run("plan", "lane", "task-os", "building", "--item", bad)
+        for bad in ("upstream-sync repo-g", "skill:", "skill:Upstream Sync"):
+            code, _out, err = _run("plan", "lane", "repo-g", "building", "--item", bad)
             self.assertEqual(code, 2, bad)
             self.assertIn("must be #N, skill:<name> or empty", err)
 

@@ -33,7 +33,7 @@ pins each row's outcome against the ``❓``/``❌`` verdict the adapter prints f
 that code.
 
 **Job-declared codes.** That table is global and belongs to the
-adapter. A job's *own* child can also exit non-zero on purpose: life-os's
+adapter. A job's *own* child can also exit non-zero on purpose: a
 nightly email sweep exits 3 when it has mail to sweep but no desktop to start
 Outlook on. A job declares that in its config entry
 (``"exit_outcomes": {"3": "deferred"}``), and :func:`run_outcome` takes the

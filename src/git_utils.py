@@ -50,7 +50,7 @@ def git_env(base: Optional[dict] = None) -> dict:
     This repo is the fleet's only *fleet-wide* git reader, which is what makes
     it the one that can strand dozens at once. ``/api/claude-code/git-status``
     fans :func:`src.scanner.git_status` across every child of ``projects_dir``
-    (default: this repo's parent, ``E:/automation``) in parallel threads, on a
+    (default: this repo's parent folder) in parallel threads, on a
     ~45 s poll. Measured on this host: 40 of the 42 sibling repos take the
     optional lock on every poll, each holding it 4–6 ms starting ~75 % into a
     ~30 ms run — so the fan-out's lock windows **overlap in real time**, and

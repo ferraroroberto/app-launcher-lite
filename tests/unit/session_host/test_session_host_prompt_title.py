@@ -26,7 +26,7 @@ from src.session_host import (
 def _make_session() -> PtySession:
     return PtySession(
         session_id="sid-test",
-        project_dir=r"C:\code\app-launcher",
+        project_dir=r"C:\stub\app-launcher",
         name="app-launcher",
         flags="",
         started_at=time.time(),

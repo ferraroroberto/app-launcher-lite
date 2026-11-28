@@ -41,10 +41,10 @@ def _place(card, plan, markers_read=True, dormant=frozenset()):
     (_card(2, ["Needs-Validation"]), _plan(), bb.WAITING, ["validate"]),
     (_card(2, ["needs-owner"]), _plan(waiting=[{"ref": "app-launcher#2", "repo": "app-launcher"}]),
      bb.WAITING, ["before start", "question"]),
-    # A question or a waiting-roberto row without the label is a chip, not the bucket.
+    # A question or a waiting-owner row without the label is a chip, not the bucket.
     (_card(2), _plan(waiting=[{"ref": "app-launcher#2", "repo": "app-launcher"}]),
      bb.NOT_PLANNED, ["question"]),
-    (_card(2), _plan(queue=[_row(2, "waiting-roberto")]), bb.QUEUED, ["question"]),
+    (_card(2), _plan(queue=[_row(2, "waiting-owner")]), bb.QUEUED, ["question"]),
     # An owner row that lacks the label is Blocked, and says why.
     (_card(2), _plan(queue=[_row(2, "parked", kind="owner")]), bb.BLOCKED, ["owner step", "no label"]),
     (_card(2, ["needs-owner"]), _plan(queue=[_row(2, "parked", kind="owner")]),
@@ -55,13 +55,13 @@ def _place(card, plan, markers_read=True, dormant=frozenset()):
     (_card(3), _plan(queue=[_row(3, after="fleet-config#9 no-lane:fleet-config")]),
      bb.QUEUED, ["after fleet-config#9", "after no lane in fleet-config"]),
     # Blocked: blocked-by rows, and a parked row with no kind.
-    (_card(3), _plan(queue=[_row(3, "parked", kind="blocked-by", blocked_by="life-os#4")]),
-     bb.BLOCKED, ["blocked by life-os#4"]),
+    (_card(3), _plan(queue=[_row(3, "parked", kind="blocked-by", blocked_by="repo-f#4")]),
+     bb.BLOCKED, ["blocked by repo-f#4"]),
     (_card(3), _plan(queue=[_row(3, "parked")]), bb.BLOCKED, ["parked"]),
     # Umbrellas.
     (_card(5), _plan(queue=[_row(5, "parked", kind="umbrella")]), bb.UMBRELLA, []),
     # 4. Not planned; a row for another repo's #4 does not match.
-    (_card(4), _plan(queue=[{**_row(4), "repo": "life-os"}]), bb.NOT_PLANNED, []),
+    (_card(4), _plan(queue=[{**_row(4), "repo": "repo-f"}]), bb.NOT_PLANNED, []),
 ])
 def test_precedence(card, plan, bucket, chips):
     got_bucket, got_chips, _ = _place(card, plan)
@@ -126,7 +126,7 @@ def _fixture_board():
     plan = _plan(queue=[
         _row(2, "parked", kind="owner"),
         _row(4),
-        _row(5, "parked", kind="blocked-by", blocked_by="life-os#1"),
+        _row(5, "parked", kind="blocked-by", blocked_by="repo-f#1"),
         _row(6, "parked", kind="owner"),
         _row(7, "parked", kind="umbrella"),
         _row(4, "building"),  # a repeat row: the first one places the issue
@@ -213,9 +213,9 @@ def test_a_validate_to_close_item_names_the_plan_rows_it_unblocks():
     bb.classify(cards, [], _plan(), markers_read=True, dormant_repos=set())
     plan = _plan(queue=[
         _row(5, "parked", kind="blocked-by", blocked_by="app-launcher#2"),
-        # A bare #2 on a life-os row is life-os#2, another repo's issue.
-        {**_row(6, "parked", kind="blocked-by", blocked_by="#2"), "repo": "life-os"},
-        {**_row(7, "parked", kind="blocked-by", blocked_by="x#9 app-launcher#2"), "repo": "life-os"},
+        # A bare #2 on a repo-f row is repo-f#2, another repo's issue.
+        {**_row(6, "parked", kind="blocked-by", blocked_by="#2"), "repo": "repo-f"},
+        {**_row(7, "parked", kind="blocked-by", blocked_by="x#9 app-launcher#2"), "repo": "repo-f"},
         _row(8, "queued", blocked_by="app-launcher#2"),  # not a blocked-by row
     ])
     items = [_owner_item(2, "validate-after"), _owner_item(3, "validate-after"),
@@ -223,7 +223,7 @@ def test_a_validate_to_close_item_names_the_plan_rows_it_unblocks():
 
     bb.owner_counts(cards, items, plan)
 
-    assert [it["unblocks"] for it in items] == [["app-launcher#5", "life-os#7"], [], []]
+    assert [it["unblocks"] for it in items] == [["app-launcher#5", "repo-f#7"], [], []]
 
 
 def test_owner_counts_name_waiting_issues_the_owner_list_lacks():

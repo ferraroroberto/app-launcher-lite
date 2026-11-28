@@ -179,7 +179,7 @@ def _bypass_gate(monkeypatch):
 def _serve(overrides, monkeypatch, path: Path) -> None:
     overrides["session"].list_sessions.return_value = [{
         "session_id": "s1", "kind": "pty", "agent": "copilot", "alive": True,
-        "project_dir": "E:/work/proj", "started_at": 1_789_000_000,
+        "project_dir": "E:/stub/proj", "started_at": 1_789_000_000,
     }]
     monkeypatch.setattr(board, "state_row_for_session",
                         lambda live, rows, sid: {"transcript_path": str(path)})

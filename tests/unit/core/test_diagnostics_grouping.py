@@ -71,9 +71,9 @@ def test_unknown_parent_left_top_level() -> None:
 def test_detached_helpers_grouped_by_cwd() -> None:
     # local-llm-hub spawns its TTS + translate helpers detached, so their
     # ppids don't reach the hub. Same cwd → nest under the lowest-port one.
-    hub = PortOwner(pid=100, port=8000, cwd=r"E:\automation\local-llm-hub")
-    tts = PortOwner(pid=200, port=8093, cwd=r"E:\automation\local-llm-hub")
-    xlate = PortOwner(pid=300, port=8094, cwd=r"E:\automation\local-llm-hub")
+    hub = PortOwner(pid=100, port=8000, cwd=r"E:\stubfolder\local-llm-hub")
+    tts = PortOwner(pid=200, port=8093, cwd=r"E:\stubfolder\local-llm-hub")
+    xlate = PortOwner(pid=300, port=8094, cwd=r"E:\stubfolder\local-llm-hub")
     # No ancestry link between any of them.
     _assign_parents([hub, tts, xlate], _lookup({100: 1, 200: 1, 300: 1}))
     assert hub.parent_pid is None  # lowest port → the parent
@@ -92,8 +92,8 @@ def test_cwd_fallback_ignores_empty_cwd() -> None:
 
 def test_cwd_fallback_separate_dirs_not_grouped() -> None:
     # Different working directories → genuinely separate apps, no nesting.
-    a = PortOwner(pid=100, port=8000, cwd=r"E:\automation\local-llm-hub")
-    b = PortOwner(pid=200, port=8443, cwd=r"E:\automation\voice-transcriber")
+    a = PortOwner(pid=100, port=8000, cwd=r"E:\stubfolder\local-llm-hub")
+    b = PortOwner(pid=200, port=8443, cwd=r"E:\stubfolder\repo-b")
     _assign_parents([a, b], _lookup({100: 1, 200: 1}))
     assert a.parent_pid is None
     assert b.parent_pid is None
@@ -102,8 +102,8 @@ def test_cwd_fallback_separate_dirs_not_grouped() -> None:
 @pytest.mark.windows_only
 def test_cwd_normalized_case_and_separators() -> None:
     # Windows: case-insensitive, separator-insensitive cwd comparison.
-    hub = PortOwner(pid=100, port=8000, cwd=r"E:\automation\local-llm-hub")
-    tts = PortOwner(pid=200, port=8093, cwd="e:/automation/local-llm-hub/")
+    hub = PortOwner(pid=100, port=8000, cwd=r"E:\stubfolder\local-llm-hub")
+    tts = PortOwner(pid=200, port=8093, cwd="e:/stubfolder/local-llm-hub/")
     _assign_parents([hub, tts], _lookup({100: 1, 200: 1}))
     assert tts.parent_pid == 100
 
@@ -111,9 +111,9 @@ def test_cwd_normalized_case_and_separators() -> None:
 def test_ancestry_wins_over_cwd_fallback() -> None:
     # A helper already nested by ancestry isn't re-pointed by the cwd pass,
     # even if it shares a directory with a different lower-port listener.
-    hub = PortOwner(pid=100, port=8000, cwd=r"E:\automation\local-llm-hub")
-    mid = PortOwner(pid=150, port=8050, cwd=r"E:\automation\local-llm-hub")
-    child = PortOwner(pid=200, port=8093, cwd=r"E:\automation\local-llm-hub")
+    hub = PortOwner(pid=100, port=8000, cwd=r"E:\stubfolder\local-llm-hub")
+    mid = PortOwner(pid=150, port=8050, cwd=r"E:\stubfolder\local-llm-hub")
+    child = PortOwner(pid=200, port=8093, cwd=r"E:\stubfolder\local-llm-hub")
     # child is a real PID descendant of mid (mid -> child).
     _assign_parents(
         [hub, mid, child], _lookup({100: 1, 150: 1, 200: 150})

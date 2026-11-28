@@ -80,8 +80,8 @@ class TestSharedSessionName:
             {
                 "session_id": "abc-123",
                 "kind": "pty",
-                "name": "photo-ocr",
-                "project_dir": "E:/automation/photo-ocr",
+                "name": "repo-a",
+                "project_dir": "E:/stubfolder/repo-a",
                 "live_title": "",
                 "prompt_title": "",
                 "started_at": "2026-07-08T10:00:00Z",
@@ -90,8 +90,8 @@ class TestSharedSessionName:
         state_file = Path(app.state.webapp_config.sessions_state_file)
         state_file.write_text(json.dumps({
             "t-uuid": {
-                "project": "photo-ocr", "status": "needs-you",
-                "cwd": "E:/automation/photo-ocr",
+                "project": "repo-a", "status": "needs-you",
+                "cwd": "E:/stubfolder/repo-a",
                 "name": "Fixing the chunk merge bug",
                 "name_source": None,
                 "updated_at": (
@@ -118,8 +118,8 @@ class TestSharedSessionName:
             {
                 "session_id": "abc-123",
                 "kind": "pty",
-                "name": "photo-ocr",
-                "project_dir": "E:/automation/photo-ocr",
+                "name": "repo-a",
+                "project_dir": "E:/stubfolder/repo-a",
             }
         ]
         resp = client.get("/api/claude-code/sessions")

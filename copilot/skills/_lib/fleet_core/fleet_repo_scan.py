@@ -31,6 +31,7 @@ from typing import Dict, FrozenSet, Iterator, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import git_run  # noqa: E402
+import lite_ports  # noqa: E402
 
 # skills/_lib/fleet_core/fleet_repo_scan.py -> repo root is two levels up.
 _DEFAULT_PROJECTS_TOML = Path(__file__).resolve().parents[3] / "hooks" / "projects.toml"
@@ -126,7 +127,7 @@ def is_linked_worktree(path: str | Path) -> bool:
     `git worktree add` writes a `.git` **file** containing a `gitdir:` pointer,
     where a real checkout has a `.git` **directory**. That one byte-level fact
     is the only reliable discriminator, and every fleet sweep over
-    `E:/automation` needs it: a sibling `<repo>-wt-<N>` tree is a full checkout
+    the projects folder needs it: a sibling `<repo>-wt-<N>` tree is a full checkout
     holding a byte-identical copy of its primary's `CLAUDE.md`, `.fleet.toml`
     and skills, so counting it double-counts the repo it belongs to.
 
@@ -144,8 +145,22 @@ def is_linked_worktree(path: str | Path) -> bool:
     return (Path(path) / ".git").is_file()
 
 
+class FleetOwnerUnset(ValueError):
+    """No account is configured, so which remotes are the fleet's is unknown."""
+
+
+def fleet_owner() -> str:
+    """The forge account that owns the fleet: `fleet_owner` in this checkout's
+    `config/config.json` (or the file `FLEET_LITE_CONFIG` names)."""
+    owner = str(lite_ports.read_config().get("fleet_owner") or "").strip()
+    if not owner:
+        raise FleetOwnerUnset(
+            f'set "fleet_owner" in {lite_ports.config_path()} to the account that owns the fleet repos')
+    return owner
+
+
 def is_fleet_repo(remote_url: str | None) -> bool:
-    """True if the remote URL belongs to the `ferraroroberto` GitHub org.
+    """True if the remote URL belongs to the configured fleet owner (`fleet_owner`).
 
     Matches both the https (`https://github.com/ferraroroberto/x.git`) and
     ssh (`git@github.com:ferraroroberto/x.git`) remote URL forms, via the one
@@ -154,7 +169,7 @@ def is_fleet_repo(remote_url: str | None) -> bool:
     substring check.
     """
     slug = git_run.slug_from_url(remote_url)
-    return bool(slug) and slug.split("/", 1)[0] == "ferraroroberto"
+    return bool(slug) and slug.split("/", 1)[0] == fleet_owner()
 
 
 def iter_fleet_repos(
@@ -169,7 +184,7 @@ def iter_fleet_repos(
     A directory qualifies when it is a real repo (`.git` is a **directory** —
     a linked worktree's `.git` is a *file*, and sweeping a sibling `-wt-<N>`
     tree would double-count the repo it belongs to; see `is_linked_worktree`)
-    whose `origin` remote is a `ferraroroberto` one. `only` narrows to a
+    whose `origin` remote is the configured fleet owner's. `only` narrows to a
     single repo by directory name.
     A directory whose `origin` can't be read is skipped silently — it isn't a
     fleet repo as far as this crawl can tell.

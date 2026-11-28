@@ -690,7 +690,7 @@ function dropFinishing(d) {
   return true;
 }
 
-// Streamed stop: flush remaining chunks, ask the voice-transcriber
+// Streamed stop: flush remaining chunks, ask the dictation service
 // for the canonical transcript, settle the dictated span, tear down.
 async function finishStreaming(d) {
   const sid = d.voiceSession;

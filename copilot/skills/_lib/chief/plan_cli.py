@@ -41,7 +41,7 @@ from chief import journal
 
 def _summary(doc: Dict[str, Any]) -> str:
     return (f"PLAN=written lanes={len(doc['lanes'])} queue={len(doc['queue'])} "
-            f"waiting={len(doc['waiting_on_roberto'])} updated_at={doc['updated_at']}")
+            f"waiting={len(doc['waiting_on_owner'])} updated_at={doc['updated_at']}")
 
 
 def render(doc: Dict[str, Any]) -> str:
@@ -117,17 +117,17 @@ def _ask_mutation(add: Callable[[Dict[str, Any]], str], added: List[str],
     def mutate(doc: Dict[str, Any]) -> None:
         item_id = add(doc)
         added.append(item_id)
-        row = next(item for item in doc["waiting_on_roberto"] if item.get("id") == item_id)
+        row = next(item for item in doc["waiting_on_owner"] if item.get("id") == item_id)
         events.append(("asked", f"asked: {row['text']}", row.get("ref")))
     return mutate
 
 
 def _unwait_mutation(args: argparse.Namespace, events: List[JournalEvent]) -> Callable[[Dict[str, Any]], None]:
     def mutate(doc: Dict[str, Any]) -> None:
-        before = list(doc["waiting_on_roberto"])
+        before = list(doc["waiting_on_owner"])
         clear_waiting(doc, args.key)
         events.extend(("answered", f"answered: {row['text']}", row.get("ref"))
-                      for row in before if row not in doc["waiting_on_roberto"])
+                      for row in before if row not in doc["waiting_on_owner"])
     return mutate
 
 
@@ -244,7 +244,7 @@ def add_cli(parser: argparse.ArgumentParser) -> None:
     prune.add_argument("--status", action="append", choices=QUEUE_STATUSES, default=None,
                        help="status to drop; repeat to widen (default: merged)")
 
-    wait = acts.add_parser("wait", help="add a waiting-on-Roberto item")
+    wait = acts.add_parser("wait", help="add a waiting-on-owner item")
     wait.add_argument("text", help="filed as a question (the short form of `ask`, #1102)")
     wait.add_argument("--ref", default=None, help="<repo>#<N>")
 

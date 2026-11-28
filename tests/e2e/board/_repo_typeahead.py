@@ -33,7 +33,7 @@ def _narrow_commit_and_clear(page: Page) -> None:
     expect(_options(page)).to_have_count(5)  # "All projects" + 4
     page.keyboard.type("PHO")
     # Case-insensitive substring; "All projects" stays first.
-    expect(_options(page)).to_have_text(["All projects", "photo-ocr"])
+    expect(_options(page)).to_have_text(["All projects", "repo-a"])
     expect(clear).to_be_visible()
     # Typing alone commits nothing.
     expect(page.locator(_HIDDEN)).to_have_value("")
@@ -41,8 +41,8 @@ def _narrow_commit_and_clear(page: Page) -> None:
 
     page.keyboard.press("Enter")
     expect(page.locator(_LIST)).to_be_hidden()
-    expect(page.locator(_HIDDEN)).to_have_value("photo-ocr")
-    expect(field).to_have_value("photo-ocr")
+    expect(page.locator(_HIDDEN)).to_have_value("repo-a")
+    expect(field).to_have_value("repo-a")
     expect(page.locator("#boardColBacklog .board-count")).to_have_text("0")
     expect(page.locator("#boardColYours .board-count")).to_have_text("1")
     expect(clear).to_be_visible()
@@ -90,7 +90,7 @@ def _arrow_keys_enter_and_escape(page: Page) -> None:
     page.keyboard.press("Control+a")
     page.keyboard.type("vo")
     page.keyboard.press("Enter")
-    expect(page.locator(_HIDDEN)).to_have_value("voice-transcriber")
+    expect(page.locator(_HIDDEN)).to_have_value("repo-b")
 
     # Escape closes the list and drops what was typed, keeping the committed pick.
     field.click()
@@ -100,8 +100,8 @@ def _arrow_keys_enter_and_escape(page: Page) -> None:
     expect(page.locator(f"{_LIST} .board-repo-empty")).to_be_visible()
     page.keyboard.press("Escape")
     expect(page.locator(_LIST)).to_be_hidden()
-    expect(field).to_have_value("voice-transcriber")
-    expect(page.locator(_HIDDEN)).to_have_value("voice-transcriber")
+    expect(field).to_have_value("repo-b")
+    expect(page.locator(_HIDDEN)).to_have_value("repo-b")
 
     # Back to All projects so the caller's later steps see the whole board.
     page.locator(_CLEAR).click()

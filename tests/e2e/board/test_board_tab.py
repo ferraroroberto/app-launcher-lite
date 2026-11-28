@@ -130,7 +130,7 @@ def _assert_counts_and_your_turn(authed_page: Page) -> None:
     yours = authed_page.locator('.board-list[data-col="your_turn"] li.board-item')
     expect(yours.first).to_be_visible(timeout=5_000)
     assert yours.count() == 1
-    expect(yours.nth(0)).to_contain_text("photo-ocr")
+    expect(yours.nth(0)).to_contain_text("repo-a")
     expect(yours.nth(0)).to_contain_text("needs you")
     expect(yours.nth(0)).to_contain_text("chunk merge fix")
     # The shared session row (#1433): the avatar leads, then the title over
@@ -414,7 +414,7 @@ def test_board_poll_heals_an_unfetched_github_that_renders_unknown_not_zero(
     # has no process evidence for it, so its avatar wears no badge.
     payload["columns"]["claude_turn"].append(
         {"session_id": None, "kind": "external", "agent": "copilot",
-         "project_dir": "E:/automation/reporting", "name": "reporting",
+         "project_dir": "E:/stubfolder/reporting", "name": "reporting",
          "alive": None, "started_at": None, "live_title": "", "prompt_title": "",
          "project": "reporting", "status": "waiting-on-task", "age_seconds": 120},
     )
@@ -424,7 +424,7 @@ def test_board_poll_heals_an_unfetched_github_that_renders_unknown_not_zero(
     _fake_clock.install(authed_page)
     _open_board(authed_page, base_url)
     expect(authed_page.locator("#boardColBacklog .board-count")).to_have_text("1")
-    live = authed_page.locator("#boardColClaude .board-item-session").filter(has_text="life-os")
+    live = authed_page.locator("#boardColClaude .board-item-session").filter(has_text="repo-f")
     expect(live.locator(".avatar")).to_have_attribute("data-badge", "alive")
     external = authed_page.locator("#boardColClaude .board-item-session").filter(has_text="reporting")
     expect(external.locator(".avatar")).to_have_attribute("data-badge", "none")
@@ -694,7 +694,7 @@ def test_board_card_drawer_shows_exchange_and_posts_reply(
     expect(authed_page.locator("#boardColYours .board-count")).to_have_text("0")
     expect(authed_page.locator("#boardColClaude .board-count")).to_have_text("2")
     moved_card = authed_page.locator(
-        '.board-list[data-col="claude_turn"] li.board-item', has_text="photo-ocr"
+        '.board-list[data-col="claude_turn"] li.board-item', has_text="repo-a"
     )
     expect(moved_card).to_be_visible()
     expect(moved_card).to_have_class(re.compile(r"\bis-working\b"))

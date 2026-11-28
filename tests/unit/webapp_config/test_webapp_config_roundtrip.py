@@ -15,8 +15,8 @@ the same way:
 - a ``default_factory`` field treats a falsy on-disk value as absent and
   re-derives its default (an empty ``projects_dir`` means "never set");
 - a literal-default field keeps a falsy value as authored, because that is
-  how features here are switched off (an empty ``voice_transcriber_url``
-  hides the 🎤 button). Collapsing these two disciplines would silently
+  how features here are switched off (an empty service URL
+  hides its button). Collapsing these two disciplines would silently
   re-enable whatever the user turned off.
 """
 

@@ -1,6 +1,6 @@
 """Webapp process manager — adopt-or-spawn for the webapp server.
 
-Mirrors photo-ocr's manager: status() probes /healthz and the TCP port,
+Mirrors a sibling app's manager: status() probes /healthz and the TCP port,
 start() adopts an already-listening webapp or spawns one, stop() only
 terminates a process this manager owns. Adoption needs the process holding
 the port to run from this checkout: a second clone on the same port answers

@@ -27,7 +27,7 @@ _COPILOT_ID = "0f3c2a51-7d7e-4c55-9a0e-2b8c4ad1e002"
 
 
 def _session(**extra: Any) -> Dict[str, Any]:
-    row = {"session_id": "s1", "agent": "copilot", "project_dir": r"E:\work\project",
+    row = {"session_id": "s1", "agent": "copilot", "project_dir": r"E:\stub\project",
            "started_at": _STARTED}
     row.update(extra)
     return row
@@ -36,7 +36,7 @@ def _session(**extra: Any) -> Dict[str, Any]:
 def _folder(root: Path, name: str, created: str, events: bool = True) -> Path:
     (root / name).mkdir(parents=True)
     (root / name / "workspace.yaml").write_text(
-        f"cwd: E:\\work\\project\ncreated_at: {created}\n", encoding="utf-8")
+        f"cwd: E:\\stub\\project\ncreated_at: {created}\n", encoding="utf-8")
     path = root / name / "events.jsonl"
     if events:
         path.write_text("{}\n", encoding="utf-8")
@@ -91,7 +91,7 @@ def test_exact_id_resolution_never_scans_the_state_folder(tmp_path: Path, monkey
     monkeypatch.setattr(tl, "_scan_resumed_workspaces", refuse)
     monkeypatch.setattr(Path, "glob", refuse)
     monkeypatch.setattr(session_transcript, "read_live_sessions", lambda _p: ([_session()], None))
-    row = {"status": "working", "cwd": r"E:\work\project", "agent": "copilot",
+    row = {"status": "working", "cwd": r"E:\stub\project", "agent": "copilot",
            "launcher_session_id": "s1", "updated_at": "2026-11-20T10:40:00Z"}
     monkeypatch.setattr(board, "read_sessions_state", lambda _p: {"rows": {_COPILOT_ID: row}})
     cfg = WebappConfig(sessions_state_file=str(tmp_path / "sessions-state.json"))

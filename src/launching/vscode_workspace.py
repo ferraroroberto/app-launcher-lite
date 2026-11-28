@@ -52,7 +52,7 @@ def workspace_path_for(projects_dir: Path, name: str) -> Path:
 
     A *sibling* of the project directory, not a child: every workspace file
     on this machine sits directly under ``projects_dir`` (e.g.
-    ``E:\\automation\\app-launcher.code-workspace``), with a ``folders[].path``
+    ``<projects>\\app-launcher.code-workspace``), with a ``folders[].path``
     that is the bare folder name relative to that same location.
     """
     return Path(projects_dir) / f"{name}.code-workspace"

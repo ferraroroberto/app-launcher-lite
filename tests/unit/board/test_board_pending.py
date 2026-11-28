@@ -165,7 +165,7 @@ def test_overlay_background_dispatch_notified_keeps_needs_you(tmp_path: Path):
 
 
 def test_overlay_background_dispatch_enqueued_not_dequeued_is_waiting_on_task(tmp_path: Path):
-    """#601: a live transcript (app-launcher#601, home-automation issue #321)
+    """#601: a live transcript (app-launcher#601, repo-c issue #321)
     ended with the notification's ``enqueue`` line as the very last thing
     written — no ``dequeue``/``remove`` followed it anywhere in the tail, so
     Claude had not actually received the result yet. The notification being

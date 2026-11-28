@@ -146,19 +146,19 @@ def test_a_long_tool_heavy_session_opens_small_and_fast(
         other = state / f"other-{n:04d}"
         other.mkdir(parents=True)
         (other / "workspace.yaml").write_text(
-            f"cwd: E:\\work\\other{n}\ncreated_at: 2026-11-01T10:00:00.000Z\n", encoding="utf-8"
+            f"cwd: E:\\stub\\other{n}\ncreated_at: 2026-11-01T10:00:00.000Z\n", encoding="utf-8"
         )
     mine = state / "mine"
     mine.mkdir()
     (mine / "workspace.yaml").write_text(
-        "cwd: E:\\work\\project\ncreated_at: 2026-11-20T10:00:03.000Z\n", encoding="utf-8"
+        "cwd: E:\\stub\\project\ncreated_at: 2026-11-20T10:00:03.000Z\n", encoding="utf-8"
     )
     log = mine / "events.jsonl"
     log.write_text(_event("session.start", {}) + _tool_heavy_turns(1500, 8), encoding="utf-8")
     assert log.stat().st_size > 20 * 1024 * 1024
     monkeypatch.setattr(transcript_locate, "_COPILOT_STATE_DIR", state)
     overrides["session"].list_sessions.return_value = [_live(
-        agent="copilot", project_dir=r"E:\work\project", started_at=1_795_168_800.0,
+        agent="copilot", project_dir=r"E:\stub\project", started_at=1_795_168_800.0,
     )]
     reads: List[Path] = []
     real_open = Path.open

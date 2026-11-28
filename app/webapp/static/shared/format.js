@@ -4,10 +4,9 @@
 // is in the past, negative when it is in the future, 0 for today. `date`'s
 // own year/month/day are read as given (in local time) — the caller owns
 // parsing an ISO string or epoch into that shape first. The one day-diff
-// scan shared by life-os.js's `daysSince`/`convoWhen`, screen-time.js's
-// `whenText` and jobs-agenda.js's `_dayOffset`, so none of them redoes this
-// `new Date(y, m, d)` + "today at midnight" + `Math.round(diff / 86400000)`
-// walk on its own.
+// scan for every caller (jobs-agenda.js's `_dayOffset` among them), so none of
+// them redoes this `new Date(y, m, d)` + "today at midnight" +
+// `Math.round(diff / 86400000)` walk on its own.
 export function calendarDaysFromToday(date) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());

@@ -164,5 +164,25 @@ class ChiefTests(PortsCase):
         self.assertIn(f"http://127.0.0.1:{_port_of(self.stub)} ('team-group', '')", proc.stdout)
 
 
+class FleetOwnerTests(PortsCase):
+    def test_the_fleet_owner_comes_from_the_lite_config(self) -> None:
+        from fleet_core import fleet_repo_scan
+
+        with mock.patch.dict(os.environ, {lite_ports.CONFIG_ENV: str(self.config)}):
+            with self.assertRaises(fleet_repo_scan.FleetOwnerUnset):
+                fleet_repo_scan.is_fleet_repo("https://github.com/example-org/demo.git")
+            self.config.write_text('{"fleet_owner": "example-org"}', encoding="utf-8")
+            self.assertTrue(fleet_repo_scan.is_fleet_repo("git@github.com:example-org/demo.git"))
+            self.assertFalse(fleet_repo_scan.is_fleet_repo("https://github.com/other/demo.git"))
+
+    def test_a_configured_repo_alias_joins_the_built_in_ones(self) -> None:
+        from owner_check import backfill
+
+        self.config.write_text('{"repo_aliases": {"web": "example-web-app"}}', encoding="utf-8")
+        with mock.patch.dict(os.environ, {lite_ports.CONFIG_ENV: str(self.config)}):
+            items = backfill.parse_audit_list("web#3; lite#4")
+        self.assertEqual([item.repo for item in items], ["example-web-app", "app-launcher-lite"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -86,9 +86,9 @@ _TINT_FILES = {
     "available": True, "reason": None, "session_id": _SID, "source": "transcript",
     "partial": False, "project_exists": True, "counts": {"additions": 4, "deletions": 0},
     "files": [
-        {"path": "tool.py", "key": "E:/work/proj/tool.py", "status": "M",
+        {"path": "tool.py", "key": "E:/stub/proj/tool.py", "status": "M",
          "additions": 3, "deletions": 0, "steps": 1},
-        {"path": "data.json", "key": "E:/work/proj/data.json", "status": "M",
+        {"path": "data.json", "key": "E:/stub/proj/data.json", "status": "M",
          "additions": 1, "deletions": 0, "steps": 1},
     ],
 }
@@ -218,7 +218,7 @@ def test_file_view_download_and_menu_on_the_phone(authed_page: Page, base_url: s
     expect(segs).to_have_text(["Diff", "File"])
     expect(segs.first).to_have_attribute("aria-pressed", "true")
     expect(row.locator(".chg-pane-diff .chg-step")).to_have_count(2)
-    expect(row.locator(".chg-fullpath")).to_have_text("E:\\work\\proj\\docs\\notes.md")
+    expect(row.locator(".chg-fullpath")).to_have_text("E:\\stub\\proj\\docs\\notes.md")
     assert seen["content"] == []
 
     # Diff view: Copy diff and Copy path, no Copy content, no Open on PC (phone).
@@ -245,7 +245,7 @@ def test_file_view_download_and_menu_on_the_phone(authed_page: Page, base_url: s
     expect(src).to_contain_text("<script>window.__ran = true</script>")
     expect(row.locator(".chg-pane-file h1")).to_have_count(0)
     assert page.evaluate("() => window.__ran === undefined")
-    assert seen["content"] == ["E:/work/proj/docs/notes.md"], seen
+    assert seen["content"] == ["E:/stub/proj/docs/notes.md"], seen
 
     segs.first.click()
     expect(row.locator(".chg-pane-diff")).to_be_visible()
@@ -263,7 +263,7 @@ def test_file_view_download_and_menu_on_the_phone(authed_page: Page, base_url: s
 
     _open_kebab(page, row).locator("[data-item='chg-copy-path']").click()
     expect(page.locator("#toast")).to_contain_text("Path copied")
-    assert page.evaluate("() => window.__copied")[-1] == "E:\\work\\proj\\docs\\notes.md"
+    assert page.evaluate("() => window.__copied")[-1] == "E:\\stub\\proj\\docs\\notes.md"
     assert len(seen["content"]) == 1, f"Copy content refetched the file: {seen}"
     # Every copy wrote the clipboard inside its tap, with no await before it.
     assert page.evaluate("() => window.__tapSync") == [True, True, True]
@@ -347,14 +347,14 @@ def test_download_open_on_pc_code_gutter_and_a_file_gone_from_disk(
     assert download.suggested_filename == "long.py"
     with open(download.path(), encoding="utf-8") as fh:
         assert fh.read() == _CODE
-    assert seen["content"] == ["E:/work/proj/src/pkg/long.py"], seen
+    assert seen["content"] == ["E:/stub/proj/src/pkg/long.py"], seen
 
     # This page talks to the webapp over loopback: it is the PC itself.
     menu = _open_kebab(page, row)
     assert "Open on PC" in _items(menu), _items(menu)
     menu.locator("[data-item='chg-open-pc']").click()
     expect(page.locator("#toast")).to_contain_text("Opened in VS Code")
-    assert seen["open"] == [{"path": "E:/work/proj/src/pkg/long.py"}], seen
+    assert seen["open"] == [{"path": "E:/stub/proj/src/pkg/long.py"}], seen
 
     # The File view shows the file already read (no second request), with a
     # line-number gutter, and code is not tinted as JSON.
@@ -547,7 +547,7 @@ def test_diff_and_file_views_take_token_colours_and_only_html_and_markdown_previ
     page = authed_page
     files = {**_TINT_FILES, "files": [
         *_TINT_FILES["files"],
-        {"path": "page.html", "key": "E:/work/proj/page.html", "status": "M",
+        {"path": "page.html", "key": "E:/stub/proj/page.html", "status": "M",
          "additions": 1, "deletions": 0, "steps": 1},
     ]}
     _mock(page, files=files, steps=_steps_for(_PY_DIFF))

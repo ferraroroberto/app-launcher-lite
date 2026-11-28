@@ -85,7 +85,7 @@ class ProjectDir:
 
 def pretty_folder_name(folder: Path) -> str:
     """A folder's name as a row label: sentence case, the one casing every
-    label of the app shares (``mass-html-to-markdown`` -> ``Mass html to markdown``)."""
+    label of the app shares (``my-example-app`` -> ``My example app``)."""
     parts = [p for p in re.split(r"[_\-\s]+", folder.name) if p]
     if not parts:
         parts = [folder.name]
@@ -152,7 +152,7 @@ def scan_project_dirs(
     return results
 
 
-# ------------------------------------------------------------- life-os skills
+# ------------------------------------------------------------- skill folders
 
 # A skill's slash-command / folder name must be a safe slug — it is
 # interpolated into the launch command line (`claude … /<name>`), so any
@@ -175,7 +175,7 @@ _SKILL_ICON_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 @dataclass(frozen=True)
 class Skill:
-    """One life-os skill the Life OS tab can launch and browse.
+    """One skill the app can launch and browse.
 
     ``id`` is the on-disk folder name — the stable key threaded through
     the API path (``/api/life-os/skills/<id>/…``). ``command`` is the
@@ -233,12 +233,12 @@ def _first_paragraph(path: Path) -> str:
 
 
 def skills_dir_for(life_os_dir: Path) -> Path:
-    """The skills root inside a life-os checkout (``.claude/skills``)."""
+    """The skills root inside a skills checkout (``.claude/skills``)."""
     return life_os_dir / ".claude" / "skills"
 
 
 def scan_skills(life_os_dir: Path) -> List[Skill]:
-    """List the life-os skills under ``<life_os_dir>/.claude/skills``.
+    """List the skills under ``<life_os_dir>/.claude/skills``.
 
     Modelled on :func:`scan_project_dirs`: every direct child directory
     whose name does **not** start with ``_`` (scaffolding) and isn't VCS
@@ -251,7 +251,7 @@ def scan_skills(life_os_dir: Path) -> List[Skill]:
     """
     skills_root = skills_dir_for(life_os_dir)
     if not skills_root.is_dir():
-        logger.warning(f"⚠️ life-os skills dir does not exist: {skills_root}")
+        logger.warning(f"⚠️ skills dir does not exist: {skills_root}")
         return []
 
     results: List[Skill] = []
@@ -276,7 +276,7 @@ def scan_skills(life_os_dir: Path) -> List[Skill]:
             command = folder
         if not command:
             logger.warning(
-                f"⚠️ skipping life-os skill with unsafe name: {folder!r}"
+                f"⚠️ skipping skill with unsafe name: {folder!r}"
             )
             continue
 

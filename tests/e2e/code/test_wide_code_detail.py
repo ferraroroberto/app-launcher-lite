@@ -33,7 +33,7 @@ _B = "sid-wide-b-1135"
 def _row_data(sid: str, title: str) -> dict:
     return {
         "session_id": sid, "kind": "remote", "agent": "copilot",
-        "project_dir": "E:/automation/wideproj", "name": "wideproj",
+        "project_dir": "E:/stubfolder/wideproj", "name": "wideproj",
         "alive": True, "started_at": 1_790_150_400.0,
         "live_title": "", "prompt_title": "", "manual_title": title,
     }

@@ -20,8 +20,8 @@ from tests.e2e.jobs.test_jobs_sort_next_run import _wire_jobs
 
 pytestmark = pytest.mark.smoke
 
-_PROJECTS = ["alpha-site", "beta-tools", "gamma-lab", "photo-ocr"]
-_APPS = ["Photo OCR", "Voice Transcriber", "Reporting"]
+_PROJECTS = ["alpha-site", "beta-tools", "gamma-lab", "repo-a"]
+_APPS = ["Repo A", "Repo B", "Reporting"]
 
 
 def _json_route(page: Page, pattern, body: dict) -> None:
@@ -88,7 +88,7 @@ def test_projects_and_apps_filters_narrow_restore_and_empty(
     box = page.locator("#claudeFilterInput")
     box.fill("oto")
     expect(page.locator(f"{rows}:visible")).to_have_count(1)
-    assert _visible_titles(page, rows) == ["photo-ocr"]
+    assert _visible_titles(page, rows) == ["repo-a"]
     box.fill("zzz")
     expect(page.locator(f"{rows}:visible")).to_have_count(0)
     expect(page.locator("#claudeFilterEmpty")).to_be_visible()
@@ -111,7 +111,7 @@ def test_projects_and_apps_filters_narrow_restore_and_empty(
     expect(page.locator(apps)).to_have_count(len(_APPS), timeout=5_000)
     page.locator("#appsFilterInput").fill("voi")
     expect(page.locator(f"{apps}:visible")).to_have_count(1)
-    assert _visible_titles(page, apps) == ["Voice Transcriber"]
+    assert _visible_titles(page, apps) == ["Repo B"]
     page.locator("#appsFilterInput").fill("qqq")
     expect(page.locator("#appsFilterEmpty")).to_be_visible()
     page.locator("#appsFilterEmpty .empty-state-action").click()

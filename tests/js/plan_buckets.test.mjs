@@ -23,7 +23,7 @@ const backlog = [
 
 // Keys: a bare #N takes the row's repo; case folds; no issue is ''.
 assert.equal(issueKey('app-launcher', '#3'), 'app-launcher#3');
-assert.equal(issueKey('', 'Life-OS#4'), 'life-os#4');
+assert.equal(issueKey('', 'Repo-F#4'), 'repo-f#4');
 assert.equal(issueKey('app-launcher', ''), '');
 
 // The buckets add up to the total, every card counted once.
@@ -42,7 +42,7 @@ const rows = [
   { repo: 'app-launcher', ref: '#2', status: 'parked' },
   { repo: 'app-launcher', ref: '#1', status: 'building' },
   { repo: 'app-launcher', ref: '#99', status: 'merged' },
-  { repo: 'automation', ref: '', status: 'waiting-roberto' },
+  { repo: 'automation', ref: '', status: 'waiting-owner' },
 ];
 const groups = groupPlanRows(rows, index);
 const n = (key) => (groups[key] || []).length;

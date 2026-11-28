@@ -30,14 +30,14 @@ Gitignored; the committed template is `config/jobs.sample.json`. It is separate 
     {
       "id": "reporting-daily",
       "name": "Daily Reporting",
-      "script_path": "E:\\automation\\reporting\\run_report.bat",
+      "script_path": "<projects>\\example-app\\run_report.bat",
       "args": "auto",
       "schedule": { "type": "daily", "at": "06:00" }
     },
     {
       "id": "scrape",
       "name": "Scrape",
-      "script_path": "E:\\automation\\scraper\\scrape.py",
+      "script_path": "<projects>\\example-app\\scrape.py",
       "schedule": { "type": "daily_times", "at": ["06:00", "12:00", "18:00"] }
     }
   ]
@@ -151,7 +151,7 @@ A job can declare typed inputs. With none, **Run now** fires immediately; with s
 {
   "id": "scrape",
   "name": "Scrape",
-  "script_path": "E:\\automation\\scraper\\scrape.py",
+  "script_path": "<projects>\\example-app\\scrape.py",
   "params": [
     { "name": "since", "kind": "date", "flag": "--since" },
     { "name": "tier", "kind": "enum", "options": ["smb", "mid"], "default": "smb", "flag": "--tier" },
@@ -198,7 +198,7 @@ A failed verification, or an unknown provider secret, gets `401` and writes no r
 {
   "id": "gh-push-deploy",
   "name": "Deploy on push",
-  "script_path": "E:\\automation\\deploy\\deploy.py",
+  "script_path": "<projects>\\example-app\\deploy.py",
   "params": [
     { "name": "repo", "kind": "string", "flag": "--repo" },
     { "name": "branch", "kind": "string", "flag": "--branch" }
@@ -434,7 +434,7 @@ Each problem class has its own wording, in `src/jobs/coverage.py::PROBLEM_ANNOUN
 A job can declare `env: {NAME: value}` in `config/jobs.json` or through the create/edit API. The executor merges it into the child's environment after `os.environ` and before the typed-param env, so a per-run param can override it. A value is a literal or a `$secret:<key>` reference resolved against `webapp_config.json`'s gitignored `secrets` block (`src.jobs.secrets`), the same mechanism as `webhook.secret`:
 
 ```json
-{ "id": "sync", "name": "Sync", "script_path": "E:\\automation\\sync\\sync.py", "env": {"API_KEY": "$secret:sync_api"} }
+{ "id": "sync", "name": "Sync", "script_path": "<projects>\\example-app\\sync.py", "env": {"API_KEY": "$secret:sync_api"} }
 ```
 
 `jobs.json` and every API response carry only the reference. An unresolvable reference finalises the run `failed` with `note: "secret '<key>' not found"`, and the dry-run check catches it without firing. Env names are UPPER_SNAKE_CASE. A rotated secret changes in one place.

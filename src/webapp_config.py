@@ -160,7 +160,7 @@ class WebappConfig:
     # The sessions-state file written by fleet-config's session_state hook. The board
     # reads it defensively: absent/corrupt/stale degrades to unknown, never an error.
     sessions_state_file: str = field(default_factory=_default_sessions_state_file)
-    # The fleet chief's plan: lanes, queue, what waits on Roberto.
+    # The fleet chief's plan: lanes, queue, what waits on the owner.
     # Read defensively like sessions_state_file: absent/corrupt/unsupported
     # leaves the Board's "Chief's plan" card blank, never an error.
     chief_plan_file: str = field(default_factory=_default_chief_plan_file)

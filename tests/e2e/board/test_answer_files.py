@@ -27,7 +27,7 @@ from tests.e2e.board.test_owner_checks_board import _payload
 
 pytestmark = pytest.mark.smoke
 
-_STORED = "E:/automation/fleet-config/.launcher-tmp/e2e-stub-stored-{n}.png"
+_STORED = "E:/stubfolder/fleet-config/.launcher-tmp/e2e-stub-stored-{n}.png"
 
 
 def _stub(name: str) -> dict:
@@ -93,7 +93,7 @@ def test_chief_answer_carries_each_files_path_under_its_line(
             "Answers from the Board (2 of 3):\n"
             "1. [fleet-config#959] Approve the four plans? → Yes, all four (recommended) {id: q-plans}\n"
             "   Attached: " + _STORED.format(n=1) + "\n"
-            "2. [life-os] Which days work? → (files only) {id: q-days}\n"
+            "2. [repo-f] Which days work? → (files only) {id: q-days}\n"
             "   Attached: " + _STORED.format(n=3) + "\n"
             "Skipped: 3"
         ),

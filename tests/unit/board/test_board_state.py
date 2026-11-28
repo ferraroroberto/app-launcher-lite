@@ -28,8 +28,8 @@ def test_state_corrupt_file_unavailable(tmp_path: Path):
 def test_state_fresh_rows(tmp_path: Path):
     target = tmp_path / "sessions-state.json"
     target.write_text(json.dumps({
-        "sid-1": {"project": "photo-ocr", "status": "needs-you",
-                  "cwd": "E:/automation/photo-ocr",
+        "sid-1": {"project": "repo-a", "status": "needs-you",
+                  "cwd": "E:/stubfolder/repo-a",
                   "updated_at": _iso(NOW - timedelta(minutes=12))},
     }), encoding="utf-8")
     result = board.read_sessions_state(target, now=NOW)
@@ -66,8 +66,8 @@ def test_active_issues_keeps_fresh_and_expires_orphans(tmp_path: Path):
             "repo": "app-launcher", "number": 528,
             "branch": "feat/528-active", "started_at": _iso(NOW - timedelta(hours=2)),
         },
-        "photo-ocr#73": {
-            "repo": "photo-ocr", "number": 73,
+        "repo-a#73": {
+            "repo": "repo-a", "number": 73,
             "branch": "fix/73-old", "started_at": _iso(NOW - timedelta(hours=25)),
         },
         "broken#1": {"repo": "broken", "number": 1, "started_at": "garbage"},

@@ -41,7 +41,7 @@ def _mock_sessions_list(page: Page) -> None:
             status=200, content_type="application/json",
             body=_json.dumps({"sessions": [{
                 "session_id": _SID, "kind": "pty", "agent": "copilot",
-                "project_dir": "E:/automation/heavyproj", "name": "heavyproj",
+                "project_dir": "E:/stubfolder/heavyproj", "name": "heavyproj",
                 "alive": True, "started_at": "2026-09-21T10:00:00Z",
                 "live_title": "", "prompt_title": "", "manual_title": "Heavy demo",
             }]}),

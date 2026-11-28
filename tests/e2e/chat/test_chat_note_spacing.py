@@ -1,6 +1,6 @@
 """Regression pin for #1098 — the detached-session footnote's own air.
 
-Roberto reported from the phone that the "Detached session — no terminal"
+The owner reported from the phone that the "Detached session — no terminal"
 caption in Chat mode was drawn *over* the last line of the message above it.
 
 ``.chat-note`` had ``padding: 0 12px 8px``, so the only air above it came

@@ -477,7 +477,7 @@ def _refresh_chief_pointer_after_resume(
 
     The identification writer would eventually record the same id off the next
     poll, but only once a hook has fired and only while a row still exists.
-    Doing it here means the 7-day expiry clock restarts the moment Roberto
+    Doing it here means the 7-day expiry clock restarts the moment the owner
     presses Resume — which matters most for exactly the conversation that had
     no row left to find (the transcript path then comes from the pointer that
     named it in the first place). Also primes the memo, so the poll that
@@ -528,7 +528,7 @@ async def get_chief_journal(request: Request) -> Dict[str, Any]:
 
 @router.post("/api/board/chief/journal/looked")
 async def post_chief_journal_looked(request: Request) -> Dict[str, Any]:
-    """Stamp "Roberto looked just now": the Board sent the chief a message or
+    """Stamp "the owner looked just now": the Board sent the chief a message or
     submitted the answer sheet (Tailscale + passkey, as every
     ``/api/board/chief/`` route). Entries after the stamp read as new.
     """

@@ -168,8 +168,8 @@ class TestEnsureSpawn:
     ):
         """The case actually observed live (#617), verified against the real
         session (1c8e6dde…): a session-host restart kills chief's PTY, and
-        Roberto re-attaches the same Claude Code conversation via Resume —
-        no label, and the first line submitted into the *new* PTY is his own
+        The owner re-attaches the same Claude Code conversation via Resume —
+        no label, and the first line submitted into the *new* PTY is their own
         chat message, never "/chief". Only Claude's own persisted conversation
         name (``shared_name``, joined from the hook state file) identifies it."""
         client, app, overrides = webapp_client

@@ -2,8 +2,8 @@
  * first.
  *
  * GET /api/board/chief-journal serves the entries newest first, each flagged
- * `new` against Roberto's last look; the chief is the journal's only writer, so
- * the card only reads. The last look moves when he sends the chief a message
+ * `new` against the owner's last look; the chief is the journal's only writer, so
+ * the card only reads. The last look moves when they send the chief a message
  * from the Board, submits the answer sheet or taps Clear: journal-look.js
  * stamps it on the server (every device agrees) and the card re-reads at once.
  *

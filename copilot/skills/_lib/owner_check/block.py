@@ -37,7 +37,7 @@ _LINE = re.compile(r"^- (" + "|".join(FIELDS) + r"): ?(.*)$")
 # A before-start step must be answerable cold: what to do, where, which answer unblocks.
 _MIN_ACTION_WORDS = 6
 _PLACEHOLDER = re.compile(r"^\W*(tbd|todo|n/?a|none|see (the )?(issue|above|body)|decide|check|investigate|"
-                          r"look into it|ask roberto|owner decides?)\W*$", re.IGNORECASE)
+                          r"look into it|ask (the )?\w+|owner decides?)\W*$", re.IGNORECASE)
 
 
 def vague_text(text: str) -> Optional[str]:

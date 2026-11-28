@@ -12,7 +12,7 @@ unconfirmed row must be tellable apart from **both** neighbours, not merely
 different from one of them.
 
 Issue #1316 added a fourth terminal outcome, ``deferred``: an exit code the
-job itself declares a designed deferral (life-os's email sweep exits 3 when it
+job itself declares a designed deferral (repo-f's email sweep exits 3 when it
 has no desktop to start Outlook on). It rides on the same render, because it
 also has to be tellable apart from all three of the others.
 

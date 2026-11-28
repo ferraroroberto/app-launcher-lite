@@ -587,7 +587,7 @@ async def audit_session_start_and_maybe_mirror(
     # PC — the default for every caller; only
     # an explicit in-page loopback browser skips it (see should_mirror_to_pc),
     # and a caller passing ``mirror=False`` — the fleet chief's own Board
-    # dispatch, which runs unwatched until Roberto opens it.
+    # dispatch, which runs unwatched until the owner opens it.
     # mirror_url picks loopback (auth-bypass) or the ts.net URL with explicit
     # credentials, keyed on the active cert.
     if mirror and request is not None and kind == "pty" and should_mirror_to_pc(

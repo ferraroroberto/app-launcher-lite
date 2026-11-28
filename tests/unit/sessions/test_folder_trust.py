@@ -16,7 +16,7 @@ from src import audit
 from src.clients import session as session_client
 from src.session_view import folder_trust
 
-FOLDER = r"E:\work\unseen-project"
+FOLDER = r"E:\stub\unseen-project"
 
 DIALOG = [
     "● No Copilot instructions found for this repository. Run /init to generate them.",

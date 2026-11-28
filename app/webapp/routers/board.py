@@ -393,7 +393,7 @@ async def get_chief_plan(request: Request) -> Dict[str, Any]:
     """The chief's plan for the Board's "Chief's plan" card.
 
     Read-only, polled alongside ``/api/board``: ``state`` is ``ok`` (with
-    ``updated_at``, ``lanes``, ``queue``, ``waiting_on_roberto``), ``empty``
+    ``updated_at``, ``lanes``, ``queue``, ``waiting_on_owner``), ``empty``
     or ``unreadable``. Whether the chief is running is the client's to say,
     from the session cards ``/api/board`` already carries.
 
@@ -574,8 +574,8 @@ def _opens_pc_window(chief_dispatch: bool, body: Dict[str, Any]) -> bool:
 
     The fleet chief dispatches over loopback with no browser flag, and its
     workers run unwatched: a window per dispatch put its whole queue on
-    Roberto's desktop. Such a launch opens none; the window comes when he
-    opens the session himself (the Code tab's row, or the mirror action).
+    the owner's desktop. Such a launch opens none; the window comes when they
+    open the session by hand (the Code tab's row, or the mirror action).
     A browser's own Board tap (``desktop`` or ``in_page`` set) keeps the
     usual rule, chief running or not.
     """
