@@ -1,4 +1,4 @@
-/* Stamp "Roberto just looked" for the Board's journal card.
+/* Stamp "the owner just looked" for the Board's journal card.
  *
  * The chat send, the drawer's reply box and the answer sheet each call
  * markLooked() after a message reached the chief. It imports only the API

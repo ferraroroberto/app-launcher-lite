@@ -43,15 +43,15 @@ BAT_CASES = {
         [r"C:\Python\pythonw.exe", r'"C:\Apps\Mini\Worker.py"'], r"C:\Windows", r"C:\Python\pythonw.exe",
     ),
     "darwin": (
-        posixpath, "/Users/dev/mini", "python worker.py\n",
+        posixpath, "/Users/me/mini", "python worker.py\n",
         ["/Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python",
          "worker.py"],
-        "/Users/dev/mini",
+        "/Users/me/mini",
         "/Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python",
     ),
     "linux": (
-        posixpath, "/home/dev/mini", "python3 worker.py\n",
-        ["python3", "./worker.py"], "/home/dev/mini", "/usr/bin/python3.12",
+        posixpath, "/home/me/mini", "python3 worker.py\n",
+        ["python3", "./worker.py"], "/home/me/mini", "/usr/bin/python3.12",
     ),
 }
 

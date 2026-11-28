@@ -9,8 +9,8 @@ Writes into ``app/webapp/static/``: ``icon-512.png``, ``icon-512-maskable.png``,
 ``app-launcher.ico``. Into ``assets/stream-deck/``: ``app-launcher-144.png``.
 
 The ``project-scaffolding`` checkout is resolved as this repo's sibling, the
-same convention ``src/webapp_config.py`` uses for the ``life-os`` and
-``fleet-config`` checkouts. Set ``PROJECT_SCAFFOLDING_DIR`` to override when
+same convention ``src/webapp_config.py`` uses for the sibling
+``fleet-config`` checkout. Set ``PROJECT_SCAFFOLDING_DIR`` to override when
 it lives somewhere else.
 
 Usage:

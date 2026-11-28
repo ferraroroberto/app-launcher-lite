@@ -18,7 +18,7 @@ const { mirrorDocTitle } = await import('../../app/webapp/static/terminal.js');
 // Only Claude emits a genuine per-conversation OSC title; Antigravity and
 // Copilot emit none.
 {
-  const dir = 'C:/code/app-launcher';   // basename 'app-launcher'
+  const dir = 'C:/stub/app-launcher';   // basename 'app-launcher'
   assert.equal(sessionTitle({
     live_title: '✳ Fixing the login flow bug',
     prompt_title: 'something else', project_dir: dir, name: 'app-launcher',
@@ -35,7 +35,7 @@ const { mirrorDocTitle } = await import('../../app/webapp/static/terminal.js');
     live_title: '', prompt_title: 'wire up the API', project_dir: dir, name: 'app-launcher',
   }), 'wire up the API', 'no agent title at all: the first-prompt title shows');
   assert.equal(sessionTitle({
-    live_title: '', prompt_title: '', project_dir: 'C:/code/myproj', name: 'myproj',
+    live_title: '', prompt_title: '', project_dir: 'C:/stub/myproj', name: 'myproj',
   }), 'myproj', 'nothing derived yet: the launch name');
   assert.equal(sessionTitle({
     live_title: 'app-launcher | gpt-5.5', prompt_title: '', project_dir: dir, name: 'app-launcher',

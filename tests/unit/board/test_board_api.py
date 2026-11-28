@@ -75,7 +75,7 @@ _PLAN_V1 = {
          "note": ["not", "text"], "model": 5},
         {"repo": "automation", "ref": "#136", "title": "no model", "status": "queued"},
     ],
-    "waiting_on_roberto": [{"text": "Remember the last tab?", "ref": "app-launcher#1131"}],
+    "waiting_on_owner": [{"text": "Remember the last tab?", "ref": "app-launcher#1131"}],
 }
 
 
@@ -104,14 +104,14 @@ def test_chief_plan_reader_is_tolerant(tmp_path: Path):
              "note": "", "model": "", "ref_url": ""},
         ],
         # An old text-only item reads as a free-text question (#1295).
-        "waiting_on_roberto": [{
+        "waiting_on_owner": [{
             "text": "Remember the last tab?", "ref": "app-launcher#1131", "repo": "", "detail": "",
             "recommendation": "", "id": "", "question": "Remember the last tab?", "options": [],
             "multi": False, "ref_url": "", "asked_at": "",
         }],
     }
 
-    f.write_text(json.dumps({"version": 1, "queue": [], "lanes": [], "waiting_on_roberto": []}), encoding="utf-8")
+    f.write_text(json.dumps({"version": 1, "queue": [], "lanes": [], "waiting_on_owner": []}), encoding="utf-8")
     assert chief_plan.read_chief_plan(f) == {"state": "empty"}
     for bad in ("{", "", "[]", json.dumps({**_PLAN_V1, "version": 2}), json.dumps({"queue": _PLAN_V1["queue"]})):
         f.write_text(bad, encoding="utf-8")
@@ -126,7 +126,7 @@ def test_chief_plan_questions_read_the_additive_fields_field_by_field(tmp_path: 
     capped at four and need a label; question falls back to the text and a
     missing id stays blank; a ``repo#N`` ref links on the given owner."""
     f = tmp_path / "chief-plan.json"
-    f.write_text(json.dumps({**_PLAN_V1, "waiting_on_roberto": [
+    f.write_text(json.dumps({**_PLAN_V1, "waiting_on_owner": [
         {
             "id": "q-plans", "text": "Approve the plans", "ref": "fleet-config#959", "repo": "fleet-config",
             "question": "Approve the four plans?", "detail": "Each one\nships alone.",
@@ -143,7 +143,7 @@ def test_chief_plan_questions_read_the_additive_fields_field_by_field(tmp_path: 
         {"text": "Which days?", "multi": "true", "options": {"label": "not a list"}, "id": ["bad"],
          "question": 7, "detail": None},
         {"text": "Pick any", "multi": True, "options": [{"label": "A"}, {"label": "B"}], "ref": "#12",
-         "repo": "life-os"},
+         "repo": "repo-f"},
     ]}), encoding="utf-8")
     plan = chief_plan.read_chief_plan(f, "octo")
     # Queue rows link the same way (#1297): a `#N` ref beside its repo.
@@ -156,7 +156,7 @@ def test_chief_plan_questions_read_the_additive_fields_field_by_field(tmp_path: 
     assert [lane["ref_url"] for lane in plan["lanes"]] == [
         "https://gitlab.com/octo/app-launcher/-/issues/1273",
     ]
-    first, second, third = plan["waiting_on_roberto"]
+    first, second, third = plan["waiting_on_owner"]
     assert first == {
         "text": "Approve the plans", "ref": "fleet-config#959", "repo": "fleet-config",
         "detail": "Each one ships alone.", "recommendation": "Yes, all four", "id": "q-plans",
@@ -174,7 +174,7 @@ def test_chief_plan_questions_read_the_additive_fields_field_by_field(tmp_path: 
         "id": "", "question": "7", "options": [], "multi": False, "ref_url": "", "asked_at": "",
     }
     assert third["id"] == "" and third["multi"] is True
-    assert third["ref_url"] == "https://gitlab.com/octo/life-os/-/issues/12"
+    assert third["ref_url"] == "https://gitlab.com/octo/repo-f/-/issues/12"
     assert [o["label"] for o in third["options"]] == ["A", "B"]
 
 
@@ -183,15 +183,28 @@ def test_chief_plan_with_only_questions_or_lanes_is_ok_not_empty(tmp_path: Path)
     reach the Board, and a lane alone still reads as a plan."""
     f = tmp_path / "chief-plan.json"
     ask = {"id": "t1", "text": "Test?", "options": [{"label": "a", "value": "a"}]}
-    f.write_text(json.dumps({"version": 1, "queue": [], "lanes": [], "waiting_on_roberto": [ask]}),
+    f.write_text(json.dumps({"version": 1, "queue": [], "lanes": [], "waiting_on_owner": [ask]}),
                  encoding="utf-8")
     plan = chief_plan.read_chief_plan(f)
     assert plan["state"] == "ok" and plan["queue"] == [] and plan["lanes"] == []
-    assert [q["id"] for q in plan["waiting_on_roberto"]] == ["t1"]
+    assert [q["id"] for q in plan["waiting_on_owner"]] == ["t1"]
 
     f.write_text(json.dumps({"version": 1, "queue": [], "lanes": _PLAN_V1["lanes"]}), encoding="utf-8")
     plan = chief_plan.read_chief_plan(f)
     assert plan["state"] == "ok" and len(plan["lanes"]) == 1
+
+
+def test_chief_plan_saved_under_the_old_names_reads_the_same(tmp_path: Path):
+    f = tmp_path / "chief-plan.json"
+    f.write_text(json.dumps({
+        "version": 1, "lanes": [], "waiting_on_someone": [{"id": "q1", "text": "Pick one?"}],
+        "queue": [{"repo": "demo", "ref": "#1", "title": "t", "status": "waiting-someone"}],
+    }), encoding="utf-8")
+    plan = chief_plan.read_chief_plan(f)
+    assert [q["id"] for q in plan["waiting_on_owner"]] == ["q1"]
+    assert plan["queue"][0]["status"] == "waiting-owner"
+    index = chief_plan.read_plan_index(f)
+    assert len(index["waiting"]) == 1 and index["queue"][0]["status"] == "waiting-owner"
 
 
 def test_api_board_chief_plan_answers_a_questions_only_plan(webapp_client):
@@ -199,10 +212,10 @@ def test_api_board_chief_plan_answers_a_questions_only_plan(webapp_client):
     plan_file = Path(app.state.webapp_config.chief_plan_file)
     plan_file.write_text(json.dumps({
         "version": 1, "updated_at": "2026-10-11T08:00:00Z", "queue": [], "lanes": [],
-        "waiting_on_roberto": [{"id": "t1", "text": "Test?"}],
+        "waiting_on_owner": [{"id": "t1", "text": "Test?"}],
     }), encoding="utf-8")
     body = client.get("/api/board/chief-plan").json()
-    assert body["state"] == "ok" and [q["id"] for q in body["waiting_on_roberto"]] == ["t1"]
+    assert body["state"] == "ok" and [q["id"] for q in body["waiting_on_owner"]] == ["t1"]
 
 
 def test_api_board_chief_plan_reads_the_configured_file_behind_board_auth(webapp_client):
@@ -216,7 +229,7 @@ def test_api_board_chief_plan_reads_the_configured_file_behind_board_auth(webapp
     body = client.get("/api/board/chief-plan").json()
     assert body["state"] == "ok" and [q["ref"] for q in body["queue"]] == ["#1273", "#135", "#136"]
     owner = app.state.webapp_config.gitlab_group
-    assert body["waiting_on_roberto"][0]["ref_url"] == f"https://gitlab.com/{owner}/app-launcher/-/issues/1131"
+    assert body["waiting_on_owner"][0]["ref_url"] == f"https://gitlab.com/{owner}/app-launcher/-/issues/1131"
 
     app.state.webapp_config.auth_token = "secret-token"
     for path in ("/api/board", "/api/board/chief-plan"):
@@ -231,7 +244,7 @@ def test_api_board_marks_active_backlog_issue(
     client, app, _overrides = webapp_client
     fake = _FakeGh()
     monkeypatch.setattr(forge.subprocess, "run", fake)
-    forge.refresh("ferraroroberto")
+    forge.refresh("example-org")
 
     active_file = Path(app.state.webapp_config.sessions_state_file).with_name(
         "active-issues.json"
@@ -259,7 +272,7 @@ def test_api_board_exposes_claim_state_per_backlog_card(
     client, app, overrides = webapp_client
     fake = _FakeGh()
     monkeypatch.setattr(forge.subprocess, "run", fake)
-    forge.refresh("ferraroroberto")
+    forge.refresh("example-org")
     app.state.webapp_config.fleet_config_dir = str(_claim_contract(tmp_path))
 
     active_file = Path(app.state.webapp_config.sessions_state_file).with_name(
@@ -296,12 +309,12 @@ def test_api_board_exposes_claim_state_per_backlog_card(
 def test_api_board_merges_live_sessions_and_state(webapp_client):
     client, app, overrides = webapp_client
     overrides["session"].list_sessions.return_value = [
-        _live("live-1", "E:/automation/photo-ocr", 20),
+        _live("live-1", "E:/stubfolder/repo-a", 20),
     ]
     state_file = Path(app.state.webapp_config.sessions_state_file)
     state_file.write_text(json.dumps({
-        "t-uuid": {"project": "photo-ocr", "status": "needs-you", "agent": "claude",
-                   "cwd": "E:/automation/photo-ocr",
+        "t-uuid": {"project": "repo-a", "status": "needs-you", "agent": "claude",
+                   "cwd": "E:/stubfolder/repo-a",
                    "updated_at": _iso(datetime.now(timezone.utc) - timedelta(minutes=3))},
     }), encoding="utf-8")
 
@@ -321,12 +334,12 @@ def test_api_board_chief_never_lands_in_your_turn(webapp_client):
     between dispatches, not a transient alert like a worker session's."""
     client, app, overrides = webapp_client
     overrides["session"].list_sessions.return_value = [
-        _live("chief-1", "E:/automation/fleet-config", 20, label="chief"),
+        _live("chief-1", "E:/stubfolder/fleet-config", 20, label="chief"),
     ]
     state_file = Path(app.state.webapp_config.sessions_state_file)
     state_file.write_text(json.dumps({
         "t-uuid": {"project": "fleet-config", "status": "needs-you", "agent": "claude",
-                   "cwd": "E:/automation/fleet-config",
+                   "cwd": "E:/stubfolder/fleet-config",
                    "updated_at": _iso(datetime.now(timezone.utc) - timedelta(minutes=3))},
     }), encoding="utf-8")
 
@@ -417,12 +430,12 @@ def test_chief_plan_reader_keeps_only_a_well_formed_asked_at(tmp_path: Path):
     reads blank, so the Board never shows an invented date."""
     f = tmp_path / "chief-plan.json"
     plan = dict(_PLAN_V1)
-    plan["waiting_on_roberto"] = [
+    plan["waiting_on_owner"] = [
         {"text": "a", "asked_at": "2026-11-03"},
         {"text": "b", "asked_at": "yesterday"},
         {"text": "c", "asked_at": 20261103},
         {"text": "d"},
     ]
     f.write_text(json.dumps(plan), encoding="utf-8")
-    got = chief_plan.read_chief_plan(f)["waiting_on_roberto"]
+    got = chief_plan.read_chief_plan(f)["waiting_on_owner"]
     assert [w["asked_at"] for w in got] == ["2026-11-03", "", "", ""]

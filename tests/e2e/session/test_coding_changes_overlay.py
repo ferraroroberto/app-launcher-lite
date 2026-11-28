@@ -58,7 +58,7 @@ DIFF = (
 def _app(app_id: str) -> dict:
     return {
         "id": app_id, "name": app_id, "kind": "claude-code",
-        "project_dir": f"E:/automation/{app_id}", "added_at": "",
+        "project_dir": f"E:/stubfolder/{app_id}", "added_at": "",
         "is_favorite": False, "repo_url": None,
     }
 
@@ -69,7 +69,7 @@ def _install_routes(page: Page, *, dirty: bool, files: dict = CHANGES) -> dict:
         "**/api/apps",
         lambda route: route.fulfill(
             status=200, content_type="application/json",
-            body=json.dumps({"scan_root": "E:/automation", "apps": [_app("alpha"), _app("clean")]}),
+            body=json.dumps({"scan_root": "E:/stubfolder", "apps": [_app("alpha"), _app("clean")]}),
         ),
     )
     page.route(

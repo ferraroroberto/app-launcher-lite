@@ -1,6 +1,6 @@
 """Shared plumbing for the loopback sibling-app HTTP clients.
 
-``session_client``, ``voice_client`` and ``photo_ocr_client`` all talk to a
+The loopback clients (``session_client`` among them) each talk to a
 same-host sibling app over loopback and make the *same* three decisions on
 every call: a transport failure (``requests.RequestException``) maps to a 503,
 a ``>= 400`` upstream response surfaces with its own status (preferring the
@@ -131,7 +131,7 @@ def request(
     of the transport failures: a *read* timeout — the peer accepted the call and
     never answered in time — raises that status with a "still working" message
     instead of the 503 "unreachable" a refused or timed-out connect gets, for a
-    caller whose upstream legitimately runs long (photo-ocr). ``retry_dropped``
+    caller whose upstream legitimately runs long. ``retry_dropped``
     rides to :func:`pooled_request`. ``**kwargs`` (``json``, ``params``, ``files``, ``data``,
     ``headers``, ...) flow straight to ``requests.request``.
     """

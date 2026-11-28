@@ -14,15 +14,16 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
+import lite_ports
+
 from owner_check import rule
 
+# The short names every checkout understands; a machine adds its own under
+# `repo_aliases` in `config/config.json`.
 ALIASES: Dict[str, str] = {
-    "fs": "facilitation-suite",
-    "cm": "content-management",
     "al": "app-launcher",
     "hub": "local-llm-hub",
     "lite": "app-launcher-lite",
-    "grocery": "grocery-shopping-automation",
 }
 
 BACKFILL_REASON = "Shipped with no owner check on record"
@@ -57,9 +58,15 @@ def _expand(start: str, end: Optional[str]) -> List[int]:
     return list(range(lo, hi + 1)) if hi >= lo else [lo]
 
 
+def configured_aliases() -> Dict[str, str]:
+    """`ALIASES` plus this checkout's own `repo_aliases`."""
+    own = lite_ports.read_config().get("repo_aliases")
+    return {**ALIASES, **{str(k).lower(): str(v) for k, v in (own if isinstance(own, dict) else {}).items()}}
+
+
 def parse_audit_list(text: str, aliases: Optional[Dict[str, str]] = None) -> List[Item]:
     """One Item per segment that names at least one `repo#N`; a repeated repo in one segment merges."""
-    aliases = ALIASES if aliases is None else aliases
+    aliases = configured_aliases() if aliases is None else aliases
     items: List[Item] = []
     for line in text.splitlines():
         for segment in re.split(r"[|;]", line):

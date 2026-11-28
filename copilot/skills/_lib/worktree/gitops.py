@@ -353,7 +353,7 @@ def setup_worktree(repo: Path, issue: str, branch: str) -> Path:
         # NEVER recommend `git worktree remove` here. A stale worktree still
         # holds its `.venv` junction, and git's recursive delete follows it
         # into the primary's real venv -- which is exactly how this message
-        # destroyed task-os's venv under a live app: the
+        # destroyed a sibling repo's venv under a live app: the
         # lane did what the helper told it to. `remove-worktree` strips the
         # junction with a reparse-safe `rmdir` first.
         # Forward slashes throughout: this line exists to be pasted, and Git
@@ -546,7 +546,7 @@ def _report_removal(wt: Path) -> int:
     .CurrentDirectory.Handle` from its PEB, then `NtDuplicateObject(...,
     DUPLICATE_CLOSE_SOURCE)`), not by killing or rebooting -- rebooting the
     host was tried and the directories came straight
-    back. Working implementation: `home-automation`'s `scripts/unpin_directory.py`.
+    back.
     """
     if wt.exists():
         # logging-not-print-exempt: KEY=value or status line the worktree_claim CLI's caller reads from this stream

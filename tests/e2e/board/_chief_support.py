@@ -18,7 +18,7 @@ from tests.e2e.board._support import _open_board  # noqa: F401  (re-exported to 
 
 _CHIEF_CARD = {
     "session_id": "s-chief", "kind": "pty", "agent": "copilot",
-    "label": "chief", "project_dir": "E:/automation/fleet-config",
+    "label": "chief", "project_dir": "E:/stubfolder/fleet-config",
     "name": "chief", "alive": True, "started_at": "2026-07-18T06:00:00Z",
     "live_title": "", "prompt_title": "", "manual_title": "chief",
     "project": "fleet-config", "status": "idle", "age_seconds": 60,
@@ -27,10 +27,10 @@ _CHIEF_CARD = {
 
 _WORKER_CARD = {
     "session_id": "s-work", "kind": "pty", "agent": "copilot",
-    "project_dir": "E:/automation/life-os", "name": "life-os",
+    "project_dir": "E:/stubfolder/repo-f", "name": "repo-f",
     "alive": True, "started_at": "2026-07-18T06:30:00Z",
     "live_title": "weekly recap", "prompt_title": "",
-    "project": "life-os", "status": "working", "age_seconds": 240,
+    "project": "repo-f", "status": "working", "age_seconds": 240,
 }
 
 
@@ -80,7 +80,7 @@ def _mock_board(page: Page, payload: dict) -> None:
 
 
 _PLAN = {
-    "state": "ok", "updated_at": "", "lanes": [], "waiting_on_roberto": [],
+    "state": "ok", "updated_at": "", "lanes": [], "waiting_on_owner": [],
     "queue": [{"repo": "app-launcher", "ref": "#1279", "title": "chief's plan card",
                "status": "building", "note": ""}],
 }
@@ -179,7 +179,7 @@ _QUESTIONS = [
          {"label": "Only the first"},
          {"label": "Hold them"},
      ]},
-    {"id": "q-days", "text": "Which days?", "repo": "life-os", "question": "Which days work?",
+    {"id": "q-days", "text": "Which days?", "repo": "repo-f", "question": "Which days work?",
      "multi": True, "recommendation": "Mon and Wed suit the gym.",
      "options": [{"label": "Mon"}, {"label": "Wed"}, {"label": "Fri"}]},
     {"text": "Remember the last tab?", "ref": "app-launcher#1131"},
@@ -191,7 +191,7 @@ def _plan_with(tmp_path, waiting: list, updated_at: str = "2026-09-27T09:00:00Z"
     f.write_text(_json.dumps({
         "version": 1, "updated_at": updated_at, "lanes": [],
         "queue": [{"repo": "app-launcher", "ref": "#1295", "title": "answer sheet", "status": "building"}],
-        "waiting_on_roberto": waiting,
+        "waiting_on_owner": waiting,
     }), encoding="utf-8")
     return chief_plan.read_chief_plan(f, "octo")
 
@@ -214,7 +214,7 @@ _PNG_1x1 = base64.b64decode(
 )
 
 
-_CHIEF_UPLOAD = "E:/automation/fleet-config/.launcher-tmp/e2e-stub-paste.png"
+_CHIEF_UPLOAD = "E:/stubfolder/fleet-config/.launcher-tmp/e2e-stub-paste.png"
 
 
 def _mock_chief_upload(page: Page) -> list:

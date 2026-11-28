@@ -22,7 +22,7 @@ from owner_check import block as owner_block
 DEFAULT_WORKER_CAP = 3
 
 # What the cap counts, from the launcher's `worker_cap_scope` setting: `chief`
-# only the sessions the chief dispatched (so a session Roberto opened himself
+# only the sessions the chief dispatched (so a session the owner opened by hand
 # never takes a lane slot), `all` every live session. An absent value is
 # `chief`; any other value is an unreadable setting, never silently either.
 WORKER_CAP_SCOPES = ("chief", "all")
@@ -121,11 +121,11 @@ def repo_occupancy(
     card never blocks a dispatch — only a live PTY actually holds the repo.
 
     A standing `telegram:*` channel session (`_is_channel_session`) is skipped
-    too: three of them run permanently in life-os, so counting them made
-    every life-os dispatch refuse.
+    too: three of them run permanently in one repo, so counting them made
+    every dispatch there refuse.
 
     `exclude_sid` drops one card by session id: the caller's own. The standing
-    chief runs as an ordinary launcher PTY with cwd `E:/automation/fleet-config`,
+    chief runs as an ordinary launcher PTY with cwd `<projects>/fleet-config`,
     so counting its card made this repo permanently occupied and chief could
     never dispatch its own queue. Chief is not a worker — it
     never runs `git`, never edits files, never claims a checkout — so its cwd
@@ -187,7 +187,7 @@ def alive_worker_count(
     otherwise hold three lane slots forever.
 
     `managed_sids` is the `chief` cap scope: only cards whose session id the
-    chief recorded at dispatch count, so a session the owner opened himself
+    chief recorded at dispatch count, so a session the owner opened by hand
     holds no slot. `None` is the `all` scope, every card above.
     """
     cards = list(columns.get("claude_turn") or []) + list(columns.get("your_turn") or [])
@@ -330,7 +330,7 @@ def fleet_job_refusal(
 def owner_check_refusal(repo: str, number: int, issue: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
     """`(refusal, warning)` from an issue-state row (`launcher.fetch_issue_state`).
 
-    A `needs-owner` issue waits on a step of Roberto's, so it is refused. A row
+    A `needs-owner` issue waits on a step of the owner's, so it is refused. A row
     that could not be read is only warned: `/issue-start`'s owner gate is the
     hard stop and refuses an unknown state there.
     """
@@ -338,7 +338,7 @@ def owner_check_refusal(repo: str, number: int, issue: Dict[str, Any]) -> Tuple[
         return None, f"owner-check-unknown reason={issue['error']}"
     labels = {str(lab.get("name")) for lab in issue.get("labels") or []}
     if owner_block.LABELS[owner_block.BEFORE_START] in labels:
-        return (f"needs-owner: {repo}#{number} waits on a step of Roberto's; "
+        return (f"needs-owner: {repo}#{number} waits on a step of the owner's; "
                 f"owner_check gate {repo}#{number} prints the reason"), None
     return None, None
 

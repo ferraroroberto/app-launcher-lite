@@ -4,7 +4,7 @@ The registry is one JSON file (``config/apps.json``, gitignored) that
 holds the **Apps tab** rows — bat-based launchers:
 
     {
-      "scan_root": "E:\\automation",
+      "scan_root": "<projects>",
       "apps": [
         {"id": "...", "name": "...", "kind": "streamlit", "bat_path": "..."},
         {"id": "...", "name": "...", "kind": "webapp",    "bat_path": "..."},

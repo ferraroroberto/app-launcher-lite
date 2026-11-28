@@ -14,7 +14,7 @@ This module runs that package's command line, never re-reading the labels itself
 
 The launcher keeps four marks of its own, in ``webapp/owner-check-marks.json``:
 ``later`` (a snooze, until :data:`SNOOZE_HOURS` pass; the Pending answer), ``problem``
-(the owner reported one; the label stays until a fix ships and he validates),
+(the owner reported one; the label stays until a fix ships and they validate),
 ``paused`` and ``closing`` (the owner asked the chief to pause the work or to close
 the issue; the label stays until the chief acts). A marked item stays listed but
 leaves the "needs you" count.

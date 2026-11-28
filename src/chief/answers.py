@@ -135,6 +135,6 @@ def unanswered_count(plan: Mapping[str, Any]) -> Optional[int]:
         return None
     answered = set(plan.get("answered") or [])
     return sum(
-        1 for index, item in enumerate(plan.get("waiting_on_roberto") or [])
+        1 for index, item in enumerate(plan.get("waiting_on_owner") or [])
         if item_key(item, index) not in answered
     )

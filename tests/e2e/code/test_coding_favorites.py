@@ -31,7 +31,7 @@ def _row(slug: str, fav: bool) -> dict:
         "id": slug,
         "name": slug,
         "kind": "claude-code",
-        "project_dir": f"E:/automation/{slug}",
+        "project_dir": f"E:/stubfolder/{slug}",
         "added_at": "",
         "is_favorite": fav,
     }
@@ -58,7 +58,7 @@ def _install_routes(page: Page) -> None:
         route.fulfill(
             status=200,
             content_type="application/json",
-            body=json.dumps({"scan_root": "E:/automation", "apps": rows}),
+            body=json.dumps({"scan_root": "E:/stubfolder", "apps": rows}),
         )
 
     def _favorites(route, request):

@@ -23,7 +23,7 @@ _PRESETS = [
     # Its model is not on the list below, so the server would refuse it: not offered.
     {"id": "p-gone", "name": "Unlisted", "agent": "copilot", "model": "not-listed", "effort": "high"},
 ]
-_ROW = {"id": "alpha", "name": "alpha", "kind": "claude-code", "project_dir": "E:/automation/alpha",
+_ROW = {"id": "alpha", "name": "alpha", "kind": "claude-code", "project_dir": "E:/stubfolder/alpha",
         "added_at": "", "is_favorite": False, "repo_url": None, "issues_url": None}
 
 
@@ -41,7 +41,7 @@ def _install_routes(page: Page, presets: list, launches: list) -> None:
     page.route("**/api/config", _config)
     page.route("**/api/apps", lambda route: route.fulfill(
         status=200, content_type="application/json",
-        body=json.dumps({"scan_root": "E:/automation", "apps": [_ROW]})))
+        body=json.dumps({"scan_root": "E:/stubfolder", "apps": [_ROW]})))
     page.route("**/api/apps/alpha/launch", _launch)
 
 

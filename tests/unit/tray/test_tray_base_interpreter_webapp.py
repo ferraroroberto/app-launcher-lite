@@ -22,7 +22,7 @@ from scripts import webapp_port
 from src.subprocess_flags import NO_WINDOW
 from tests.unit.tray.test_tray_lifecycle_reclaim import REPO_ROOT, _owns
 
-REPO = "C:" + "\\automation\\app-launcher-lite"
+REPO = "C:" + "\\stubfolder\\app-launcher-lite"
 BASE = '"C:\\Python314\\pythonw.exe" -m app.webapp.serve --host 0.0.0.0 --port 8475 '
 
 
@@ -35,21 +35,21 @@ def _tls(root: str) -> str:
 @pytest.mark.windows_only
 class TestBaseInterpreterWebapp:
     def test_a_webapp_naming_this_checkouts_certificates_is_owned(self, tmp_path: Path) -> None:
-        worktree = "C:/automation/app-launcher-lite-wt-478"
+        worktree = "C:/stubfolder/app-launcher-lite-wt-478"
         owned = _owns(tmp_path, REPO, [
             BASE + _tls(REPO),
             # the other drive spelling of the junctioned root, quoted, in the `both` serve mode
             'python.exe -m app.webapp.serve_modes --http-port 8476 --ssl-certfile '
-            '"E:/automation/app-launcher-lite/webapp/certificates/cert.pem"',
-            BASE + _tls("C:\\automation\\app-launcher-lite-wt-478"),
+            '"E:/stubfolder/app-launcher-lite/webapp/certificates/cert.pem"',
+            BASE + _tls("C:\\stubfolder\\app-launcher-lite-wt-478"),
         ], [worktree])
         assert owned == [True, True, True]
 
     def test_another_checkout_or_another_process_is_not_owned(self, tmp_path: Path) -> None:
         owned = _owns(tmp_path, REPO, [
-            BASE + _tls("C:\\automation\\app-launcher"),
-            BASE + _tls("C:\\automation\\app-launcher-lite-wt-999"),
-            BASE + _tls("C:\\other\\automation\\app-launcher-lite"),
+            BASE + _tls("C:\\stubfolder\\app-launcher"),
+            BASE + _tls("C:\\stubfolder\\app-launcher-lite-wt-999"),
+            BASE + _tls("C:\\other\\stubfolder\\app-launcher-lite"),
             # no certificate to name the checkout: plain HTTP stays unclaimed
             BASE.strip(),
             # names the certificate without being the web app

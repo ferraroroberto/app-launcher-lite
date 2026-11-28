@@ -1,6 +1,6 @@
 /* The chief's answer sheet.
  *
- * The Chief's-plan card (board.js) lists what waits on Roberto. This
+ * The Chief's-plan card (board.js) lists what waits on the owner. This
  * module is the one-shot way to answer all of it: a sheet in the style of the
  * transcript's AskUserQuestion card (the same `.tr-ask-*` rows) with
  * one block per waiting item, in file order: the repo and ref, the question,
@@ -159,7 +159,7 @@ function answerText(item, draft) {
 //   Answers from the Board (2 of 3):
 //   1. [fleet-config#<n>] Approve the four plans? → Yes, all four (recommended) {id: q-plans}
 //      Attached: <path>   (one per file, under its item's line)
-//   2. [life-os#<n>] Blank the old passwords? → Other: only the transcripts
+//   2. [repo-a#<n>] Blank the old passwords? → Other: only the transcripts
 //   Skipped: 3
 //   Also: <anything-else text>
 // Anything else goes as typed (trimmed), not folded to one line: an attached
@@ -419,7 +419,7 @@ export function syncChiefAnswers(run) {
 // scrolled to that question: a tap on its Board row.
 export function openChiefAnswers(plan, run, shown, startAt) {
   const ok = !!plan && plan.state === 'ok';
-  const items = ok ? plan.waiting_on_roberto || [] : [];
+  const items = ok ? plan.waiting_on_owner || [] : [];
   const indices = ok ? shown || allIndices(items) : [];
   if (!indices.length) return;
   openSheet('chief', plan, run, indices, [], startAt == null ? null : itemKey(items[startAt], startAt));
@@ -439,7 +439,7 @@ function openSheet(mode, plan, run, indices, owner, startKey, ownerKind) {
   const dialog = els.chiefAnswersDialog;
   if (!dialog) return;
   const ok = !!plan && plan.state === 'ok';
-  const items = ok ? plan.waiting_on_roberto || [] : [];
+  const items = ok ? plan.waiting_on_owner || [] : [];
   const version = ok ? plan.updated_at || '' : null;
   // Reopening the same version of the plan keeps what was typed.
   const same = sheet && sheet.version === version

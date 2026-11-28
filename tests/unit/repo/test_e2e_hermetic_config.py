@@ -25,7 +25,7 @@ _UNUSUAL_LIVE_CONFIG = {
     "autostart_channel_sessions": True,
     "claude_model": "not-a-default-model",
     "coding_favorites": ["alpha"],
-    "life_os_dir": "E:/example/life-os",
+    "life_os_dir": "E:/example/repo-f",
     "fleet_config_dir": "E:/example/fleet-config",
     "apps_scan_root": "E:/example/apps",
     "tunnel_url": "https://example.test/",

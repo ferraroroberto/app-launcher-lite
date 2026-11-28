@@ -122,7 +122,7 @@ def _conversation(turns: int, *, tool_calls_per_turn: int = 2) -> List[Dict[str,
 
 def _live(sid: str = "s1", **extra: Any) -> Dict[str, Any]:
     row = {"session_id": sid, "kind": "pty", "agent": "copilot", "alive": True,
-           "project_dir": "E:/automation/proj", "started_at": 1_789_000_000}
+           "project_dir": "E:/stubfolder/proj", "started_at": 1_789_000_000}
     row.update(extra)
     return row
 

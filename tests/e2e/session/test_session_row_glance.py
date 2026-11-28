@@ -31,24 +31,24 @@ _SHARED_NAME = "Fixing the chunk merge bug"
 
 _SESSIONS = [
     {"session_id": "s-chief", "kind": "pty", "agent": "copilot", "label": "chief",
-     "project_dir": "E:/work/control-room", "name": "chief", "flags": "",
+     "project_dir": "E:/stub/control-room", "name": "chief", "flags": "",
      "started_at": _NOW - 7200, "alive": True, "rows": 40, "cols": 120,
      "live_title": "", "prompt_title": "", "manual_title": "chief", "output_chars": 10},
     {"session_id": "s-pty", "kind": "pty", "agent": "copilot", "label": "",
-     "project_dir": "E:/work/demo-garden", "name": "demo-garden", "flags": "",
+     "project_dir": "E:/stub/demo-garden", "name": "demo-garden", "flags": "",
      "started_at": _NOW - 600, "alive": True, "rows": 40, "cols": 120,
      "live_title": "",
      "prompt_title": "a deliberately long session title that cannot fit on one phone line",
      "manual_title": "", "output_chars": 10},
     {"session_id": "s-remote", "kind": "remote", "agent": "copilot", "label": "",
-     "project_dir": "E:/work/a-rather-long-project-folder-name-for-the-meta-line",
+     "project_dir": "E:/stub/a-rather-long-project-folder-name-for-the-meta-line",
      "name": "remote", "flags": "", "started_at": _NOW - 60, "alive": True,
      "live_title": "", "prompt_title": "detached worker", "manual_title": "",
      "output_chars": 0},
     # One live session carrying the shared cross-tab title (fleet-config#302),
     # on both tabs under the same id.
     {"session_id": _SHARED_SID, "kind": "pty", "agent": "copilot", "label": "",
-     "project_dir": "E:/work/photo-lab", "name": "photo-lab", "flags": "",
+     "project_dir": "E:/stub/photo-lab", "name": "photo-lab", "flags": "",
      "started_at": _NOW - 300, "alive": True, "rows": 40, "cols": 120,
      "live_title": "", "prompt_title": "", "manual_title": "", "output_chars": 10,
      "shared_name": _SHARED_NAME, "shared_name_source": None},
@@ -57,7 +57,7 @@ _SESSIONS = [
 
 def _card(sid: str, status: str, **extra) -> dict:
     card = {"session_id": sid, "kind": "pty", "agent": "copilot", "alive": True,
-            "project_dir": "E:/work/demo-garden", "name": "demo-garden",
+            "project_dir": "E:/stub/demo-garden", "name": "demo-garden",
             "live_title": "", "prompt_title": sid + " title", "project": "demo-garden",
             "status": status, "age_seconds": 300, "started_at": "2026-09-10T11:00:00Z"}
     card.update(extra)
@@ -71,7 +71,7 @@ _BOARD = {
         "claude_turn": [
             _card("b-chief", "working", label="chief", name="chief", manual_title="chief"),
             _card("b-idle", "idle"),
-            _card(_SHARED_SID, "working", project_dir="E:/work/photo-lab", name="photo-lab",
+            _card(_SHARED_SID, "working", project_dir="E:/stub/photo-lab", name="photo-lab",
                   project="photo-lab", prompt_title="", shared_name=_SHARED_NAME,
                   shared_name_source=None),
         ],

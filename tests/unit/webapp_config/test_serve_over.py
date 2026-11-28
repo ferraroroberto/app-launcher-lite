@@ -60,7 +60,7 @@ def test_the_default_setting_serves_as_before():
 
 def test_the_default_http_port_is_not_one_a_fleet_app_declares():
     # Read from each sibling repo's .fleet.toml `port`, gathered by hand when
-    # the default was chosen; 8467 was overmark's.
+    # the default was chosen; 8467 was another app's.
     declared = {8020, 8000, 8377, 8443, 8444, 8445, 8446, 8447, 8448, 8449, 8450, 8451, 8452, 8453,
                 8455, 8456, 8465, 8466, 8467, 8501, 8502, 8503}
     assert WebappConfig().serve_http_port not in declared

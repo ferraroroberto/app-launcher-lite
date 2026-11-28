@@ -59,7 +59,7 @@ def test_dismissing_a_failed_job_card_drops_it_and_the_failing_count(
          "error": "glab api exited 1: 403 Forbidden"},
     ]
     payload["columns"]["your_turn"][0].update(
-        {"session_id": "s-trust", "status": "awaiting-decision", "folder_trust": "photo-ocr"}
+        {"session_id": "s-trust", "status": "awaiting-decision", "folder_trust": "repo-a"}
     )
     _mock_board(authed_page)
     current = {"body": payload}
@@ -86,7 +86,7 @@ def test_dismissing_a_failed_job_card_drops_it_and_the_failing_count(
         trusts.append(f"{route.request.method} {route.request.url.split('/api/')[1]}")
         route.fulfill(
             status=200, content_type="application/json",
-            body=_json.dumps({"ok": True, "folder": "photo-ocr", "trusted": True}),
+            body=_json.dumps({"ok": True, "folder": "repo-a", "trusted": True}),
         )
 
     authed_page.route(re.compile(r".*/api/claude-code/sessions/s-trust/folder-trust$"), _trust)

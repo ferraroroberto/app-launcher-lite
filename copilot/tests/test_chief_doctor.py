@@ -161,9 +161,9 @@ class DoctorTests(unittest.TestCase):
 
 class RedactionTests(unittest.TestCase):
     def test_paths_user_and_host_are_masked(self) -> None:
-        redact = doctor.Redactor([(r"C:\Users\Ana", "<home>"), (r"C:\Users\Ana\lite", "<checkout>")], "Ana", "PC-7")
-        text = r"C:\Users\Ana\lite\x C:/users/ana/.copilot C:\\Users\\Ana\\y ana@PC-7 banana"
-        self.assertEqual(redact(text), r"<checkout>\x <home>/.copilot <home>\\y <user>@<host> banana")
+        redact = doctor.Redactor([(r"C:\Users\sample", "<home>"), (r"C:\Users\sample\lite", "<checkout>")], "Sample", "PC-7")
+        text = r"C:\Users\sample\lite\x C:/users/sample/.copilot C:\\Users\\sample\\y sample@PC-7 resampled"
+        self.assertEqual(redact(text), r"<checkout>\x <home>/.copilot <home>\\y <user>@<host> resampled")
 
     def test_doctor_output_never_names_the_real_home_user_or_host(self) -> None:
         tmp = Path(tempfile.mkdtemp())

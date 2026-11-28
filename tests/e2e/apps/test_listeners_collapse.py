@@ -67,7 +67,7 @@ _PROBE_PAYLOAD = {
             "name": "python.exe",
             "exe": "python.exe",
             "cmdline": "streamlit run app.py",
-            "app": "Photo OCR",
+            "app": "Repo A",
             "parent_port": None,
             "service": None,
         },

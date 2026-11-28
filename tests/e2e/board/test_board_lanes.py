@@ -229,10 +229,10 @@ def test_board_cards_carry_their_date_and_it_is_never_cut(
     cols["backlog"][0]["updated_at"] = _iso_utc(earlier)
     cols["other"][0]["updated_at"] = _iso_utc(now)
     cols["done"] = [
-        {"kind": "issue", "repo": "voice-transcriber", "number": 87, "title": "newer close",
+        {"kind": "issue", "repo": "repo-b", "number": 87, "title": "newer close",
          "url": "u87", "updated_at": _iso_utc(closed_new), "closed_at": _iso_utc(closed_new),
          "state": "closed", "labels": []},
-        {"kind": "issue", "repo": "voice-transcriber", "number": 86, "title": "older close, later comment",
+        {"kind": "issue", "repo": "repo-b", "number": 86, "title": "older close, later comment",
          "url": "u86", "updated_at": _iso_utc(now), "closed_at": _iso_utc(closed_old),
          "state": "closed", "labels": []},
     ]
@@ -253,8 +253,8 @@ def test_board_cards_carry_their_date_and_it_is_never_cut(
 
     expect_meta("backlog", 0, "app-launcher #301", _local_stamp(earlier, today=False))
     expect_meta("other", 0, "app-launcher MR !158", _local_stamp(now, today=True))
-    expect_meta("done", 0, "voice-transcriber #87 · closed", _local_stamp(closed_new, today=True))
-    expect_meta("done", 1, "voice-transcriber #86 · closed", _local_stamp(closed_old, today=True))
+    expect_meta("done", 0, "repo-b #87 · closed", _local_stamp(closed_new, today=True))
+    expect_meta("done", 1, "repo-b #86 · closed", _local_stamp(closed_old, today=True))
 
     # Whole, not clipped: the meta shows every line it has, and the stamp is
     # the tail of its text (so the repo name leads and nothing pushes it out).

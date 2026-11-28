@@ -292,7 +292,7 @@ def test_a_cwd_outside_any_repo_names_nothing(box, tmp_path):
         ("python.exe", [], "python"),
         ("node.exe", ["node", "/srv/app/server.js", "--port", "1"], "node (server)"),
         ("svchost.exe", ["svchost.exe", "-k", "secret"], "svchost"),
-        ("chrome.exe", ["chrome.exe", "--user-data-dir=C:\\Users\\someone"], "chrome"),
+        ("chrome.exe", ["chrome.exe", "--user-data-dir=C:\\Users\\me"], "chrome"),
         ("", [], "?"),
     ],
 )

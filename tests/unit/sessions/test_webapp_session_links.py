@@ -213,7 +213,7 @@ def _copilot_folder(root, folder=_SESSION_ID, task_id=_TASK_ID):
     only appears at the first prompt. ``task_id`` None is a session that was
     never shared remotely."""
     (root / folder).mkdir(exist_ok=True)
-    lines = [f"id: {folder}", "cwd: E:/work/project", "created_at: 2026-09-17T21:57:34Z"]
+    lines = [f"id: {folder}", "cwd: E:/stub/project", "created_at: 2026-09-17T21:57:34Z"]
     if task_id:
         lines.append(f"mc_task_id: {task_id}")
     (root / folder / "workspace.yaml").write_text(
@@ -223,7 +223,7 @@ def _copilot_folder(root, folder=_SESSION_ID, task_id=_TASK_ID):
 
 def _copilot_row(sid="s-cop"):
     return {"session_id": sid, "kind": "pty", "agent": "copilot",
-            "project_dir": r"E:\work\project", "started_at": _STARTED}
+            "project_dir": r"E:\stub\project", "started_at": _STARTED}
 
 
 def _link(rows, override="", state_rows=None):

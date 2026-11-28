@@ -35,7 +35,7 @@ _NOW = int(time.time())
 
 def _session(sid: str, column, status, **extra) -> dict:
     s = {"session_id": sid, "kind": "pty", "agent": "copilot", "label": "",
-         "project_dir": "E:/work/" + sid, "name": sid, "flags": "",
+         "project_dir": "E:/stub/" + sid, "name": sid, "flags": "",
          "started_at": _NOW - 600, "alive": True, "rows": 40, "cols": 120,
          "live_title": "", "prompt_title": sid + " title", "manual_title": "",
          "output_chars": 10, "board_column": column, "board_status": status}

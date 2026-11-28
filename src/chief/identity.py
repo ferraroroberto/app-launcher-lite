@@ -68,11 +68,11 @@ def reconcile_chief_label(
     """Self-heal ``label`` for a chief PTY spawned outside ``ensure``.
 
     ``ensure_chief`` is spawn-if-absent, but it is not the only way a chief
-    gets started. Two ways it slips past the label: Roberto opens a plain
-    Coding-tab session in fleet-config and types ``/chief`` himself, or — the
+    gets started. Two ways it slips past the label: the owner opens a plain
+    Coding-tab session in fleet-config and types ``/chief`` by hand, or — the
     case actually observed live, verified against the real session
     (1c8e6dde…) rather than only synthetic tests — the session-host restarts,
-    killing the PTY, and he re-attaches the *same underlying Claude Code
+    killing the PTY, and they re-attach the *same underlying Claude Code
     conversation* via Resume. Either way the launcher never gets to pass
     ``label="chief"`` at spawn, so every consumer keying on it —
     :func:`find_chief`, ``chief_ops.py``'s worker-cap count and

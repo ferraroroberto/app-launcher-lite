@@ -1,4 +1,4 @@
-"""src.scanner.scan_skills — life-os skill discovery (issue #102)."""
+"""src.scanner.scan_skills — repo-f skill discovery (issue #102)."""
 
 from __future__ import annotations
 
@@ -83,4 +83,4 @@ class TestScanSkills:
         assert found[0].command == "meeting-prep"
 
     def test_missing_skills_dir_returns_empty(self, tmp_path: Path):
-        assert scan_skills(tmp_path / "no-life-os") == []
+        assert scan_skills(tmp_path / "no-repo-f") == []

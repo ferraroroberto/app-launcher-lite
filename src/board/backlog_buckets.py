@@ -23,7 +23,7 @@ the labels. First match wins:
 
 ``umbrella``, ``record`` and ``dormant`` draw folded shut, but they are counted
 in the total like every other bucket. A plan question on an issue, or a
-``waiting-roberto`` row, adds a ``question`` chip wherever the issue lands.
+``waiting-owner`` row, adds a ``question`` chip wherever the issue lands.
 
 An issue is only placed when every source that could put it in a higher
 bucket was read. With the plan or the marker file unreadable, an issue no
@@ -105,7 +105,7 @@ def _after_chips(after: str) -> List[str]:
 
 
 # Statuses the bucket heading or the question chip already says, so no status chip.
-_HEADING_SAYS_IT = frozenset({QueueStatus.QUEUED, QueueStatus.PARKED, QueueStatus.WAITING_ROBERTO})
+_HEADING_SAYS_IT = frozenset({QueueStatus.QUEUED, QueueStatus.PARKED, QueueStatus.WAITING_OWNER})
 
 
 def _row_chips(row: Mapping[str, str]) -> List[str]:
@@ -224,7 +224,7 @@ def _place(
         return UNKNOWN, []
     labels = {str(lab).lower() for lab in card.get("labels") or []}
     row = queue.get(key) if key is not None else None
-    question = key in asked or queue_status(row) is QueueStatus.WAITING_ROBERTO
+    question = key in asked or queue_status(row) is QueueStatus.WAITING_OWNER
     tail = ["question"] if question else []
     chips = _label_chips(labels)
     if chips:

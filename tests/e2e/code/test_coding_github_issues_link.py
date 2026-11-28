@@ -23,7 +23,7 @@ def _row(slug: str, issues_url: str | None) -> dict:
         "id": slug,
         "name": slug,
         "kind": "claude-code",
-        "project_dir": f"E:/automation/{slug}",
+        "project_dir": f"E:/stubfolder/{slug}",
         "added_at": "",
         "is_favorite": False,
         "repo_url": issues_url.split("/-/issues")[0] if issues_url else None,
@@ -39,7 +39,7 @@ def _install_routes(page: Page, repo: dict) -> None:
             status=200,
             content_type="application/json",
             body=json.dumps(
-                {"scan_root": "E:/automation", "apps": [_row("alpha", repo["url"])]}
+                {"scan_root": "E:/stubfolder", "apps": [_row("alpha", repo["url"])]}
             ),
         )
 

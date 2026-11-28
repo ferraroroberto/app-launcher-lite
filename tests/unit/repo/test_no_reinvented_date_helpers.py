@@ -2,7 +2,7 @@
 
 A `/codebase-audit` duplication bucket flagged, two audits running (recurring):
 the "whole local calendar days between a date and today" scan written four
-times (life-os.js's ``daysSince``/``convoWhen``, screen-time.js's ``whenText``,
+times (repo-f.js's ``daysSince``/``convoWhen``, screen-time.js's ``whenText``,
 jobs-agenda.js's ``_dayOffset``) instead of calling one
 ``calendarDaysFromToday`` in ``format.js``, and usage-meter.js's own
 ``fmtResetFull`` duplicating ``format.js``'s ``fmtResetClock``/

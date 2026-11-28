@@ -280,10 +280,10 @@ class TestScanAppBats:
 
 class TestPrettyFolderName:
     def test_sentence_case_not_title_case(self):
-        assert pretty_folder_name(Path("mass-html_to-markdown")) == "Mass html to markdown"
+        assert pretty_folder_name(Path("my-example_app-name")) == "My example app name"
 
     def test_single_word_is_capitalised(self):
-        assert pretty_folder_name(Path("pvgis")) == "Pvgis"
+        assert pretty_folder_name(Path("myapp")) == "Myapp"
 
 
 class TestEmptyScanRoot:

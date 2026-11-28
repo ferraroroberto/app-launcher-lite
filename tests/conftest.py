@@ -1,6 +1,6 @@
 """Shared pytest fixtures for app-launcher-lite.
 
-Mirrors the pattern used by sister projects (voice-transcriber / photo-ocr):
+Mirrors the pattern used by sister projects (repo-b / repo-a):
 build a fresh FastAPI ``create_app()`` against an isolated temp config dir,
 with the expensive deps (session-host loopback client, audit log writer)
 swapped for mocks. Tests run in-process via ``TestClient`` — no live tray,

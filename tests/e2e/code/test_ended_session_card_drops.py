@@ -35,7 +35,7 @@ _END = "sid-end-1488"
 def _row_data(sid: str, title: str, alive: bool = True) -> dict:
     return {
         "session_id": sid, "kind": "remote", "agent": "copilot",
-        "project_dir": "E:/automation/endproj", "name": "endproj",
+        "project_dir": "E:/stubfolder/endproj", "name": "endproj",
         "alive": alive, "started_at": 1_790_150_400.0,
         "live_title": "", "prompt_title": "", "manual_title": title,
     }

@@ -21,7 +21,7 @@ class TestReconcileChiefLabel:
     own persisted conversation identity, which survives a Resume into a new
     PTY after a session-host restart — the case actually observed live
     against real session 1c8e6dde…, where the first line submitted into the
-    new PTY was Roberto's own chat message, not ``/chief``), or ``live_title``
+    new PTY was the owner's own chat message, not ``/chief``), or ``live_title``
     (#628, the OSC title session_host parses straight off the PTY's own
     output — available before either of the other two, since it needs no
     hook and no submitted prompt at all)."""
@@ -62,7 +62,7 @@ class TestReconcileChiefLabel:
 
     def test_wrong_project_dir_is_not_healed(self):
         row = self._unlabelled_row(
-            prompt_title="/chief", project_dir="E:/automation/app-launcher"
+            prompt_title="/chief", project_dir="E:/stubfolder/app-launcher"
         )
         healed = chief_router._reconcile_chief_label(row, "chief", CHIEF_DIR)
         assert healed["label"] == ""

@@ -248,11 +248,11 @@ def _check_multi_day_and_untimed_runs(page: Page, tr: _Transcript) -> None:
     age = 53 * 3600 + 12 * 60
     tr.entries = [
         _turn("user", "work on it", 100, _since(page, age)),
-        _read(200, _since(page, 3600), "E:/automation/modeproj/notes.md"),
-        _read(300, _since(page, 3600 - 4), "E:/automation/modeproj/a.md"),
+        _read(200, _since(page, 3600), "E:/stubfolder/modeproj/notes.md"),
+        _read(300, _since(page, 3600 - 4), "E:/stubfolder/modeproj/a.md"),
         _turn("assistant", "Done.", 400, _since(page, 3600 - 9)),
         _turn("user", "again", 500, _since(page, 120)),
-        _read(600, _since(page, 100), "E:/automation/modeproj/notes.md"),
+        _read(600, _since(page, 100), "E:/stubfolder/modeproj/notes.md"),
     ]
     _open_chat(page)
     runs = page.locator("#transcriptList .tr-run")
@@ -272,7 +272,7 @@ def _check_multi_day_and_untimed_runs(page: Page, tr: _Transcript) -> None:
     # would (rightly) draw "finished … · session 50s".
     tr.entries = [
         _turn("user", "hello", 100, None),
-        _read(200, None, "E:/automation/modeproj/notes.md"),
+        _read(200, None, "E:/stubfolder/modeproj/notes.md"),
         _turn("assistant", "Done.", 300, None),
     ]
     _open_chat(page)
@@ -313,7 +313,7 @@ def test_an_opened_run_says_when_it_ran_and_where_it_sits_in_the_session(
         _turn("assistant", "Done.", 400, _since(page, start - 15_120 - 1_800)),
         _turn("user", "now read it", 500, _since(page, start - 17_000)),
         # One step, no reply later than it by more than a second.
-        _read(600, _since(page, start - 17_100), "E:/automation/modeproj/notes.md"),
+        _read(600, _since(page, start - 17_100), "E:/stubfolder/modeproj/notes.md"),
         _turn("assistant", "Read.", 700, _since(page, start - 17_100)),
     ]
     _open_chat(page)

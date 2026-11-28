@@ -46,7 +46,7 @@ class _OneKeystroke:
         return self.frames.pop()
 
 
-_CREATE = ("post", "/sessions", {"project_dir": "C:/repo"})
+_CREATE = ("post", "/sessions", {"project_dir": "C:/stub"})
 _INPUT = ("post", "/sessions/sid/input", {"data": "hi", "submit": True})
 
 

@@ -91,7 +91,7 @@ def test_concurrent_polls_open_each_transcript_once_with_bounded_latency(tmp_pat
     live: List[dict] = []
     rows: Dict[str, dict] = {}
     for i in range(_SESSIONS):
-        project = f"E:/automation/proj{i}"
+        project = f"E:/stubfolder/proj{i}"
         live.append(_live(f"s{i}", project, 30 - i))
         rows[f"t{i}"] = _state_row(
             project, status="needs-you", transcript_path=str(_transcript(tmp_path, f"t{i}"))

@@ -17,14 +17,14 @@ import { DESKTOP_BOARD } from './board-columns.js';
 import { clearMergedButton, mergedCount } from './plan-prune.js';
 import { CLOSED, NOT_LOADED, bucketIndex, bucketName, groupPlanRows } from './plan-buckets.js';
 
-// The fleet chief records its lanes, its queue and what waits on Roberto in a
+// The fleet chief records its lanes, its queue and what waits on the owner in a
 // plan file (format v1, fleet-config's `chief_ops.py plan`); the server reads
 // it tolerantly (src/chief/plan.py) and this card shows it under Claude's
 // turn. No plan, the card stays blank. A plan the server could not trust adds
 // one quiet note, never a toast. Whether the chief is running comes from the
 // session cards /api/board already carries, and is said on its own line: a
 // plan with no chief behind it must not read as current. What waits on
-// Roberto carries an "Answer N questions" button into the one-shot answer
+// the owner carries an "Answer N questions" button into the one-shot answer
 // sheet (board-answers.js).
 
 // Status -> chip tone, on the tone map: work in progress is accent,
@@ -32,7 +32,7 @@ import { CLOSED, NOT_LOADED, bucketIndex, bucketName, groupPlanRows } from './pl
 // included) is neutral.
 const PLAN_TONES = {
   building: 'accent', gate: 'accent',
-  waiting: 'attention', 'waiting-roberto': 'attention',
+  waiting: 'attention', 'waiting-owner': 'attention',
   merged: 'neutral',
 };
 
@@ -224,7 +224,7 @@ function planRowShown(row, filter) {
 
 // What the chief has set aside: shown under Parked, never in the
 // queue. Every other status is work in the queue's order.
-const PARKED_STATUSES = ['parked', 'waiting-roberto'];
+const PARKED_STATUSES = ['parked', 'waiting-owner'];
 
 function isParked(q) {
   return PARKED_STATUSES.indexOf(q.status) !== -1;
@@ -340,7 +340,7 @@ export function chevron(glyph, onTap) {
 // the folded plan card's "N questions for you".
 function pendingQuestions(plan, answered, filter) {
   if (plan.state !== 'ok') return 0;
-  return (plan.waiting_on_roberto || []).filter(function (w, i) {
+  return (plan.waiting_on_owner || []).filter(function (w, i) {
     return planRowShown(w, filter) && answered.indexOf(itemKey(w, i)) === -1;
   }).length;
 }
@@ -350,7 +350,7 @@ function pendingQuestions(plan, answered, filter) {
 // it. One already answered says so and does nothing on tap: the sheet skips
 // it.
 function questionRow(plan, run, open, i, answered) {
-  const w = plan.waiting_on_roberto[i];
+  const w = plan.waiting_on_owner[i];
   const sent = answered.indexOf(itemKey(w, i)) !== -1;
   const title = w.text || w.question || w.ref;
   const ref = (w.text || w.question) ? (w.ref || w.repo) : '';
@@ -418,7 +418,7 @@ export function renderChiefPlan(body, liveRead) {
       nodes.push(planLine('board-plan-chief', 'Chief status unknown — session-host unreachable.'));
     }
     nodes.push(planLine('board-plan-age', age));
-    const waiting = plan.waiting_on_roberto || [];
+    const waiting = plan.waiting_on_owner || [];
     // Positions, not items: an answer's key is its place in the whole list.
     const shown = [];
     waiting.forEach(function (w, i) { if (planRowShown(w, filter)) shown.push(i); });

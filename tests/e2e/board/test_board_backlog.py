@@ -44,7 +44,7 @@ def test_backlog_start_button_posts_issue_start(
             body=_json.dumps({"scan_root": "", "apps": [{
                 "id": "cc-app-launcher", "kind": "claude-code",
                 "name": "app-launcher",
-                "project_dir": "E:/automation/app-launcher",
+                "project_dir": "E:/stubfolder/app-launcher",
             }]}),
         ),
     )
@@ -392,7 +392,7 @@ def _mock_apps_with_app_launcher(page: Page) -> None:
             body=_json.dumps({"scan_root": "", "apps": [{
                 "id": "cc-app-launcher", "kind": "claude-code",
                 "name": "app-launcher",
-                "project_dir": "E:/automation/app-launcher",
+                "project_dir": "E:/stubfolder/app-launcher",
             }]}),
         ),
     )
@@ -418,13 +418,13 @@ def test_dispatch_repo_dropdown_is_tap_to_select_and_filters_board_columns(
             status=200, content_type="application/json",
             body=_json.dumps({"scan_root": "", "apps": [
                 {"id": "cc-app-launcher", "kind": "claude-code",
-                 "name": "app-launcher", "project_dir": "E:/automation/app-launcher"},
+                 "name": "app-launcher", "project_dir": "E:/stubfolder/app-launcher"},
                 {"id": "cc-voice", "kind": "claude-code",
-                 "name": "voice-transcriber", "project_dir": "E:/automation/voice-transcriber"},
-                {"id": "cc-life-os", "kind": "claude-code",
-                 "name": "life-os", "project_dir": "E:/automation/life-os"},
+                 "name": "repo-b", "project_dir": "E:/stubfolder/repo-b"},
+                {"id": "cc-repo-f", "kind": "claude-code",
+                 "name": "repo-f", "project_dir": "E:/stubfolder/repo-f"},
                 {"id": "cc-photo", "kind": "claude-code",
-                 "name": "photo-ocr", "project_dir": "E:/automation/photo-ocr"},
+                 "name": "repo-a", "project_dir": "E:/stubfolder/repo-a"},
             ]}),
         ),
     )
@@ -458,8 +458,8 @@ def test_dispatch_repo_dropdown_is_tap_to_select_and_filters_board_columns(
     expect(authed_page.locator("#boardDispatchRepo")).to_have_value("app-launcher")
 
     # Filtered to app-launcher: backlog issue (repo=app-launcher) stays;
-    # Claude's turn (life-os session) and Done (voice-transcriber issue) empty
-    # out; Your turn drops the photo-ocr session (no match); Other keeps only
+    # Claude's turn (repo-f session) and Done (repo-b issue) empty
+    # out; Your turn drops the repo-a session (no match); Other keeps only
     # the app-launcher PR, dropping the job card (no project at all).
     expect(authed_page.locator("#boardColBacklog .board-count")).to_have_text("1")
     expect(authed_page.locator("#boardColClaude .board-count")).to_have_text("0")

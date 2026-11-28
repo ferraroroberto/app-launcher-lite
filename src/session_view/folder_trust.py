@@ -16,7 +16,7 @@ What the dialog looks like (probed on Copilot CLI 1.0.114, 120 columns)::
     │ Confirm folder trust                 │
     │ ──────────────────────────────────── │
     │ ╭──────────────────────────────────╮ │
-    │ │ E:\\work\\some-project            │ │
+    │ │ <projects>\\some-project          │ │
     │ ╰──────────────────────────────────╯ │
     │ ...                                  │
     │ Do you trust the files in this folder? │

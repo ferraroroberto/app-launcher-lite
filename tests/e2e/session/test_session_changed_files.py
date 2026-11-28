@@ -56,11 +56,11 @@ _FILES = {
     "partial": False, "project_exists": True,
     "counts": {"additions": 9, "deletions": 3},
     "files": [
-        {"path": "docs/notes.md", "key": "E:/work/proj/docs/notes.md", "status": "A",
+        {"path": "docs/notes.md", "key": "E:/stub/proj/docs/notes.md", "status": "A",
          "additions": 5, "deletions": 0, "steps": 2},
         {"path": "src/pkg/" + "very_long_module_name_" * 4 + ".py",
-         "key": "E:/work/proj/src/pkg/long.py", "status": "M", "additions": 4, "deletions": 2, "steps": 1},
-        {"path": "old.txt", "key": "E:/work/proj/old.txt", "status": "D",
+         "key": "E:/stub/proj/src/pkg/long.py", "status": "M", "additions": 4, "deletions": 2, "steps": 1},
+        {"path": "old.txt", "key": "E:/stub/proj/old.txt", "status": "D",
          "additions": 0, "deletions": 1, "steps": 1},
     ],
 }
@@ -172,7 +172,7 @@ def test_changed_files_lists_the_sessions_edits_and_opens_one(
     expect(diffs_shown).to_have_count(2)
     expect(diffs_shown.nth(1).locator(".d-add .d-ln").first).to_have_text("4")
     expect(diffs_shown.nth(0).locator(".d-add").first).not_to_have_css("background-color", "rgba(0, 0, 0, 0)")
-    assert len(diffs) == 1 and "path=E%3A%2Fwork%2Fproj%2Fdocs%2Fnotes.md" in diffs[0], diffs
+    assert len(diffs) == 1 and "path=E%3A%2Fstub%2Fproj%2Fdocs%2Fnotes.md" in diffs[0], diffs
 
     _assert_long_list_filters_by_name_and_folder(authed_page)
     _assert_empty_and_unreadable_say_so(authed_page)
@@ -214,7 +214,7 @@ def _assert_git_only_file_is_marked_and_opens_its_git_diff(page: Page) -> None:
     _serve_files(page, {
         **_FILES, "git": {"state": "ok", "added": 1}, "counts": {"additions": 12, "deletions": 3},
         "files": [*_FILES["files"], {
-            "path": "from-shell.txt", "key": "E:/work/proj/from-shell.txt", "status": "U",
+            "path": "from-shell.txt", "key": "E:/stub/proj/from-shell.txt", "status": "U",
             "additions": 3, "deletions": 0, "steps": 0, "source": "git", "staged": False,
         }],
     })
@@ -254,7 +254,7 @@ def _many_files(n: int = 14) -> dict:
         **_FILES,
         "counts": {"additions": n * 2, "deletions": n},
         "files": [
-            {"path": p, "key": "E:/work/proj/" + p, "status": "M", "additions": 2, "deletions": 1, "steps": 1}
+            {"path": p, "key": "E:/stub/proj/" + p, "status": "M", "additions": 2, "deletions": 1, "steps": 1}
             for p in names
         ],
     }
@@ -344,15 +344,15 @@ def _assert_partial_read_loads_older_in_chunks(page: Page, diffs: list) -> None:
         "5000": {
             **_FILES, "partial": True, "next_cursor": 1200, "counts": {"additions": 5, "deletions": 1},
             "files": [
-                {"path": "docs/notes.md", "key": "E:/work/proj/docs/notes.md", "status": "A",
+                {"path": "docs/notes.md", "key": "E:/stub/proj/docs/notes.md", "status": "A",
                  "additions": 2, "deletions": 0, "steps": 1},
-                {"path": "lib/early.py", "key": "E:/work/proj/lib/early.py", "status": "A",
+                {"path": "lib/early.py", "key": "E:/stub/proj/lib/early.py", "status": "A",
                  "additions": 3, "deletions": 1, "steps": 1},
             ],
         },
         "1200": {
             **_FILES, "partial": False, "next_cursor": None, "counts": {"additions": 1, "deletions": 0},
-            "files": [{"path": "zeta.py", "key": "E:/work/proj/zeta.py", "status": "A",
+            "files": [{"path": "zeta.py", "key": "E:/stub/proj/zeta.py", "status": "A",
                        "additions": 1, "deletions": 0, "steps": 1}],
         },
     }

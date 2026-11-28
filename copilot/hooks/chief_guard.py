@@ -209,7 +209,7 @@ def slots_hold(now: float) -> Optional[str]:
         return None
     _stamp("chief-slots-nudge")
     return (f"{line}: worker slots are free while plan rows wait. Dispatch from the top of the plan "
-            "queue, or ask Roberto with `chief_ops.py plan ask ... --id slots-idle`, then end the turn.")
+            "queue, or ask the owner with `chief_ops.py plan ask ... --id slots-idle`, then end the turn.")
 
 
 def on_agent_stop(payload: Dict[str, Any], sid: str) -> Optional[Dict[str, Any]]:

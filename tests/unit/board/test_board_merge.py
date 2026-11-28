@@ -12,15 +12,15 @@ from tests.unit.board._support import NOW, _iso, _live, _state_row, _transcript_
 
 def test_merge_joins_by_normalized_cwd():
     cards = board.merge_sessions(
-        [_live("aaa", "E:\\automation\\photo-ocr", 30)],
-        {"t-uuid": _state_row("e:/automation/photo-ocr", status="needs-you")},
+        [_live("aaa", "E:\\stubfolder\\repo-a", 30)],
+        {"t-uuid": _state_row("e:/stubfolder/repo-a", status="needs-you")},
         now=NOW,
     )
     assert len(cards) == 1
     # #608: the raw hook "needs-you" is split; no transcript to check
     # pending tool_use against, so it lands on the safe generic fallback.
     assert cards[0]["status"] == "awaiting-input"
-    assert cards[0]["project"] == "photo-ocr"
+    assert cards[0]["project"] == "repo-a"
     assert cards[0]["session_id"] == "aaa"
 
 
@@ -29,8 +29,8 @@ def test_merge_carries_label_from_live_session():
     frontend can single out e.g. the fleet chief; absent → empty string."""
     cards = board.merge_sessions(
         [
-            _live("aaa", "E:\\automation\\fleet-config", 30, label="chief"),
-            _live("bbb", "E:\\automation\\photo-ocr", 20),
+            _live("aaa", "E:\\stubfolder\\fleet-config", 30, label="chief"),
+            _live("bbb", "E:\\stubfolder\\repo-a", 20),
         ],
         {},
         now=NOW,
@@ -42,8 +42,8 @@ def test_merge_carries_label_from_live_session():
 
 def test_merge_matches_cwd_under_project_dir():
     cards = board.merge_sessions(
-        [_live("aaa", "E:/automation/app-launcher", 30)],
-        {"t": _state_row("E:/automation/app-launcher/subdir", status="working")},
+        [_live("aaa", "E:/stubfolder/app-launcher", 30)],
+        {"t": _state_row("E:/stubfolder/app-launcher/subdir", status="working")},
         now=NOW,
     )
     assert cards[0]["status"] == "working"
@@ -56,11 +56,11 @@ def test_merge_two_sessions_one_dir_ambiguous_row_stays_unclaimed():
     transcript. Neither session claims the single row; both render
     ``unknown`` instead of one confidently (and possibly wrongly)
     inheriting it."""
-    older = _live("old", "E:/automation/app-launcher", 120)
-    newer = _live("new", "E:/automation/app-launcher", 5)
+    older = _live("old", "E:/stubfolder/app-launcher", 120)
+    newer = _live("new", "E:/stubfolder/app-launcher", 5)
     cards = board.merge_sessions(
         [older, newer],
-        {"t": _state_row("E:/automation/app-launcher", status="needs-you")},
+        {"t": _state_row("E:/stubfolder/app-launcher", status="needs-you")},
         now=NOW,
     )
     by_id = {c["session_id"]: c for c in cards}
@@ -79,21 +79,21 @@ def test_merge_three_sessions_one_dir_never_cross_wires_transcripts():
     the safe outcome here is every card staying unmatched (``unknown``,
     no transcript), not a confident wrong guess."""
     sessions = [
-        _live("s-oldest", "E:/automation/app-launcher", 60),
-        _live("s-middle", "E:/automation/app-launcher", 40),
-        _live("s-newest", "E:/automation/app-launcher", 20),
+        _live("s-oldest", "E:/stubfolder/app-launcher", 60),
+        _live("s-middle", "E:/stubfolder/app-launcher", 40),
+        _live("s-newest", "E:/stubfolder/app-launcher", 20),
     ]
     rows = {
         "row-a": _state_row(
-            "E:/automation/app-launcher", status="needs-you",
+            "E:/stubfolder/app-launcher", status="needs-you",
             updated_min_ago=1, transcript_path="a.jsonl",
         ),
         "row-b": _state_row(
-            "E:/automation/app-launcher", status="working",
+            "E:/stubfolder/app-launcher", status="working",
             updated_min_ago=5, transcript_path="b.jsonl",
         ),
         "row-c": _state_row(
-            "E:/automation/app-launcher", status="needs-you",
+            "E:/stubfolder/app-launcher", status="needs-you",
             updated_min_ago=10, transcript_path="c.jsonl",
         ),
     }
@@ -108,12 +108,12 @@ def test_merge_non_claude_does_not_claim_legacy_claude_row():
     """#455: legacy rows are Claude rows. A Codex session in the same cwd
     must stay truthful/unknown instead of borrowing Claude's needs-you state."""
     codex = _live(
-        "codex-live", "E:/automation/app-launcher", 5, agent="codex"
+        "codex-live", "E:/stubfolder/app-launcher", 5, agent="codex"
     )
     cards = board.merge_sessions(
         [codex],
         {"claude-transcript": _state_row(
-            "E:/automation/app-launcher", status="needs-you", updated_min_ago=240
+            "E:/stubfolder/app-launcher", status="needs-you", updated_min_ago=240
         )},
         now=NOW,
     )
@@ -127,15 +127,15 @@ def test_merge_non_claude_does_not_claim_legacy_claude_row():
 def test_merge_exact_launcher_id_beats_same_cwd_recency():
     """Agent writers can provide launcher_session_id for a deterministic
     claim; a newer sibling row in the same cwd must not steal the session."""
-    live = [_live("launcher-aaa", "E:/automation/app-launcher", 30)]
+    live = [_live("launcher-aaa", "E:/stubfolder/app-launcher", 30)]
     state_rows = {
         "right": _state_row(
-            "E:/automation/app-launcher", status="needs-you",
+            "E:/stubfolder/app-launcher", status="needs-you",
             updated_min_ago=20, agent="claude",
             launcher_session_id="launcher-aaa",
         ),
         "newer-other": _state_row(
-            "E:/automation/app-launcher", status="working",
+            "E:/stubfolder/app-launcher", status="working",
             updated_min_ago=1, agent="claude",
             launcher_session_id="launcher-bbb",
         ),
@@ -151,15 +151,15 @@ def test_merge_duplicate_exact_launcher_ids_take_newest_row():
     """A resume/transcript rollover may leave more than one hook row carrying
     the inherited launcher id; exact identity still needs a deterministic
     newest-event tie-break."""
-    live = [_live("launcher-aaa", "E:/automation/app-launcher", 30)]
+    live = [_live("launcher-aaa", "E:/stubfolder/app-launcher", 30)]
     state_rows = {
         "older": _state_row(
-            "E:/automation/app-launcher", status="working",
+            "E:/stubfolder/app-launcher", status="working",
             updated_min_ago=20, agent="claude",
             launcher_session_id="launcher-aaa",
         ),
         "newer": _state_row(
-            "E:/automation/app-launcher", status="needs-you",
+            "E:/stubfolder/app-launcher", status="needs-you",
             updated_min_ago=1, agent="claude",
             launcher_session_id="launcher-aaa",
         ),
@@ -189,8 +189,8 @@ def test_merge_claimed_card_carries_state_sid():
     """#307: the card threads through the claimed row's own key, so a Slack
     ping (which only knows this transcript UUID) can resolve to the card."""
     cards = board.merge_sessions(
-        [_live("aaa", "E:/automation/photo-ocr", 30)],
-        {"t-uuid": _state_row("E:/automation/photo-ocr", status="needs-you")},
+        [_live("aaa", "E:/stubfolder/repo-a", 30)],
+        {"t-uuid": _state_row("E:/stubfolder/repo-a", status="needs-you")},
         now=NOW,
     )
     assert cards[0]["state_sid"] == "t-uuid"
@@ -210,9 +210,9 @@ def test_merge_carries_shared_name_from_state_row():
     live_title/prompt_title fields — the Coding tab reads the identical
     fields via board.attach_shared_names()."""
     cards = board.merge_sessions(
-        [_live("aaa", "E:/automation/photo-ocr", 30)],
+        [_live("aaa", "E:/stubfolder/repo-a", 30)],
         {"t": _state_row(
-            "E:/automation/photo-ocr", status="needs-you",
+            "E:/stubfolder/repo-a", status="needs-you",
             name="Fixing the chunk merge bug",
         )},
         now=NOW,
@@ -223,14 +223,14 @@ def test_merge_carries_shared_name_from_state_row():
 
 def test_merge_carries_shared_name_source_derived():
     cards = board.merge_sessions(
-        [_live("aaa", "E:/automation/photo-ocr", 30)],
+        [_live("aaa", "E:/stubfolder/repo-a", 30)],
         {"t": _state_row(
-            "E:/automation/photo-ocr", status="working",
-            name="photo-ocr-2", name_source="derived",
+            "E:/stubfolder/repo-a", status="working",
+            name="repo-a-2", name_source="derived",
         )},
         now=NOW,
     )
-    assert cards[0]["shared_name"] == "photo-ocr-2"
+    assert cards[0]["shared_name"] == "repo-a-2"
     assert cards[0]["shared_name_source"] == "derived"
 
 
@@ -247,10 +247,10 @@ def test_merge_cwd_fallback_ignores_row_older_than_session_start():
     some earlier, unrelated conversation in the same directory — a row can
     only be a session's own state if it was written at-or-after that
     session's started_at."""
-    live = [_live("new-session", "E:/automation/app-launcher", 2)]
+    live = [_live("new-session", "E:/stubfolder/app-launcher", 2)]
     state_rows = {
         "stale-leftover": _state_row(
-            "E:/automation/app-launcher", status="needs-you",
+            "E:/stubfolder/app-launcher", status="needs-you",
             updated_min_ago=300, name="Vendor project-scaffolding's button component",
         ),
     }
@@ -268,7 +268,7 @@ def test_merge_carries_manual_title_from_live_session():
     the card alongside live_title/prompt_title — the Board drawer's rename
     button reads/writes the same field the Coding tab does."""
     cards = board.merge_sessions(
-        [_live("aaa", "E:/automation/photo-ocr", 30, manual_title="my rename")],
+        [_live("aaa", "E:/stubfolder/repo-a", 30, manual_title="my rename")],
         {}, now=NOW,
     )
     assert cards[0]["manual_title"] == "my rename"
@@ -293,9 +293,9 @@ def test_merge_external_card_manual_title_is_empty_string(tmp_path: Path):
 
 
 def test_attach_shared_names_joins_by_cwd():
-    live = [_live("aaa", "E:/automation/photo-ocr", 30)]
+    live = [_live("aaa", "E:/stubfolder/repo-a", 30)]
     state_rows = {"t": _state_row(
-        "E:/automation/photo-ocr", name="Chunk merge fix",
+        "E:/stubfolder/repo-a", name="Chunk merge fix",
     )}
     joined = board.attach_shared_names(live, state_rows)
     assert len(joined) == 1
@@ -303,7 +303,7 @@ def test_attach_shared_names_joins_by_cwd():
     assert joined[0]["shared_name_source"] is None
     # Every original field survives the join.
     assert joined[0]["session_id"] == "aaa"
-    assert joined[0]["project_dir"] == "E:/automation/photo-ocr"
+    assert joined[0]["project_dir"] == "E:/stubfolder/repo-a"
 
 
 def test_attach_shared_names_no_match_returns_none():
@@ -314,9 +314,9 @@ def test_attach_shared_names_no_match_returns_none():
 
 
 def test_attach_shared_names_does_not_cross_agent_boundary():
-    live = [_live("codex-live", "E:/automation/app-launcher", 10, agent="codex")]
+    live = [_live("codex-live", "E:/stubfolder/app-launcher", 10, agent="codex")]
     state_rows = {"claude-row": _state_row(
-        "E:/automation/app-launcher", name="Claude title",
+        "E:/stubfolder/app-launcher", name="Claude title",
     )}
     joined = board.attach_shared_names(live, state_rows)
     assert joined[0]["shared_name"] is None
@@ -324,8 +324,8 @@ def test_attach_shared_names_does_not_cross_agent_boundary():
 
 
 def test_attach_shared_names_does_not_mutate_input():
-    live = [_live("aaa", "E:/automation/photo-ocr", 30)]
-    state_rows = {"t": _state_row("E:/automation/photo-ocr", name="X")}
+    live = [_live("aaa", "E:/stubfolder/repo-a", 30)]
+    state_rows = {"t": _state_row("E:/stubfolder/repo-a", name="X")}
     board.attach_shared_names(live, state_rows)
     assert "shared_name" not in live[0]
 
@@ -392,9 +392,9 @@ def test_attach_last_turn_does_not_mutate_input():
 def test_attach_shared_names_agrees_with_merge_sessions():
     """The Coding tab and Board tab must resolve the same live session to the
     same title source — same cwd claim walk, same result (#396 acceptance)."""
-    live = [_live("aaa", "E:/automation/photo-ocr", 30)]
+    live = [_live("aaa", "E:/stubfolder/repo-a", 30)]
     state_rows = {"t": _state_row(
-        "E:/automation/photo-ocr", status="needs-you", name="Chunk merge fix",
+        "E:/stubfolder/repo-a", status="needs-you", name="Chunk merge fix",
     )}
     coding_tab = board.attach_shared_names(live, state_rows)
     board_tab = board.merge_sessions(live, state_rows, now=NOW)
@@ -406,7 +406,7 @@ def test_merge_unverifiable_state_only_row_is_suppressed():
     """#455: a hook row without a live host match or an existing, recently
     active transcript is not proof that a process exists."""
     cards = board.merge_sessions(
-        [], {"t": _state_row("E:/automation/reporting", status="needs-you")}, now=NOW
+        [], {"t": _state_row("E:/stubfolder/reporting", status="needs-you")}, now=NOW
     )
     assert cards == []
 
@@ -424,7 +424,7 @@ def test_merge_cold_state_only_row_dropped():
 def test_merge_working_ghost_dropped(tmp_path: Path):
     """A headless/sdk-cli row stuck at 'working' with a long-quiet transcript
     is a dead process, not active work — dropped, not rendered."""
-    row = _state_row("E:/automation/local-llm-hub", status="working", updated_min_ago=40)
+    row = _state_row("E:/stubfolder/local-llm-hub", status="working", updated_min_ago=40)
     row["transcript_path"] = _transcript_file(tmp_path, NOW - timedelta(minutes=40))
     cards = board.merge_sessions([], {"t": row}, now=NOW)
     assert cards == []
@@ -433,7 +433,7 @@ def test_merge_working_ghost_dropped(tmp_path: Path):
 def test_merge_working_fresh_transcript_still_renders(tmp_path: Path):
     """A genuinely active 'working' row (recent transcript activity) still
     shows up — the ghost check must not catch real work in progress."""
-    row = _state_row("E:/automation/local-llm-hub", status="working", updated_min_ago=40)
+    row = _state_row("E:/stubfolder/local-llm-hub", status="working", updated_min_ago=40)
     row["transcript_path"] = _transcript_file(tmp_path, NOW - timedelta(minutes=1))
     cards = board.merge_sessions([], {"t": row}, now=NOW)
     assert len(cards) == 1
@@ -443,7 +443,7 @@ def test_merge_working_fresh_transcript_still_renders(tmp_path: Path):
 def test_merge_working_no_transcript_path_is_suppressed():
     """#455: missing cloud/bridge transcripts are no longer trusted as
     external process-liveness evidence for up to 24 hours."""
-    row = _state_row("E:/automation/local-llm-hub", status="working", updated_min_ago=40)
+    row = _state_row("E:/stubfolder/local-llm-hub", status="working", updated_min_ago=40)
     cards = board.merge_sessions([], {"t": row}, now=NOW)
     assert cards == []
 
@@ -451,7 +451,7 @@ def test_merge_working_no_transcript_path_is_suppressed():
 def test_merge_needs_you_quiet_transcript_is_suppressed(tmp_path: Path):
     """A waiting hook state is semantic evidence, not process-liveness
     evidence; once its external transcript is quiet, the card must clear."""
-    row = _state_row("E:/automation/local-llm-hub", status="needs-you", updated_min_ago=40)
+    row = _state_row("E:/stubfolder/local-llm-hub", status="needs-you", updated_min_ago=40)
     row["transcript_path"] = _transcript_file(tmp_path, NOW - timedelta(minutes=40))
     cards = board.merge_sessions([], {"t": row}, now=NOW)
     assert cards == []
@@ -467,14 +467,14 @@ def test_merge_shared_transcript_superseded_row_does_not_double_render(tmp_path:
     keeps writing. One live session must yield exactly one card, never a
     real one plus a ghost carrying the old row's stale status."""
     transcript = _transcript_file(tmp_path, NOW - timedelta(minutes=1))
-    live = [_live("aaa", "E:/automation/fleet-config", 30)]
+    live = [_live("aaa", "E:/stubfolder/fleet-config", 30)]
     state_rows = {
         "current-row": _state_row(
-            "E:/automation/fleet-config", status="working", updated_min_ago=1,
+            "E:/stubfolder/fleet-config", status="working", updated_min_ago=1,
             transcript_path=transcript, launcher_session_id="aaa",
         ),
         "superseded-row": _state_row(
-            "E:/automation/fleet-config", status="working", updated_min_ago=30,
+            "E:/stubfolder/fleet-config", status="working", updated_min_ago=30,
             transcript_path=transcript, launcher_session_id="aaa",
         ),
     }
@@ -492,7 +492,7 @@ def test_merge_reaped_launcher_session_suppressed_despite_fresh_transcript(tmp_p
     launcher-spawned session hard-killed without a SessionEnd, its row still
     inside the transcript-freshness window."""
     row = _state_row(
-        "E:/automation/app-launcher", status="needs-you", updated_min_ago=5,
+        "E:/stubfolder/app-launcher", status="needs-you", updated_min_ago=5,
         transcript_path=_transcript_file(tmp_path, NOW - timedelta(minutes=1)),
         launcher_session_id="dead-pty-id",
     )
@@ -502,7 +502,7 @@ def test_merge_reaped_launcher_session_suppressed_despite_fresh_transcript(tmp_p
 
 def test_merge_reaped_launcher_session_with_no_transcript_also_suppressed():
     row = _state_row(
-        "E:/automation/app-launcher", status="working", updated_min_ago=2,
+        "E:/stubfolder/app-launcher", status="working", updated_min_ago=2,
         launcher_session_id="dead-pty-id",
     )
     cards = board.merge_sessions([], {"t": row}, now=NOW)
@@ -520,7 +520,7 @@ def test_merge_reaped_codex_launcher_session_suppressed(tmp_path: Path):
     this ghost is suppressed exactly like the Claude case above, regardless
     of how fresh its transcript looks."""
     row = _state_row(
-        "E:/automation/app-launcher", status="needs-you", updated_min_ago=14,
+        "E:/stubfolder/app-launcher", status="needs-you", updated_min_ago=14,
         transcript_path=_transcript_file(tmp_path, NOW - timedelta(minutes=1)),
         launcher_session_id="dead-codex-pty-id", agent="codex",
     )
@@ -536,7 +536,7 @@ def test_external_row_liveness_reaped_check_does_not_fire_when_id_is_live(tmp_pa
     from src.board.transcript import _external_row_liveness
 
     row = _state_row(
-        "E:/automation/app-launcher", status="working", updated_min_ago=2,
+        "E:/stubfolder/app-launcher", status="working", updated_min_ago=2,
         transcript_path=_transcript_file(tmp_path, NOW - timedelta(minutes=1)),
         launcher_session_id="still-alive",
     )

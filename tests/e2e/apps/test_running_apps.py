@@ -34,8 +34,8 @@ def _two_row_payload() -> dict:
     return {
         "running": [
             {
-                "app_id": "voice-transcriber-webapp",
-                "name": "Voice Transcriber",
+                "app_id": "repo-b-webapp",
+                "name": "Repo B",
                 "kind": "webapp",
                 "pid": 12345,
                 "started_at": 1736179200,
@@ -44,8 +44,8 @@ def _two_row_payload() -> dict:
                 "alive": True,
             },
             {
-                "app_id": "photo-ocr-streamlit",
-                "name": "Photo OCR",
+                "app_id": "repo-a-streamlit",
+                "name": "Repo A",
                 "kind": "streamlit",
                 "pid": 23456,
                 "started_at": 1736179200,
@@ -135,7 +135,7 @@ def test_stop_confirms_and_posts(authed_page: Page, base_url: str) -> None:
     # Since #1437 the kind is the avatar's glyph, which wears the alive
     # badge, and the context line is ":port" with "up …" as its tail figure; the
     # pid moved to the menu's header line.
-    expect(row0.locator(".action-row-title")).to_have_text("Voice Transcriber")
+    expect(row0.locator(".action-row-title")).to_have_text("Repo B")
     expect(row0.locator(".action-row-meta-text")).to_have_text(":8501")
     expect(row0.locator(".action-row-meta-tail")).to_have_text(re.compile(r"^up .+$"))
     expect(row0.locator(".action-open")).to_be_enabled()
@@ -146,7 +146,7 @@ def test_stop_confirms_and_posts(authed_page: Page, base_url: str) -> None:
     expect(open_row_menu(authed_page).locator(".row-menu-head")).to_have_text("pid 12345")
     authed_page.keyboard.press("Escape")
 
-    expect(row1.locator(".action-row-title")).to_have_text("Photo OCR")
+    expect(row1.locator(".action-row-title")).to_have_text("Repo A")
     expect(row1.locator(".action-row-meta")).to_contain_text("binding")
     expect(row1.locator(".action-open")).to_be_disabled()
     # Something is running, so the empty state and its footer are gone.
@@ -163,7 +163,7 @@ def test_stop_confirms_and_posts(authed_page: Page, base_url: str) -> None:
     open_row_menu(authed_page).locator("[data-item=action-stop-close]").click()
     confirm = authed_page.locator("#confirmDialog")
     expect(confirm).to_be_visible()
-    expect(confirm.locator("#confirmDialogTitle")).to_have_text("Stop Voice Transcriber?")
+    expect(confirm.locator("#confirmDialogTitle")).to_have_text("Stop Repo B?")
     # The modal contract (#545): a header ✕ and one full-width action.
     expect(confirm.locator(".detail-header .detail-close")).to_have_count(1)
     expect(confirm.locator(".detail-actions button")).to_have_count(1)
@@ -173,5 +173,5 @@ def test_stop_confirms_and_posts(authed_page: Page, base_url: str) -> None:
     assert native == [], f"a native dialog fired: {native!r}"
     assert len(stop_calls) == 1, f"expected one stop POST, got {stop_calls!r}"
     assert stop_calls[0].endswith(
-        "/api/apps/voice-transcriber-webapp/instances/12345/stop"
+        "/api/apps/repo-b-webapp/instances/12345/stop"
     ), f"stop POST hit the wrong path: {stop_calls[0]}"

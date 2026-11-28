@@ -224,7 +224,7 @@ def test_answer_sheet_renders_questions_and_done_sends_one_message(
         "data": (
             "Answers from the Board (2 of 3):\n"
             "1. [fleet-config#959] Approve the four plans? → Yes, all four (recommended) {id: q-plans}\n"
-            "2. [life-os] Which days work? → Mon, Wed; Other: not Friday {id: q-days}\n"
+            "2. [repo-f] Which days work? → Mon, Wed; Other: not Friday {id: q-days}\n"
             "Skipped: 3\n"
             "Also: ship it tonight\n\n" + _CHIEF_UPLOAD
         ),

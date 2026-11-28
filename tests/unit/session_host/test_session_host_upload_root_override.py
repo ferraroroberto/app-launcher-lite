@@ -51,8 +51,8 @@ def test_defaults_to_the_session_project_dir(monkeypatch: pytest.MonkeyPatch) ->
     """The real, non-test path: beside the code the agent is working on."""
     monkeypatch.delenv(sh_server.UPLOAD_ROOT_ENV, raising=False)
 
-    assert sh_server._upload_dir(r"C:\code\myproj") == Path(
-        r"C:\code\myproj"
+    assert sh_server._upload_dir(r"C:\stub\myproj") == Path(
+        r"C:\stub\myproj"
     ) / ".launcher-tmp"
 
 
@@ -63,7 +63,7 @@ def test_env_relocates_the_root_and_keeps_the_leaf(
 
     # The root moves; `.launcher-tmp` stays, so a redirected upload is still
     # recognisably one (the compose-bar e2e assertions pin the leaf).
-    assert sh_server._upload_dir(r"C:\code\myproj") == tmp_path / ".launcher-tmp"
+    assert sh_server._upload_dir(r"C:\stub\myproj") == tmp_path / ".launcher-tmp"
 
 
 def test_blank_env_falls_back_rather_than_writing_off_the_cwd(
@@ -72,8 +72,8 @@ def test_blank_env_falls_back_rather_than_writing_off_the_cwd(
     """An empty or whitespace value is "unset", not `Path("")` (= CWD)."""
     monkeypatch.setenv(sh_server.UPLOAD_ROOT_ENV, "   ")
 
-    assert sh_server._upload_dir(r"C:\code\myproj") == Path(
-        r"C:\code\myproj"
+    assert sh_server._upload_dir(r"C:\stub\myproj") == Path(
+        r"C:\stub\myproj"
     ) / ".launcher-tmp"
 
 

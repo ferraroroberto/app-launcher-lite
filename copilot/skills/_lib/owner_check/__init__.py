@@ -1,4 +1,4 @@
-"""Owner checks: work that needs Roberto's validation, or a step of his before it starts.
+"""Owner checks: work that needs the owner's validation, or a step of theirs before it starts.
 
 The contract is `docs/owner-check.md`. `rule` decides required/none from what an
 issue says and what its PR changed, `block` owns the comment-block format, `github`

@@ -108,7 +108,7 @@ def _long_chip_gives_way(page: Page, chip) -> None:
     # A long repo name too: the text may now ellipsize, the date still stays whole.
     tight = stable_eval(chip, """chip => {
       const el = chip.closest('li');
-      el.querySelector('.action-row-meta-text').textContent = 'grocery-shopping-automation #497';
+      el.querySelector('.action-row-meta-text').textContent = 'a-long-example-repository-x #497';
       const main = el.querySelector('.action-row-main').getBoundingClientRect();
       const stamp = el.querySelector('.board-card-stamp').getBoundingClientRect();
       return {mainRight: main.right, stampRight: stamp.right};

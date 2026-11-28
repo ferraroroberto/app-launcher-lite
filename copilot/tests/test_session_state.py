@@ -26,7 +26,7 @@ def _payload(sid: str = "abc-123", **extra):
     base = {
         "sessionId": sid,
         "timestamp": 1785613387578,
-        "cwd": "C:\\work\\some-project",
+        "cwd": "C:\\stub\\some-project",
     }
     base.update(extra)
     return _lib.normalize_payload(base)
@@ -52,7 +52,7 @@ class SessionStateTests(unittest.TestCase):
         p = _payload(prompt="hi", transcriptPath="C:\\t\\events.jsonl")
         self.assertEqual(p["session_id"], "abc-123")
         self.assertEqual(p["transcript_path"], "C:\\t\\events.jsonl")
-        self.assertEqual(p["cwd"], "C:\\work\\some-project")
+        self.assertEqual(p["cwd"], "C:\\stub\\some-project")
 
     def test_normalize_passthrough_for_snake_case(self):
         original = {"session_id": "x", "cwd": "C:\\y"}
@@ -222,10 +222,10 @@ class SessionStatusMachineTests(unittest.TestCase):
         # A late sessionStart is an illegal downgrade: it refreshes the heartbeat
         # and leaves status, cwd and transcript exactly as they were.
         session_state.apply_event(
-            _payload(transcriptPath="C:\\t\\events.jsonl", cwd="C:\\work\\first"), "agentStop"
+            _payload(transcriptPath="C:\\t\\events.jsonl", cwd="C:\\stub\\first"), "agentStop"
         )
         before = self._row()
-        session_state.apply_event(_payload(cwd="C:\\work\\second", source="new"), "sessionStart")
+        session_state.apply_event(_payload(cwd="C:\\stub\\second", source="new"), "sessionStart")
         after = self._row()
         self.assertEqual({k: v for k, v in after.items() if k != "updated_at"},
                          {k: v for k, v in before.items() if k != "updated_at"})
@@ -301,7 +301,7 @@ class HookCommandUtf8Tests(unittest.TestCase):
             .replace("{{REPO}}", self.REPO.as_posix())
             .replace("{{SCOPE}}", "")  # a dedicated machine: every session is recorded
         )
-        cwd = "C:\\work\\café—中"
+        cwd = "C:\\stub\\café—中"
         # Raw UTF-8 codepoints, as Copilot sends them: a default json.dumps
         # would \u-escape them and the check would pass on any transport.
         stdin = json.dumps(
