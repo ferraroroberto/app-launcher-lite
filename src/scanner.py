@@ -178,7 +178,7 @@ class Skill:
     """One skill the app can launch and browse.
 
     ``id`` is the on-disk folder name — the stable key threaded through
-    the API path (``/api/life-os/skills/<id>/…``). ``command`` is the
+    the API path (``/api/team-os/skills/<id>/…``). ``command`` is the
     slash-command base used at launch (``/journal-daily``); it is the
     frontmatter ``name`` when that is a valid slug, else the folder name,
     and is always validated against :data:`_SKILL_SLUG_RE`. ``name`` is
